@@ -228,32 +228,33 @@ ignored_actionnames:
 
 ### Scenario 1: New Star Citizen Release (e.g., R4_61)
 
-1. **Extract new game files**:
-   - Copy `defaultProfile.xml` to `star_citizen_data/keybindings/R4_61/`
-   - Copy localization files (`global_*.ini`, `keybinding_localization.xml`)
-
-2. **Update config.yaml**:
+1. **Enable automatic version management**:
    ```yaml
    sc-keybind-mappings:
-     sc_channel_version: R4_61  # Change version
+     auto_detect_version: true
+     auto_extract_game_files: true
+     sc_unp4k_install_dir: C:/Tools/unp4k-suite
    ```
 
-3. **Keep user custom keybinds**:
+2. **Restart Wingman**. It reads the active channel's `build_manifest.id`, maps the
+   release branch to a version directory, and compares the build ID with
+   `.sc-extraction.json`.
+
+3. **Automatic extraction**:
+   - `unp4k` extracts `defaultProfile.xml`, `keybinding_localization.xml`, and translations.
+   - `unforge` converts the extracted CryXML files to normal XML.
+   - The validated files are written to the detected version directory.
+
+4. **Keep user custom keybinds**:
    - Export your keybindings in-game
    - Place in configured location
 
-4. **Run update**:
-   ```yaml
-   # In config.yaml, set:
-   update_keybindings: true  # Triggers update mode
-   ```
-
 5. **What happens**:
-   - Loads existing `R4_60/sc_all_keybindings.json`
-   - Parses new `R4_61/defaultProfile.xml`
+   - Loads command phrases from the newest prior `sc_all_keybindings.json`
+   - Parses the newly extracted `defaultProfile.xml` and translations
    - Merges data, preserving existing command phrases
    - Generates phrases only for NEW commands
-   - Saves to `R4_61/sc_all_keybindings.json`
+   - Saves to the automatically selected version directory
 
 ### Scenario 2: Changed Custom Keybindings
 
@@ -370,7 +371,11 @@ update_keybindings: false  # Don't update during migration
 sc-keybind-mappings:
   sc_installation_dir: "C:/Program Files/Roberts Space Industries/StarCitizen"
   sc_active_channel: "LIVE"  # or PTU, EPTU
-  sc_channel_version: "R4_60"
+  auto_detect_version: true
+  auto_extract_game_files: true
+  sc_channel_version: "R4_60"  # fallback when detection is unavailable
+  sc_unp4k_install_dir: "C:/Tools/unp4k-suite"
+  sc_unp4k_timeout_seconds: 900
   user_keybinding_file_name: "layout_exported_keyboard_joystick.xml"
   keybindings-directory: "/keybindings/"
   sc_unp4k_file_default_keybindings_filter: "defaultProfile.xml"
@@ -425,7 +430,10 @@ include_actions:
 **A:** Check config.yaml:
 ```yaml
 update_keybindings: true  # Must be true
-sc_channel_version: "R4_60"  # Must match directory
+sc-keybind-mappings:
+  auto_detect_version: true
+  auto_extract_game_files: true
+  sc_unp4k_install_dir: "C:/Tools/unp4k-suite"
 ```
 
 ### Q: Want to regenerate phrases in different language?

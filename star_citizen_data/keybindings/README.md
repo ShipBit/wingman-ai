@@ -400,11 +400,19 @@ for name, cmd in mining_commands.items():
 
 When Star Citizen releases a new version (e.g., R4_60 → R4_61):
 
-1. **Extract game files** to new version folder
-2. **Update config.yaml:** `sc_channel_version: R4_61`
-3. **Export your custom keybindings** from game
-4. **Run migration** if needed
-5. **Verify with utilities**
+1. Wingman reads `<SC installation>/<channel>/build_manifest.id` on startup.
+2. A changed branch/build ID selects the matching version directory automatically.
+3. `unp4k` extracts the default profile, key names, and all translations; `unforge`
+   converts the two CryXML resources into normal XML.
+4. Existing command phrases are carried over from the newest previous version. Only
+   newly introduced active actions need phrase generation.
+5. Export your custom keybindings from the game when your personal mappings change.
+
+Enable this workflow with `auto_detect_version: true` and
+`auto_extract_game_files: true` under `sc-keybind-mappings`. Set
+`sc_unp4k_install_dir` to a directory containing both `unp4k` and `unforge`.
+The configured `sc_channel_version` remains a fallback for installations without a
+readable manifest. Set either option to `false` to retain the manual workflow.
 
 See **KEYBINDINGS_DESIGN.md** for detailed update workflows.
 

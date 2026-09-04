@@ -24,6 +24,12 @@ from typing import Dict, List, Set, Optional, Any
 from pathlib import Path
 
 from services.secret_keeper import SecretKeeper
+from wingmen.star_citizen_services.sc_game_files import (
+    SCBuild,
+    SCGameFileError,
+    SCGameFileExtractor,
+    detect_installed_build,
+)
 
 DEBUG = True
 
@@ -54,35 +60,8 @@ class SCKeybindings:
         """
         self.config = config
         self.secret_keeper = secret_keeper
-        
-        # ─── Path Configuration ───
-        self.data_root_path = f'{config["data-root-directory"]}{config["sc-keybind-mappings"]["keybindings-directory"]}'
-        self.sc_installation_dir = config["sc-keybind-mappings"]["sc_installation_dir"]
-        self.user_keybinding_file_name = config["sc-keybind-mappings"]["user_keybinding_file_name"]
-        self.sc_active_channel = config["sc-keybind-mappings"]["sc_active_channel"]
-        self.sc_channel_version = config["sc-keybind-mappings"]["sc_channel_version"]
-        
-        # ─── File Paths ───
-        self.version_dir = Path(self.data_root_path) / self.sc_channel_version
-        self.json_path = self.version_dir / "sc_all_keybindings.json"
-        
-        # Deprecated files (kept for backward compatibility during migration)
-        self.json_path_knowledge = self.version_dir / "keybindings_existing_knowledge.json"
-        self.json_path_miss_knowledge = self.version_dir / "keybindings_missing_knowledge.json"
-        
-        # SC game files
-        self.default_keybinds_file = self.version_dir / config["sc-keybind-mappings"]["sc_unp4k_file_default_keybindings_filter"]
-        self.keybindings_localization_file = self.version_dir / config["sc-keybind-mappings"]["sc_unp4k_file_keybinding_localization_filter"]
-        self.en_translation_file = config["sc-keybind-mappings"]["en_translation_file"]
-        self.sc_translations_en = self.version_dir / self.en_translation_file
-        
-        # User custom keybindings
-        user_keybinding_file_config = f"{self.sc_installation_dir}/{self.sc_active_channel}/USER/Client/0/Controls/Mappings/{self.user_keybinding_file_name}"
-        self.user_keybinding_file = Path(user_keybinding_file_config.format(sc_channel_version=self.sc_channel_version))
-        
-        # ─── Runtime Data ───
-        self.keybindings: Optional[Dict] = None  # Loaded on first access
-        
+        mapping_config = config["sc-keybind-mappings"]
+
         # ─── Configuration ───
         self.player_language = config["openai"]["player_language"]
         self.command_languages = config["command_languages"]
@@ -90,6 +69,46 @@ class SCKeybindings:
         self.keybind_actions_to_include: Set[str] = set(config.get("include_actions", []))
         self.ignored_actionnames: Set[str] = set(config.get("ignored_actionnames", []))
         
+        # ─── Path Configuration ───
+        self.data_root_path = f'{config["data-root-directory"]}{mapping_config["keybindings-directory"]}'
+        self.sc_installation_dir = mapping_config["sc_installation_dir"]
+        self.user_keybinding_file_name = mapping_config["user_keybinding_file_name"]
+        self.sc_active_channel = mapping_config["sc_active_channel"]
+        self.sc_channel_version = mapping_config["sc_channel_version"]
+        self.auto_detect_version = mapping_config.get("auto_detect_version", True)
+        self.auto_extract_game_files = mapping_config.get("auto_extract_game_files", True)
+
+        try:
+            self.detected_build: Optional[SCBuild] = detect_installed_build(
+                Path(self.sc_installation_dir), self.sc_active_channel
+            )
+        except SCGameFileError as exc:
+            print_debug(
+                f"Warning: Could not auto-detect the Star Citizen version ({exc}); "
+                f"using configured fallback {self.sc_channel_version}"
+            )
+            self.detected_build = None
+        if self.auto_detect_version and self.detected_build:
+            detected_version = self.detected_build.version_directory
+            if detected_version != self.sc_channel_version:
+                print_debug(
+                    f"Detected Star Citizen {self.detected_build.branch} in "
+                    f"{self.sc_active_channel}; switching {self.sc_channel_version} -> {detected_version}"
+                )
+            self.sc_channel_version = detected_version
+            # Other SC services receive the same config after keybindings validation.
+            mapping_config["sc_channel_version"] = detected_version
+
+        self.game_file_extractor = SCGameFileExtractor(
+            mapping_config=mapping_config,
+            installation_dir=Path(self.sc_installation_dir),
+            command_languages=self.command_languages,
+        )
+        self._refresh_version_paths()
+
+        # ─── Runtime Data ───
+        self.keybindings: Optional[Dict] = None  # Loaded on first access
+
         # ─── OpenAI Configuration ───
         self.openai_keybinding_generation_model = config.get("keybinding_generation_model", "gpt-4")
         self.open_api_key = secret_keeper.retrieve(
@@ -179,8 +198,31 @@ class SCKeybindings:
         5. Generates command phrases (if needed)
         6. Saves to unified sc_all_keybindings.json
         """
-        # Check if files exist and updates are disabled
-        if self.json_path.exists() and not self.config.get("update_keybindings", False):
+        game_files_updated = False
+        if self.auto_extract_game_files and self.detected_build:
+            if (
+                self.auto_detect_version
+                or self.detected_build.version_directory == self.sc_channel_version
+            ):
+                game_files_updated = self.game_file_extractor.ensure_extracted(
+                    self.detected_build, self.version_dir
+                )
+                if game_files_updated:
+                    print_debug(
+                        f"Extracted Star Citizen game files for {self.sc_channel_version}"
+                    )
+            else:
+                print_debug(
+                    "Skipping automatic extraction because the configured version does not "
+                    "match the installed channel and auto detection is disabled"
+                )
+
+        # A newly extracted build must be parsed even when routine updates are disabled.
+        if (
+            self.json_path.exists()
+            and not self.config.get("update_keybindings", False)
+            and not game_files_updated
+        ):
             print_debug(f"Keybind files already exist, updates disabled: {self.json_path}")
             return
 
@@ -189,13 +231,20 @@ class SCKeybindings:
         print_debug("=" * 80)
 
         # Load existing or build from scratch
-        if self.json_path.exists() and self.config.get("update_keybindings", True):
+        if self.json_path.exists() and (
+            self.config.get("update_keybindings", True) or game_files_updated
+        ):
             print_debug("Update mode: Loading existing keybindings")
             actions = self._load_sc_all_keybindings()
             actions = self._merge_missing_default_actions(actions)
         else:
-            print_debug("Initial build: Parsing SC default keybindings")
-            actions = self._build_sc_keybinding_default_actions()
+            actions = self._load_previous_version_keybindings()
+            if actions:
+                print_debug("New SC version: Reusing command phrases from previous version")
+                actions = self._merge_missing_default_actions(actions)
+            else:
+                print_debug("Initial build: Parsing SC default keybindings")
+                actions = self._build_sc_keybinding_default_actions()
 
         # Load custom player keybindings
         if self.user_keybinding_file.exists():
@@ -245,6 +294,35 @@ class SCKeybindings:
     # Private Helper Methods
     # ════════════════════════════════════════════════════════════════════════
 
+    def _refresh_version_paths(self):
+        """Rebuild all paths that depend on the selected SC version."""
+        mapping_config = self.config["sc-keybind-mappings"]
+        self.version_dir = Path(self.data_root_path) / self.sc_channel_version
+        self.json_path = self.version_dir / "sc_all_keybindings.json"
+
+        # Deprecated files (kept for backward compatibility during migration)
+        self.json_path_knowledge = self.version_dir / "keybindings_existing_knowledge.json"
+        self.json_path_miss_knowledge = self.version_dir / "keybindings_missing_knowledge.json"
+
+        self.default_keybinds_file = self.version_dir / mapping_config[
+            "sc_unp4k_file_default_keybindings_filter"
+        ]
+        self.keybindings_localization_file = self.version_dir / mapping_config[
+            "sc_unp4k_file_keybinding_localization_filter"
+        ]
+        self.en_translation_file = mapping_config["en_translation_file"]
+        self.sc_translations_en = self.version_dir / self.en_translation_file
+
+        user_keybinding_file_config = (
+            f"{self.sc_installation_dir}/{self.sc_active_channel}/USER/Client/0/Controls/"
+            f"Mappings/{self.user_keybinding_file_name}"
+        )
+        self.user_keybinding_file = Path(
+            user_keybinding_file_config.format(
+                sc_channel_version=self.sc_channel_version
+            )
+        )
+
     def _ensure_keybindings_loaded(self):
         """Ensure keybindings are loaded from file."""
         if self.keybindings is None:
@@ -259,8 +337,8 @@ class SCKeybindings:
         - Preserves existing entries (including user-defined command-phrases) for shared keys
         """
         default_actions = self._build_sc_keybinding_default_actions()
-        default_action_names = set(default_actions.keys())
-        current_action_names = set(actions.keys())
+        default_action_names = set(default_actions)
+        current_action_names = set(actions)
 
         missing_action_names = sorted(default_action_names - current_action_names)
         obsolete_action_names = sorted(current_action_names - default_action_names)
@@ -270,7 +348,6 @@ class SCKeybindings:
                 f"Update mode: Removing {len(obsolete_action_names)} obsolete actions not found in current defaultProfile.xml"
             )
             for action_name in obsolete_action_names:
-                actions.pop(action_name, None)
                 print_debug(f"  - removed obsolete action: {action_name}")
 
         if missing_action_names:
@@ -278,7 +355,6 @@ class SCKeybindings:
                 f"Update mode: Adding {len(missing_action_names)} new actions from current defaultProfile.xml"
             )
             for action_name in missing_action_names:
-                actions[action_name] = copy.deepcopy(default_actions[action_name])
                 print_debug(f"  - added new action: {action_name}")
         else:
             print_debug("Update mode: No new default actions to add")
@@ -286,7 +362,40 @@ class SCKeybindings:
         if not missing_action_names and not obsolete_action_names:
             print_debug("Update mode: Keybindings already in sync with current defaultProfile.xml")
 
-        return actions
+        # Default bindings and translations may change between releases. Start from
+        # the fresh SC data and preserve only the expensive, user-facing AI phrases.
+        merged_actions = copy.deepcopy(default_actions)
+        for action_name in default_action_names & current_action_names:
+            command_phrases = actions[action_name].get("command-phrases")
+            if command_phrases:
+                merged_actions[action_name]["command-phrases"] = copy.deepcopy(
+                    command_phrases
+                )
+
+        return merged_actions
+
+    def _load_previous_version_keybindings(self) -> Dict:
+        """Load the newest other version so established voice phrases survive upgrades."""
+        data_root = Path(self.data_root_path)
+        if not data_root.is_dir():
+            return {}
+
+        candidates = []
+        for candidate in data_root.glob("R*/sc_all_keybindings.json"):
+            if candidate.parent == self.version_dir:
+                continue
+            match = re.fullmatch(r"R(\d+)_(\d+)", candidate.parent.name)
+            if match:
+                candidates.append(
+                    ((int(match.group(1)), int(match.group(2))), candidate)
+                )
+        if not candidates:
+            return {}
+
+        _, previous_path = max(candidates, key=lambda item: item[0])
+        print_debug(f"Loading previous keybinding knowledge from: {previous_path}")
+        with open(previous_path, "r", encoding="utf-8") as file:
+            return json.load(file)
 
     def _load_sc_all_keybindings(self) -> Dict:
         """Load the unified keybindings from JSON file."""

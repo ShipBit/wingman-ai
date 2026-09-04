@@ -113,27 +113,16 @@ ignored_actionnames:
 
 ### Task: Update after new Star Citizen release
 
-```bash
-# 1. Extract new SC files to R4_61/ folder
-# 2. Update config.yaml
-```
-
 ```yaml
 sc-keybind-mappings:
-  sc_channel_version: R4_61  # ← Change version
+  auto_detect_version: true
+  auto_extract_game_files: true
+  sc_unp4k_install_dir: C:/Tools/unp4k-suite
 ```
 
 ```bash
-# 3. Set update mode in config.yaml
-```
-
-```yaml
-update_keybindings: true  # ← Enable updates
-```
-
-```bash
-# 4. Restart Wingman AI
-# 5. Done! Your command phrases are preserved
+# Restart Wingman AI. The manifest is detected, files are extracted and converted,
+# and existing command phrases are preserved automatically.
 ```
 
 ## Cheat Sheet
