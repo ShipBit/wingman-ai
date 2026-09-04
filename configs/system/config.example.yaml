@@ -571,7 +571,7 @@ wingmen:
       sc_active_channel: LIVE # HOTFIX 4.0_PREVIEW LIVE or PTU or EPTU TECH-PREVIEW - The channel you are playing on
       auto_detect_version: True # reads <channel>/build_manifest.id and updates sc_channel_version at startup
       auto_extract_game_files: True # runs unp4k/unforge when a new build is detected or required files are missing
-      sc_channel_version: R4_60 # fallback if the manifest cannot be read or auto detection is disabled
+      sc_channel_version: R4_90 # fallback if the manifest cannot be read or auto detection is disabled
 
 
       # the name of the exported keybinding file. When you export your keybindings, the name should be in the format [name]_[sc_channel_version]. 
