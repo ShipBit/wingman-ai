@@ -4,42 +4,37 @@ This is a 5-minute guide to get started with the improved Star Citizen keybindin
 
 ## What You Need to Know
 
-**The Big Change:** Everything about keybindings is now in ONE file (`sc_all_keybindings.json`) with clear status information.
+**The Big Change:** Each local version has one runtime file (`sc_all_keybindings.json`),
+while reusable voice phrases are stored separately in the tracked
+`command_phrase_knowledge.json`.
 
 **New Tools:** Python utilities to help you understand and manage keybindings.
 
-**Your Config:** No changes required unless you want to use new features.
+**Your Config:** Set the SC installation, active channel, and `sc_unp4k_install_dir`.
 
 ## 5-Minute Getting Started
 
-### Step 1: Check Current Status (1 minute)
+### Step 1: Generate the Current Cache (2 minutes)
+
+```yaml
+sc-keybind-mappings:
+  auto_detect_version: true
+  auto_extract_game_files: true
+  sc_unp4k_install_dir: C:/Tools/unp4k-suite
+```
+
+Start Wingman once. It detects the installed build and creates the ignored version cache.
+
+### Step 2: Check Current Status (1 minute)
 
 ```bash
 cd star_citizen_data/keybindings
 python list_commands.py --stats
-```
 
-**What this shows:**
-- Total commands available
-- How many are active for AI
-- Why some are inactive
-- Statistics about your keybindings
-
-### Step 2: Migrate to New Format (2 minutes)
-
-```bash
-# This adds helpful metadata to your keybindings
-python migrate_keybindings.py R4_60 --backup
-
-# Verify it worked
 python check_command_status.py v_toggle_mining_mode
 ```
 
-**What this does:**
-- Creates automatic backup
-- Adds `ai_status` metadata to each command
-- Preserves all existing data
-- Shows migration statistics
+The utilities select the newest local version automatically.
 
 ### Step 3: Try the Utilities (2 minutes)
 
@@ -149,11 +144,13 @@ python migrate_keybindings.py --help
 
 ```
 star_citizen_data/keybindings/
-├── R4_60/
-│   └── sc_all_keybindings.json      ← MAIN FILE (everything is here)
+├── command_phrase_knowledge.json    ← TRACKED PHRASE SEED
+├── R4_100/                          ← GENERATED, IGNORED CACHE
+│   └── sc_all_keybindings.json      ← CURRENT RUNTIME DATA
 ├── check_command_status.py          ← Tool: Check a command
 ├── list_commands.py                 ← Tool: Browse commands
 ├── migrate_keybindings.py           ← Tool: Migrate format
+├── export_command_phrase_knowledge.py ← Tool: Persist reviewed phrases
 ├── KEYBINDINGS_DESIGN.md            ← Full documentation
 ├── README.md                        ← Detailed user guide
 ├── IMPROVEMENTS.md                  ← What's new

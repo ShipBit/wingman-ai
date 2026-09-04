@@ -184,6 +184,9 @@ cache_data/
 star_citizen_data/macro-data/macros/
 star_citizen_data/macro-data/tts_cache/
 
+# Extracted/generated SC keybinding caches (tracked phrase knowledge lives above R*/)
+star_citizen_data/keybindings/R*/
+
 # Issue Council local/runtime data (keep examples and scripts trackable)
 star_citizen_data/issue_council_data/.issue_council_bearer_token
 star_citizen_data/issue_council_data/playwright_profile/

@@ -11,22 +11,30 @@ Examples:
 
 import json
 import sys
-import os
 from pathlib import Path
 
+try:
+    from .version_utils import available_versions, resolve_version
+except ImportError:
+    from version_utils import available_versions, resolve_version
 
-def check_command(actionname, version='R4_60'):
+
+def check_command(actionname, version=None):
     """Check and display the status of a specific command."""
     # Build path to keybindings file
     script_dir = Path(__file__).parent
+    try:
+        version = resolve_version(script_dir, version)
+    except FileNotFoundError as exc:
+        print(f"❌ {exc}")
+        return
     kb_file = script_dir / version / 'sc_all_keybindings.json'
     
     if not kb_file.exists():
         print(f"❌ Keybindings file not found: {kb_file}")
         print(f"   Available versions:")
-        for item in script_dir.iterdir():
-            if item.is_dir() and item.name.startswith('R'):
-                print(f"   - {item.name}")
+        for available_version in available_versions(script_dir):
+            print(f"   - {available_version}")
         return
     
     # Load keybindings
@@ -117,9 +125,14 @@ def check_command(actionname, version='R4_60'):
     print(f"\n{'='*70}\n")
 
 
-def list_all_commands(version='R4_60', filter_active=True):
+def list_all_commands(version=None, filter_active=True):
     """List all commands, optionally filtered by active status."""
     script_dir = Path(__file__).parent
+    try:
+        version = resolve_version(script_dir, version)
+    except FileNotFoundError as exc:
+        print(f"❌ {exc}")
+        return
     kb_file = script_dir / version / 'sc_all_keybindings.json'
     
     if not kb_file.exists():
@@ -173,12 +186,12 @@ if __name__ == '__main__':
         print("-" * 70)
         check_command('v_toggle_mining_mode')
     elif sys.argv[1] == '--list':
-        version = sys.argv[2] if len(sys.argv) > 2 else 'R4_60'
+        version = sys.argv[2] if len(sys.argv) > 2 else None
         list_all_commands(version, filter_active=True)
     elif sys.argv[1] == '--list-all':
-        version = sys.argv[2] if len(sys.argv) > 2 else 'R4_60'
+        version = sys.argv[2] if len(sys.argv) > 2 else None
         list_all_commands(version, filter_active=False)
     else:
         actionname = sys.argv[1]
-        version = sys.argv[2] if len(sys.argv) > 2 else 'R4_60'
+        version = sys.argv[2] if len(sys.argv) > 2 else None
         check_command(actionname, version)

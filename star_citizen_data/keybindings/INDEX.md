@@ -13,15 +13,16 @@ The Star Citizen keybindings system has been completely redesigned to be simpler
 3. **[KEYBINDINGS_DESIGN.md](KEYBINDINGS_DESIGN.md)** - Full architecture documentation
 4. **[IMPROVEMENTS.md](IMPROVEMENTS.md)** - Migration guide and benefits
 
-### 🛠️ Utilities (3 Python tools)
+### 🛠️ Utilities (4 Python tools)
 
 5. **[check_command_status.py](check_command_status.py)** - Inspect individual commands
 6. **[list_commands.py](list_commands.py)** - Browse/search all commands
 7. **[migrate_keybindings.py](migrate_keybindings.py)** - Migrate to new format
+8. **[export_command_phrase_knowledge.py](export_command_phrase_knowledge.py)** - Persist reviewed phrases
 
-### 💻 Code (1 improved implementation)
+### 💻 Code
 
-8. **[keybindings_improved.py](../../wingmen/star_citizen_services/keybindings_improved.py)** - Refactored keybindings class (optional)
+9. **[keybindings.py](../../wingmen/star_citizen_services/keybindings.py)** - Runtime keybinding manager
 
 ## Quick Start
 
@@ -32,13 +33,10 @@ cd star_citizen_data/keybindings
 # 2. See current status
 python list_commands.py --stats
 
-# 3. Migrate to new format (with backup)
-python migrate_keybindings.py R4_60 --backup
-
-# 4. Verify migration
+# 3. Inspect one command
 python check_command_status.py v_toggle_mining_mode
 
-# 5. Explore your keybindings
+# 4. Explore your keybindings
 python list_commands.py --active-only
 ```
 
@@ -51,7 +49,8 @@ python list_commands.py --active-only
 - Complex update process
 
 ### After ✅
-- Single source of truth: `sc_all_keybindings.json`
+- Generated runtime source of truth: `sc_all_keybindings.json`
+- Tracked, version-independent phrase seed: `command_phrase_knowledge.json`
 - Clear `ai_status` metadata on every command
 - Easy search utilities
 - Smart update process that preserves custom data
@@ -128,9 +127,11 @@ star_citizen_data/keybindings/
 ├── 🛠️ check_command_status.py         ← Inspect commands
 ├── 🛠️ list_commands.py                ← Browse commands
 ├── 🛠️ migrate_keybindings.py          ← Migrate format
+├── 🛠️ export_command_phrase_knowledge.py ← Persist reviewed phrases
+├── command_phrase_knowledge.json       ← Tracked version-independent phrase seed
 │
-└── R4_60/
-    └── sc_all_keybindings.json         ← Main data file
+└── R4_100/                              ← Generated, ignored runtime cache
+    └── sc_all_keybindings.json         ← Current runtime data
 ```
 
 ## Where to Start

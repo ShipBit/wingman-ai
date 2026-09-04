@@ -22,6 +22,11 @@ from pathlib import Path
 from datetime import datetime
 import shutil
 
+try:
+    from .version_utils import resolve_version
+except ImportError:
+    from version_utils import resolve_version
+
 
 def backup_file(file_path):
     """Create a backup of the file with timestamp."""
@@ -125,9 +130,14 @@ def calculate_ai_status(cmd, config_filters=None):
     return status
 
 
-def migrate_keybindings(version='R4_60', create_backup=True, config_filters=None):
+def migrate_keybindings(version=None, create_backup=True, config_filters=None):
     """Migrate keybindings to new unified format."""
     script_dir = Path(__file__).parent
+    try:
+        version = resolve_version(script_dir, version)
+    except FileNotFoundError as exc:
+        print(f"❌ {exc}")
+        return False
     kb_file = script_dir / version / 'sc_all_keybindings.json'
     kb_existing_file = script_dir / version / 'keybindings_existing_knowledge.json'
     
@@ -288,7 +298,7 @@ def load_config_filters_from_yaml(config_path):
 
 def main():
     """Main entry point."""
-    version = 'R4_60'
+    version = None
     create_backup = False
     config_filters = None
     

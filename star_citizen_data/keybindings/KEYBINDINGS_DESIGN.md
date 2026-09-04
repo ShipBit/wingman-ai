@@ -11,11 +11,12 @@ The previous system had several issues:
 4. **Complex updates**: When SC updates or user changes keybinds, regeneration was confusing
 5. **Split knowledge**: Information about a command was spread across multiple files
 
-## Solution: Unified Keybindings Structure
+## Solution: Persistent Knowledge + Generated Runtime Data
 
-### Single Source of Truth: `sc_all_keybindings.json`
+### Runtime Source of Truth: `sc_all_keybindings.json`
 
-This file now contains ALL information about keybindings in one place with enhanced metadata:
+Inside the currently detected, generated version directory this file contains all
+runtime information about keybindings with enhanced metadata:
 
 ```json
 {
@@ -92,18 +93,28 @@ Possible values when `is_active = false`:
 - `true`: Activation mode is supported (tap, press, etc.)
 - `false`: Activation mode not supported (hold, hold_toggle) - these require continuous keypress
 
+### Persistent Source: `command_phrase_knowledge.json`
+
+Only reusable AI command phrases are stored in Git. They are independent from the
+extracted SC version and seed a clean installation without another full OpenAI
+generation run. The export utility merges reviewed phrases from a local runtime cache
+into this file.
+
 ## File Structure (Simplified)
 
-### Required Files:
+### Tracked and generated files:
 ```
-star_citizen_data/keybindings/R4_60/
-├── sc_all_keybindings.json          # SINGLE SOURCE OF TRUTH - all keybindings with metadata
-├── defaultProfile.xml                # SC default keybindings (from game files)
-├── keybinding_localization.xml       # Key name translations (from game files)
-├── global_en_GB.ini                  # English translations (from game files)
-├── global_de_DE.ini                  # German translations (from game files)
-├── global_fr_FR.ini                  # French translations (from game files)
-└── global.ini                        # Base translations (from game files)
+star_citizen_data/keybindings/
+├── command_phrase_knowledge.json     # tracked persistent seed
+├── export_command_phrase_knowledge.py
+└── R4_100/                           # generated, ignored by Git
+    ├── .sc-extraction.json           # extracted build identity
+    ├── sc_all_keybindings.json       # runtime source of truth
+    ├── defaultProfile.xml            # SC default keybindings
+    ├── keybinding_localization.xml   # key name translations
+    ├── global_en_GB.ini              # English translations
+    ├── global_de_DE.ini              # configured translations
+    └── global.ini                    # compatibility copy
 ```
 
 ### Deprecated Files (can be removed after migration):
@@ -118,14 +129,15 @@ star_citizen_data/keybindings/R4_60/
 
 ### 1. Initial Generation
 ```
-Parse defaultProfile.xml → Load user custom keybinds → Merge → 
+Load command_phrase_knowledge.json → Parse defaultProfile.xml →
+Load user custom keybinds → Merge →
 Add localizations → Calculate AI status → Generate command phrases → 
 Save to sc_all_keybindings.json
 ```
 
 ### 2. Update Process (when SC releases new version or user changes keybinds)
 ```
-Load existing sc_all_keybindings.json → 
+Load persistent phrase knowledge and newest local cache →
 Parse new defaultProfile.xml → 
 Load new user custom keybinds → 
 Merge (preserving existing command phrases) → 
@@ -250,11 +262,17 @@ ignored_actionnames:
    - Place in configured location
 
 5. **What happens**:
-   - Loads command phrases from the newest prior `sc_all_keybindings.json`
+   - Loads command phrases from `command_phrase_knowledge.json` and any newer local cache
    - Parses the newly extracted `defaultProfile.xml` and translations
    - Merges data, preserving existing command phrases
    - Generates phrases only for NEW commands
    - Saves to the automatically selected version directory
+
+6. **Persist reviewed new phrases when desired**:
+   ```bash
+   python star_citizen_data/keybindings/export_command_phrase_knowledge.py R4_61
+   ```
+   Generated version directories remain ignored; only the merged phrase seed is committed.
 
 ### Scenario 2: Changed Custom Keybindings
 

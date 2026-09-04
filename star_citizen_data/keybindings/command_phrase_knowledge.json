@@ -1,0 +1,3075 @@
+{
+  "schema_version": 1,
+  "source_version": "R4_90",
+  "commands": {
+    "ammoRepool": {
+      "en": [
+        "Repool ammo",
+        "Repool ammunition",
+        "Refill ammo",
+        "Refill ammunition",
+        "Ammo repool"
+      ],
+      "de_DE": [
+        "Munition",
+        "Munition auffrischen",
+        "Munition nachfüllen",
+        "Munition wieder auffüllen",
+        "Munition repool"
+      ]
+    },
+    "customize": {
+      "en": [
+        "Customize",
+        "Customize weapon",
+        "Customize gun",
+        "Modify weapon",
+        "Weapon modification"
+      ],
+      "de_DE": [
+        "Anpassen",
+        "Waffe anpassen",
+        "Waffe konfigurieren",
+        "Waffe modifizieren",
+        "Waffenanpassung"
+      ]
+    },
+    "emote_cs_forward": {
+      "en": [
+        "Forward",
+        "Move forward",
+        "Go forward",
+        "Move forward now",
+        "Advance now"
+      ],
+      "de_DE": [
+        "Vorwärts",
+        "Vorwärts gehen",
+        "Geh vorwärts",
+        "Jetzt vorwärts",
+        "Vorrücken jetzt"
+      ]
+    },
+    "emote_cs_left": {
+      "en": [
+        "Left",
+        "Turn left",
+        "Go left",
+        "Move left",
+        "Left now"
+      ],
+      "de_DE": [
+        "Links",
+        "Nach links",
+        "Dreh links",
+        "Geh links",
+        "Jetzt links"
+      ]
+    },
+    "emote_cs_no": {
+      "en": [
+        "No",
+        "Negative",
+        "Say no",
+        "Decline",
+        "No now"
+      ],
+      "de_DE": [
+        "Nein",
+        "Negativ",
+        "Sag nein",
+        "Ablehnen",
+        "Nein jetzt"
+      ]
+    },
+    "emote_cs_right": {
+      "en": [
+        "Right",
+        "Turn right",
+        "Go right",
+        "Move right",
+        "Right now"
+      ],
+      "de_DE": [
+        "Rechts",
+        "Nach rechts",
+        "Dreh rechts",
+        "Geh rechts",
+        "Jetzt rechts"
+      ]
+    },
+    "emote_cs_stop": {
+      "en": [
+        "Stop",
+        "Stop now",
+        "Halt",
+        "Halt now",
+        "Stop moving now"
+      ],
+      "de_DE": [
+        "Stopp",
+        "Stopp jetzt",
+        "Halt",
+        "Halt jetzt",
+        "Bewegung jetzt stoppen"
+      ]
+    },
+    "emote_cs_yes": {
+      "en": [
+        "Yes",
+        "Affirmative",
+        "Say yes",
+        "Confirm yes",
+        "Say yes now"
+      ],
+      "de_DE": [
+        "Ja",
+        "Bestätigen",
+        "Sag ja",
+        "Ja bestätigen",
+        "Ja jetzt"
+      ]
+    },
+    "incapacitatedRespawn": {
+      "en": [
+        "Toggle incapacitated regen",
+        "Incapacitated regen on",
+        "Incapacitated regen off",
+        "Regen while incapacitated",
+        "Toggle passive regen"
+      ],
+      "de_DE": [
+        "Bewusstlos Regeneration umschalten",
+        "Regeneration bei bewusstlos an",
+        "Regeneration bei bewusstlos aus",
+        "Regeneration im bewusstlosen Zustand",
+        "Passive Regeneration umschalten"
+      ]
+    },
+    "mobiglas": {
+      "en": [
+        "MobiGlas",
+        "Open mobiGlas",
+        "Close mobiGlas",
+        "Toggle mobiGlas",
+        "Show mobiGlas"
+      ],
+      "de_DE": [
+        "MobiGlas",
+        "MobiGlas öffnen",
+        "MobiGlas schließen",
+        "MobiGlas umschalten",
+        "MobiGlas anzeigen"
+      ]
+    },
+    "notification_accept": {
+      "en": [
+        "Accept invite"
+      ],
+      "de_DE": [
+        "Einladung annehmen",
+        "Akzeptieren"
+      ]
+    },
+    "notification_decline": {
+      "en": [
+        "Decline invite",
+        "Decline"
+      ],
+      "de_DE": [
+        "Einladung ablehnen",
+        "Ablehnen"
+      ]
+    },
+    "pc_pit_inventory": {
+      "en": [
+        "Open personal inventory",
+        "Close personal inventory",
+        "Toggle personal inventory",
+        "Personal inventory",
+        "Open commodity inventory",
+        "Close commodity inventory"
+      ],
+      "de_DE": [
+        "Öffne persönliches Inventar",
+        "Schließe persönliches Inventar",
+        "Persönliches Inventar umschalten",
+        "Persönliches Inventar",
+        "Öffne Wareninventar",
+        "Schließe Wareninventar"
+      ]
+    },
+    "pl_exit": {
+      "en": [
+        "Exit seat",
+        "Leave seat",
+        "Get out seat",
+        "Stand up",
+        "Exit vehicle seat"
+      ],
+      "de_DE": [
+        "Sitz verlassen",
+        "Sitz aufgeben",
+        "Aussteigen",
+        "Aufstehen",
+        "Sitz verlassen jetzt"
+      ]
+    },
+    "reloadSecondary": {
+      "en": [
+        "Secondary",
+        "Reload secondary",
+        "Reload sidearm",
+        "Reload offhand",
+        "Reload backup gun"
+      ],
+      "de_DE": [
+        "Sekundär",
+        "Sekundär nachladen",
+        "Seitenwaffe nachladen",
+        "Nebenwaffe nachladen",
+        "Backup Waffe nachladen"
+      ]
+    },
+    "stopwatch_reset": {
+      "en": [
+        "Zero",
+        "Reset stopwatch",
+        "Reset timer",
+        "Stopwatch reset",
+        "Clear stopwatch"
+      ],
+      "de_DE": [
+        "Nullen",
+        "Stoppuhr zurücksetzen",
+        "Timer zurücksetzen",
+        "Stoppuhr Reset",
+        "Stoppuhr löschen"
+      ]
+    },
+    "stopwatch_trigger": {
+      "en": [
+        "Timer",
+        "Start stopwatch",
+        "Pause stopwatch",
+        "Start timer",
+        "Pause timer"
+      ],
+      "de_DE": [
+        "Timer",
+        "Stoppuhr starten",
+        "Stoppuhr pausieren",
+        "Timer starten",
+        "Timer pausieren"
+      ]
+    },
+    "thirdperson": {
+      "en": [
+        "Third person",
+        "First person"
+      ],
+      "de_DE": [
+        "Innensicht",
+        "Außenansicht",
+        "Internal view",
+        "First Person",
+        "Third Person",
+        "Standardsicht"
+      ]
+    },
+    "toggleAttachHelmet": {
+      "en": [
+        "Equip helmet now",
+        "Equip helmet immediate",
+        "Force equip helmet",
+        "Helmet equip",
+        "Put on helmet now"
+      ],
+      "de_DE": [
+        "Helm anlegen jetzt",
+        "Helm sofort anlegen",
+        "Helm erzwingen anlegen",
+        "Helm anlegen",
+        "Helm jetzt anlegen"
+      ]
+    },
+    "toggleEquipHelmet": {
+      "en": [
+        "Toggle helmet",
+        "Helmet on",
+        "Helmet off",
+        "Helmet toggle",
+        "Helmet status"
+      ],
+      "de_DE": [
+        "Helm umschalten",
+        "Helm an",
+        "Helm aus",
+        "Helm wechsel",
+        "Helm status"
+      ]
+    },
+    "toggle_chat": {
+      "en": [
+        "Toggle chat window",
+        "Open chat window",
+        "Close chat window",
+        "Chat window",
+        "Chat toggle"
+      ],
+      "de_DE": [
+        "Chatfenster umschalten",
+        "Chatfenster öffnen",
+        "Chatfenster schließen",
+        "Chatfenster",
+        "Chat umschalten"
+      ]
+    },
+    "toggle_contact": {
+      "en": [
+        "Toggle commlink",
+        "Commlink on",
+        "Commlink off",
+        "Open commlink",
+        "Close commlink"
+      ],
+      "de_DE": [
+        "Commlink umschalten",
+        "Commlink öffnen",
+        "Commlink schließen",
+        "Commlink an",
+        "Commlink aus"
+      ]
+    },
+    "toggle_flashlight": {
+      "en": [
+        "Flashlight",
+        "Toggle flashlight",
+        "Flashlight on",
+        "Flashlight off",
+        "Toggle torch"
+      ],
+      "de_DE": [
+        "Taschenlampe",
+        "Taschenlampe umschalten",
+        "Taschenlampe an",
+        "Taschenlampe aus",
+        "Lampe umschalten"
+      ]
+    },
+    "tractor_beam_detach": {
+      "en": [
+        "Detach tractor beam",
+        "Release tractor beam",
+        "Tractor beam detach",
+        "Release target",
+        "Drop tractor beam"
+      ],
+      "de_DE": [
+        "Traktorstrahl lösen",
+        "Traktor lösen",
+        "Traktorstrahl abkoppeln",
+        "Ziel loslassen",
+        "Traktorstrahl freigeben"
+      ]
+    },
+    "tractor_beam_reset_rotation": {
+      "en": [
+        "Reset tractor rotation",
+        "Reset rotation",
+        "Tractor rotation reset",
+        "Reset object rotation",
+        "Zero tractor rotation"
+      ],
+      "de_DE": [
+        "Rotation zurücksetzen",
+        "Traktorrotation zurücksetzen",
+        "Rotation des Objekts zurücksetzen",
+        "Rotation nullen",
+        "Drehung zurücksetzen"
+      ]
+    },
+    "tractor_beam_throw": {
+      "en": [
+        "Throw tractor beam",
+        "Tractor beam throw",
+        "Launch tractor beam",
+        "Throw target",
+        "Toss tractor beam"
+      ],
+      "de_DE": [
+        "Traktorstrahl werfen",
+        "Traktor werfen",
+        "Traktorziel werfen",
+        "Ziel schleudern",
+        "Traktorstrahl schleudern"
+      ]
+    },
+    "turret_change_position": {
+      "en": [
+        "Change turret position",
+        "Move turret position",
+        "Shift turret position",
+        "Cycle turret position"
+      ],
+      "de_DE": [
+        "Turret Position ändern",
+        "Turret Position bewegen",
+        "Turret Position verschieben",
+        "Turret Position wechseln"
+      ]
+    },
+    "turret_gyromode": {
+      "en": [
+        "Gyro stabilization",
+        "Toggle gyro stabilization",
+        "Enable gyro stabilization",
+        "Disable gyro stabilization"
+      ],
+      "de_DE": [
+        "Gyro Stabilisierung",
+        "Gyro Stabilisierung umschalten",
+        "Gyro Stabilisierung aktivieren",
+        "Gyro Stabilisierung deaktivieren"
+      ]
+    },
+    "turret_mouse_mode_cycle": {
+      "en": [
+        "Cycle turret mouse mode",
+        "Next turret mouse mode",
+        "Turret mouse mode",
+        "Change turret mouse mode"
+      ],
+      "de_DE": [
+        "Turret Maus Modus wechseln",
+        "Nächster Turret Maus Modus",
+        "Turret Maus Modus",
+        "Turret Maus Modus ändern"
+      ]
+    },
+    "turret_recenter": {
+      "en": [
+        "Recenter turret",
+        "Center turret",
+        "Reset turret aim",
+        "Return turret center"
+      ],
+      "de_DE": [
+        "Turret zentrieren",
+        "Turret Mitte",
+        "Ziel Turret zurücksetzen",
+        "Turret in Mitte bringen"
+      ]
+    },
+    "turret_remote_cycle_next": {
+      "en": [
+        "Next turret station",
+        "Next remote turret",
+        "Cycle turret next",
+        "Move to next turret"
+      ],
+      "de_DE": [
+        "Nächste Turret Station",
+        "Nächste Remote Turret",
+        "Turret weiter schalten",
+        "Zur nächsten Turret wechseln"
+      ]
+    },
+    "turret_remote_cycle_prev": {
+      "en": [
+        "Previous turret station",
+        "Previous remote turret",
+        "Cycle turret previous",
+        "Move to previous turret"
+      ],
+      "de_DE": [
+        "Vorherige Turret Station",
+        "Vorherige Remote Turret",
+        "Zurück zur vorherigen Turret",
+        "Turret zurück schalten"
+      ]
+    },
+    "turret_remote_exit": {
+      "en": [
+        "Exit turret",
+        "Leave turret",
+        "Stop remote turret",
+        "Exit remote turret"
+      ],
+      "de_DE": [
+        "Turret verlassen",
+        "Turret raus",
+        "Remote Turret verlassen",
+        "Fernbedienung Turret verlassen"
+      ]
+    },
+    "turret_toggle_mouse_mode": {
+      "en": [
+        "Turretmouse",
+        "Turret mouse",
+        "Toggle turret mouse",
+        "Enable turret mouse",
+        "Disable turret mouse"
+      ],
+      "de_DE": [
+        "Turret Maus",
+        "Turretmaus",
+        "Turret Maus umschalten",
+        "Turret Maus aktivieren",
+        "Turret Maus deaktivieren"
+      ]
+    },
+    "v_accel_range_decrement": {
+      "en": [
+        "Reduce",
+        "Decrease acceleration range",
+        "Lower acceleration range",
+        "Contract acceleration range",
+        "Acceleration range down"
+      ],
+      "de_DE": [
+        "Weniger Raketen"
+      ]
+    },
+    "v_accel_range_increment": {
+      "en": [
+        "Acceleration",
+        "Increase acceleration range",
+        "Raise acceleration range",
+        "Expand acceleration range",
+        "Acceleration range up"
+      ],
+      "de_DE": [
+        "Beschleunigung",
+        "Beschleunigungsbereich erhöhen",
+        "Beschleunigungsbereich erweitern",
+        "Beschleunigung erhöhen",
+        "Beschleunigungsbereich hoch"
+      ]
+    },
+    "v_afterburner": {
+      "en": [
+        "Afterburner",
+        "Afterburner on",
+        "Afterburner off",
+        "Toggle afterburner",
+        "Boost"
+      ],
+      "de_DE": [
+        "Nachbrenner",
+        "Nachbrenner an",
+        "Nachbrenner aus",
+        "Nachbrenner umschalten",
+        "Boost"
+      ]
+    },
+    "v_atc_loading_area_request": {
+      "en": [
+        "CargoRequest",
+        "Request cargo loading",
+        "Request cargo",
+        "Request loading",
+        "Call cargo loading"
+      ],
+      "de_DE": [
+        "Frachtanfrage",
+        "Frachtladen anfordern",
+        "Fracht Verladung",
+        "Fracht anfragen"
+      ]
+    },
+    "v_atc_request": {
+      "en": [
+        "Landrequest",
+        "Request landing",
+        "Landing request",
+        "Request landing clearance",
+        "Call for landing"
+      ],
+      "de_DE": [
+        "Landeanfrage",
+        "Landerlaubnis anfordern",
+        "Starterlaubnis",
+        "Starterlaubnis anfordern"
+      ]
+    },
+    "v_auto_targeting_toggle_long": {
+      "en": [
+        "Auto targeting",
+        "Enable auto targeting",
+        "Disable auto targeting",
+        "Toggle auto targeting",
+        "Auto target"
+      ],
+      "de_DE": [
+        "Auto Zielerfassung",
+        "Automatische Zielerfassung"
+      ]
+    },
+    "v_autoland": {
+      "en": [
+        "Autoland",
+        "Engage autoland",
+        "Start autoland",
+        "Begin autoland sequence",
+        "Activate autoland"
+      ],
+      "de_DE": [
+        "Autolandung",
+        "Autoland aktivieren",
+        "Autoland starten",
+        "Automatische Landung",
+        "Autoland ausfuehren"
+      ]
+    },
+    "v_close_all_doors": {
+      "en": [
+        "Close",
+        "Close doors",
+        "Shut doors",
+        "Close all doors",
+        "Close hatches",
+        "Seal hatches"
+      ],
+      "de_DE": [
+        "Schließen",
+        "Türen schließen",
+        "Luken schließen",
+        "Alle Türen schließen",
+        "Türen zu",
+        "Luken verriegeln"
+      ]
+    },
+    "v_dock_toggle_view": {
+      "en": [
+        "Docking camera",
+        "Enable docking camera",
+        "Disable docking camera",
+        "Toggle docking camera",
+        "Dock camera"
+      ],
+      "de_DE": [
+        "Andockkamera",
+        "Andockkamera aktivieren",
+        "Andockkamera deaktivieren",
+        "Andockkamera umschalten",
+        "Andock kamera"
+      ]
+    },
+    "v_engineering_assignment_engine_decrease": {
+      "en": [
+        "Throttle",
+        "Decrease engines",
+        "Decrease thrust",
+        "Reduce engine power",
+        "Lower engine power"
+      ],
+      "de_DE": [
+        "Gas",
+        "Triebwerke verringern",
+        "Schub verringern",
+        "Triebwerksleistung senken",
+        "Schub senken"
+      ]
+    },
+    "v_engineering_assignment_engine_increase": {
+      "en": [
+        "Thrust",
+        "Increase engines",
+        "Increase thrust",
+        "Increase engine power",
+        "Raise engine power"
+      ],
+      "de_DE": [
+        "Schub",
+        "Triebwerke erhöhen",
+        "Schub erhöhen",
+        "Triebwerksleistung erhöhen",
+        "Mehr Schub"
+      ]
+    },
+    "v_engineering_assignment_engine_max": {
+      "en": [
+        "Afterburner",
+        "Set engines to maximum",
+        "Engines full power",
+        "Maximize engine power",
+        "Engines maximum"
+      ],
+      "de_DE": [
+        "Nachbrenner",
+        "Triebwerke auf Maximum",
+        "Triebwerke volle Leistung",
+        "Schub maximal",
+        "Triebwerke maximale Leistung"
+      ]
+    },
+    "v_engineering_assignment_engine_min": {
+      "en": [
+        "Idle",
+        "Set engines to minimum",
+        "Engines idle",
+        "Engines minimum",
+        "Reduce engines to idle"
+      ],
+      "de_DE": [
+        "Leerlauf",
+        "Triebwerke auf Leerlauf",
+        "Triebwerke Minimieren",
+        "Triebwerke auf Minimum",
+        "Triebwerk im Leerlauf"
+      ]
+    },
+    "v_engineering_assignment_reset": {
+      "en": [
+        "Redistribute",
+        "Reset power assignments",
+        "Reset power distribution",
+        "Clear power assignments",
+        "Reset power allocation"
+      ],
+      "de_DE": [
+        "Neuverteilung",
+        "Stromzuweisung zurücksetzen",
+        "Energieverteilung zurücksetzen",
+        "Zuweisungen löschen",
+        "Energiezuweisung zurücksetzen"
+      ]
+    },
+    "v_engineering_assignment_shields_decrease": {
+      "en": [
+        "Weaken",
+        "Decrease shields",
+        "Lower shields",
+        "Decrease shield power",
+        "Reduce shields"
+      ],
+      "de_DE": [
+        "Schwächen",
+        "Schilde verringern",
+        "Schilde senken",
+        "Schildleistung verringern",
+        "Schilde reduzieren"
+      ]
+    },
+    "v_engineering_assignment_shields_increase": {
+      "en": [
+        "Reinforce",
+        "Increase shields",
+        "Raise shields",
+        "Increase shield power",
+        "Strengthen shields"
+      ],
+      "de_DE": [
+        "Verstärken",
+        "Schilde erhöhen",
+        "Schilde verstärken",
+        "Schildleistung erhöhen",
+        "Schilde stärken"
+      ]
+    },
+    "v_engineering_assignment_shields_max": {
+      "en": [
+        "Fortify",
+        "Set shields to maximum",
+        "Shields full strength",
+        "Maximize shields",
+        "Shields maximum"
+      ],
+      "de_DE": [
+        "Absichern",
+        "Schilde auf Maximum",
+        "Schilde volle Stärke",
+        "Schilde maximieren",
+        "Schilde maximal"
+      ]
+    },
+    "v_engineering_assignment_shields_min": {
+      "en": [
+        "Lower",
+        "Set shields to minimum",
+        "Shields down",
+        "Minimize shields",
+        "Shields minimum"
+      ],
+      "de_DE": [
+        "Senkung",
+        "Schilde auf Minimum",
+        "Schilde runter",
+        "Schilde minimieren",
+        "Schilde aus"
+      ]
+    },
+    "v_engineering_assignment_weapons_decrease": {
+      "en": [
+        "Diminish",
+        "Decrease weapons",
+        "Lower weapons",
+        "Decrease weapon power",
+        "Reduce weapons power"
+      ],
+      "de_DE": [
+        "Verringern",
+        "Waffen verringern",
+        "Waffen senken",
+        "Waffenleistung reduzieren",
+        "Waffen weniger Leistung"
+      ]
+    },
+    "v_engineering_assignment_weapons_increase": {
+      "en": [
+        "Armaments",
+        "Increase weapons",
+        "Raise weapons",
+        "Increase weapon power",
+        "Power up weapons"
+      ],
+      "de_DE": [
+        "Bewaffnung",
+        "Waffen erhöhen",
+        "Waffen verstärken",
+        "Waffenleistung erhöhen",
+        "Waffen mehr Leistung"
+      ]
+    },
+    "v_engineering_assignment_weapons_max": {
+      "en": [
+        "Overcharge",
+        "Set weapons to maximum",
+        "Weapons full power",
+        "Maximize weapon power",
+        "Weapons maximum"
+      ],
+      "de_DE": [
+        "Überladen",
+        "Waffen auf Maximum",
+        "Waffen volle Leistung",
+        "Waffen maximieren",
+        "Waffen maximal"
+      ]
+    },
+    "v_engineering_assignment_weapons_min": {
+      "en": [
+        "Depower",
+        "Set weapons to minimum",
+        "Weapons idle",
+        "Minimize weapons",
+        "Weapons minimum"
+      ],
+      "de_DE": [
+        "Entladen",
+        "Waffen auf Minimum",
+        "Waffen Leerlauf",
+        "Waffen minimieren",
+        "Waffen minimal"
+      ]
+    },
+    "v_horn": {
+      "en": [
+        "Horn",
+        "Use horn",
+        "Sound horn",
+        "Vehicle horn",
+        "Honk horn"
+      ],
+      "de_DE": [
+        "Hupe",
+        "Hupe verwenden",
+        "Hupe betätigen",
+        "Fahrzeughupe",
+        "Hupen"
+      ]
+    },
+    "v_hud_open_scoreboard": {
+      "en": [
+        "Scoreboard",
+        "Show scoreboard",
+        "Open scoreboard",
+        "Toggle scoreboard",
+        "Display scoreboard"
+      ],
+      "de_DE": [
+        "Punktestand",
+        "Punktestand anzeigen",
+        "Punktestand öffnen",
+        "Anzeigetafel anzeigen",
+        "Scoreboard anzeigen"
+      ]
+    },
+    "v_ifcs_speed_limiter_decrement": {
+      "en": [
+        "Decrease",
+        "Decrease speed limiter",
+        "Lower speed limiter",
+        "Speed limiter down",
+        "Reduce speed limiter"
+      ],
+      "de_DE": [
+        "Verringern",
+        "Geschwindigkeitsbegrenzer verringern",
+        "Begrenzer verringern",
+        "Begrenzer runter",
+        "Geschwindigkeitsbegrenzer senken"
+      ]
+    },
+    "v_ifcs_speed_limiter_increment": {
+      "en": [
+        "Limiter",
+        "Increase speed limiter",
+        "Raise speed limiter",
+        "Speed limiter up",
+        "Speed limiter increase"
+      ],
+      "de_DE": [
+        "Begrenzer",
+        "Geschwindigkeitsbegrenzer erhöhen",
+        "Begrenzer erhöhen",
+        "Begrenzer hoch",
+        "Geschwindigkeitsbegrenzer erhöhen jetzt"
+      ]
+    },
+    "v_ifcs_throttle_swap_mode": {
+      "en": [
+        "Cruise",
+        "Cruise mode",
+        "Enable cruise mode",
+        "Disable cruise mode",
+        "Toggle cruise mode"
+      ],
+      "de_DE": [
+        "Cruise",
+        "Cruisemodus",
+        "Tempomat",
+        "Reisegeschwindigkeit"
+      ]
+    },
+    "v_ifcs_vector_decoupling_toggle": {
+      "en": [
+        "Decouple",
+        "Couple",
+        "Vector decoupling",
+        "Decouple vector",
+        "Toggle vector decoupling",
+        "Enable vector decoupling",
+        "Disable vector decoupling"
+      ],
+      "de_DE": [
+        "Entkoppeln",
+        "Koppeln",
+        "Vektorentkopplung",
+        "Vektor entkoppeln",
+        "Vektorentkopplung umschalten",
+        "Vektorentkopplung aktivieren",
+        "Vektorentkopplung deaktivieren"
+      ]
+    },
+    "v_increase_mining_throttle": {
+      "en": [
+        "Increase mining power",
+        "Boost mining laser",
+        "Mining power up",
+        "Increase laser power",
+        "Raise mining output"
+      ],
+      "de_DE": [
+        " Miningleistung erhöhen",
+        " Mininglaser verstärken",
+        "Leistung  Mining höher",
+        "Laserkraft erhöhen",
+        " Mining Ausgang erhöhen"
+      ]
+    },
+    "v_jettison_volatile_cargo": {
+      "en": [
+        "Jettison cargo",
+        "Eject cargo",
+        "Dump cargo",
+        "Jettison cargo now",
+        "Discard cargo"
+      ],
+      "de_DE": [
+        "Fracht abwerfen",
+        "Ladung ausstoßen",
+        "Fracht auswerfen",
+        "Fracht jetzt abwerfen",
+        "Ladung verwerfen"
+      ]
+    },
+    "v_light_amplification_toggle": {
+      "en": [
+        "Amplification",
+        "Light amplification",
+        "Enable light amplification",
+        "Disable light amplification",
+        "Toggle light amplification",
+        "Night vision",
+        "Enable night vision",
+        "Disable night vision",
+        "Toggle night vision",
+        "Night vision mode"
+      ],
+      "de_DE": [
+        "Verstärkung",
+        "Lichtverstärkung",
+        "Lichtverstärkung aktivieren",
+        "Lichtverstärkung deaktivieren",
+        "Lichtverstärkung umschalten",
+        "Nachtsicht",
+        "Nachtsicht aktivieren",
+        "Nachtsicht deaktivieren",
+        "Nachtsicht umschalten",
+        "Nachtsicht Modus"
+      ]
+    },
+    "v_lights": {
+      "en": [
+        "Headlights",
+        "Toggle headlights",
+        "Headlights on",
+        "Headlights off",
+        "Toggle lights"
+      ],
+      "de_DE": [
+        "Scheinwerfer",
+        "Scheinwerfer umschalten",
+        "Scheinwerfer ein",
+        "Scheinwerfer aus",
+        "Lichter umschalten"
+      ]
+    },
+    "v_lock_all_doors": {
+      "en": [
+        "Lock",
+        "Lock doors",
+        "Lock all doors",
+        "Lock ship doors",
+        "Lock cockpit doors",
+        "Secure",
+        "Secure doors",
+        "Secure all doors",
+        "Secure ship doors"
+      ],
+      "de_DE": [
+        "Verriegeln",
+        "Türen verriegeln",
+        "Alle Türen verriegeln",
+        "Schiffstüren verriegeln",
+        "Cockpit Türen verriegeln",
+        "Sichern",
+        "Türen sichern",
+        "Alle Türen sichern",
+        "Schiffstüren sichern"
+      ]
+    },
+    "v_lock_rotation": {
+      "en": [
+        "Stabilize",
+        "Lock pitch",
+        "Unlock pitch",
+        "Lock pitch yaw",
+        "Toggle pitch lock"
+      ],
+      "de_DE": [
+        "Stabilisieren",
+        "Nick sperren",
+        "Nick entsperren",
+        "Nick und Gier sperren",
+        "Stabilisierung umschalten"
+      ]
+    },
+    "v_look_ahead_enable": {
+      "en": [
+        "Lookahead",
+        "Enable look ahead",
+        "Disable look ahead",
+        "Toggle look ahead"
+      ],
+      "de_DE": [
+        "Vorausschauen",
+        "Vorausschauen aktivieren",
+        "Vorausschauen deaktivieren",
+        "Vorausschau umschalten"
+      ]
+    },
+    "v_master_mode_cycle_long": {
+      "en": [
+        "Master",
+        "Cycle master mode",
+        "Next master mode",
+        "Master mode",
+        "Change master mode",
+        "Navigation mode",
+        "Combat mode"
+      ],
+      "de_DE": [
+        "Master Modus",
+        "Master Modus aendern",
+        "naechster Master Modus"
+      ]
+    },
+    "v_master_mode_set_nav": {
+      "en": [
+        "Navigation",
+        "Set navigation mode",
+        "Set master navigation",
+        "Navigation master mode",
+        "Enter navigation mode"
+      ],
+      "de_DE": [
+        "Navigation",
+        "Navigationsmodus"
+      ]
+    },
+    "v_master_mode_set_scm": {
+      "en": [
+        "SCM",
+        "Set SCM mode",
+        "Set master SCM",
+        "Enter SCM mode",
+        "Space combat mode"
+      ],
+      "de_DE": [
+        "SCM",
+        "SCM Modus"
+      ]
+    },
+    "v_mfd_interact_cycle_backwards_short": {
+      "en": [
+        "Previous",
+        "Previous MFD",
+        "Cycle MFD backward",
+        "Previous display",
+        "Previous panel"
+      ],
+      "de_DE": [
+        "Vorherige",
+        "Vorherige MFD",
+        "MFD rückwärts wechseln",
+        "Vorheriges Display",
+        "Vorheriges Panel"
+      ]
+    },
+    "v_mfd_interact_cycle_forwards_short": {
+      "en": [
+        "Next",
+        "Next MFD",
+        "Cycle MFD forward",
+        "Next display",
+        "Next panel"
+      ],
+      "de_DE": [
+        "Nächste",
+        "Nächste MFD",
+        "MFD vorwärts wechseln",
+        "Nächstes Display",
+        "Nächstes Panel"
+      ]
+    },
+    "v_mfd_select_view_comms_short": {
+      "en": [
+        "Comms",
+        "Comms view",
+        "Select comms view",
+        "Switch to comms panel",
+        "Comms panel"
+      ],
+      "de_DE": [
+        "Kommunikation",
+        "Kommunikationsansicht",
+        "Kommunikationsansicht wahlen",
+        "Zur Kommunikationsanzeige wechseln",
+        "Kommunikationspanel"
+      ]
+    },
+    "v_mfd_select_view_configuration_short": {
+      "en": [
+        "View configuration",
+        "Show configuration",
+        "Select configuration view",
+        "Configuration view"
+      ],
+      "de_DE": [
+        "MFD Konfiguration anzeigen",
+        "MFD Konfiguration"
+      ]
+    },
+    "v_mfd_select_view_diagnostics_short": {
+      "en": [
+        "Diagnostics",
+        "Diagnostics view",
+        "Select diagnostics view",
+        "Switch to diagnostics panel",
+        "Systems diagnostics"
+      ],
+      "de_DE": [
+        "Diagnoseansicht",
+        "Systemdiagnose"
+      ]
+    },
+    "v_mfd_select_view_ifcs_short": {
+      "en": [
+        "IFCS",
+        "IFCS view",
+        "Select IFCS view",
+        "Switch to flight control view",
+        "Flight control view"
+      ],
+      "de_DE": [
+        "Flugsteuerung",
+        "Flugsteuerung anzeigen"
+      ]
+    },
+    "v_mfd_select_view_resource_network_short": {
+      "en": [
+        "Resources",
+        "Resource network",
+        "Select resource network",
+        "Switch to resource panel",
+        "Network resources"
+      ],
+      "de_DE": [
+        "Energieverteilung anzeigen",
+        "Ressourcennetzwerk"
+      ]
+    },
+    "v_mfd_select_view_self_status_short": {
+      "en": [
+        "View self status",
+        "Self status",
+        "Show self status",
+        "Select self status view"
+      ],
+      "de_DE": [
+        "Schiffsstatus anzeigen",
+        "Schiffsstatus"
+      ]
+    },
+    "v_mfd_select_view_target_status_short": {
+      "en": [
+        "View target status",
+        "Target status",
+        "Show target status",
+        "Select target status view"
+      ],
+      "de_DE": [
+        "Zielstatus anzeigen",
+        "Zielstatus"
+      ]
+    },
+    "v_mfd_soft_select_mfd_10_short": {
+      "en": [
+        "MFD 10",
+        "Select MFD 10",
+        "Show MFD 10",
+        "Switch to MFD 10"
+      ],
+      "de_DE": [
+        "MFD 10",
+        "MFD 10 auswählen",
+        "MFD 10 anzeigen",
+        "Zu MFD 10 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_1_short": {
+      "en": [
+        "MFD 1",
+        "Select MFD 1",
+        "Show MFD 1",
+        "Switch to MFD 1"
+      ],
+      "de_DE": [
+        "MFD 1",
+        "MFD 1 auswählen",
+        "MFD 1 anzeigen",
+        "Zu MFD 1 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_2_short": {
+      "en": [
+        "MFD 2",
+        "Select MFD 2",
+        "Show MFD 2",
+        "Switch to MFD 2"
+      ],
+      "de_DE": [
+        "MFD 2",
+        "MFD 2 auswählen",
+        "MFD 2 anzeigen",
+        "Zu MFD 2 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_3_short": {
+      "en": [
+        "MFD 3",
+        "Select MFD 3",
+        "Show MFD 3",
+        "Switch to MFD 3"
+      ],
+      "de_DE": [
+        "MFD 3",
+        "MFD 3 auswählen",
+        "MFD 3 anzeigen",
+        "Zu MFD 3 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_4_short": {
+      "en": [
+        "MFD 4",
+        "Select MFD 4",
+        "Show MFD 4",
+        "Switch to MFD 4"
+      ],
+      "de_DE": [
+        "MFD 4",
+        "MFD 4 auswählen",
+        "MFD 4 anzeigen",
+        "Zu MFD 4 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_5_short": {
+      "en": [
+        "MFD 5",
+        "Select MFD 5",
+        "Show MFD 5",
+        "Switch to MFD 5"
+      ],
+      "de_DE": [
+        "MFD 5",
+        "MFD 5 auswählen",
+        "MFD 5 anzeigen",
+        "Zu MFD 5 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_6_short": {
+      "en": [
+        "MFD 6",
+        "Select MFD 6",
+        "Show MFD 6",
+        "Switch to MFD 6"
+      ],
+      "de_DE": [
+        "MFD 6",
+        "MFD 6 auswählen",
+        "MFD 6 anzeigen",
+        "Zu MFD 6 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_7_short": {
+      "en": [
+        "MFD 7",
+        "Select MFD 7",
+        "Show MFD 7",
+        "Switch to MFD 7"
+      ],
+      "de_DE": [
+        "MFD 7",
+        "MFD 7 auswählen",
+        "MFD 7 anzeigen",
+        "Zu MFD 7 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_8_short": {
+      "en": [
+        "MFD 8",
+        "Select MFD 8",
+        "Show MFD 8",
+        "Switch to MFD 8"
+      ],
+      "de_DE": [
+        "MFD 8",
+        "MFD 8 auswählen",
+        "MFD 8 anzeigen",
+        "Zu MFD 8 wechseln"
+      ]
+    },
+    "v_mfd_soft_select_mfd_9_short": {
+      "en": [
+        "MFD 9",
+        "Select MFD 9",
+        "Show MFD 9",
+        "Switch to MFD 9"
+      ],
+      "de_DE": [
+        "MFD 9",
+        "MFD 9 auswählen",
+        "MFD 9 anzeigen",
+        "Zu MFD 9 wechseln"
+      ]
+    },
+    "v_mining_use_consumable1": {
+      "en": [
+        "Activate module 1",
+        "Module 1",
+        "Enable module 1",
+        "Activate mining module 1",
+        "Turn on slot 1"
+      ],
+      "de_DE": [
+        "Modul 1 aktivieren",
+        "Modul 1",
+        "Modul 1 einschalten",
+        " Miningmodul 1 aktivieren",
+        "Slot 1 einschalten"
+      ]
+    },
+    "v_mining_use_consumable2": {
+      "en": [
+        "Activate module 2",
+        "Module 2",
+        "Enable module 2",
+        "Activate mining module 2",
+        "Turn on slot 2"
+      ],
+      "de_DE": [
+        "Modul 2 aktivieren",
+        "Modul 2",
+        "Modul 2 einschalten",
+        " Miningmodul 2 aktivieren",
+        "Slot 2 einschalten"
+      ]
+    },
+    "v_mining_use_consumable3": {
+      "en": [
+        "Activate module 3",
+        "Module 3",
+        "Enable module 3",
+        "Activate mining module 3",
+        "Turn on slot 3"
+      ],
+      "de_DE": [
+        "Modul 3 aktivieren",
+        "Modul 3",
+        "Modul 3 einschalten",
+        " Miningmodul 3 aktivieren",
+        "Slot 3 einschalten"
+      ]
+    },
+    "v_mining_use_permanent_modifier": {
+      "en": [
+        "Mine",
+        "Activate mining module",
+        "Enable mining module",
+        "Start mining module",
+        "Mining module slot one"
+      ],
+      "de_DE": [
+        "Bergbau",
+        "Bergbaumodul aktivieren",
+        "Bergbaumodul Platz 1 aktivieren",
+        "Bergbaumodul starten",
+        "Bergbau starten"
+      ]
+    },
+    "v_open_all_doors": {
+      "en": [
+        "Open",
+        "Open doors",
+        "Unseal doors",
+        "Open all doors",
+        "Open hatches"
+      ],
+      "de_DE": [
+        "Öffnen",
+        "Türen öffnen",
+        "Luken öffnen",
+        "Alle Türen öffnen",
+        "Luftschleusen öffnen"
+      ]
+    },
+    "v_power_throttle_down": {
+      "en": [
+        "Slow",
+        "Throttle down",
+        "Decrease throttle",
+        "Reduce ship throttle",
+        "Lower throttle"
+      ],
+      "de_DE": [
+        "Verlangsamen",
+        "Schub zurück",
+        "Schub drosseln",
+        "Schub verringern",
+        "Schub senken"
+      ]
+    },
+    "v_power_throttle_max": {
+      "en": [
+        "Boost",
+        "Throttle to max",
+        "Full throttle",
+        "Set throttle to maximum",
+        "Boost throttle"
+      ],
+      "de_DE": [
+        "Vollgas",
+        "Schub auf maximum",
+        "Schub voll geben",
+        "Schub auf maximum setzen",
+        "Maximaler schub"
+      ]
+    },
+    "v_power_throttle_min": {
+      "en": [
+        "Cut",
+        "Throttle to idle",
+        "Throttle idle",
+        "Set throttle to minimum",
+        "Cut throttle"
+      ],
+      "de_DE": [
+        "Leerlauf",
+        "Schub auf leerlauf",
+        "Schub auf minimum",
+        "Schub auf minimal setzen",
+        "Schub stoppen"
+      ]
+    },
+    "v_power_throttle_up": {
+      "en": [
+        "Throttle",
+        "Throttle up",
+        "Increase throttle",
+        "Increase ship throttle",
+        "Raise throttle"
+      ],
+      "de_DE": [
+        "Schub",
+        "Schub erhöhen",
+        "Schub geben",
+        "Schub steigern",
+        "Schub hoch"
+      ]
+    },
+    "v_power_toggle": {
+      "en": [
+        "Power",
+        "Power all",
+        "Toggle power all",
+        "Power all on",
+        "Power all off"
+      ],
+      "de_DE": [
+        "Energie",
+        "Alle energie",
+        "Alle energie umschalten",
+        "Alle energie an",
+        "Alle energie aus"
+      ]
+    },
+    "v_power_toggle_shields": {
+      "en": [
+        "Shields",
+        "Power shields",
+        "Toggle power shields",
+        "Shields on",
+        "Shields off"
+      ],
+      "de_DE": [
+        "Schilde",
+        "Schilde energie",
+        "Schilde umschalten",
+        "Schilde an",
+        "Schilde aus"
+      ]
+    },
+    "v_power_toggle_thrusters": {
+      "en": [
+        "Thrusters",
+        "Power thrusters",
+        "Toggle power thrusters",
+        "Thrusters on",
+        "Thrusters off"
+      ],
+      "de_DE": [
+        "Schubdüsen",
+        "Schubdüsen energie",
+        "Schubdüsen umschalten",
+        "Schubdüsen an",
+        "Schubdüsen aus"
+      ]
+    },
+    "v_power_toggle_weapons": {
+      "en": [
+        "Weapons",
+        "Power weapons",
+        "Toggle power weapons",
+        "Weapons on",
+        "Weapons off"
+      ],
+      "de_DE": [
+        "Waffen",
+        "Waffen energie",
+        "Waffen umschalten",
+        "Waffen an",
+        "Waffen aus"
+      ]
+    },
+    "v_roll_left": {
+      "en": [
+        "Bank",
+        "Bank left",
+        "Roll left",
+        "Roll to the left"
+      ],
+      "de_DE": [
+        "Banken",
+        "Banken links",
+        "Rollen links",
+        "Rolle nach links"
+      ]
+    },
+    "v_roll_right": {
+      "en": [
+        "Roll",
+        "Roll right",
+        "Bank right",
+        "Roll to the right"
+      ],
+      "de_DE": [
+        "Rollen",
+        "Rollen rechts",
+        "Bank rechts",
+        "Rolle nach rechts"
+      ]
+    },
+    "v_salvage_beam_spacing_rel": {
+      "en": [
+        "Spacing",
+        "Beam spacing",
+        "Relative spacing",
+        "Set beam spacing"
+      ],
+      "de_DE": [
+        "Abstand",
+        "Strahl Abstand",
+        "Relativer Abstand",
+        "Strahl Abstand einstellen"
+      ]
+    },
+    "v_salvage_focus_all_heads": {
+      "en": [
+        "Heads",
+        "Focus heads",
+        "All heads",
+        "Focus all heads"
+      ],
+      "de_DE": [
+        "Köpfe",
+        "Köpfe fokussieren",
+        "Alle Köpfe",
+        "Alle Köpfe fokussieren"
+      ]
+    },
+    "v_salvage_focus_disintegrate": {
+      "en": [
+        "Disintegrate",
+        "Focus disintegrate",
+        "Disintegrate heads",
+        "Focus disintegrate heads"
+      ],
+      "de_DE": [
+        "Disintegration Modus"
+      ]
+    },
+    "v_salvage_focus_fracture": {
+      "en": [
+        "Fracture",
+        "Focus fracture",
+        "Fracture heads",
+        "Focus fracture heads"
+      ],
+      "de_DE": [
+        "Aufbrechen fokussieren",
+        "Aufbrechen aktivieren",
+        "Schneidbrenner aktivieren",
+        "Schneidbrenner Modus"
+      ]
+    },
+    "v_salvage_focus_left": {
+      "en": [
+        "Focus left",
+        "Left heads",
+        "Focus left heads"
+      ],
+      "de_DE": [
+        "Links fokussieren",
+        "Linke Köpfe",
+        "Linke Köpfe fokussieren"
+      ]
+    },
+    "v_salvage_focus_right": {
+      "en": [
+        "Focus right",
+        "Right heads",
+        "Focus right heads"
+      ],
+      "de_DE": [
+        "Rechts fokussieren",
+        "Rechte Köpfe",
+        "Rechte Köpfe fokussieren"
+      ]
+    },
+    "v_salvage_reset_gimbal": {
+      "en": [
+        "Reset gimbal",
+        "Center gimbal",
+        "Gimbal center",
+        "Reset salvage gimbal",
+        "Recenter gimbal"
+      ],
+      "de_DE": [
+        "Gimbal zurücksetzen",
+        "Gimbal zentrieren",
+        "Gimbal Mitte",
+        "Bergung Gimbal zurücksetzen",
+        "Gimbal neu zentrieren"
+      ]
+    },
+    "v_salvage_toggle_beam_spacing_axis": {
+      "en": [
+        "Axis",
+        "Beam axis",
+        "Toggle beam axis",
+        "Beam axis horizontal",
+        "Beam axis vertical"
+      ],
+      "de_DE": [
+        "Achse",
+        "Strahl Achse",
+        "Strahl Achse umschalten",
+        "Strahl Achse horizontal",
+        "Strahl Achse vertikal"
+      ]
+    },
+    "v_salvage_toggle_fire_disintegrate": {
+      "en": [
+        "Fire disintegrate beam",
+        "Stop disintegrate beam",
+        "Disintegrate beam",
+        "Toggle disintegrate fire",
+        "Enable disintegrate mode"
+      ],
+      "de_DE": [
+        "Disintegrationsstrahl feuern",
+        "Disintegrationsstrahl stoppen",
+        "Disintegrationsstrahl",
+        "Disintegrationsfeuer umschalten",
+        "Disintegrationsmodus aktivieren"
+      ]
+    },
+    "v_salvage_toggle_fire_fracture": {
+      "en": [
+        "Fire fracture beam",
+        "Stop fracture beam",
+        "Fracture beam",
+        "Toggle fracture fire",
+        "Enable fracture mode"
+      ],
+      "de_DE": [
+        "Schneidbrenner",
+        "Frakturstrahl"
+      ]
+    },
+    "v_salvage_toggle_fire_left": {
+      "en": [
+        "Fire left salvage",
+        "Stop left salvage",
+        "Left salvage",
+        "Toggle left salvage",
+        "Enable left cutter"
+      ],
+      "de_DE": [
+        "Linker Abwracklaser"
+      ]
+    },
+    "v_salvage_toggle_fire_right": {
+      "en": [
+        "Fire right salvage",
+        "Stop right salvage",
+        "Right salvage",
+        "Toggle right salvage",
+        "Enable right cutter"
+      ],
+      "de_DE": [
+        "Rechter Abwracklaser"
+      ]
+    },
+    "v_salvage_toggle_gimbal_mode": {
+      "en": [
+        "Gimbal mode",
+        "Enable gimbal mode",
+        "Disable gimbal mode",
+        "Toggle gimbal mode",
+        "Salvage gimbal toggle"
+      ],
+      "de_DE": [
+        "Gimbal Modus",
+        "Gimbal Modus aktivieren",
+        "Gimbal Modus deaktivieren",
+        "Gimbal Modus umschalten",
+        "Bergung Gimbal umschalten"
+      ]
+    },
+    "v_space_brake": {
+      "en": [
+        "Spacebrake",
+        "Engage spacebrake",
+        "Apply spacebrake",
+        "Brake ship",
+        "Full stop"
+      ],
+      "de_DE": [
+        "Raumbremse",
+        "Raumbremse aktivieren",
+        "Bremsen",
+        "Schiff bremsen",
+        "Vollstopp"
+      ]
+    },
+    "v_starmap": {
+      "en": [
+        "Starmap",
+        "Open starmap",
+        "Open star map",
+        "Show starmap",
+        "Toggle starmap"
+      ],
+      "de_DE": [
+        "Map",
+        "Sternenkarte",
+        "Sternenkarte öffnen",
+        "Sterntafel öffnen",
+        "Sternenkarte anzeigen",
+        "Sternenkarte umschalten"
+      ]
+    },
+    "v_strafe_back": {
+      "en": [
+        "Reduce",
+        "Throttle down",
+        "Decrease throttle",
+        "Cut throttle",
+        "Reduce engine throttle"
+      ],
+      "de_DE": [
+        "Reduzieren",
+        "Schub runter",
+        "Schub verringern",
+        "Drossel zu",
+        "Triebwerksschub verringern"
+      ]
+    },
+    "v_strafe_down": {
+      "en": [
+        "Sink",
+        "Strafe down",
+        "Slide down",
+        "Move down",
+        "Strafe downward"
+      ],
+      "de_DE": [
+        "Absenken",
+        "Strafe runter",
+        "Nach unten schieben",
+        "Runter bewegen",
+        "Strafe nach unten"
+      ]
+    },
+    "v_strafe_forward": {
+      "en": [
+        "Throttle",
+        "Throttle up",
+        "Increase throttle",
+        "Open throttle",
+        "Increase engine throttle"
+      ],
+      "de_DE": [
+        "Schub",
+        "Schub hoch",
+        "Schub erhohen",
+        "Drossel auf",
+        "Triebwerksschub erhohen"
+      ]
+    },
+    "v_strafe_left": {
+      "en": [
+        "Slide",
+        "Strafe left",
+        "Slide left",
+        "Move left",
+        "Strafe to the left"
+      ],
+      "de_DE": [
+        "Verschieben",
+        "Strafe links",
+        "Nach links schieben",
+        "Links bewegen",
+        "Strafe nach links"
+      ]
+    },
+    "v_strafe_right": {
+      "en": [
+        "Strafe",
+        "Strafe right",
+        "Translate right",
+        "Move right",
+        "Strafe to the right"
+      ],
+      "de_DE": [
+        "Strafe",
+        "Strafe rechts",
+        "Nach rechts verschieben",
+        "Rechts bewegen",
+        "Strafe nach rechts"
+      ]
+    },
+    "v_strafe_trim_reset_long": {
+      "en": [
+        "Recenter",
+        "Center trim",
+        "Reset trim",
+        "Reset control trim",
+        "Trim center"
+      ],
+      "de_DE": [
+        "Zuruecksetzen",
+        "Trim zentrieren",
+        "Trim zurucksetzen",
+        "Steuertrim zuruecksetzen",
+        "Trim zentrieren"
+      ]
+    },
+    "v_strafe_trim_reset_short": {
+      "en": [
+        "Release",
+        "Release trim",
+        "Trim release",
+        "Release flight trim",
+        "Release control trim"
+      ],
+      "de_DE": [
+        "Loslassen",
+        "Trim loslassen",
+        "Trim freigeben",
+        "Flugtrim loslassen",
+        "Steuertrim loslassen"
+      ]
+    },
+    "v_strafe_up": {
+      "en": [
+        "Rise",
+        "Strafe up",
+        "Slide up",
+        "Move up",
+        "Strafe upward"
+      ],
+      "de_DE": [
+        "Aufsteigen",
+        "Strafe hoch",
+        "Nach oben schieben",
+        "Hoch bewegen",
+        "Strafe nach oben"
+      ]
+    },
+    "v_target_cycle_all_fwd": {
+      "en": [
+        "Alltargets",
+        "Cycle lock all targets",
+        "Next target",
+        "Cycle all targets forward"
+      ],
+      "de_DE": [
+        "AlleZiele",
+        "Alle Ziele sperre wechseln",
+        "N\u0000e4chstes Ziel",
+        "Alle Ziele vorw\u0000e4rts wechseln"
+      ]
+    },
+    "v_target_cycle_all_reset": {
+      "en": [
+        "Nearestall",
+        "Reset all to closest",
+        "All targets reset",
+        "Choose nearest target"
+      ],
+      "de_DE": [
+        "N\u0000e4chsteAlle",
+        "Alle auf n\u0000e4chsten zur\u0000fccksetzen",
+        "Alle Ziele zur\u0000fccksetzen",
+        "N\u0000e4chstes Ziel w\u0000e4hlen"
+      ]
+    },
+    "v_target_cycle_attacker_fwd": {
+      "en": [
+        "Attackers",
+        "Cycle lock attackers",
+        "Next attacker",
+        "Cycle attackers forward"
+      ],
+      "de_DE": [
+        "Angreifer anvisieren"
+      ]
+    },
+    "v_target_cycle_attacker_reset": {
+      "en": [
+        "Nearestattackers",
+        "Reset attackers to closest",
+        "Attackers reset",
+        "Choose nearest attacker"
+      ],
+      "de_DE": [
+        "Nächster Angreifer"
+      ]
+    },
+    "v_target_cycle_friendly_fwd": {
+      "en": [
+        "Friendlies",
+        "Cycle lock friendlies",
+        "Next friendly",
+        "Cycle friendlies forward"
+      ],
+      "de_DE": [
+        "Freund anvisieren"
+      ]
+    },
+    "v_target_cycle_friendly_reset": {
+      "en": [
+        "Nearestfriendlies",
+        "Reset friendlies to closest",
+        "Friendlies reset",
+        "Choose nearest friendly"
+      ],
+      "de_DE": [
+        "Nächster Freund"
+      ]
+    },
+    "v_target_cycle_hostile_fwd": {
+      "en": [
+        "Hostiles",
+        "Cycle lock hostiles",
+        "Next hostile",
+        "Cycle hostiles forward"
+      ],
+      "de_DE": [
+        "Feind anvisieren"
+      ]
+    },
+    "v_target_cycle_hostile_reset": {
+      "en": [
+        "Nearesthostiles",
+        "Reset hostiles to closest",
+        "Hostiles reset",
+        "Choose nearest hostile"
+      ],
+      "de_DE": [
+        "Nächster Feind"
+      ]
+    },
+    "v_target_cycle_in_view_fwd": {
+      "en": [
+        "Sightlock",
+        "Cycle lock in view",
+        "Next lock in view",
+        "Cycle lock in view forward"
+      ],
+      "de_DE": [
+        "Sichtfix",
+        "Sperre im Sichtfeld wechseln",
+        "N\u0000e4chste Sperre im Sichtfeld",
+        "Sperre im Sichtfeld vorw\u0000e4rts"
+      ]
+    },
+    "v_target_cycle_in_view_reset": {
+      "en": [
+        "Reticlelock",
+        "Cycle lock under reticle",
+        "Next lock under reticle",
+        "Cycle lock under reticle now"
+      ],
+      "de_DE": [
+        "FadenkreuzSperre",
+        "Sperre unter Fadenkreuz wechseln",
+        "N\u0000e4chste Sperre unter Fadenkreuz",
+        "Sperre unter Fadenkreuz cyclen"
+      ]
+    },
+    "v_target_cycle_subitem_fwd": {
+      "en": [
+        "Subtarget",
+        "Cycle sub target",
+        "Next sub target",
+        "Cycle sub target forward"
+      ],
+      "de_DE": [
+        "Unterziel",
+        "Unterziel wechseln",
+        "N\u0000e4chstes Unterziel",
+        "Unterziel vorw\u0000e4rts wechseln"
+      ]
+    },
+    "v_target_cycle_subitem_reset": {
+      "en": [
+        "Resetsubtarget",
+        "Reset sub target",
+        "Return to main target",
+        "Reset sub target to main"
+      ],
+      "de_DE": [
+        "Unterziel zurücksetzen"
+      ]
+    },
+    "v_target_hail": {
+      "en": [
+        "Hail",
+        "Hail target",
+        "Call target",
+        "Hail selected target"
+      ],
+      "de_DE": [
+        "Anfunken",
+        "Ziel anfunken",
+        "Ziel rufen"
+      ]
+    },
+    "v_target_remove_all_pins": {
+      "en": [
+        "Clearpins",
+        "Clear pins",
+        "Remove all pins",
+        "Remove all pinned targets"
+      ],
+      "de_DE": [
+        "PinsL\u0000f6schen",
+        "Pins l\u0000f6schen",
+        "Alle Pins entfernen",
+        "Alle angepinnten Ziele entfernen"
+      ]
+    },
+    "v_target_toggle_lock_index_1": {
+      "en": [
+        "PinOne",
+        "Lock one",
+        "Unlock one",
+        "Lock pinned target one",
+        "Toggle pinned target one"
+      ],
+      "de_DE": [
+        "PinEins",
+        "Ziel eins sperren",
+        "Ziel eins entsperren",
+        "Gepinntes Ziel eins sperren",
+        "Gepinntes Ziel eins umschalten"
+      ]
+    },
+    "v_target_toggle_lock_index_2": {
+      "en": [
+        "PinTwo",
+        "Lock two",
+        "Unlock two",
+        "Lock pinned target two",
+        "Toggle pinned target two"
+      ],
+      "de_DE": [
+        "PinZwei",
+        "Ziel zwei sperren",
+        "Ziel zwei entsperren",
+        "Gepinntes Ziel zwei sperren",
+        "Gepinntes Ziel zwei umschalten"
+      ]
+    },
+    "v_target_toggle_lock_index_3": {
+      "en": [
+        "PinThree",
+        "Lock three",
+        "Unlock three",
+        "Lock pinned target three",
+        "Toggle pinned target three"
+      ],
+      "de_DE": [
+        "PinDrei",
+        "Ziel drei sperren",
+        "Ziel drei entsperren",
+        "Gepinntes Ziel drei sperren",
+        "Gepinntes Ziel drei umschalten"
+      ]
+    },
+    "v_target_toggle_pin_index_1": {
+      "en": [
+        "Anchor",
+        "Pin one",
+        "Slot one",
+        "Pin selected target one",
+        "Unpin one",
+        "Remove pin one"
+      ],
+      "de_DE": [
+        "Anpinnen",
+        "Pin eins",
+        "Slot eins",
+        "Gew\u0000e4hltes Ziel anpinnen eins",
+        "Abpinnen eins",
+        "Anpinnung eins entfernen"
+      ]
+    },
+    "v_target_toggle_pin_index_2": {
+      "en": [
+        "Mark",
+        "Pin two",
+        "Slot two",
+        "Pin selected target two",
+        "Unpin two",
+        "Remove pin two"
+      ],
+      "de_DE": [
+        "Markieren",
+        "Pin zwei",
+        "Slot zwei",
+        "Gew\u0000e4hltes Ziel anpinnen zwei",
+        "Abpinnen zwei",
+        "Anpinnung zwei entfernen"
+      ]
+    },
+    "v_target_toggle_pin_index_3": {
+      "en": [
+        "Bookmark",
+        "Pin three",
+        "Slot three",
+        "Pin selected target three",
+        "Unpin three",
+        "Remove pin three"
+      ],
+      "de_DE": [
+        "Lesezeichen",
+        "Pin drei",
+        "Slot drei",
+        "Gew\u0000e4hltes Ziel anpinnen drei",
+        "Abpinnen drei",
+        "Anpinnung drei entfernen"
+      ]
+    },
+    "v_target_unlock": {
+      "en": [
+        "Unlock",
+        "Unlock target",
+        "Release target",
+        "Unlock current target"
+      ],
+      "de_DE": [
+        "Entsperren",
+        "Ziel entsperren",
+        "Ziel freigeben",
+        "Aktuelles Ziel entsperren"
+      ]
+    },
+    "v_toggle_all_doors": {
+      "en": [
+        "Open doors",
+        "Close doors",
+        "Toggle doors",
+        "Doors",
+        "Open hatches",
+        "Close hatches",
+        "Hatches"
+      ],
+      "de_DE": [
+        "Türen öffnen",
+        "Türen schließen",
+        "Türen umschalten",
+        "Türen",
+        "Luken öffnen",
+        "Luken schließen",
+        "Luken"
+      ]
+    },
+    "v_toggle_all_portlocks": {
+      "en": [
+        "Lock all ports",
+        "Unlock all ports",
+        "Toggle all port locks",
+        "Ports lock",
+        "Ports unlock",
+        "Lock all hatches",
+        "Unlock all hatches"
+      ],
+      "de_DE": [
+        "Komponenten verriegeln",
+        "Komponenten entriegeln",
+        "Ports verriegeln",
+        "Ports entriegeln"
+      ]
+    },
+    "v_toggle_cursor_input": {
+      "en": [
+        "Toggle cursor input",
+        "Cursor input on",
+        "Cursor input off",
+        "Enable cursor input",
+        "Disable cursor input"
+      ],
+      "de_DE": [
+        "Cursor Eingabe umschalten",
+        "Cursor Eingabe an",
+        "Cursor Eingabe aus",
+        "Cursor aktivieren",
+        "Cursor deaktivieren"
+      ]
+    },
+    "v_toggle_docking_request": {
+      "en": [
+        "Dock",
+        "Dock now",
+        "Dock ship",
+        "Dock with station",
+        "Begin docking",
+        "Request docking",
+        "Request dock",
+        "Send docking request",
+        "Initiate dock request"
+      ],
+      "de_DE": [
+        "Andocken",
+        "Andocken starten",
+        "Andocken jetzt",
+        "Mit Station andocken",
+        "Bei Station andocken",
+        "Docking anfordern",
+        "Dockanfrage senden",
+        "Andockanfrage senden",
+        "Andockanfrage anfordern"
+      ]
+    },
+    "v_toggle_landing_system": {
+      "en": [
+        "Landing",
+        "Landing gear",
+        "Toggle landing gear",
+        "Deploy landing gear",
+        "Retract landing gear"
+      ],
+      "de_DE": [
+        "Landestützen",
+        "Fahrwerk",
+        "Fahrwerk ausfahren",
+        "Fahrwerk einfahren",
+        "Fahrwerk umschalten"
+      ]
+    },
+    "v_toggle_mining_laser_fire": {
+      "en": [
+        "Fire mining laser",
+        "Stop mining laser",
+        "Mining laser",
+        "Toggle mining laser",
+        "Cease mining fire"
+      ],
+      "de_DE": [
+        " Mininglaser feuern",
+        " Mininglaser stoppen",
+        " Mininglaser",
+        " Mininglaser umschalten",
+        " Miningfeuer stoppen"
+      ]
+    },
+    "v_toggle_mining_laser_type": {
+      "en": [
+        "Select mining laser",
+        "Deselect mining laser",
+        "Switch mining laser",
+        "Toggle laser selection",
+        "Cycle mining laser"
+      ],
+      "de_DE": [
+        " Mininglaser auswählen",
+        " Mininglaser abwählen",
+        " Mininglaser wechseln",
+        "Laser Auswahl umschalten",
+        " Mininglaser wechseln"
+      ]
+    },
+    "v_toggle_mining_mode": {
+      "en": [
+        "Mining",
+        "Start mining",
+        "Stop mining",
+        "Mining mode"
+      ],
+      "de_DE": [
+        " Mining",
+        " Mining umschalten",
+        " Mining starten",
+        " Mining stoppen",
+        " Mining Modus",
+        " Mining Modus umschalten",
+        " Mining aktivieren",
+        " Mining deaktivieren"
+      ]
+    },
+    "v_toggle_qdrive_engagement": {
+      "en": [
+        "Quantum",
+        "Engage quantum drive",
+        "Quantum drive",
+        "Engage quantum",
+        "Jump quantum"
+      ],
+      "de_DE": [
+        "Springen",
+        "Quantensprung"
+      ]
+    },
+    "v_toggle_salvage_mode": {
+      "en": [
+        "Salvage",
+        "Activate salvage",
+        "Start salvage",
+        "Stop salvage",
+        "Salvage mode",
+        "Activate salvage mode",
+        "Enable salvage mode"
+      ],
+      "de_DE": [
+        "Abwracken",
+        "Abwracken aktivieren",
+        "Abwracken starten",
+        "Abwracken stoppen",
+        "Abwracken Modus",
+        "Abwracken Modus aktivieren",
+        "Abwracken aktivieren"
+      ]
+    },
+    "v_toggle_scan_mode": {
+      "en": [
+        "Scan",
+        "Toggle scan",
+        "Start scan",
+        "Stop scan",
+        "Scan mode",
+        "Toggle scan mode",
+        "Enable scan mode",
+        "Disable scan mode"
+      ],
+      "de_DE": [
+        "Scannen",
+        "Scannen umschalten",
+        "Scannen starten",
+        "Scannen stoppen",
+        "Scan Modus",
+        "Scan Modus umschalten",
+        "Scan aktivieren",
+        "Scan deaktivieren"
+      ]
+    },
+    "v_transform_cycle": {
+      "en": [
+        "Configuration",
+        "Cycle configuration",
+        "Cycle ship configuration",
+        "Change configuration",
+        "Ship configuration"
+      ],
+      "de_DE": [
+        "Flügel einklappen",
+        "Flügel ausklappen",
+        "Schiffskonfiguration wechseln",
+        "Schiffskonfiguration ändern",
+        "Flügelkonfiguration ändern",
+        "Flügelkonfiguration wechseln"
+      ]
+    },
+    "v_ui_next_contact": {
+      "en": [
+        "Next contact",
+        "Contact",
+        "Next target",
+        "Advance contact",
+        "Contact forward"
+      ],
+      "de_DE": [
+        "Nächster Kontakt",
+        "Kontakt",
+        "Nächstes Ziel",
+        "Kontakt weiter",
+        "Kontakt vor"
+      ]
+    },
+    "v_ui_next_contact_page": {
+      "en": [
+        "Next contact page",
+        "Contact page",
+        "Advance contact page",
+        "Next contact",
+        "Contact page forward"
+      ],
+      "de_DE": [
+        "Nächste Kontakt Seite",
+        "Kontakt Seite",
+        "Kontakt Seite weiter",
+        "Kontakt Seite vor",
+        "Nächster Kontakt"
+      ]
+    },
+    "v_ui_next_scan_page": {
+      "en": [
+        "Next scan page",
+        "Scan page",
+        "Advance scan page",
+        "Next scan",
+        "Scan page forward"
+      ],
+      "de_DE": [
+        "Nächste Scan Seite",
+        "Scan Seite",
+        "Scan Seite weiter",
+        "Scan Seite vor",
+        "Nächster Scan"
+      ]
+    },
+    "v_ui_next_scan_tab": {
+      "en": [
+        "Scan",
+        "Next scan tab",
+        "Scan tab",
+        "Advance scan tab",
+        "Next scan group"
+      ],
+      "de_DE": [
+        "Nächster Scan Reiter",
+        "Scan Reiter",
+        "Scan Reiter weiter",
+        "Nächste Scan Gruppe"
+      ]
+    },
+    "v_ui_prev_contact": {
+      "en": [
+        "Previous contact",
+        "Prev contact",
+        "Contact back",
+        "Back contact",
+        "Previous target"
+      ],
+      "de_DE": [
+        "Vorheriger Kontakt",
+        "Zurück Kontakt",
+        "Kontakt zurück",
+        "Kontakt vorher",
+        "Vorheriges Ziel"
+      ]
+    },
+    "v_ui_prev_contact_page": {
+      "en": [
+        "Previous contact page",
+        "Prev contact page",
+        "Contact page back",
+        "Back contact page",
+        "Previous contact"
+      ],
+      "de_DE": [
+        "Vorige Kontakt Seite",
+        "Zurück Kontakt Seite",
+        "Kontakt Seite zurück",
+        "Kontakt Seite vorher",
+        "Vorheriger Kontakt"
+      ]
+    },
+    "v_ui_prev_scan_page": {
+      "en": [
+        "Previous scan page",
+        "Prev scan page",
+        "Scan page back",
+        "Back scan page",
+        "Previous scan"
+      ],
+      "de_DE": [
+        "Vorige Scan Seite",
+        "Zurück Scan Seite",
+        "Scan Seite zurück",
+        "Scan Seite vorher",
+        "Vorherige Scan"
+      ]
+    },
+    "v_ui_prev_scan_tab": {
+      "en": [
+        "Prevscan",
+        "Previous scan",
+        "Previous tab",
+        "Previous scan tab"
+      ],
+      "de_DE": [
+        "Vorheriger Scan",
+        "Vorheriger Reiter",
+        "Vorheriger Scan Reiter"
+      ]
+    },
+    "v_unlock_all_doors": {
+      "en": [
+        "Unlock",
+        "Unlock doors",
+        "Unlock all doors",
+        "Unlock ship doors",
+        "Unlock cockpit doors",
+        "Open",
+        "Open doors",
+        "Open all doors",
+        "Open ship doors"
+      ],
+      "de_DE": [
+        "Entriegeln",
+        "Türen entriegeln",
+        "Alle Türen entriegeln",
+        "Schiffstüren entriegeln",
+        "Cockpit Türen entriegeln",
+        "Öffnen",
+        "Türen öffnen",
+        "Alle Türen öffnen",
+        "Schiffstüren öffnen"
+      ]
+    },
+    "v_vtol_toggle": {
+      "en": [
+        "VTOL",
+        "Toggle VTOL",
+        "Enable VTOL",
+        "Disable VTOL",
+        "Enter VTOL mode",
+        "Exit VTOL mode"
+      ],
+      "de_DE": [
+        "VTOL",
+        "VTOL umschalten",
+        "VTOL aktivieren",
+        "VTOL deaktivieren",
+        "VTOL Modus betreten",
+        "VTOL Modus verlassen"
+      ]
+    },
+    "v_weapon_aim_type_cycle": {
+      "en": [
+        "Aim type",
+        "Weapon aim",
+        "Cycle weapon aim",
+        "Next weapon aim",
+        "Gimbal aim",
+        "Fixed aim"
+      ],
+      "de_DE": [
+        "Zieltyp",
+        "Waffen Zieltyp",
+        "Zieltyp wechseln",
+        "Nächster Zieltyp",
+        "Gimbal Ziel",
+        "Fixierte Zielung"
+      ]
+    },
+    "v_weapon_bombing_toggle_desired_impact_point": {
+      "en": [
+        "Impact",
+        "Toggle impact point",
+        "Set impact point",
+        "Clear impact point",
+        "Desired impact point"
+      ],
+      "de_DE": [
+        "Einschlagpunkt",
+        "Einschlagpunkt umschalten",
+        "Einschlagpunkt setzen",
+        "Einschlagpunkt löschen",
+        "Gewünschter einschlagpunkt"
+      ]
+    },
+    "v_weapon_countermeasure_decoy_burst_decrease": {
+      "en": [
+        "Shrink",
+        "Decrease burst",
+        "Decrease decoy burst",
+        "Decrease decoy burst size",
+        "Smaller decoy burst"
+      ],
+      "de_DE": [
+        "Weniger Täuschkörper"
+      ]
+    },
+    "v_weapon_countermeasure_decoy_burst_increase": {
+      "en": [
+        "Burst",
+        "Increase burst",
+        "Increase decoy burst",
+        "Increase decoy burst size",
+        "Bigger decoy burst"
+      ],
+      "de_DE": [
+        "Mehr Täuschkörper"
+      ]
+    },
+    "v_weapon_countermeasure_decoy_launch": {
+      "en": [
+        "Decoy",
+        "Launch decoy burst",
+        "Set and launch decoy burst",
+        "Set decoy burst",
+        "Decoy burst"
+      ],
+      "de_DE": [
+        "Täuschkörper",
+        "Täuschkörper salve abfeuern",
+        "Salve setzen und abfeuern",
+        "Täuschkörpersalve setzen",
+        "Täuschkörper salve"
+      ]
+    },
+    "v_weapon_countermeasure_decoy_launch_panic": {
+      "en": [
+        "Decoys",
+        "Launch decoys",
+        "Fire decoys",
+        "Deploy decoys",
+        "Panic decoy launch",
+        "Countermeasures",
+        "Launch countermeasures",
+        "Deploy countermeasures",
+        "Mass countermeasure launch"
+      ],
+      "de_DE": [
+        "Täuschkörper salve"
+      ]
+    },
+    "v_weapon_countermeasure_noise_launch": {
+      "en": [
+        "Noise",
+        "Deploy noise",
+        "Launch noise countermeasure",
+        "Deploy noise countermeasure",
+        "Noise countermeasure"
+      ],
+      "de_DE": [
+        "Störsignal",
+        "Störung einsetzen",
+        "Störung abwerfen",
+        "Störsignal einsetzen",
+        "Störsignal abwerfen",
+        "Radarabwehr"
+      ]
+    },
+    "v_weapon_cycle_missile_back": {
+      "en": [
+        "Warheads",
+        "Previous missile type",
+        "Cycle previous missile type",
+        "Previous warhead",
+        "Previous warhead type"
+      ],
+      "de_DE": [
+        "Gefechtsköpfe",
+        "Vorheriger raketentyp",
+        "Vorherigen raketentyp wechseln",
+        "Vorheriger gefechtskopf",
+        "Vorherigen gefechtskopf typ"
+      ]
+    },
+    "v_weapon_cycle_missile_fwd": {
+      "en": [
+        "Warhead",
+        "Next missile type",
+        "Cycle missile type",
+        "Next warhead",
+        "Cycle warhead"
+      ],
+      "de_DE": [
+        "Gefechtskopf",
+        "Nächster raketentyp",
+        "Raketentyp wechseln",
+        "Nächster gefechtskopf",
+        "Gefechtskopf wechseln"
+      ]
+    },
+    "v_weapon_gimbals_state_toggle": {
+      "en": [
+        "Gimbals",
+        "Toggle gimbals",
+        "Enable gimbals",
+        "Disable gimbals",
+        "Weapon gimbals"
+      ],
+      "de_DE": [
+        "Gimbals",
+        "Gimbals umschalten",
+        "Gimbals ein",
+        "Gimbals aus",
+        "Waffen Gimbals"
+      ]
+    },
+    "v_weapon_increase_max_missiles": {
+      "en": [
+        "Arm",
+        "Arm missiles",
+        "Increase armed missiles",
+        "Arm more missiles",
+        "Increase missile arming"
+      ],
+      "de_DE": [
+        "Mehr Raketen"
+      ]
+    },
+    "v_weapon_preset_attack": {
+      "en": [
+        "Fire weapon preset",
+        "Activate weapon preset",
+        "Use weapon preset",
+        "Fire preset now"
+      ],
+      "de_DE": [
+        "Waffenpreset abfeuern",
+        "Waffenpreset aktivieren",
+        "Preset benutzen",
+        "Preset jetzt abfeuern"
+      ]
+    },
+    "v_weapon_preset_next": {
+      "en": [
+        "Next weapon preset",
+        "Cycle weapon preset",
+        "Weapon preset next",
+        "Next preset"
+      ],
+      "de_DE": [
+        "Nächstes Waffenpreset",
+        "Waffenpreset wechseln",
+        "Waffenpreset weiter",
+        "Nächstes Preset"
+      ]
+    },
+    "v_weapon_preset_prev": {
+      "en": [
+        "Preset",
+        "Previous preset",
+        "Weapon preset",
+        "Previous weapon preset",
+        "Previous loadout"
+      ],
+      "de_DE": [
+        "Voreinstellung",
+        "Vorherige voreinstellung",
+        "Waffen voreinstellung",
+        "Vorherige waffen voreinstellung",
+        "Vorheriges Loadout"
+      ]
+    },
+    "v_weapon_reset_max_missiles": {
+      "en": [
+        "Reset",
+        "Reset armed missiles",
+        "Reset missile arming",
+        "Reset number armed missiles",
+        "Clear armed missiles"
+      ],
+      "de_DE": [
+        "Raketen zurücksetzen"
+      ]
+    },
+    "v_weapon_staggered_fire_toggle": {
+      "en": [
+        "Staggered fire",
+        "Stagger",
+        "Enable staggered fire",
+        "Disable staggered fire",
+        "Toggle staggered fire",
+        "Alternating fire",
+        "Alternate",
+        "Enable alternating fire",
+        "Disable alternating fire"
+      ],
+      "de_DE": [
+        "Versetztes Feuer",
+        "Versetzt",
+        "Aktiviere versetztes Feuer",
+        "Deaktiviere versetztes Feuer",
+        "Umschalte versetztes Feuer",
+        "Wechselndes Feuer",
+        "Wechselnd",
+        "Aktiviere wechselndes Feuer",
+        "Deaktiviere wechselndes Feuer"
+      ]
+    },
+    "v_weapon_toggle_ai": {
+      "en": [
+        "Auto",
+        "Auto weapons",
+        "Toggle auto weapons",
+        "Enable auto weapons",
+        "Disable auto weapons",
+        "Weapon AI",
+        "Toggle weapon AI",
+        "Enable weapon AI",
+        "Disable weapon AI"
+      ],
+      "de_DE": [
+        "Automatik",
+        "Automatische Waffen",
+        "Automatische Waffen umschalten",
+        "Automatische Waffen einschalten",
+        "Automatische Waffen ausschalten",
+        "Waffen KI",
+        "Waffen KI umschalten",
+        "Waffen KI einschalten",
+        "Waffen KI ausschalten"
+      ]
+    },
+    "v_weapon_toggle_launch_missile": {
+      "en": [
+        "Missiles",
+        "Launch missiles",
+        "Fire missiles",
+        "Launch missiles now",
+        "Fire missile salvo"
+      ],
+      "de_DE": [
+        "Raketen",
+        "Raketen abfeuern",
+        "Raketen starten",
+        "Raketen jetzt starten",
+        "Raketen salve abfeuern"
+      ]
+    },
+    "view_load_view_2": {
+      "en": [
+        "View",
+        "View 2",
+        "View two",
+        "Load view",
+        "Load view 2"
+      ],
+      "de_DE": [
+        "Ansicht",
+        "Ansicht 2",
+        "Ansicht zwei",
+        "Ansicht laden",
+        "Ansicht 2 laden"
+      ]
+    },
+    "view_load_view_4": {
+      "en": [
+        "Load",
+        "Load view",
+        "Load view 4",
+        "Load camera view",
+        "Load camera view 4",
+        "Recall view",
+        "Recall view 4",
+        "Recall camera view",
+        "View 4",
+        "Select view 4"
+      ],
+      "de_DE": [
+        "Ansicht",
+        "Ansicht laden",
+        "Ansicht 4 laden",
+        "Kamera Ansicht laden",
+        "Kamera Ansicht 4 laden",
+        "Ansicht abrufen",
+        "Ansicht 4 abrufen",
+        "Ansicht 4",
+        "Ansicht 4 auswählen",
+        "Ansicht auswählen"
+      ]
+    },
+    "visor_wipe": {
+      "en": [
+        "Wipe visor",
+        "Clean visor",
+        "Wipe helmet visor",
+        "Clear visor",
+        "Clean helmet visor"
+      ],
+      "de_DE": [
+        "Visier wischen",
+        "Visier reinigen",
+        "Helmvisier wischen",
+        "Visier säubern",
+        "Helmvisier reinigen"
+      ]
+    },
+    "weapon_auxiliary_action": {
+      "en": [
+        "Underbarrel",
+        "Underbarrel action",
+        "Use underbarrel",
+        "Toggle underbarrel",
+        "Underbarrel attachment"
+      ],
+      "de_DE": [
+        "Unterlauf",
+        "Unterlauf Aktion",
+        "Unterlauf benutzen",
+        "Unterlauf umschalten",
+        "Unterlauf Anbauteil"
+      ]
+    },
+    "weapon_change_firemode": {
+      "en": [
+        "Fire mode",
+        "Change fire mode",
+        "Cycle fire mode",
+        "Next fire mode",
+        "Single fire",
+        "Burst fire",
+        "Automatic fire"
+      ],
+      "de_DE": [
+        "Feuermodus",
+        "Feuermodus ändern",
+        "Feuermodus wechseln",
+        "Nächster Feuermodus",
+        "Einzelschuss",
+        "Salve",
+        "Automatik"
+      ]
+    },
+    "weapon_change_mining_throttle": {
+      "en": [
+        "Change mining throttle",
+        "Mining throttle",
+        "Increase mining throttle",
+        "Decrease mining throttle",
+        "Set mining throttle"
+      ],
+      "de_DE": [
+        "Mining Schub",
+        "Mining Drossel",
+        "Drossel ändern",
+        "Mining Schub erhöhen",
+        "Mining Schub verringern"
+      ]
+    },
+    "weapon_zeroing_decrease": {
+      "en": [
+        "Decrease zeroing",
+        "Zeroing down",
+        "Reduce zeroing",
+        "Lower zeroing",
+        "Decrease weapon zeroing"
+      ],
+      "de_DE": [
+        "Nullung verringern",
+        "Nullung runter",
+        "Nullpunkt verringern",
+        "Visierverstellung verringern",
+        "Zielpunkt verringern"
+      ]
+    },
+    "weapon_zeroing_increase": {
+      "en": [
+        "Increase zeroing",
+        "Zeroing up",
+        "Increase zeroing auto",
+        "Raise zeroing",
+        "Increase weapon zeroing"
+      ],
+      "de_DE": [
+        "Nullung erhöhen",
+        "Nullung rauf",
+        "Nullung automatisch erhöhen",
+        "Nullpunkt erhöhen",
+        "Visierverstellung erhöhen"
+      ]
+    }
+  }
+}

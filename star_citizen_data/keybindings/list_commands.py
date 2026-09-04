@@ -25,18 +25,27 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
+try:
+    from .version_utils import available_versions, resolve_version
+except ImportError:
+    from version_utils import available_versions, resolve_version
 
-def load_keybindings(version='R4_60'):
+
+def load_keybindings(version=None):
     """Load keybindings file for specified version."""
     script_dir = Path(__file__).parent
+    try:
+        version = resolve_version(script_dir, version)
+    except FileNotFoundError as exc:
+        print(f"❌ {exc}")
+        return None
     kb_file = script_dir / version / 'sc_all_keybindings.json'
     
     if not kb_file.exists():
         print(f"❌ Keybindings file not found: {kb_file}")
         print(f"\nAvailable versions:")
-        for item in script_dir.iterdir():
-            if item.is_dir() and item.name.startswith('R'):
-                print(f"   - {item.name}")
+        for available_version in available_versions(script_dir):
+            print(f"   - {available_version}")
         return None
     
     with open(kb_file, encoding='utf-8') as f:
@@ -268,7 +277,7 @@ def main():
         return
     
     # Parse arguments
-    version = 'R4_60'
+    version = None
     mode = '--by-category'
     active_only = True
     search_term = None

@@ -83,6 +83,46 @@ class KeybindingVersionIntegrationTests(unittest.TestCase):
         )
         self.assertNotIn("command-phrases", merged["new"])
 
+    def test_phrase_knowledge_combines_tracked_seed_and_newer_local_cache(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            seed_path = root / "command_phrase_knowledge.json"
+            seed_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "source_version": "R4_90",
+                        "commands": {
+                            "seed_only": {"en": ["seed phrase"]},
+                            "overridden": {"en": ["seed value"]},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            previous_dir = root / "R4_100"
+            previous_dir.mkdir()
+            (previous_dir / "sc_all_keybindings.json").write_text(
+                json.dumps(
+                    {
+                        "overridden": {"command-phrases": {"en": ["local value"]}},
+                        "local_only": {"command-phrases": {"en": ["local phrase"]}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manager = object.__new__(SCKeybindings)
+            manager.command_phrase_knowledge_path = seed_path
+            manager.data_root_path = str(root)
+            manager.version_dir = root / "R4_101"
+
+            knowledge = manager._load_command_phrase_knowledge()
+
+            self.assertEqual({"seed_only", "overridden", "local_only"}, set(knowledge))
+            self.assertEqual(
+                {"en": ["local value"]}, knowledge["overridden"]["command-phrases"]
+            )
+
     @staticmethod
     def _config(root: Path):
         return {

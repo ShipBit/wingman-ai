@@ -238,9 +238,9 @@ class SCKeybindings:
             actions = self._load_sc_all_keybindings()
             actions = self._merge_missing_default_actions(actions)
         else:
-            actions = self._load_previous_version_keybindings()
+            actions = self._load_command_phrase_knowledge()
             if actions:
-                print_debug("New SC version: Reusing command phrases from previous version")
+                print_debug("New SC version: Reusing persisted command phrase knowledge")
                 actions = self._merge_missing_default_actions(actions)
             else:
                 print_debug("Initial build: Parsing SC default keybindings")
@@ -299,6 +299,9 @@ class SCKeybindings:
         mapping_config = self.config["sc-keybind-mappings"]
         self.version_dir = Path(self.data_root_path) / self.sc_channel_version
         self.json_path = self.version_dir / "sc_all_keybindings.json"
+        self.command_phrase_knowledge_path = (
+            Path(self.data_root_path) / "command_phrase_knowledge.json"
+        )
 
         # Deprecated files (kept for backward compatibility during migration)
         self.json_path_knowledge = self.version_dir / "keybindings_existing_knowledge.json"
@@ -374,11 +377,41 @@ class SCKeybindings:
 
         return merged_actions
 
-    def _load_previous_version_keybindings(self) -> Dict:
-        """Load the newest other version so established voice phrases survive upgrades."""
+    def _load_command_phrase_knowledge(self) -> Dict:
+        """Load tracked phrase knowledge plus newer phrases from a local prior cache."""
+        phrase_knowledge = {}
+        if self.command_phrase_knowledge_path.is_file():
+            with open(
+                self.command_phrase_knowledge_path, "r", encoding="utf-8"
+            ) as file:
+                persisted = json.load(file)
+            if persisted.get("schema_version") != 1 or not isinstance(
+                persisted.get("commands"), dict
+            ):
+                raise ValueError(
+                    f"Unsupported command phrase knowledge format: "
+                    f"{self.command_phrase_knowledge_path}"
+                )
+            phrase_knowledge.update(
+                {
+                    action_name: {
+                        "actionname": action_name,
+                        "command-phrases": copy.deepcopy(command_phrases),
+                    }
+                    for action_name, command_phrases in persisted["commands"].items()
+                    if command_phrases
+                }
+            )
+            print_debug(
+                f"Loaded {len(phrase_knowledge)} persisted command phrase sets from: "
+                f"{self.command_phrase_knowledge_path}"
+            )
+
+        # Locally generated phrases may be newer than the repository seed. They are
+        # safe to reuse without making the versioned cache part of source control.
         data_root = Path(self.data_root_path)
         if not data_root.is_dir():
-            return {}
+            return phrase_knowledge
 
         candidates = []
         for candidate in data_root.glob("R*/sc_all_keybindings.json"):
@@ -389,13 +422,20 @@ class SCKeybindings:
                 candidates.append(
                     ((int(match.group(1)), int(match.group(2))), candidate)
                 )
-        if not candidates:
-            return {}
+        if candidates:
+            _, previous_path = max(candidates, key=lambda item: item[0])
+            print_debug(f"Loading local command phrase cache from: {previous_path}")
+            with open(previous_path, "r", encoding="utf-8") as file:
+                previous_keybindings = json.load(file)
+            for action_name, command in previous_keybindings.items():
+                command_phrases = command.get("command-phrases")
+                if command_phrases:
+                    phrase_knowledge[action_name] = {
+                        "actionname": action_name,
+                        "command-phrases": copy.deepcopy(command_phrases),
+                    }
 
-        _, previous_path = max(candidates, key=lambda item: item[0])
-        print_debug(f"Loading previous keybinding knowledge from: {previous_path}")
-        with open(previous_path, "r", encoding="utf-8") as file:
-            return json.load(file)
+        return phrase_knowledge
 
     def _load_sc_all_keybindings(self) -> Dict:
         """Load the unified keybindings from JSON file."""

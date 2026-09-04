@@ -2,6 +2,10 @@
 
 This directory contains utility scripts to help you manage and understand Star Citizen keybindings for the Wingman AI system.
 
+Version directories such as `R4_100/` are generated runtime caches and are not stored
+in Git. Reusable voice phrases live in the tracked `command_phrase_knowledge.json`.
+If no version is passed to a utility, it automatically uses the newest local cache.
+
 ## Available Utilities
 
 ### 1. `check_command_status.py` - Inspect Individual Commands
@@ -181,26 +185,37 @@ python migrate_keybindings.py
 
 ---
 
+### 4. `export_command_phrase_knowledge.py` - Persist Reviewed Phrases
+
+Merge generated command phrases from a local runtime cache into the small,
+version-independent file tracked by Git:
+
+```bash
+python export_command_phrase_knowledge.py R4_100
+```
+
+Extracted bindings, translations, debug responses, and backups remain local.
+
+---
+
 ## Quick Start Guide
 
 ### First Time Setup
 
-1. **Migrate your existing keybindings:**
-   ```bash
-   cd star_citizen_data/keybindings
-   python migrate_keybindings.py R4_60 --backup
-   ```
+1. **Enable automatic detection/extraction** and configure `sc_unp4k_install_dir`.
 
-2. **Verify the migration:**
+2. **Start Wingman once**, then verify the generated current cache:
    ```bash
-   python check_command_status.py v_toggle_mining_mode
-   python list_commands.py --stats
+    python check_command_status.py v_toggle_mining_mode
+    python list_commands.py --stats
    ```
 
 3. **Browse available commands:**
    ```bash
    python list_commands.py --active-only
    ```
+
+The migration utility is retained only for old local cache formats.
 
 ### Common Workflows
 
@@ -307,14 +322,16 @@ Then use `v_invoke_quantum_drive` as the `sc_command` value in config.yaml.
 
 ```
 star_citizen_data/keybindings/
-├── R4_60/                           # Current SC version
-│   ├── sc_all_keybindings.json      # Main file (single source of truth)
-│   ├── defaultProfile.xml           # SC default keybindings
-│   ├── keybinding_localization.xml  # Key translations
-│   └── global_*.ini                 # Language files
+├── command_phrase_knowledge.json    # Tracked, version-independent voice phrases
+├── R4_100/                          # Generated and ignored runtime cache
+│   ├── sc_all_keybindings.json      # Runtime source of truth
+│   ├── defaultProfile.xml           # Extracted SC default keybindings
+│   ├── keybinding_localization.xml  # Extracted key translations
+│   └── global_*.ini                 # Extracted language files
 ├── check_command_status.py          # Utility: Check command details
 ├── list_commands.py                 # Utility: List/search commands
 ├── migrate_keybindings.py           # Utility: Migrate to new format
+├── export_command_phrase_knowledge.py # Promote local phrases into the tracked seed
 ├── KEYBINDINGS_DESIGN.md            # Complete design documentation
 └── README.md                        # This file
 ```
@@ -402,10 +419,11 @@ When Star Citizen releases a new version (e.g., R4_60 → R4_61):
 
 1. Wingman reads `<SC installation>/<channel>/build_manifest.id` on startup.
 2. A changed branch/build ID selects the matching version directory automatically.
-3. `unp4k` extracts the default profile, key names, and all translations; `unforge`
+3. `unp4k` extracts the default profile, key names, and configured translations; `unforge`
    converts the two CryXML resources into normal XML.
-4. Existing command phrases are carried over from the newest previous version. Only
-   newly introduced active actions need phrase generation.
+4. Existing command phrases are loaded from `command_phrase_knowledge.json` and, if
+   present, the newest local cache. Only newly introduced active actions need phrase
+   generation.
 5. Export your custom keybindings from the game when your personal mappings change.
 
 Enable this workflow with `auto_detect_version: true` and
@@ -413,6 +431,15 @@ Enable this workflow with `auto_detect_version: true` and
 `sc_unp4k_install_dir` to a directory containing both `unp4k` and `unforge`.
 The configured `sc_channel_version` remains a fallback for installations without a
 readable manifest. Set either option to `false` to retain the manual workflow.
+
+After reviewing newly generated phrases, persist them for future clean installations:
+
+```bash
+python star_citizen_data/keybindings/export_command_phrase_knowledge.py R4_100
+```
+
+The exporter merges phrases into the existing seed, so knowledge for temporarily
+removed actions is retained.
 
 See **KEYBINDINGS_DESIGN.md** for detailed update workflows.
 
