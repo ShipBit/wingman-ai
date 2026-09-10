@@ -81,9 +81,9 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 3: Admin (`wingman-backend`, Route `/admin`)
 
-- [ ] 3.1 Zugang nur mit Supabase-Rolle `admin`; zusätzlich Vercel Authentication auf dem Projekt, bis das Panel fertig ist.
-- [ ] 3.2 Seiten: Übersicht (Nutzer nach Plan, Tagesverbrauch, Kosten-Schätzung), Nutzerliste mit Suche, Nutzerdetail (Subscription, Verbrauch pro Tag/Modell, Geräte, Overrides setzen, Plan manuell setzen), Modell-Routen und Plan-Limits bearbeiten, IPN-Log, Abgleich-Report, Audit.
-- [ ] 3.3 CSV-Export für Verbrauch und Nutzer.
+- [x] 3.1 Zugang nur mit Supabase-Rolle `admin`; zusätzlich Vercel Authentication auf dem Projekt, bis das Panel fertig ist.
+- [x] 3.2 Seiten: Übersicht (Nutzer nach Plan, Tagesverbrauch, Kosten-Schätzung), Nutzerliste mit Suche, Nutzerdetail (Subscription, Verbrauch pro Tag/Modell, Geräte, Overrides setzen, Plan manuell setzen), Modell-Routen und Plan-Limits bearbeiten, IPN-Log, Abgleich-Report, Audit.
+- [x] 3.3 CSV-Export für Verbrauch und Nutzer.
 - Test: Änderung einer Route wirkt beim nächsten Request ohne Deploy.
 
 ### Phase 4: Migrationsskripte (`wingman-backend/scripts`)
@@ -284,6 +284,17 @@ Gemessene Kosten und Preisannahmen:
 Sonstige Funde: Inworlds normale Antwort trägt `audioContent` auf oberster Ebene, die Stream-Antwort dagegen `result.audioContent` pro JSON-Zeile — beides wird gelesen. Der RIFF-Header wird wie in Core entfernt. Inworld liefert 282 Stimmen.
 
 Noch offen in Phase 2: **2.7** (Suspend/Renew über PayPro) — braucht Schreibzugriffe auf PayPro und wartet auf Freigabe.
+
+### Phase 3: Admin-Panel steht
+
+Unter `https://api.wingman-ai.com/admin`, vier Reiter: Übersicht, Nutzer, Modelle und Limits, IPN und Audit.
+
+- **Zugang** über Supabase-Rolle `admin` in `app_metadata.role`. Geprüft: ohne die Rolle antworten alle sechs Admin-Endpunkte mit 403, mit Rolle mit 200. Ein Geräte-Token kommt grundsätzlich nicht durch.
+- **Anmeldung im Browser per Magic Link**, Sitzung im localStorage, alle Aufrufe mit Bearer-Token. Bewusst **keine Cookies**: weil der CSRF-Schutz wegen PayPro global aus ist, wäre ein Cookie-authentifiziertes Admin-Panel die einzige Stelle, die sich von fremden Seiten auslösen ließe. Die Auflage aus Phase 2 ist damit eingehalten.
+- **Übersicht:** Nutzer nach Plan, gesperrte, manuell gesetzte Pläne, Subscriptions nach Status, Verbrauch heute und im Monat, Kosten nach Modell, und eine Liste "braucht Aufmerksamkeit" (unverarbeitete IPNs, Subscriptions ohne Nutzer).
+- **Nutzer:** Suche über E-Mail, Anzeigename und B2C-Objekt-ID; Detail mit Subscriptions, Verbrauch pro Tag und Modell, Geräten und Override. Plan setzen und sperren direkt aus der Ansicht — jede Änderung setzt `plan_source = 'manual'`, damit der nächtliche Abgleich sie nicht stillschweigend überschreibt, und landet in `admin_audit` mit Vorher- und Nachher-Stand.
+- **Modelle und Limits** bearbeitbar, dazu die `app_settings`. Der Abnahmetest aus dem Plan ist erfüllt: Anzeigename einer Route über die API geändert, `/api/v1/models` liefert ihn beim nächsten Aufruf, ohne Deploy.
+- **CSV-Export** für Nutzer und Verbrauch. Der Download läuft über einen Fetch mit Bearer-Token und einen Blob — ein einfacher Link hätte ohne Authorization-Header eine 401 bekommen.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
