@@ -18,11 +18,20 @@ Der Wert im Projekt ist aktuell der Platzhalter `local-dev.apps.googleuserconten
 Prüfen (die Client-ID steht im Redirect, das ist die einzige verlässliche Probe):
 
 ```sh
-curl -sI "https://bkmmccpxmrccaeikyila.supabase.co/auth/v1/authorize?provider=google" \
+curl -s -i "https://bkmmccpxmrccaeikyila.supabase.co/auth/v1/authorize?provider=google" \
   | grep -i '^location'
 ```
 
+`-s -i`, nicht `-sI`: mit `-I` schickt curl ein HEAD, und darauf antwortet GoTrue
+mit 405 ganz ohne `Location`-Header — man sieht dann nichts und hält es für kaputt.
+
 Erwartet: `client_id=…apps.googleusercontent.com` mit der echten ID.
+
+**Erledigt am 2026-09-10:** Client-ID `1080940440260-…apps.googleusercontent.com`
+steht im Projekt. Google nimmt sie an — der Redirect landet auf der Anmeldeseite,
+kein `invalid_client`, kein `redirect_uri_mismatch` — und `wingman://auth/callback`
+übersteht den Authorize-Aufruf, die Redirect-Allowlist stimmt also auch. Was ein
+Skript nicht prüfen kann, ist der Login selbst; das zeigt erst der Beta-Client.
 
 Wichtig: **kein `supabase config push` ausführen, solange nicht klar ist, was es
 ändert.** Der Google-Provider ist deshalb bewusst nicht mehr in `config.toml`
