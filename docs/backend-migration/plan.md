@@ -70,7 +70,7 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 2: Proxy-Routen und Metering (`wingman-backend`)
 
-- [ ] 2.1 `POST /api/v1/chat/completions`: OpenAI-Chat-Completion-Format wie heute `/ask` (messages, tools, stream, reasoning_effort). Middleware: Overrides → Limits → Modellwahl aus `model_routes` → Vercel AI Gateway mit Fallback-Kette → Stream durchreichen → `usage` aus letztem Chunk in `usage_daily`. Hard-Cap: HTTP 429 mit JSON `{error: "quota_exceeded", resets_at}`.
+- [x] 2.1 `POST /api/v1/chat/completions`: OpenAI-Chat-Completion-Format wie heute `/ask` (messages, tools, stream, reasoning_effort). Middleware: Overrides → Limits → Modellwahl aus `model_routes` → Vercel AI Gateway mit Fallback-Kette → Stream durchreichen → `usage` aus letztem Chunk in `usage_daily`. Hard-Cap: HTTP 429 mit JSON `{error: "quota_exceeded", resets_at}`.
 - [ ] 2.2 `POST /api/v1/audio/transcriptions`: multipart, Modell aus `model_routes` (Alias `stt`), Gateway; Sekunden zählen (Dauer aus Datei-Header).
 - [ ] 2.3 `POST /api/v1/audio/speech`: Provider `openai` (Gateway, tts-1/tts-1-hd) oder `inworld` (direkt, Streaming wie heute in `generate_inworld_speech`, LINEAR16 für Streaming); Zeichen zählen. Ultra-Prüfung für Inworld.
 - [ ] 2.4 `GET /api/v1/voices?provider=inworld|openai&language=`: Inworld-Voices-Proxy wie heute, OpenAI-Stimmenliste statisch.
@@ -88,9 +88,9 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 4: Migrationsskripte (`wingman-backend/scripts`)
 
-- [ ] 4.1 `export-b2c.ts`: Graph `GET /users?$select=id,displayName,identities,otherMails,createdDateTime,accountEnabled,extension_3453752678f34332bf48453d0bd422f2_*` mit Pagination; Ausgabe `b2c-users.json`. App-Registrierung mit `User.Read.All` (die Graph-App aus wingman-webhook hat `User.ReadWrite.All`, reicht).
-- [ ] 4.2 `export-paypro.ts`: `Subscriptions/GetList` (statusIds 1–4, `includeOrders`, Paging 100), je Subscription `Orders/GetOrderDetails` der Initial-Order; Ausgabe `paypro-subscriptions.json`.
-- [ ] 4.3 `join-report.ts`: Zuordnung über `x-azure-user-id`, Fallback E-Mail; Report: zugeordnet, mehrdeutig, ohne Nutzer, Nutzer ohne Subscription aber mit Plan in B2C (Legacy Stripe/Paddle).
+- [x] 4.1 `export-b2c.ts`: Graph `GET /users?$select=id,displayName,identities,otherMails,createdDateTime,accountEnabled,extension_3453752678f34332bf48453d0bd422f2_*` mit Pagination; Ausgabe `b2c-users.json`. App-Registrierung mit `User.Read.All` (die Graph-App aus wingman-webhook hat `User.ReadWrite.All`, reicht).
+- [x] 4.2 `export-paypro.ts`: `Subscriptions/GetList` (statusIds 1–4, `includeOrders`, Paging 100), je Subscription `Orders/GetOrderDetails` der Initial-Order; Ausgabe `paypro-subscriptions.json`.
+- [x] 4.3 `join-report.ts`: Zuordnung über `x-azure-user-id`, Fallback E-Mail; Report: zugeordnet, mehrdeutig, ohne Nutzer, Nutzer ohne Subscription aber mit Plan in B2C (Legacy Stripe/Paddle).
 - [ ] 4.4 `import-users.ts`: idempotent (Upsert über `legacy_b2c_object_id`); `auth.admin.createUser({email, email_confirm: true, app_metadata: {legacy_b2c_object_id}})`; `users`-Zeile mit Plan, `plan_until`, `terms_accepted_at` (aus `WingmanTermsConsentDateTime`, Unix-Sekunden). Flag `--only-email` für Einzelimport (eigener Account zuerst).
 - [ ] 4.5 `import-subscriptions.ts`: idempotent über `paypro_subscription_id`.
 - [ ] 4.6 `stamp-paypro.ts`: `Subscriptions/ChangeCustomFields` mit `x-user-id` auf jede aktive Subscription (über Relay). Erst in Phase 9 ausführen.
@@ -246,6 +246,28 @@ Live seit 2026-09-10, 14:40: **https://wingman-backend.vercel.app**
   1. SvelteKits CSRF-Schutz beantwortet einen form-encodeten POST ohne passenden `Origin` mit 403, **bevor** die Route läuft — und die Prüfung ist im Dev-Server abgeschaltet. PayPros IPN lief damit im ersten Deploy gegen die Wand. Behoben mit `csrf: { trustedOrigins: ['*'] }`. Vertretbar, weil sich nichts über Cookies authentifiziert: jeder Endpunkt prüft Bearer-Token oder IP plus HASH und SIGNATURE. **Auflage für Phase 3:** das Admin-Panel darf keine Cookie-authentifizierten Form-Actions benutzen.
   2. Vercel speichert keine leeren Env-Werte. `RELAY_URL` und `RELAY_SECRET` kommen deshalb aus `$env/dynamic/private`; der statische Import hätte jeden Build ohne Relay abgebrochen.
 - **Relay-Entscheidung revidiert:** PayPro antwortet auch von Vercels fra1-IP, also braucht es den Hostinger-VPS nicht. `payProCall` ruft PayPro direkt auf, solange `RELAY_URL` leer ist; `relay/` bleibt einsatzbereit. Wichtig: **kein Allowlist-Ticket beim PayPro-Support**, das würde alle nicht gelisteten Quellen sperren, Vercel eingeschlossen.
+
+### Zahlen aus dem ersten echten Export (2026-09-10)
+
+`scripts/export-b2c.ts`, `export-paypro.ts` und `join-report.ts` sind fertig und einmal komplett gelaufen. Alle Aufrufe waren lesend. Ergebnisse in `exports/` (gitignored, enthält Personendaten).
+
+**B2C: 5895 Nutzer.** Anmeldeart: 3323 Google, 2380 E-Mail und Passwort, 192 andere föderierte Anbieter. 4605 haben die ToS akzeptiert, 175 haben keine E-Mail-Adresse hinterlegt, 3514 sind deaktiviert. Die 2380 E-Mail-Konten sind die Zahl für den SMTP-Bedarf: die brauchen beim Cutover alle einen Magic Link, weil B2C keine Passwort-Hashes herausgibt.
+
+**PayPro: 1773 Subscriptions**, davon 257 aktiv, 1374 suspended, 142 terminated, 36 Testbestellungen. **1763 tragen `x-azure-user-id` im Custom Field** (99,4 %), alle 1773 haben eine Kunden-E-Mail.
+
+**Join: alle 257 aktiven Subscriptions lassen sich eindeutig einem B2C-Nutzer zuordnen.** Keine mehrdeutig, keine offen. Über die gesamte Historie bleiben 13 von 1773 ohne Zuordnung, das sind gelöschte Konten. Damit ist das größte Migrationsrisiko aus Abschnitt 6 vom Tisch.
+
+**Aber: 256 Nutzer haben einen Wingman-Plan in B2C ohne aktive PayPro-Subscription.** Aufschlüsselung: 186 ohne jede Subscription (vermutlich manuell vergebene Pläne — Team, Presse, Bekannte), 57 Paddle- oder Stripe-Altkunden, 11 suspended, 2 terminated. Nur einer hat ein Enddatum in der Vergangenheit, 254 haben gar keins. **Entscheidung nötig vor 4.4:** Wenn der Import den Plan aus B2C übernimmt, bekommen 186 Leute dauerhaft Pro oder Ultra geschenkt. Vorschlag: Plan grundsätzlich aus PayPro ableiten, die 186 einzeln durchsehen und bewusst als `plan_source = 'manual'` importieren.
+
+Umgekehrt gibt es **2 aktive Subscriptions, deren Nutzer in B2C keinen Plan haben** — die zahlen und haben womöglich keinen Pro-Zugang. Vor dem Cutover anschauen.
+
+### Phase 2 begonnen
+
+- **2.1 `POST /api/v1/chat/completions` fertig und getestet.** Format wie heute `/ask`, `model` wird ignoriert und aus `model_routes` bestimmt. Kette: Override → Limits gegen Monatsverbrauch → Alias (`default`, ab `downgrade_at_pct` `downgraded`) → Gateway mit Fallback-Liste → Antwort durchreichen → Verbrauch zählen. Streaming geht unverändert durch, `stream_options.include_usage` wird automatisch gesetzt, sonst käme kein `usage`-Block und die Anfrage wäre in unseren Büchern gratis.
+- **Der Gateway liefert `usage.cost` in Dollar mit** — eine eigene Preistabelle braucht es nicht, `cost_estimate_usd` kommt direkt aus der Antwort.
+- Neue Migration `20260910160000_usage_increment.sql`: `increment_usage()` zählt in einem Statement hoch (parallele Anfragen verlieren sonst Zähler), `usage_this_month()` liefert die Monatssumme in einem Roundtrip.
+- Getestet gegen den echten Gateway: Antwort und Streaming korrekt, Verbrauch landet in `usage_daily` mit Kosten, Hard-Cap liefert 429 mit `resets_at`, Downgrade und Fallback-Kette greifen nachweislich.
+- **Blockiert:** im AI Gateway sind keine Credits geladen. `openai/gpt-4.1-mini` läuft über das Free-Kontingent, `gpt-5-nano` und `gpt-4.1-nano` werden mit 429 abgelehnt ("Free tier requests on this model are rate-limited"). Der Downgrade-Pfad ist damit erst nach dem Aufladen vollständig testbar.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
