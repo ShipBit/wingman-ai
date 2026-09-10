@@ -1502,16 +1502,21 @@ class ConfigManager:
         )
 
     def enforce_plan_tts_restrictions(self, plan: str):
-        """Downgrade Inworld TTS to Azure for non-Ultra users across all configs."""
+        """Downgrade Inworld TTS to OpenAI for non-Ultra users across all configs.
+
+        Inworld voices are the Ultra feature; everyone else gets the OpenAI
+        voices, which the backend serves through the same endpoint. Before the
+        backend migration this fell back to Azure Speech, which no longer exists.
+        """
         if plan == "Ultra":
             return
 
         patched = False
-        fallback = WingmanProTtsProvider.AZURE.value
+        fallback = WingmanProTtsProvider.OPENAI.value
 
         # Patch defaults
         if self.default_config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
-            self.default_config.wingman_pro.tts_provider = WingmanProTtsProvider.AZURE
+            self.default_config.wingman_pro.tts_provider = WingmanProTtsProvider.OPENAI
             self.save_defaults_config()
             patched = True
 

@@ -119,11 +119,12 @@ class WingmanSubscription:
         # Get minimal reasoning effort for the model to reduce latency
         reasoning_params = get_minimal_reasoning_by_model(deployment)
 
-        # `deployment` stays in the signature because callers pass it, but the
-        # backend picks the model from its own routing table and ignores anything
-        # sent here. Reasoning params are still useful: they travel through.
+        # `deployment` is an alias now — "default" or "fast" — which the backend
+        # resolves through its routing table. Old configs hold a raw model name
+        # like gpt-4.1-mini; the backend ignores those and uses the default.
         data = {
             "messages": serialized_messages,
+            "model": deployment,
             "stream": stream,
             "tools": tools,
             **reasoning_params,

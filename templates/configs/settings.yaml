@@ -9,6 +9,7 @@ voice_activation:
   energy_threshold: 0.01
   stt_provider: parakeet
   azure:
+    region: westeurope
     languages:
       - en-US
       - de-DE

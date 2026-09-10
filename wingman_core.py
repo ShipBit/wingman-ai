@@ -2834,8 +2834,10 @@ class WingmanCore(WebSocketUser):
                 },
             )
             response.raise_for_status()
-            model_list = response.json()
-            return model_list
+            body = response.json()
+            # The new backend answers {plan, models:[{id,name}]}; the client wants
+            # the bare list, the way the old endpoint returned it.
+            return body.get("models", []) if isinstance(body, dict) else body
         except Exception as e:
             self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
             return []
