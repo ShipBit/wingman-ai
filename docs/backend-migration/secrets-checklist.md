@@ -39,6 +39,14 @@ deklariert. Vor jedem Push `supabase config diff` lesen.
 
 ## 2. PayPro-Werte aus dem Azure-Portal holen
 
+**Erledigt am 2026-09-10.** Simon hat den App-Settings-Export als
+`/Users/shackles/Source/wingman-backend/azure.json` abgelegt. Die Datei ist
+`chmod 600`, steht in `.gitignore` und war nie in einem Commit. Die vier Werte
+liegen damit lokal vor; sie müssen noch nach Vercel bzw. auf den Relay-VPS.
+`scripts/vercel-env.sh production` schiebt sie in ein verlinktes Vercel-Projekt,
+ohne sie auszugeben. Die acht Produkt-IDs aus dem Export sind identisch mit denen
+in der wingman-client-`.env` und stehen bereits in `paypro_products`.
+
 Alle vier Werte laufen heute produktiv in der Function App `wingman-webhook`.
 Das ist die verlässliche Quelle — nicht im PayPro-Panel suchen, wenn es nicht
 sein muss.
@@ -81,9 +89,14 @@ Doku, die Beschriftungen können minimal abweichen.
   → **Integration**. Der API-Key ist dort regenerierbar — nicht neu erzeugen,
   sonst bricht die alte Azure-Function.
 - **vendorAccountId**: Account Settings → **Business info**.
-- **IP-Allowlist für API-Calls**: geht nur über den Support. Ticket mit der
-  Ausgangs-IP des VPS aufmachen; die IP auf der Maschine selbst holen, nicht aus
-  dem Hostinger-Panel:
+- **IP-Allowlist für API-Calls: nicht anfordern, bevor das Relay steht.** Gemessen
+  am 2026-09-10 antwortet PayPro auf `Products/GetProductPricing` und
+  `Subscriptions/GetList` von einer normalen Privatanschluss-IP. Für dieses Konto
+  ist also **keine** Allowlist aktiv, und das Backend kann PayPro direkt aufrufen.
+  Ein Support-Ticket würde das Konto in den Allowlist-Modus schalten und damit
+  alle anderen Quellen sperren, Vercel eingeschlossen. Also erst das Relay
+  aufsetzen, dann die IP melden — oder ganz darauf verzichten. IP auf der
+  Maschine selbst holen, nicht aus dem Hostinger-Panel:
   ```sh
   curl -4 ifconfig.me
   ```
@@ -100,13 +113,34 @@ Doku, die Beschriftungen können minimal abweichen.
   anhängen. In Testbestellungen ist `HASH` = `md5("1")`, das ist im Webhook bereits
   berücksichtigt.
 
-## 4. Reihenfolge, die am wenigsten Leerlauf erzeugt
+## 4. Was jetzt noch offen ist
 
-1. Google-Provider reparieren (oben, 2 Minuten) — danach ist der Login testbar.
-2. Die vier PayPro-Werte aus Azure kopieren.
-3. Support-Ticket bei PayPro für die IP-Allowlist aufmachen; das dauert extern am
-   längsten, deshalb früh.
-4. Relay auf dem VPS aufsetzen (`relay/README.md` im Backend-Repo).
-5. Vercel-Projekt anlegen, Env-Variablen setzen, Domain `api.wingman-ai.com`
-   DNS-only.
-6. Erst dann IPN-Simulator gegen das Preview-Deployment.
+1. ~~Google-Provider reparieren~~ — erledigt und geprüft.
+2. ~~Die vier PayPro-Werte aus Azure kopieren~~ — liegen in `azure.json`.
+3. **Vercel-Projekt anlegen**, `vercel link`, dann `scripts/vercel-env.sh production`
+   für die PayPro-Werte, den Rest (Supabase, AI Gateway, Inworld, `CRON_SECRET`)
+   von Hand. Domain `api.wingman-ai.com` als DNS-only bei Cloudflare.
+4. **Entscheidung Relay ja/nein.** Ohne Allowlist läuft der direkte Weg; das
+   Relay ist fertig, kostet aber einen VPS und ein bewegliches Teil mehr. Wenn
+   nein: `PAYPRO_ACCOUNT_ID` und `PAYPRO_API_KEY` in Vercel setzen. Wenn ja:
+   Relay aufsetzen, `RELAY_URL`/`RELAY_SECRET` in Vercel setzen, die beiden
+   PayPro-Keys dort wieder löschen.
+5. IPN-Simulator gegen das Preview-Deployment (Phase 8), zweite IPN-URL erst danach.
+
+## 5. Gemessene Eigenheiten der PayPro-API (2026-09-10)
+
+Gegen das echte Konto ermittelt, weil die Doku dünn war:
+
+- `Subscriptions/GetList` pagiert mit `skip` und `take`; `take` über 100 ergibt 400.
+  `response` ist ein flaches Array. Felder pro Eintrag: `id`, `status` als Wort
+  (`Active`, `Suspended`, `Terminated`, `Finished`), `nextPayment` als `M/D/YYYY`,
+  `createdAt` als ISO, `isTrial`, `orders` (nur Order-IDs, und nur mit
+  `includeOrders: true`). Kein Produkt und kein Status-Filter im Request.
+- Bestand heute: **1773 Subscriptions, davon 257 aktiv, 1374 suspended,
+  142 terminated, 833 mit Trial-Flag.** Das deckt sich mit der Annahme
+  "250–350 aktive" aus der Recherche.
+- `Products/GetProductPricing` lehnt eine IPv6-Adresse in `ipAddress` mit
+  "IpAddress is invalid." ab und kippt den ganzen Aufruf, wenn eine `productId`
+  nicht numerisch ist. Beides fängt `/api/products` jetzt ab.
+- Preise heute für DE/EUR: Pro 5,99 monatlich und 59,99 jährlich, Ultra 9,99 und
+  89,99, jeweils inklusive Steuer.
