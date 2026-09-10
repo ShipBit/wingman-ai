@@ -102,12 +102,12 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 - [x] 5.1 Tauri: `tauri-plugin-deep-link` mit Scheme `wingman`, `tauri-plugin-single-instance` (Windows/Linux), `tauri-plugin-opener` für den Systembrowser. macOS: Deep-Links nur im gebündelten Build, im Dev Loopback `http://localhost:5173/auth/callback` verwenden.
 - [x] 5.2 `authService.ts` neu: `@supabase/supabase-js` mit `flowType: 'pkce'`, `skipBrowserRedirect: true`, Session-Storage im Tauri-Store; `signInWithOAuth({provider})` → Systembrowser; Callback → `exchangeCodeForSession`; danach Geräte-Token holen und als Core-Secret `wingman_pro` speichern (Name beibehalten, damit Core-Seite minimal bleibt). MSAL-Abhängigkeit entfernen.
 - [x] 5.3 Umschalter: Env `PUBLIC_AUTH_BACKEND=azure|new` und `PUBLIC_API_BASE_URL`; im Beta-Build `new`, im Stable-Build bis Phase 9 `azure`. Beide Pfade bleiben bis Phase 9 im Code.
-- [ ] 5.4 `stores.ts`: `isPro`, `isUltra`, `hasTrial` aus `/api/me` statt aus Token-Claims.
-- [ ] 5.5 `RegionPrompt` und Region-Settings entfernen (hinter dem Umschalter, erst im Stable-Release wirksam).
-- [ ] 5.6 Subscribe-Seite: Checkout-URL mit `x-user-id` statt `x-azure-user-id`; Subscription-Details aus `/api/me/subscription`; Suspend/Renew über Backend.
-- [ ] 5.7 ToS-Dialog gegen `/api/me` und `POST /api/me/terms`.
+- [x] 5.4 `stores.ts`: `isPro`, `isUltra`, `hasTrial` aus `/api/me` statt aus Token-Claims.
+- [x] 5.5 `RegionPrompt` und Region-Settings entfernen (hinter dem Umschalter, erst im Stable-Release wirksam).
+- [x] 5.6 Subscribe-Seite: Checkout-URL mit `x-user-id` statt `x-azure-user-id`; Subscription-Details aus `/api/me/subscription`; Suspend/Renew über Backend.
+- [x] 5.7 ToS-Dialog gegen `/api/me` und `POST /api/me/terms`.
 - [ ] 5.8 Verbrauchsanzeige in den Einstellungen (Tokens, STT-Minuten, TTS-Zeichen des Monats gegen Limit), nur gerendert wenn `/api/me` Verbrauchsdaten liefert (`usage_visible`).
-- [ ] 5.10 ToS-Dialog vergleicht `terms_version` aus `/api/me` mit dem Nutzerstand; beim Cutover erscheint er für alle einmal.
+- [x] 5.10 ToS-Dialog vergleicht `terms_version` aus `/api/me` mit dem Nutzerstand; beim Cutover erscheint er für alle einmal.
 - [ ] 5.9 Beta-Updater-Kanal: Release `3.2.0-beta.x` mit `new`.
 - Test: Login auf macOS und Windows (Bundle), App-Neustart nach 25 Stunden ohne Re-Login, Kündigen/Renew im Testmodus.
 
@@ -337,6 +337,18 @@ Dabei zwei Fehler gefunden und behoben, beide im Backend:
 - **5.1 und 5.3 fertig:** Tauri hat `deep-link`, `opener` und `single-instance` registriert, Schema `wingman`, `cargo check` grün. `authBackend.ts` ist die eine Tür für beide Wege; `PUBLIC_AUTH_BACKEND` entscheidet, Layout und Kopfzeile gehen darüber statt direkt über MSAL.
 - **Login-Schirm** `LoginGate.svelte` für den neuen Weg: Google, GitHub, Anmeldelink. Erscheint nur, wenn `PUBLIC_AUTH_BACKEND=new` und keine Sitzung existiert — der MSAL-Weg leitet weiterhin selbst weiter. Texte in allen vier Sprachen. Client baut durch.
 - **7.3 vorbereitet** (Branch `feat/new-backend` in wingman-website): `PUBLIC_GET_PRODUCTS_URL` zeigt in der Beispiel-Konfiguration auf `api.wingman-ai.com/api/products`. Die Antwortform ist geprüft identisch zum alten `GetProducts`, nur mit zusätzlichen Feldern. **Die Live-Variable in Vercel bleibt bewusst unangetastet** bis zum Cutover.
+
+### Phase 5 fast fertig
+
+Branch `feat/supabase-auth` in wingman-client, vier Commits, nicht gepusht. Alles hängt am Schalter `PUBLIC_AUTH_BACKEND`, der auf `azure` steht — der Stable-Build verhält sich unverändert.
+
+- **`authBackend.ts`** ist die eine Tür: `initAuth`, `signOut`, `openAccountPage`, `applyMe`. Layout und Kopfzeile gehen darüber statt direkt über MSAL.
+- **`LoginGate.svelte`**: Google, GitHub, Anmeldelink. Texte in allen vier Sprachen. Erscheint nur im neuen Weg und nur ohne Sitzung.
+- **`subscriptionService.ts`** deckt beide Backends ab und gibt PayPros Wortlaut zurück (`Active`, `Suspended`, camelCase), damit die Abo-Seite unverändert bleibt. Neu darin: `changePlan`, das der alte Weg gar nicht konnte.
+- **Regionsauswahl** erscheint nur noch im alten Weg. Im neuen wird sie übersprungen und das Tour-Flag, das bisher an diesem Bildschirm hing, direkt gesetzt.
+- **ToS-Dialog** schreibt im neuen Weg über `POST /api/me/terms` und merkt sich die Version — beim Hochsetzen erscheint er einmal für alle.
+
+Offen in Phase 5: **5.8** (Verbrauchsanzeige in den Einstellungen) und **5.9** (Beta-Updater-Kanal). Beides braucht keine Entscheidung, nur Zeit.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
