@@ -15,6 +15,66 @@ oder **von Simon erledigt** werden muss.
 | Manuelle Freipläne | bleiben unverändert. Sichtbar im Admin unter „Freipläne“. |
 | Import | alle Nutzer und Subscriptions sind in Produktion importiert. Skripte sind idempotent und laufen vor dem Cutover erneut. |
 
+## Morgen als Erstes: IPN-Report prüfen
+
+**Frage:** Feuert die zweite IPN-URL aus den Store-Einstellungen für echte
+Bestellungen, oder überstimmt das Produkt-Feld sie?
+
+Simon hat am 2026-09-10 gegen 21:44 UTC in Store Settings → General Settings →
+Integration eine zweite Zeile ergänzt:
+`https://api.wingman-ai.com/api/webhooks/paypro`. Das Produkt-Feld
+(Store settings → Product setup → IPN URL) nimmt nur **eine** Adresse und zeigt
+weiterhin auf `https://wingman-webhook.azurewebsites.net/api/PayProWebhook` —
+das muss so bleiben, sonst hört das alte System auf, B2C zu pflegen.
+
+**So prüfen:** cp.payproglobal.com → Reports → Others → IPN, Filter auf
+*Isn't test mode*, Zeitraum seit dem 10.09. 21:44 UTC. Bei rund 250 aktiven Abos
+läuft über Nacht mindestens eine Verlängerung durch.
+
+- **Zwei Zeilen pro Ereignis**, eine mit der Azure-URL und eine mit unserer:
+  Parallelbetrieb läuft, nichts weiter zu tun.
+- **Nur eine Zeile:** das Produkt-Feld gewinnt. Dann PayPro-Support fragen, ob es
+  dort mehrere Adressen oder einen Wildcard akzeptiert. Notfalls erst am Cutover
+  umschalten — kostet den Schattenbetrieb, geht aber.
+
+## Erkenntnis: `ipn-domain` bindet die Zustellung an die Bestellung
+
+Am 2026-09-10 gemessen. Der Client hängt bei Testkäufen
+`&ipn-domain=wingman-webhook-test.azurewebsites.net` an die Checkout-URL. PayPro
+merkt sich das **pro Bestellung** und schickt alle künftigen Nachrichten dieser
+Subscription dorthin, unabhängig von jeder Store-Einstellung. Deshalb kam der
+erste Testversuch nie bei uns an — nicht weil die Konfiguration falsch war.
+
+Wichtig dabei: PayPro tauscht nur den **Hostnamen** und behält den **Pfad** aus
+der konfigurierten IPN-URL, also `/api/PayProWebhook`. Das Backend bedient
+diesen Pfad jetzt zusätzlich als Alias auf `/api/webhooks/paypro`
+(`src/routes/api/PayProWebhook/+server.ts`). Damit lässt sich jede Testbestellung
+mit `ipn-domain=api.wingman-ai.com` direkt an uns leiten — der Weg, um den
+Webhook mit echten Daten zu testen, ohne das Live-System anzufassen.
+
+## Bewiesen am 2026-09-10, 21:57 UTC
+
+Erste echte PayPro-IPN durch die volle Kette:
+
+```
+Bestellung 44235457, IPN-Typ 13 (TrialCharge)
+  IP-Allowlist   bestanden
+  MD5 HASH       bestanden
+  SHA256 SIGNATURE bestanden
+  Subscription 5362626 angelegt: pro, active, Trial, bis 17.09.2026
+  Zuordnung über x-azure-user-id -> legacy_b2c_object_id
+  Nutzer simon.hopstaetter@shipbit.de: plan pro, Quelle paypro
+```
+
+Damit ist der Webhook nicht mehr nur gegen selbst signierte Anfragen getestet,
+und die Nutzer-Zuordnung über die importierte B2C-Objekt-ID funktioniert in der
+Praxis — genau der Mechanismus, an dem beim Cutover 1763 Subscriptions hängen.
+
+**Testdaten, die dafür existieren:** Zwei Subscriptions im PayPro-Testmodus auf
+`simon.hopstaetter@shipbit.de`, beide dürfen angefasst werden:
+`5362578` (Bestellung 44235140, IPNs gehen an den Azure-Test-Host) und
+`5362626` (Bestellung 44235457, IPNs gehen an uns). Echte Kundenabos bleiben tabu.
+
 ## Offen, braucht eine Entscheidung von Simon
 
 1. **Zweite IPN-URL bei PayPro eintragen** (Store Settings → General Settings →
