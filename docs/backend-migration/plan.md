@@ -99,7 +99,7 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 5: Client (`wingman-client`)
 
-- [ ] 5.1 Tauri: `tauri-plugin-deep-link` mit Scheme `wingman`, `tauri-plugin-single-instance` (Windows/Linux), `tauri-plugin-opener` für den Systembrowser. macOS: Deep-Links nur im gebündelten Build, im Dev Loopback `http://localhost:5173/auth/callback` verwenden.
+- [x] 5.1 Tauri: `tauri-plugin-deep-link` mit Scheme `wingman`, `tauri-plugin-single-instance` (Windows/Linux), `tauri-plugin-opener` für den Systembrowser. macOS: Deep-Links nur im gebündelten Build, im Dev Loopback `http://localhost:5173/auth/callback` verwenden.
 - [x] 5.2 `authService.ts` neu: `@supabase/supabase-js` mit `flowType: 'pkce'`, `skipBrowserRedirect: true`, Session-Storage im Tauri-Store; `signInWithOAuth({provider})` → Systembrowser; Callback → `exchangeCodeForSession`; danach Geräte-Token holen und als Core-Secret `wingman_pro` speichern (Name beibehalten, damit Core-Seite minimal bleibt). MSAL-Abhängigkeit entfernen.
 - [x] 5.3 Umschalter: Env `PUBLIC_AUTH_BACKEND=azure|new` und `PUBLIC_API_BASE_URL`; im Beta-Build `new`, im Stable-Build bis Phase 9 `azure`. Beide Pfade bleiben bis Phase 9 im Code.
 - [ ] 5.4 `stores.ts`: `isPro`, `isUltra`, `hasTrial` aus `/api/me` statt aus Token-Claims.
@@ -113,17 +113,17 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 6: Core (`wingman-ai`)
 
-- [ ] 6.1 `providers/wingman_subscription.py`: Basis-URL aus Settings, Endpunkte auf `/api/v1/*`, Bearer bleibt `wingman_pro`. 401/403/429 sauber an den Client melden (429 mit `resets_at` als Hinweistext).
-- [ ] 6.2 `WingmanProSttProvider`: `whisper`, `azure_speech` → `cloud` (ein Eintrag; Modell entscheidet das Backend). `WingmanProTtsProvider`: `azure` → `openai`, `inworld` bleibt. Migration `migration_316_to_320.py`: Azure-Stimme → Inworld-Stimme gleicher Sprache und gleichen Geschlechts (Mapping-Tabelle aus der heutigen `/azure-voices`-Liste erzeugen), Fallback OpenAI-Stimme.
-- [ ] 6.3 `wingman_pro.region` und `/wingman-pro-regions` entfernen; `base_url` Default `https://api.wingman-ai.com`.
-- [ ] 6.4 `get_wingman_pro_models` → `/api/v1/models`.
+- [x] 6.1 `providers/wingman_subscription.py`: Basis-URL aus Settings, Endpunkte auf `/api/v1/*`, Bearer bleibt `wingman_pro`. 401/403/429 sauber an den Client melden (429 mit `resets_at` als Hinweistext).
+- [x] 6.2 `WingmanProSttProvider`: `whisper`, `azure_speech` → `cloud` (ein Eintrag; Modell entscheidet das Backend). `WingmanProTtsProvider`: `azure` → `openai`, `inworld` bleibt. Migration `migration_316_to_320.py`: Azure-Stimme → Inworld-Stimme gleicher Sprache und gleichen Geschlechts (Mapping-Tabelle aus der heutigen `/azure-voices`-Liste erzeugen), Fallback OpenAI-Stimme.
+- [x] 6.3 `wingman_pro.region` und `/wingman-pro-regions` entfernen; `base_url` Default `https://api.wingman-ai.com`.
+- [x] 6.4 `get_wingman_pro_models` → `/api/v1/models`.
 - Test: bestehende Provider-Tests; manuelle Session mit Beta-Client.
 
 ### Phase 7: Website (`wingman-website`)
 
 - [ ] 7.1 Supabase-Login (gleiche Projekt-Keys), Account-Seite: Plan, `plan_until`, Verbrauch (wenn `usage_visible`), Link ins PayPro-Portal, Geräte, ToS-Zustimmung für die aktuelle Version.
 - [ ] 7.2 Pricing-Seite: Buttons mit Checkout-URL inkl. `x-user-id` und `billing-email`, wenn eingeloggt; sonst erst Login.
-- [ ] 7.3 `/api/pricing` bleibt; `PUBLIC_GET_PRODUCTS_URL` auf `api.wingman-ai.com/api/products`.
+- [x] 7.3 `/api/pricing` bleibt; `PUBLIC_GET_PRODUCTS_URL` auf `api.wingman-ai.com/api/products`.
 - Test: Kauf im Testmodus von der Website ohne installierten Client; danach Client-Login zeigt Plan.
 
 ### Phase 8: Beta-Test mit dem eigenen Account
@@ -313,6 +313,30 @@ Dazu neu: `GET /api/me/subscription` liest aus unseren Tabellen statt live von P
 **GitHub-Login ist aktiv** (Provider in Supabase, OAuth-App bei ShipBit). Wichtig für die 191 GitHub-Konten: Supabase fragt `user:email` an und bekommt damit die Adresse, die B2C für 175 davon nie hatte.
 
 Offene Fragen und die Fallen, die schon zugeschnappt sind, stehen in `offene-fragen.md`.
+
+### Phase 6 fertig und gegen das laufende Backend bewiesen
+
+Branch `feat/core-new-backend` in wingman-ai. `providers/wingman_subscription.py` spricht `/api/v1/*`, `region` ist überall raus, `transcribe_whisper` und `transcribe_azure_speech` sind eine Methode `transcribe()`, Azure-Sprachausgabe ist entfernt, `WingmanProSttProvider` kennt nur noch `cloud`, `WingmanProTtsProvider` nur noch `openai` und `inworld`. Ein 429 wird eigens gemeldet („Kontingent aufgebraucht, zurückgesetzt am …"). `/wingman-pro-regions` ist weg. Migration `316_to_320` schreibt bestehende Configs um, inklusive Azure-Stimme auf eine OpenAI-Stimme gleichen Geschlechts.
+
+**Echt getestet**, mit einem Geräte-Token für `simon.hopstaetter@shipbit.de` gegen `api.wingman-ai.com`:
+
+```
+Chat            "Erfolgreich", openai/gpt-4.1-mini, 42/20 Tokens
+Transkription   whisper, Dauer gezählt, Sprachhinweis kam an
+Bild            Data-URL, quality low, 0,0022 $
+Stimmen         282 gesamt, gefiltert 17 de / 159 en / 4 fr
+```
+
+Dabei zwei Fehler gefunden und behoben, beide im Backend:
+
+1. **Core schickt `"tools": null`, der Gateway antwortet darauf mit 400.** Das hätte jede Anfrage ohne Werkzeuge zerlegt, also die meisten. Der alte Azure-Endpunkt war toleranter. Das Backend wirft `null`-Felder jetzt weg, bevor es weiterreicht.
+2. **Der Sprachfilter für Inworld-Stimmen wurde durchgereicht, aber nie angewendet** — 282 Stimmen in jedem Dropdown statt 17.
+
+### Phase 5 und 7 weiter
+
+- **5.1 und 5.3 fertig:** Tauri hat `deep-link`, `opener` und `single-instance` registriert, Schema `wingman`, `cargo check` grün. `authBackend.ts` ist die eine Tür für beide Wege; `PUBLIC_AUTH_BACKEND` entscheidet, Layout und Kopfzeile gehen darüber statt direkt über MSAL.
+- **Login-Schirm** `LoginGate.svelte` für den neuen Weg: Google, GitHub, Anmeldelink. Erscheint nur, wenn `PUBLIC_AUTH_BACKEND=new` und keine Sitzung existiert — der MSAL-Weg leitet weiterhin selbst weiter. Texte in allen vier Sprachen. Client baut durch.
+- **7.3 vorbereitet** (Branch `feat/new-backend` in wingman-website): `PUBLIC_GET_PRODUCTS_URL` zeigt in der Beispiel-Konfiguration auf `api.wingman-ai.com/api/products`. Die Antwortform ist geprüft identisch zum alten `GetProducts`, nur mit zusätzlichen Feldern. **Die Live-Variable in Vercel bleibt bewusst unangetastet** bis zum Cutover.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
