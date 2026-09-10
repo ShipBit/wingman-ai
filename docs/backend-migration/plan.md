@@ -58,7 +58,7 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 ### Phase 1: Backend-Skelett (`wingman-backend`)
 
-- [ ] 1.1 Repo anlegen: SvelteKit, `adapter-vercel`, Drizzle oder Supabase-Migrations für das Schema aus Abschnitt 1, Seed für `plan_limits` und `model_routes` (Werte aus heutigem Stand: Pro und Ultra → `openai/gpt-4.1-mini`, Downgrade → `openai/gpt-5-nano`).
+- [x] 1.1 Repo anlegen: SvelteKit, `adapter-vercel`, Drizzle oder Supabase-Migrations für das Schema aus Abschnitt 1, Seed für `plan_limits` und `model_routes` (Werte aus heutigem Stand: Pro und Ultra → `openai/gpt-4.1-mini`, Downgrade → `openai/gpt-5-nano`).
 - [ ] 1.2 Auth-Middleware: akzeptiert Supabase-JWT (JWKS, ES256) und Geräte-Token (`Authorization: Bearer wgd_…`, Hash-Lookup in `device_tokens`). Ergebnis: `locals.user` mit Plan.
 - [ ] 1.3 `POST /api/me/device-token` (Supabase-JWT → neues Token, einmal sichtbar), `GET /api/me` (Plan, `plan_until`, Verbrauch des Monats, Limits, `terms_accepted_at`, Geräte-Liste), `DELETE /api/me/device-token/:id`, `POST /api/me/terms`.
 - [ ] 1.4 `GET /api/products?currency=&billingCountry=`: Proxy auf PayPro `Products/GetProductPricing` über das Relay; Antwortform identisch zum heutigen `GetProducts`, damit Client und Website unverändert lesen können. Cache 10 Minuten.
@@ -210,6 +210,15 @@ Erledigt:
 - 1Password, Vault "Shared": `op://Shared/Supabase Wingman Prod Database/dbPass`, `op://Shared/Google OAuth Wingman/Client ID`, `op://Shared/Google OAuth Wingman/Client Secret`.
 - CLIs eingeloggt: `supabase` (sieht das Projekt), `vercel` (User `shipbitbot`), `gh` (Shackless), `op` (ShipBit-Konto). SSH-Key `~/.ssh/id_ed25519.pub`.
 
-Noch nicht begonnen:
-- Repo `wingman-backend` (lokal unter `/Users/shackles/Source/wingman-backend`, GitHub `ShipBit/wingman-backend` noch anzulegen). Nächster Schritt: SvelteKit-Scaffold, `supabase link`, Migrationen aus Abschnitt 1, Google-Provider und Redirect-Allowlist per `supabase/config.toml` + `supabase config push`.
+Aufgabe 1.1 erledigt (2026-09-10): Repo liegt lokal unter `/Users/shackles/Source/wingman-backend`, zwei Commits, noch kein GitHub-Remote.
+- SvelteKit + TypeScript, `adapter-vercel` mit `runtime: 'nodejs22.x'` und `regions: ['fra1']`, dazu Prettier, ESLint, Vitest, Tailwind. Die neue `sv`-CLI legt keine `svelte.config.js` mehr an; die Adapter-Optionen stehen in `vite.config.ts`.
+- Drei Migrationen in `supabase/migrations`: `_schema.sql` (alle Tabellen aus Abschnitt 1 plus `app_settings` und `paypro_products`, Trigger `sync_auth_user` spiegelt `auth.users` nach `public.users` bei INSERT **und** UPDATE, weil GoTrue `app_metadata` erst im zweiten Statement schreibt), `_rls.sql` (RLS auf allen Tabellen, Select-Policies und Grants nur für die vier Selbst-Tabellen), `_seed.sql` (`plan_limits`, `model_routes`, `app_settings`).
+- Seed-Werte sind Startwerte, im Admin ohne Deploy änderbar: Pro/Ultra `default` = `openai/gpt-4.1-mini`, `downgraded` = `openai/gpt-5-nano`, dazu `fast`, `stt` (`openai/whisper-1`), `tts` (`openai/tts-1`), `image` (`openai/gpt-image-1-mini`); Free ist angelegt, aber `enabled = false`. Limits geschätzt aus research.md: Pro 5M Tokens / 7200 s STT / 300k TTS-Zeichen / 50 Bilder, Ultra 3×, Downgrade bei 70 %.
+- `supabase/config.toml`: `site_url` und die vier Redirect-URLs aus 0.1, Google-Provider aktiviert mit `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)` / `…_SECRET`.
+- Getestet lokal: `supabase db reset` (alle Migrationen sauber), Anlegen eines Auth-Users über die Admin-API erzeugt die `public.users`-Zeile inkl. `legacy_b2c_object_id`, RLS-Probe (fremde `sub` sieht 0 Zeilen, eigene 1), `npm run check`, `npm run build`, `npm test`, `npm run lint`.
+
+Noch nicht begonnen bzw. offen:
+- **`supabase link` und `supabase db push`/`config push` gegen `wingman-prod` stehen noch aus.** In der Agenten-Session ist `op read` an der Biometrie hängengeblieben, deshalb kein DB-Passwort. Manuell: `supabase link --project-ref bkmmccpxmrccaeikyila`, dann `supabase db push` und `supabase config push` (letzteres überschreibt die Auth-Einstellungen im Dashboard, vorher kurz vergleichen).
+- GitHub-Repo `ShipBit/wingman-backend` anlegen und pushen.
 - Ausstehende 1Password-Items: SMTP, Vercel AI Gateway Key, PayPro (Keys + 8 Produkt-IDs), Azure Graph Export, Inworld, Hostinger Relay (IP, User), optional Cloudflare DNS Token.
+- Offene Werte für spätere Aufgaben: die acht PayPro-Produkt-IDs für `paypro_products` (1.6) und die echte `terms_version` (Seed steht auf `"1"`).
