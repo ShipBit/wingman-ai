@@ -1,6 +1,6 @@
 # Offene Fragen und Entscheidungen
 
-Stand 2026-09-10, spät abends. Ergänzt `plan.md` (Fortschritt) und
+Stand 2026-09-11, nachts. Ergänzt `plan.md` (Fortschritt) und
 `secrets-checklist.md` (Zugangsdaten). Hier steht nur, was noch **entschieden**
 oder **von Simon erledigt** werden muss.
 
@@ -36,6 +36,76 @@ läuft über Nacht mindestens eine Verlängerung durch.
 - **Nur eine Zeile:** das Produkt-Feld gewinnt. Dann PayPro-Support fragen, ob es
   dort mehrere Adressen oder einen Wildcard akzeptiert. Notfalls erst am Cutover
   umschalten — kostet den Schattenbetrieb, geht aber.
+
+## Fallen, die in der Nacht auf den 11.09. zugeschnappt sind
+
+### PostgREST hört bei 1000 Zeilen auf — ohne Fehler
+
+Das Admin-Dashboard zeigte 1000 Nutzer und 1000 Subscriptions. Beides falsch:
+`db.from('users').select(...)` liefert höchstens 1000 Zeilen und meldet das
+nicht. Die echten Zahlen sind 5547 Nutzer und 1774 Subscriptions.
+
+Behoben in zwei Schritten:
+
+* `admin_overview(p_today, p_month_start)` (Migration
+  `20260911000000_admin_overview.sql`) zählt in Postgres. Der Endpunkt ruft nur
+  noch diese Funktion auf.
+* `selectAll()` in `src/lib/server/admin.ts` blättert in 1000er-Schritten
+  durch. Genutzt vom CSV-Export (Nutzer und Verbrauch) und von den Freiplänen.
+  **Jede neue Abfrage, die eine ganze Tabelle abdecken soll, muss das
+  benutzen** — sonst fehlen ab Zeile 1001 stillschweigend Daten.
+
+### Deployments aus Git schlugen seit dem ersten Tag fehl
+
+Jeder Push erzeugte zwei Deployments: eins aus Git (**immer ERROR**) und eins
+aus der CLI (READY). Nur die CLI-Deployments waren je live. Grund:
+
+* Alle Geheimnisse kamen über `$env/static/private`, also **zur Bauzeit**.
+* In Vercel sind sie als *Sensitive* angelegt, und sensitive Werte sind beim
+  Bauen nicht lesbar. Der Git-Build brach mit
+  `[MISSING_EXPORT] "AI_GATEWAY_API_KEY" is not exported` ab.
+* `AI_GATEWAY_API_KEY` fehlte in Vercel überhaupt. Der lokale Build hat ihn aus
+  `.env` genommen und **fest in das Bundle geschrieben** — der Schlüssel lag im
+  ausgelieferten Code.
+
+Behoben: alle sieben Dateien lesen jetzt über `$env/dynamic/private` zur
+Laufzeit, und `AI_GATEWAY_API_KEY` liegt als *Encrypted* in Vercel
+(production, preview, development). Seither läuft der Git-Build durch, und im
+Build-Ergebnis steht kein `vck_`-Schlüssel mehr.
+
+**Regel:** im Backend nie wieder `$env/static/private` für ein Geheimnis.
+
+### Core sprach lokal, nicht über das Backend
+
+`wingman_pro.tts_provider: openai` allein reicht nicht — solange
+`features.tts_provider` auf `pocket_tts` steht, wird lokal gesprochen und das
+Backend sieht keinen einzigen TTS-Aufruf. Simons Config steht jetzt auf
+`features.tts_provider: wingman_pro`. Zurück auf lokal: dieses Feld wieder auf
+`pocket_tts` setzen.
+
+### Das Modell im Config war ein Name, keine Alias
+
+`wingman_pro.conversation_deployment` stand auf `gpt-4.1-mini`. Das Backend
+liefert unter `/api/v1/models` aber nur `default` und `fast` — der Name passte
+zu keinem Eintrag, das Auswahlfeld im Client wäre leer geblieben. Die Migration
+316→320 schreibt jeden unbekannten Wert auf `default` um.
+
+Nebenwirkung: `conversation_manager.py` entschied an `"gpt" in
+conversation_deployment` , ob es Tool-Call-IDs im OpenAI-Format erzeugt. Mit
+einem Alias war das falsch. Prüft jetzt nur noch den Provider.
+
+## Ende-zu-Ende belegt (11.09., nachts)
+
+Ein Durchlauf über das neue Backend, gemessen an `usage_daily`:
+
+| Schritt | Beleg |
+|---|---|
+| Anmeldung | Magic Link → Geräte-Token `wgd_…` → Core, Tower mit ATC und Computer gebaut |
+| Modellliste | `/api/v1/models` liefert `{plan: "pro", models: [default, fast]}` |
+| Frage | `conversation_token_usage` 1681/26, Chat über `openai/gpt-4.1-mini` |
+| Antwort | „Alle Hauptsysteme sind online und funktionsfähig …" |
+| Sprachausgabe | `playback_started` → `playback_finished`, `openai/tts-1`, TTS-Zeichen 52 → 170 → 280 |
+| Dashboard | Verbrauch, Kosten je Modell und die echten Nutzerzahlen sichtbar |
 
 ## Erkenntnis: `ipn-domain` bindet die Zustellung an die Bestellung
 
