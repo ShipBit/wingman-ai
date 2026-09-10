@@ -324,9 +324,12 @@ class ConversationManager:
                 self._config.features.conversation_provider
                 == ConversationProvider.OPENAI
             ) or (
+                # Wingman Pro serves OpenAI models through the gateway, so the
+                # tool call ids are OpenAI-shaped. This used to sniff the model
+                # name for "gpt", which stopped working when the config started
+                # holding an alias ("default", "fast") instead.
                 self._config.features.conversation_provider
                 == ConversationProvider.WINGMAN_PRO
-                and "gpt" in self._config.wingman_pro.conversation_deployment.lower()
             ):
                 tool_id = f"call_{str(uuid.uuid4()).replace('-', '')}"
             elif (

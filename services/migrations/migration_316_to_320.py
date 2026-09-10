@@ -12,11 +12,20 @@ user's config:
   an Azure voice name has to become an OpenAI one — the mapping below picks a
   voice of the same gender, and users who had a specific favourite will want to
   pick again.
+* `wingman_pro.conversation_deployment` holds an alias now — `default` or
+  `fast` — instead of a raw model name like `gpt-4.1-mini`. The backend owns
+  the routing table, so a stored model name no longer matches anything the
+  model list offers and the picker would come up empty.
 """
 
 from services.migrations.base_migration import BaseMigration
 
 NEW_BASE_URL = "https://api.wingman-ai.com"
+
+# The aliases /api/v1/models serves. Anything else in a config is a model name
+# from the Azure era.
+DEFAULT_DEPLOYMENT = "default"
+KNOWN_ALIASES = ("default", "fast")
 
 # Azure voice names carry the gender in the name itself, e.g.
 # "de-DE-KatjaNeural". Anything unknown lands on "nova", a neutral default.
@@ -96,6 +105,13 @@ class Migration316To320(BaseMigration):
             openai_section["tts_voice"] = new_voice
             config["openai"] = openai_section
             self.log(f"{label}: speech output 'azure' -> 'openai', voice {old_voice or '—'} -> {new_voice}")
+
+        deployment = pro.get("conversation_deployment")
+        if deployment not in KNOWN_ALIASES:
+            pro["conversation_deployment"] = DEFAULT_DEPLOYMENT
+            self.log(
+                f"{label}: conversation model '{deployment or '—'}' -> '{DEFAULT_DEPLOYMENT}'"
+            )
 
         config["wingman_pro"] = pro
         return config

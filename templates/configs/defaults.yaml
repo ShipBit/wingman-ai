@@ -259,7 +259,7 @@ pocket_tts:
 wingman_pro:
   stt_provider: cloud
   tts_provider: openai
-  conversation_deployment: gpt-4.1-mini
+  conversation_deployment: default
 commands:
   - name: ResetConversationHistory
     instant_activation:
