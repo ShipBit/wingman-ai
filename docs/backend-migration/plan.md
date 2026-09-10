@@ -49,9 +49,9 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 
 - [ ] 0.1 Supabase-Projekt `wingman-prod` in Frankfurt anlegen; Pro-Plan; Google-Provider mit eigener OAuth-Client-ID (neue Client-ID, nicht die von B2C); GitHub optional gleich mit. Redirect-Allowlist: `wingman://auth/callback`, `http://localhost:5173/auth/callback`, `https://wingman-ai.com/auth/callback`, `https://*.vercel.app/auth/callback`.
 - [ ] 0.2 Custom-SMTP in Supabase (der eingebaute Versand ist auf 2 Mails/Stunde begrenzt). Anbieter frei wählbar, Absender `noreply@wingman-ai.com`.
-- [ ] 0.3 Vercel-Projekt `wingman-backend`, Region `fra1`, Domain `api.wingman-ai.com` (DNS bei Cloudflare, Proxy aus oder DNS-only, damit Streaming und Body-Größen nicht durch Cloudflare-Limits laufen).
+- [x] 0.3 Vercel-Projekt `wingman-backend`, Region `fra1`, Domain `api.wingman-ai.com` (DNS bei Cloudflare, Proxy aus oder DNS-only, damit Streaming und Body-Größen nicht durch Cloudflare-Limits laufen).
 - [ ] 0.4 Vercel AI Gateway: API-Key für `wingman-backend`, Monatsbudget als Backstop setzen (z. B. 2× erwarteter Verbrauch), Credits aufladen.
-- [ ] 0.5 Inworld-API-Key aus wingman-api übernehmen (derselbe Account).
+- [x] 0.5 Inworld-API-Key aus wingman-api übernehmen (derselbe Account).
 - [ ] 0.6 (später, optional) Sentry-Projekt und Better-Stack-Monitor auf `https://api.wingman-ai.com/health`. Vorerst reichen Vercel-Logs (1 Tag) und Supabase-Logs (7 Tage).
 - [ ] 0.7 PayPro: Testmodus-Zugang prüfen (`use-test-mode`, `secret-key`), IPN-Simulator-Zugang, Validation Key und Secret Key aus den Azure-Function-Settings übernehmen. Noch keine IPN-URL eintragen.
 - [ ] 0.8 Hostinger-Relay (siehe Abschnitt 4) aufsetzen; feste IP beim PayPro-Support allowlisten lassen. Bis die Allowlist steht, laufen PayPro-API-Calls im Testmodus weiter über die alte Azure-Function-IP, also nichts blockiert.
@@ -237,6 +237,15 @@ Phase 1 fertig implementiert (2026-09-10, sechs Commits, weiterhin nur lokal):
 - **1.8** `GET /health` und strukturierte einzeilige JSON-Fehlerlogs (`logError`).
 - **Relay** (Abschnitt 4, gehört zu 0.8): `relay/server.js` fertig, Node ohne Abhängigkeiten, nur die sieben erlaubten PayPro-Pfade, Bearer-Secret, hört nur auf 127.0.0.1. `relay/README.md` enthält systemd-Unit, Caddyfile und den Befehl für die Ausgangs-IP.
 - Getestet gegen den lokalen Stack: kompletter Login-Durchlauf (JWT, Geräte-Token, Revoke, ToS, gesperrter Nutzer, Monatsaggregation über Monatsgrenzen), acht IPN-Szenarien inkl. falscher IP, falschem HASH, falscher SIGNATURE, manipuliertem Betrag, Resend, Trial, unbekanntem Nutzer und unbekannter Produkt-ID, dazu `/api/products` und der Cron gegen ein Relay-Double. 37 Unit-Tests, `npm run check`, `build` und `lint` grün.
+
+Live seit 2026-09-10, 14:40: **https://wingman-backend.vercel.app**
+
+- Vercel-Projekt `wingman-backend` im Team ShipBit, Region `fra1`, mit dem privaten GitHub-Repo `ShipBit/wingman-backend` verbunden. Env gesetzt für Production und Preview: Supabase (URL, Service-Role, JWKS), die vier PayPro-Werte, `CRON_SECRET`, `INWORLD_API_KEY`. Offen: `AI_GATEWAY_API_KEY` (Phase 0.4).
+- Gegen die Live-Deployment geprüft: `/health` 200 mit DB-Antwort, `/api/me` ohne Token 401, mit echtem Supabase-JWT die volle Antwort, Geräte-Token ausstellen und damit erneut `/api/me` 200, `/api/products` liefert die echten Preise (Pro 5,99 / 59,99, Ultra 9,99 / 89,99 brutto DE), der Cron liest alle 1773 Subscriptions in 3,2 Sekunden.
+- **Zwei Fehler, die nur in Produktion auftreten und beim lokalen Test unsichtbar sind:**
+  1. SvelteKits CSRF-Schutz beantwortet einen form-encodeten POST ohne passenden `Origin` mit 403, **bevor** die Route läuft — und die Prüfung ist im Dev-Server abgeschaltet. PayPros IPN lief damit im ersten Deploy gegen die Wand. Behoben mit `csrf: { trustedOrigins: ['*'] }`. Vertretbar, weil sich nichts über Cookies authentifiziert: jeder Endpunkt prüft Bearer-Token oder IP plus HASH und SIGNATURE. **Auflage für Phase 3:** das Admin-Panel darf keine Cookie-authentifizierten Form-Actions benutzen.
+  2. Vercel speichert keine leeren Env-Werte. `RELAY_URL` und `RELAY_SECRET` kommen deshalb aus `$env/dynamic/private`; der statische Import hätte jeden Build ohne Relay abgebrochen.
+- **Relay-Entscheidung revidiert:** PayPro antwortet auch von Vercels fra1-IP, also braucht es den Hostinger-VPS nicht. `payProCall` ruft PayPro direkt auf, solange `RELAY_URL` leer ist; `relay/` bleibt einsatzbereit. Wichtig: **kein Allowlist-Ticket beim PayPro-Support**, das würde alle nicht gelisteten Quellen sperren, Vercel eingeschlossen.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
