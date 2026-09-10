@@ -71,11 +71,11 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 ### Phase 2: Proxy-Routen und Metering (`wingman-backend`)
 
 - [x] 2.1 `POST /api/v1/chat/completions`: OpenAI-Chat-Completion-Format wie heute `/ask` (messages, tools, stream, reasoning_effort). Middleware: Overrides → Limits → Modellwahl aus `model_routes` → Vercel AI Gateway mit Fallback-Kette → Stream durchreichen → `usage` aus letztem Chunk in `usage_daily`. Hard-Cap: HTTP 429 mit JSON `{error: "quota_exceeded", resets_at}`.
-- [ ] 2.2 `POST /api/v1/audio/transcriptions`: multipart, Modell aus `model_routes` (Alias `stt`), Gateway; Sekunden zählen (Dauer aus Datei-Header).
-- [ ] 2.3 `POST /api/v1/audio/speech`: Provider `openai` (Gateway, tts-1/tts-1-hd) oder `inworld` (direkt, Streaming wie heute in `generate_inworld_speech`, LINEAR16 für Streaming); Zeichen zählen. Ultra-Prüfung für Inworld.
-- [ ] 2.4 `GET /api/v1/voices?provider=inworld|openai&language=`: Inworld-Voices-Proxy wie heute, OpenAI-Stimmenliste statisch.
-- [ ] 2.5 `POST /api/v1/images/generations`: gpt-image-1-mini über Gateway, Antwort als Data-URL wie heute.
-- [ ] 2.6 `GET /api/v1/models`: Liste der für den Plan erlaubten Aliase mit Anzeigenamen (ersetzt `/wingman-pro-models`).
+- [x] 2.2 `POST /api/v1/audio/transcriptions`: multipart, Modell aus `model_routes` (Alias `stt`), Gateway; Sekunden zählen (Dauer aus Datei-Header).
+- [x] 2.3 `POST /api/v1/audio/speech`: Provider `openai` (Gateway, tts-1/tts-1-hd) oder `inworld` (direkt, Streaming wie heute in `generate_inworld_speech`, LINEAR16 für Streaming); Zeichen zählen. Ultra-Prüfung für Inworld.
+- [x] 2.4 `GET /api/v1/voices?provider=inworld|openai&language=`: Inworld-Voices-Proxy wie heute, OpenAI-Stimmenliste statisch.
+- [x] 2.5 `POST /api/v1/images/generations`: gpt-image-1-mini über Gateway, Antwort als Data-URL wie heute.
+- [x] 2.6 `GET /api/v1/models`: Liste der für den Plan erlaubten Aliase mit Anzeigenamen (ersetzt `/wingman-pro-models`).
 - [ ] 2.7 Subscription-Aktionen: `POST /api/me/subscription/suspend|renew` (über Relay), `GET /api/me/subscription` (aus DB, nicht live von PayPro).
 - Test: Contract-Test, der die heutigen Antworten von wingman-api (Testaccount) gegen die neuen vergleicht (Feldnamen, Streaming-Chunks, Audio-Header); Lasttest mit 20 parallelen Streams.
 
@@ -268,6 +268,22 @@ Umgekehrt gibt es **2 aktive Subscriptions, deren Nutzer in B2C keinen Plan habe
 - Neue Migration `20260910160000_usage_increment.sql`: `increment_usage()` zählt in einem Statement hoch (parallele Anfragen verlieren sonst Zähler), `usage_this_month()` liefert die Monatssumme in einem Roundtrip.
 - Getestet gegen den echten Gateway: Antwort und Streaming korrekt, Verbrauch landet in `usage_daily` mit Kosten, Hard-Cap liefert 429 mit `resets_at`, Downgrade und Fallback-Kette greifen nachweislich.
 - **Blockiert:** im AI Gateway sind keine Credits geladen. `openai/gpt-4.1-mini` läuft über das Free-Kontingent, `gpt-5-nano` und `gpt-4.1-nano` werden mit 429 abgelehnt ("Free tier requests on this model are rate-limited"). Der Downgrade-Pfad ist damit erst nach dem Aufladen vollständig testbar.
+
+### Phase 2 fertig bis auf 2.7
+
+Alle Proxy-Routen stehen und sind gegen die echten Dienste getestet: `/api/v1/chat/completions` (Stream und ohne), `/audio/transcriptions`, `/audio/speech` (OpenAI und Inworld), `/voices`, `/images/generations`, `/models`. Der Verbrauch landet für alle fünf Modalitäten in `usage_daily`, mit Kosten.
+
+**Wichtige Korrektur an einer Recherche-Annahme:** Der Vercel AI Gateway hat **keine** OpenAI-kompatiblen Audio-Pfade. `/v1/audio/transcriptions` und `/v1/audio/speech` antworten mit 404. Die Modelle stehen zwar im Katalog (372 Modelle, darunter `openai/whisper-1`, `openai/tts-1`, `openai/gpt-4o-mini-transcribe`, `google/gemini-3.5-transcribe`, `fish-audio/transcribe-1`), sind aber nur über das AI-SDK erreichbar. STT und TTS laufen deshalb über `@ai-sdk/gateway` mit `experimental_transcribe` und `experimental_generateSpeech`; Chat und Bilder bleiben auf den HTTP-Pfaden. Ein Wechsel zu Deepgram ist damit weiterhin unnötig.
+
+Gemessene Kosten und Preisannahmen:
+- Chat: der Gateway liefert `usage.cost` mit, also exakt.
+- STT: das SDK liefert die Audiodauer, Kosten geschätzt mit 0,006 $ pro Minute (whisper-1).
+- TTS: Zeichen gezählt, Kosten geschätzt mit 15 $ pro Million Zeichen — gilt für OpenAI tts-1 und Inworld gleichermaßen.
+- Bild: die Antwort meldet `input_tokens` und `output_tokens`, aber keine Kosten. Geschätzt mit 2 $ / 8 $ pro Million. **Ein 1024×1024-Bild mit gpt-image-1-mini kostet damit rund 3,3 Cent** — bei 50 Bildern im Monat also 1,66 $ pro Nutzer, mehr als der LLM-Anteil. Das Limit für Bilder ist der teuerste Posten im Seed und gehört vor dem Cutover überprüft.
+
+Sonstige Funde: Inworlds normale Antwort trägt `audioContent` auf oberster Ebene, die Stream-Antwort dagegen `result.audioContent` pro JSON-Zeile — beides wird gelesen. Der RIFF-Header wird wie in Core entfernt. Inworld liefert 282 Stimmen.
+
+Noch offen in Phase 2: **2.7** (Suspend/Renew über PayPro) — braucht Schreibzugriffe auf PayPro und wartet auf Freigabe.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
