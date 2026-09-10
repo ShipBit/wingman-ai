@@ -76,7 +76,7 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 - [x] 2.4 `GET /api/v1/voices?provider=inworld|openai&language=`: Inworld-Voices-Proxy wie heute, OpenAI-Stimmenliste statisch.
 - [x] 2.5 `POST /api/v1/images/generations`: gpt-image-1-mini über Gateway, Antwort als Data-URL wie heute.
 - [x] 2.6 `GET /api/v1/models`: Liste der für den Plan erlaubten Aliase mit Anzeigenamen (ersetzt `/wingman-pro-models`).
-- [ ] 2.7 Subscription-Aktionen: `POST /api/me/subscription/suspend|renew` (über Relay), `GET /api/me/subscription` (aus DB, nicht live von PayPro).
+- [x] 2.7 Subscription-Aktionen: `POST /api/me/subscription/suspend|renew` (über Relay), `GET /api/me/subscription` (aus DB, nicht live von PayPro).
 - Test: Contract-Test, der die heutigen Antworten von wingman-api (Testaccount) gegen die neuen vergleicht (Feldnamen, Streaming-Chunks, Audio-Header); Lasttest mit 20 parallelen Streams.
 
 ### Phase 3: Admin (`wingman-backend`, Route `/admin`)
@@ -91,8 +91,8 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 - [x] 4.1 `export-b2c.ts`: Graph `GET /users?$select=id,displayName,identities,otherMails,createdDateTime,accountEnabled,extension_3453752678f34332bf48453d0bd422f2_*` mit Pagination; Ausgabe `b2c-users.json`. App-Registrierung mit `User.Read.All` (die Graph-App aus wingman-webhook hat `User.ReadWrite.All`, reicht).
 - [x] 4.2 `export-paypro.ts`: `Subscriptions/GetList` (statusIds 1–4, `includeOrders`, Paging 100), je Subscription `Orders/GetOrderDetails` der Initial-Order; Ausgabe `paypro-subscriptions.json`.
 - [x] 4.3 `join-report.ts`: Zuordnung über `x-azure-user-id`, Fallback E-Mail; Report: zugeordnet, mehrdeutig, ohne Nutzer, Nutzer ohne Subscription aber mit Plan in B2C (Legacy Stripe/Paddle).
-- [ ] 4.4 `import-users.ts`: idempotent (Upsert über `legacy_b2c_object_id`); `auth.admin.createUser({email, email_confirm: true, app_metadata: {legacy_b2c_object_id}})`; `users`-Zeile mit Plan, `plan_until`, `terms_accepted_at` (aus `WingmanTermsConsentDateTime`, Unix-Sekunden). Flag `--only-email` für Einzelimport (eigener Account zuerst).
-- [ ] 4.5 `import-subscriptions.ts`: idempotent über `paypro_subscription_id`.
+- [x] 4.4 `import-users.ts`: idempotent (Upsert über `legacy_b2c_object_id`); `auth.admin.createUser({email, email_confirm: true, app_metadata: {legacy_b2c_object_id}})`; `users`-Zeile mit Plan, `plan_until`, `terms_accepted_at` (aus `WingmanTermsConsentDateTime`, Unix-Sekunden). Flag `--only-email` für Einzelimport (eigener Account zuerst).
+- [x] 4.5 `import-subscriptions.ts`: idempotent über `paypro_subscription_id`.
 - [ ] 4.6 `stamp-paypro.ts`: `Subscriptions/ChangeCustomFields` mit `x-user-id` auf jede aktive Subscription (über Relay). Erst in Phase 9 ausführen.
 - [ ] 4.7 `compare-shadow.ts`: vergleicht Plan/Status/Enddatum in Supabase mit B2C-Export und PayPro-Export; Report für die Parallelphase.
 - Test: Dry-Run-Modus für alle Skripte; Import gegen ein Supabase-Staging-Projekt.
@@ -100,8 +100,8 @@ Jede Aufgabe nennt Repo, Ergebnis und Test. Reihenfolge innerhalb einer Phase is
 ### Phase 5: Client (`wingman-client`)
 
 - [ ] 5.1 Tauri: `tauri-plugin-deep-link` mit Scheme `wingman`, `tauri-plugin-single-instance` (Windows/Linux), `tauri-plugin-opener` für den Systembrowser. macOS: Deep-Links nur im gebündelten Build, im Dev Loopback `http://localhost:5173/auth/callback` verwenden.
-- [ ] 5.2 `authService.ts` neu: `@supabase/supabase-js` mit `flowType: 'pkce'`, `skipBrowserRedirect: true`, Session-Storage im Tauri-Store; `signInWithOAuth({provider})` → Systembrowser; Callback → `exchangeCodeForSession`; danach Geräte-Token holen und als Core-Secret `wingman_pro` speichern (Name beibehalten, damit Core-Seite minimal bleibt). MSAL-Abhängigkeit entfernen.
-- [ ] 5.3 Umschalter: Env `PUBLIC_AUTH_BACKEND=azure|new` und `PUBLIC_API_BASE_URL`; im Beta-Build `new`, im Stable-Build bis Phase 9 `azure`. Beide Pfade bleiben bis Phase 9 im Code.
+- [x] 5.2 `authService.ts` neu: `@supabase/supabase-js` mit `flowType: 'pkce'`, `skipBrowserRedirect: true`, Session-Storage im Tauri-Store; `signInWithOAuth({provider})` → Systembrowser; Callback → `exchangeCodeForSession`; danach Geräte-Token holen und als Core-Secret `wingman_pro` speichern (Name beibehalten, damit Core-Seite minimal bleibt). MSAL-Abhängigkeit entfernen.
+- [x] 5.3 Umschalter: Env `PUBLIC_AUTH_BACKEND=azure|new` und `PUBLIC_API_BASE_URL`; im Beta-Build `new`, im Stable-Build bis Phase 9 `azure`. Beide Pfade bleiben bis Phase 9 im Code.
 - [ ] 5.4 `stores.ts`: `isPro`, `isUltra`, `hasTrial` aus `/api/me` statt aus Token-Claims.
 - [ ] 5.5 `RegionPrompt` und Region-Settings entfernen (hinter dem Umschalter, erst im Stable-Release wirksam).
 - [ ] 5.6 Subscribe-Seite: Checkout-URL mit `x-user-id` statt `x-azure-user-id`; Subscription-Details aus `/api/me/subscription`; Suspend/Renew über Backend.
@@ -295,6 +295,24 @@ Unter `https://api.wingman-ai.com/admin`, vier Reiter: Übersicht, Nutzer, Model
 - **Nutzer:** Suche über E-Mail, Anzeigename und B2C-Objekt-ID; Detail mit Subscriptions, Verbrauch pro Tag und Modell, Geräten und Override. Plan setzen und sperren direkt aus der Ansicht — jede Änderung setzt `plan_source = 'manual'`, damit der nächtliche Abgleich sie nicht stillschweigend überschreibt, und landet in `admin_audit` mit Vorher- und Nachher-Stand.
 - **Modelle und Limits** bearbeitbar, dazu die `app_settings`. Der Abnahmetest aus dem Plan ist erfüllt: Anzeigename einer Route über die API geändert, `/api/v1/models` liefert ihn beim nächsten Aufruf, ohne Deploy.
 - **CSV-Export** für Nutzer und Verbrauch. Der Download läuft über einen Fetch mit Bearer-Token und einen Blob — ein einfacher Link hätte ohne Authorization-Header eine 401 bekommen.
+
+### Nacht auf den 2026-09-11
+
+**Import ist durch, in Produktion.** 5547 Nutzer, 1773 Subscriptions, keine Fehler. 195 Doppelkonten zusammengeführt (dieselbe Adresse einmal mit Google, einmal mit Passwort — das zahlende Konto gewinnt), 147 ohne jede Adresse übersprungen, 21 GitHub-Konten über ihre PayPro-Adresse gerettet. Die Skripte sind idempotent und laufen vor dem Cutover erneut.
+
+**2.7 fertig und an einer echten Test-Subscription verifiziert.** Simon hat im PayPro-Testmodus Pro monatlich gekauft (Bestellung 44235140, Subscription 5362578). Daran durchgespielt: kündigen → PayPro meldet Suspended; reaktivieren → Active; Pro → Ultra → Produkt 95748 zu 8,39 EUR und bei uns sofort Ultra; Ultra → Pro zurück. Doppeltes Kündigen und ein Wechsel auf denselben Plan antworten mit 409. Die Subscription steht wieder im Ausgangszustand.
+
+Dazu neu: `GET /api/me/subscription` liest aus unseren Tabellen statt live von PayPro und sagt dem Client gleich, welche Knöpfe er zeigen darf.
+
+**Planwechsel, wie entschieden:** PayPro kann keine anteilige Verrechnung (`ChangeProduct` hat dafür keinen Parameter, `startBillingImmediately` greift nur in Trials). Monatsabos werden deshalb sofort umgestellt, ohne Aufpreis — der Verlust ist auf wenige Wochen Differenz begrenzt. Jahresabos wechseln zum Verlängerungstermin, und die Antwort enthält den Hinweis, dass ein Sofortwechsel über Discord von Hand geht.
+
+**Admin-Panel** hat ein Dark-Theme mit lesbaren Tabellen und einen neuen Reiter **Freipläne**: alle 253 Konten mit Plan ohne laufende Zahlung, getrennt nach `manual` (183, echte Geschenke) und `legacy` (70, Altlasten aus Paddle, Stripe oder beendeten Abos), mit Verbrauch und Kosten des laufenden Monats.
+
+**Phase 5 angefangen** (Branch `feat/supabase-auth` in wingman-client, nicht gepusht): `backendClient.ts` spricht das neue Backend, `supabaseAuthService.ts` macht den Login im Systembrowser mit PKCE, nimmt den Rückweg über `wingman://auth/callback` entgegen, holt das Geräte-Token und schiebt es als Secret `wingman_pro` an Core — dieselben WebSocket-Kommandos wie bisher. Im Dev-Server ohne Bundle läuft der Rückweg über `http://localhost:5173/auth/callback`. Tauri-seitig sind `deep-link`, `opener` und `single-instance` registriert, das Schema `wingman` steht in `tauri.conf.json`, `cargo check` ist grün. `PUBLIC_AUTH_BACKEND` steht auf `azure`, am Stable-Build ändert sich also nichts.
+
+**GitHub-Login ist aktiv** (Provider in Supabase, OAuth-App bei ShipBit). Wichtig für die 191 GitHub-Konten: Supabase fragt `user:email` an und bekommt damit die Adresse, die B2C für 175 davon nie hatte.
+
+Offene Fragen und die Fallen, die schon zugeschnappt sind, stehen in `offene-fragen.md`.
 
 Noch nicht begonnen bzw. offen:
 - **Nicht verifizierbar ohne echte Daten:** das Datumsformat von `SUBSCRIPTION_NEXT_CHARGE_DATE` (angenommen `M/D/YYYY`, ISO wird auch akzeptiert, alles andere bleibt `null` und wird geloggt) und die Feldnamen von `Subscriptions/GetList`. Beides beim ersten Testmodus-Kauf bzw. beim ersten Relay-Aufruf gegenprüfen.
