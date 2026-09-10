@@ -257,8 +257,8 @@ pocket_tts:
   speed: 1.0
   output_streaming: true
 wingman_pro:
-  stt_provider: azure_speech
-  tts_provider: azure
+  stt_provider: cloud
+  tts_provider: openai
   conversation_deployment: gpt-4.1-mini
 commands:
   - name: ResetConversationHistory

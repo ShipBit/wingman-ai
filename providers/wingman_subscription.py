@@ -52,52 +52,54 @@ class WingmanSubscription:
             color=LogType.ERROR,
         )
 
+    def send_quota_error(self, response: requests.Response):
+        """The monthly allowance is used up. The backend says when it resets, and
+        that date is the only thing the user can act on."""
+        resets_at = ""
+        try:
+            resets_at = response.json().get("resets_at", "")[:10]
+        except Exception:
+            pass
+        self.printr.print(
+            text=(
+                f"Your Wingman Pro allowance for this month is used up. It resets on {resets_at}."
+                if resets_at
+                else "Your Wingman Pro allowance for this month is used up."
+            ),
+            color=LogType.ERROR,
+        )
+
     def send_server_error(self, response: requests.Response):
         self.printr.print(
             text=f"Server Error: {response.text}",
             color=LogType.ERROR,
         )
 
-    def transcribe_whisper(self, filename: str):
-        with open(filename, "rb") as audio_input:
-            files = {"audio_file": (filename, audio_input)}
-            response = requests.post(
-                url=f"{self.settings.base_url}/transcribe-whisper",
-                params={"region": self.settings.region},
-                files=files,
-                headers=self._get_headers(),
-                timeout=self.timeout,
-            )
-            if response.status_code == 403:
-                self.send_unauthorized_error()
-                return None
-            else:
-                response.raise_for_status()
-            json = response.json()
-            transcription = Transcription.model_validate(json)
-            return transcription
-
-    def transcribe_azure_speech(self, filename: str, config: AzureSttConfig):
+    def transcribe(self, filename: str, languages: Optional[list[str]] = None):
+        """One call for all cloud transcription. Which model runs behind it is
+        the backend's business (plan section 6.2); the shape is OpenAI's, so the
+        answer is a Transcription with `.text`."""
         with open(filename, "rb") as audio_input:
             files = {"file": (filename, audio_input)}
-            params = {
-                "region": self.settings.region,
-                "languages": config.languages,
-            }
+            data = {}
+            # OpenAI takes a single language hint, not a list.
+            if languages:
+                data["language"] = languages[0]
             response = requests.post(
-                url=f"{self.settings.base_url}/transcribe-azure-speech",
-                params=params,
-                headers=self._get_headers(),
+                url=f"{self.settings.base_url}/api/v1/audio/transcriptions",
                 files=files,
+                data=data,
+                headers=self._get_headers(),
                 timeout=self.timeout,
             )
-        if response.status_code == 403:
+        if response.status_code in (401, 403):
             self.send_unauthorized_error()
             return None
-        else:
-            response.raise_for_status()
-        json = response.json()
-        return json
+        if response.status_code == 429:
+            self.send_quota_error(response)
+            return None
+        response.raise_for_status()
+        return Transcription.model_validate(response.json())
 
     def ask(
         self,
@@ -117,16 +119,17 @@ class WingmanSubscription:
         # Get minimal reasoning effort for the model to reduce latency
         reasoning_params = get_minimal_reasoning_by_model(deployment)
 
+        # `deployment` stays in the signature because callers pass it, but the
+        # backend picks the model from its own routing table and ignores anything
+        # sent here. Reasoning params are still useful: they travel through.
         data = {
             "messages": serialized_messages,
-            "deployment": deployment,
             "stream": stream,
             "tools": tools,
             **reasoning_params,
         }
         response = requests.post(
-            url=f"{self.settings.base_url}/ask",
-            params={"region": self.settings.region},
+            url=f"{self.settings.base_url}/api/v1/chat/completions",
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
@@ -134,7 +137,10 @@ class WingmanSubscription:
         if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
             return None
-        elif response.status_code == 500:
+        elif response.status_code == 429:
+            self.send_quota_error(response)
+            return None
+        elif response.status_code >= 500:
             self.send_server_error(response)
             return None
         else:
@@ -143,99 +149,6 @@ class WingmanSubscription:
         json_response = response.json()
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
         return completion
-
-    async def generate_azure_speech(
-        self,
-        text: str,
-        config: AzureTtsConfig,
-        sound_config: SoundConfig,
-        audio_player: AudioPlayer,
-        wingman_name: str,
-    ):
-        data = {
-            "text": text,
-            "voice_name": config.voice,
-            "stream": config.output_streaming,
-        }
-        if config.output_streaming:
-
-            def buffer_generator():
-                with requests.post(
-                    url=f"{self.settings.base_url}/generate-azure-speech",
-                    params={"region": self.settings.region},
-                    json=data,
-                    headers=self._get_headers(),
-                    timeout=self.timeout,
-                    stream=True,
-                ) as response:
-                    if response.status_code == 403:
-                        self.send_unauthorized_error()
-                        return None
-                    else:
-                        response.raise_for_status()
-                    for chunk in response.iter_content(chunk_size=2048):
-                        if not chunk:
-                            break
-                        yield chunk
-
-            generator_instance = buffer_generator()
-            # Initialize an incomplete buffer storage
-            incomplete_buffer = b""
-
-            def buffer_callback(audio_buffer):
-                nonlocal incomplete_buffer
-                try:
-                    chunk = next(generator_instance)
-                    # Prepend any previously incomplete buffer to the chunk
-                    chunk = incomplete_buffer + chunk
-                    # Compute new incomplete buffer size if any
-                    remainder = len(chunk) % 2  # 2 bytes for 'int16'
-                    if remainder:
-                        # Store incomplete bytes for next callback
-                        incomplete_buffer = chunk[-remainder:]
-                        # Exclude the incomplete buffer from the current chunk
-                        chunk = chunk[:-remainder]
-                    else:
-                        # No incomplete bytes, reset the incomplete buffer
-                        incomplete_buffer = b""
-
-                    audio_buffer[: len(chunk)] = chunk
-                    return len(chunk)
-                except StopIteration:
-                    if incomplete_buffer:
-                        # Handle any remaining incomplete buffer, if present, when the stream ends
-                        audio_buffer[: len(incomplete_buffer)] = incomplete_buffer
-                        chunk_length = len(incomplete_buffer)
-                        incomplete_buffer = b""  # Clear the storage
-                        return chunk_length
-                    return 0
-
-            await audio_player.stream_with_effects(
-                buffer_callback=buffer_callback,
-                config=sound_config,
-                wingman_name=wingman_name,
-                use_gain_boost=True,  # "Azure Streaming" low gain workaround
-            )
-        else:  # non-streaming
-            response = requests.post(
-                url=f"{self.settings.base_url}/generate-azure-speech",
-                params={"region": self.settings.region},
-                headers=self._get_headers(),
-                json=data,
-                timeout=self.timeout,
-            )
-            if response.status_code == 403:
-                self.send_unauthorized_error()
-                return
-            else:
-                response.raise_for_status()
-
-            audio_data = response.content
-            await audio_player.play_with_effects(
-                input_data=audio_data,
-                config=sound_config,
-                wingman_name=wingman_name,
-            )
 
     async def generate_openai_speech(
         self,
@@ -248,17 +161,13 @@ class WingmanSubscription:
         wingman_name: str,
     ):
         data = {
-            "text": text,
-            "voice_name": voice,
-            "model": model,
+            "provider": "openai",
+            "input": text,
+            "voice": voice,
             "speed": speed,
-            "stream": False,
         }
         response = requests.post(
-            url=f"{self.settings.base_url}/generate-openai-speech",
-            params={
-                "region": self.settings.region,
-            },
+            url=f"{self.settings.base_url}/api/v1/audio/speech",
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
@@ -284,7 +193,8 @@ class WingmanSubscription:
         wingman_name: str,
     ):
         data = {
-            "text": text,
+            "provider": "inworld",
+            "input": text,
             "voice_id": config.voice_id,
             "stream": config.output_streaming,
             "model_id": config.model_id,
@@ -304,8 +214,7 @@ class WingmanSubscription:
 
             def buffer_generator():
                 with requests.post(
-                    url=f"{self.settings.base_url}/generate-inworld-speech",
-                    params={"region": self.settings.region},
+                    url=f"{self.settings.base_url}/api/v1/audio/speech",
                     json=data,
                     headers=self._get_headers(),
                     timeout=self.timeout,
@@ -361,8 +270,7 @@ class WingmanSubscription:
             )
         else:
             response = requests.post(
-                url=f"{self.settings.base_url}/generate-inworld-speech",
-                params={"region": self.settings.region},
+                url=f"{self.settings.base_url}/api/v1/audio/speech",
                 headers=self._get_headers(),
                 json=data,
                 timeout=self.timeout,
@@ -385,13 +293,10 @@ class WingmanSubscription:
         text: str,
     ):
         data = {
-            "text": text,
+            "prompt": text,
         }
         response = requests.post(
-            url=f"{self.settings.base_url}/generate-image",
-            params={
-                "region": self.settings.region,
-            },
+            url=f"{self.settings.base_url}/api/v1/images/generations",
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
@@ -402,43 +307,45 @@ class WingmanSubscription:
                 return
             else:
                 response.raise_for_status()
-            return response.text
+            # The answer is OpenAI-shaped; callers want the data URL they used to
+            # get from the old endpoint.
+            data = response.json().get("data") or [{}]
+            return data[0].get("url", "")
 
     def get_available_voices(self, locale: str = ""):
+        """OpenAI voices. They carry no locale or gender — the fields stay in the
+        answer because the settings UI reads them, they are simply empty now."""
         response = requests.get(
-            url=f"{self.settings.base_url}/azure-voices",
-            params={"region": self.settings.region, "locale": locale},
+            url=f"{self.settings.base_url}/api/v1/voices",
+            params={"provider": "openai"},
             timeout=self.timeout,
             headers=self._get_headers(),
         )
-        if response.status_code == 403:
+        if response.status_code in (401, 403):
             self.send_unauthorized_error()
             return None
-        else:
-            response.raise_for_status()
-        voices_dict = response.json()
-        voice_infos = [
-            {
-                "short_name": entry.get("_short_name", ""),
-                "name": entry.get("_local_name", ""),
-                "local_name": entry.get("_local_name", ""),
-                "locale": entry.get("_locale", ""),
-                "gender": self.__resolve_gender(entry.get("_gender")),
-            }
-            for entry in voices_dict
-        ]
+        response.raise_for_status()
 
-        return voice_infos
+        return [
+            {
+                "short_name": entry.get("voiceId", ""),
+                "name": entry.get("displayName", entry.get("voiceId", "")),
+                "local_name": entry.get("displayName", entry.get("voiceId", "")),
+                "locale": locale,
+                "gender": "Unknown",
+            }
+            for entry in response.json().get("voices", [])
+        ]
 
     def get_available_inworld_voices(
         self, filter_language: Optional[str] = None
     ) -> list[VoiceInfo]:
-        params = {"region": self.settings.region}
+        params = {"provider": "inworld"}
         if filter_language:
-            params["filter"] = f"language={filter_language}"
+            params["language"] = filter_language
 
         response = requests.get(
-            url=f"{self.settings.base_url}/inworld-voices",
+            url=f"{self.settings.base_url}/api/v1/voices",
             params=params,
             timeout=self.timeout,
             headers=self._get_headers(),
@@ -502,18 +409,12 @@ class WingmanSubscriptionStt(SttInterface):
         self._config = config
 
     async def transcribe(self, filename: str) -> Transcript | None:
-        from api.enums import WingmanProSttProvider
-        if self._config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
-            result = self._ws.transcribe_whisper(filename=filename)
-        elif self._config.wingman_pro.stt_provider == WingmanProSttProvider.AZURE_SPEECH:
-            result = self._ws.transcribe_azure_speech(
-                filename=filename, config=self._config.azure.stt
-            )
-        else:
-            return None
+        # One cloud provider now, so no dispatch: the languages hint still comes
+        # from the Azure STT config, which is where users configured it.
+        languages = getattr(self._config.azure.stt, "languages", None)
+        result = self._ws.transcribe(filename=filename, languages=languages)
         if result is None:
             return None
-        # WingmanSubscription might return a dict instead of a real transcript object
         text = result.get("_text") if isinstance(result, dict) else result.text
         return Transcript(text=text) if text else None
 
@@ -526,10 +427,14 @@ class WingmanSubscriptionTts(TtsInterface):
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         from api.enums import WingmanProTtsProvider
-        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
-            await self._ws.generate_azure_speech(
+        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+            await self._ws.generate_openai_speech(
                 text=text,
-                config=self._config.azure.tts,
+                voice=self._config.openai.tts_voice.value
+                if hasattr(self._config.openai.tts_voice, "value")
+                else str(self._config.openai.tts_voice),
+                model=self._config.openai.tts_model,
+                speed=self._config.openai.tts_speed,
                 sound_config=sound_config,
                 audio_player=audio_player,
                 wingman_name=wingman_name,

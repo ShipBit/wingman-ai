@@ -531,120 +531,6 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
 
-        # Connection test endpoints
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/whispercpp",
-            endpoint=self.test_whispercpp,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/parakeet",
-            endpoint=self.test_parakeet,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/xvasynth",
-            endpoint=self.test_xvasynth,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/local-ai/support",
-            endpoint=self.test_local_ai_support,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/local-ai/embed",
-            endpoint=self.test_local_ai_embed,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/hud-server",
-            endpoint=self.test_hud_server,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/pocket-tts",
-            endpoint=self.test_pocket_tts,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/openai-compatible-tts",
-            endpoint=self.test_openai_compatible_tts,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/support",
-            endpoint=self.api_support,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/enhance-backstory",
-            endpoint=self.api_enhance_backstory,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/local-ai/enhance-backstory-budget",
-            endpoint=self.api_enhance_backstory_budget,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/embed",
-            endpoint=self.api_embed,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/elevenlabs/generate-sfx",
-            endpoint=self.generate_sfx_elevenlabs,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/elevenlabs/subscription-data",
-            endpoint=self.get_elevenlabs_subscription_data,
-            response_model=dict,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/shutdown",
-            endpoint=self.shutdown,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/models/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_models,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/regions/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_regions,
-            tags=tags,
-        )
         self.router.add_api_route(
             methods=["GET"],
             path="/memories/{wingman_name}",
@@ -1660,16 +1546,14 @@ class WingmanCore(WebSocketUser):
                 wingman_name="system",
                 settings=self.settings_service.settings.wingman_pro,
             )
-            transcription = wingman_pro.transcribe_azure_speech(
+            transcription = wingman_pro.transcribe(
                 filename=recording_file,
-                config=AzureSttConfig(
-                    languages=self.settings_service.settings.voice_activation.azure.languages,
-                    # unused as Wingman Pro sets this at API level - just for Pydantic:
-                    region=AzureRegion.WESTEUROPE,
-                ),
+                languages=self.settings_service.settings.voice_activation.azure.languages,
             )
             if transcription:
-                text = transcription.get("_text")
+                text = getattr(transcription, "text", None) or (
+                    transcription.get("_text") if isinstance(transcription, dict) else None
+                )
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
 
             def filter_and_clean_text(text):
@@ -2942,29 +2826,7 @@ class WingmanCore(WebSocketUser):
         )
         try:
             response = requests.get(
-                url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
-                params={"region": self.settings_service.settings.wingman_pro.region},
-                timeout=10,
-                headers={
-                    "Authorization": f"Bearer {wingman_pro_token}",
-                    "Content-Type": "application/json",
-                },
-            )
-            response.raise_for_status()
-            model_list = response.json()
-            return model_list
-        except Exception as e:
-            self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
-            return []
-
-    async def get_wingman_pro_regions(self):
-        wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
-        )
-        try:
-            response = requests.get(
-                url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-regions",
-                params={"region": self.settings_service.settings.wingman_pro.region},
+                url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
                 timeout=10,
                 headers={
                     "Authorization": f"Bearer {wingman_pro_token}",

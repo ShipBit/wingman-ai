@@ -194,12 +194,14 @@ class RecordingDevice(Enum):
 
 
 class WingmanProSttProvider(Enum):
-    WHISPER = "whisper"
-    AZURE_SPEECH = "azure_speech"
+    # One cloud option instead of whisper and azure_speech: which model actually
+    # transcribes is decided by the backend's model_routes table, not by the
+    # client (backend migration, plan section 6.2).
+    CLOUD = "cloud"
 
 
 class WingmanProTtsProvider(Enum):
-    AZURE = "azure"
+    OPENAI = "openai"
     INWORLD = "inworld"
 
 

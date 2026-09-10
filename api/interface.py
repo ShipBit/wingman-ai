@@ -566,7 +566,8 @@ class WingmanProConfig(BaseModel):
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    region: str
+    """Wingman backend. One region, no per-region endpoints — the old Azure
+    deployment had several, the new one runs in Frankfurt only."""
 
 
 class SoundConfig(BaseModel):

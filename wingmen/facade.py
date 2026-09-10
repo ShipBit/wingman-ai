@@ -210,11 +210,11 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
     provider = config.features.tts_provider
 
     if provider == TtsProvider.WINGMAN_PRO:
-        # Wingman Pro TTS is only ever Azure or Inworld (per WingmanProTtsProvider).
+        # Wingman Pro TTS is only ever OpenAI or Inworld (per WingmanProTtsProvider).
         subprovider = config.wingman_pro.tts_provider
-        if subprovider == WingmanProTtsProvider.AZURE:
-            config.azure.tts.voice = voice
-            return voice, "Wingman Pro / Azure TTS"
+        if subprovider == WingmanProTtsProvider.OPENAI:
+            config.openai.tts_voice = voice
+            return getattr(voice, "value", voice), "Wingman Pro / OpenAI TTS"
         if subprovider == WingmanProTtsProvider.INWORLD:
             config.inworld.voice_id = voice
             config.inworld.output_streaming = False

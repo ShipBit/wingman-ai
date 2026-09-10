@@ -9,7 +9,6 @@ voice_activation:
   energy_threshold: 0.01
   stt_provider: parakeet
   azure:
-    region: westeurope
     languages:
       - en-US
       - de-DE
@@ -41,8 +40,7 @@ voice_activation:
   parakeet_config:
     temperature: 0.0
 wingman_pro:
-  base_url: https://wingman-api-europe.azurewebsites.net
-  region: europe
+  base_url: https://api.wingman-ai.com
 xvasynth:
   enable: false
   host: http://127.0.0.1
