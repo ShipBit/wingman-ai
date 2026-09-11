@@ -37,6 +37,35 @@ läuft über Nacht mindestens eine Verlängerung durch.
   dort mehrere Adressen oder einen Wildcard akzeptiert. Notfalls erst am Cutover
   umschalten — kostet den Schattenbetrieb, geht aber.
 
+## Wie lange eine Anmeldung hält (11.09.)
+
+Der tägliche Neu-Login war der Hauptgrund für den Wechsel, aber die
+Ersteinrichtung hatte ihn beinahe wieder eingebaut. Gemessen am Live-Projekt:
+
+| Einstellung | vorher | jetzt |
+|---|---|---|
+| `jwt_expiry` | 3600 (1 Stunde) | **604800 (1 Woche, Maximum)** |
+| `enable_refresh_token_rotation` | `true` | **`false`** |
+| `refresh_token_reuse_interval` | 10 Sekunden | 60 (wirkungslos, solange Rotation aus ist) |
+
+Mit Rotation wird das alte Refresh-Token bei jeder Erneuerung ungültig. Eine
+Erneuerung, die beginnt und nicht ankommt — Rechner schläft ein, Netz bricht
+weg, zwei Fenster erneuern gleichzeitig — lässt das gespeicherte Token nach 10
+Sekunden tot zurück. Danach hilft nur ein neuer Login. Bei stündlicher
+Erneuerung gibt es 24 solcher Gelegenheiten am Tag.
+
+**Jetzt gilt: eine Anmeldung hält, bis sich jemand abmeldet.** Nachgewiesen —
+dasselbe Refresh-Token funktioniert auch 75 Sekunden nach einer Erneuerung noch,
+also weit jenseits jeder Nachfrist.
+
+**Der Preis:** Ein gestohlenes Refresh-Token gilt unbegrenzt. Tragbar, weil Core
+dieses Token nie zu sehen bekommt — es arbeitet mit Geräte-Tokens, die pro Gerät
+im Admin widerrufbar sind.
+
+**Regel für später:** `enable_refresh_token_rotation` nicht ohne Not wieder
+anschalten. Es bringt genau das Problem zurück, dessentwegen wir Azure verlassen
+haben.
+
 ## Fallen, die in der Nacht auf den 11.09. zugeschnappt sind
 
 ### PostgREST hört bei 1000 Zeilen auf — ohne Fehler
