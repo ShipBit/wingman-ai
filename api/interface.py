@@ -2,8 +2,6 @@ from typing import Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
-    AzureApiVersion,
-    AzureRegion,
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
@@ -250,41 +248,6 @@ class ParakeetSttConfig(BaseModel):
 
 class ParakeetTranscript(BaseModel):
     text: str
-
-
-class AzureInstanceConfig(BaseModel):
-    api_base_url: str
-    """https://xxx.openai.azure.com/"""
-
-    api_version: AzureApiVersion
-    """The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference"""
-
-    deployment_name: str
-    """The deployment name e.g. 'whisper'"""
-
-
-class AzureTtsConfig(BaseModel):
-    region: AzureRegion
-    voice: str
-    output_streaming: bool
-
-
-class AzureSttConfig(BaseModel):
-    region: AzureRegion
-    languages: list[str]
-
-
-class AzureConfig(BaseModel):
-    """Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
-
-    If you configured some providers above to use Azure, you need to provide your Azure settings here.
-    Please also provide your Azure API keys in the secrets.yaml.
-    """
-
-    whisper: AzureInstanceConfig
-    conversation: AzureInstanceConfig
-    tts: AzureTtsConfig
-    stt: AzureSttConfig
 
 
 class ElevenlabsLanguage(BaseModel):
@@ -561,13 +524,14 @@ class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
     conversation_deployment: str
-    # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
+
+    languages: list[str] = ["en-US"]
+    """Languages the cloud transcription may auto-detect, as BCP-47 tags."""
 
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    """Wingman backend. One region, no per-region endpoints — the old Azure
-    deployment had several, the new one runs in Frankfurt only."""
+    """Wingman backend. One region, so there is no endpoint to choose."""
 
 
 class SoundConfig(BaseModel):
@@ -600,7 +564,11 @@ class VoiceActivationSettings(BaseModel):
 
     stt_provider: VoiceActivationSttProvider
 
-    azure: AzureSttConfig
+    languages: list[str]
+    """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
+    en-US. Used by the Wingman backend; the local providers have their own
+    language settings."""
+
     whispercpp: WhispercppSettings
     fasterwhisper: FasterWhisperSettings
     parakeet: ParakeetSettings
@@ -1097,7 +1065,6 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     hume: HumeConfig
     inworld: InworldConfig
-    azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     pocket_tts: PocketTTSConfig
     whispercpp: WhispercppSttConfig

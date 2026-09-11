@@ -1506,7 +1506,7 @@ class ConfigManager:
 
         Inworld voices are the Ultra feature; everyone else gets the OpenAI
         voices, which the backend serves through the same endpoint. Before the
-        backend migration this fell back to Azure Speech, which no longer exists.
+        Before the backend migration this fell back to a provider that is gone.
         """
         if plan == "Ultra":
             return
@@ -1536,7 +1536,7 @@ class ConfigManager:
 
         if patched:
             self.printr.print(
-                f"Downgraded Inworld TTS to Azure (plan: {plan})",
+                f"Downgraded Inworld TTS to OpenAI (plan: {plan})",
                 color=LogType.WARNING,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -1856,7 +1856,6 @@ class ConfigManager:
             "elevenlabs",
             "hume",
             "inworld",
-            "azure",
             "whispercpp",
             "fasterwhisper",
             "xvasynth",

@@ -481,8 +481,6 @@ class RadioChatter(Skill):
             voice = self.wingman.config.edge_tts.voice
         elif voice_provider == TtsProvider.ELEVENLABS:
             voice = self.wingman.config.elevenlabs.voice
-        elif voice_provider == TtsProvider.AZURE:
-            voice = self.wingman.config.azure.tts.voice
         elif voice_provider == TtsProvider.XVASYNTH:
             voice = self.wingman.config.xvasynth.voice
         elif voice_provider == TtsProvider.OPENAI:

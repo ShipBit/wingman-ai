@@ -10,8 +10,6 @@ from api.enums import (
     TtsProvider,
 )
 from api.interface import (
-    AzureSttConfig,
-    AzureTtsConfig,
     InworldConfig,
     SoundConfig,
     VoiceInfo,
@@ -410,9 +408,9 @@ class WingmanSubscriptionStt(SttInterface):
         self._config = config
 
     async def transcribe(self, filename: str) -> Transcript | None:
-        # One cloud provider now, so no dispatch: the languages hint still comes
-        # from the Azure STT config, which is where users configured it.
-        languages = getattr(self._config.azure.stt, "languages", None)
+        # One cloud provider, so no dispatch. The backend decides which model
+        # transcribes; the language list only narrows its auto-detection.
+        languages = self._config.wingman_pro.languages
         result = self._ws.transcribe(filename=filename, languages=languages)
         if result is None:
             return None

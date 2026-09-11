@@ -212,24 +212,6 @@ inworld:
     - "[clear_throat] Did you hear me? [sigh] You never listen!"
     - "[angry] Are you serious right now? [sigh] Fine, I'll fix it."
     - "[surprised] Wait, what? [laugh] I did not see that coming!"
-azure:
-  whisper:
-    api_base_url: https://openai-w-eu.openai.azure.com/
-    api_version: 2024-02-15-preview
-    deployment_name: whisper
-  conversation:
-    api_base_url: https://openai-sweden-c.openai.azure.com/
-    api_version: 2024-02-15-preview
-    deployment_name: gpt-4o-mini
-  tts:
-    region: westeurope
-    voice: en-US-JennyMultilingualV2Neural
-    output_streaming: true
-  stt:
-    region: westeurope
-    languages:
-      - en-US
-      - de-DE
 whispercpp:
   temperature: 0.0
 fasterwhisper:
@@ -257,6 +239,8 @@ pocket_tts:
   speed: 1.0
   output_streaming: true
 wingman_pro:
+  languages:
+    - en-US
   stt_provider: cloud
   tts_provider: openai
   conversation_deployment: default

@@ -90,16 +90,6 @@ class CustomPropertyType(Enum):
     RANGE_SLIDER = "range_slider"
 
 
-class AzureApiVersion(Enum):
-    A2023_12_01_PREVIEW = "2023-12-01-preview"
-    A2024_02_15_PREVIEW = "2024-02-15-preview"
-
-
-class AzureRegion(Enum):
-    WESTEUROPE = "westeurope"
-    NORTHCENTRALUS = "northcentralus"
-
-
 class TtsVoiceGender(Enum):
     UNKNOWN = "Unknown"
     MALE = "Male"
@@ -132,7 +122,6 @@ class TtsProvider(Enum):
     OPENAI = "openai"
     ELEVENLABS = "elevenlabs"
     EDGE_TTS = "edge_tts"
-    AZURE = "azure"
     XVASYNTH = "xvasynth"
     WINGMAN_PRO = "wingman_pro"
     OPENAI_COMPATIBLE = "openai_compatible"
@@ -143,8 +132,6 @@ class TtsProvider(Enum):
 
 class SttProvider(Enum):
     OPENAI = "openai"
-    AZURE = "azure"
-    AZURE_SPEECH = "azure_speech"
     WHISPERCPP = "whispercpp"
     FASTER_WHISPER = "fasterwhisper"
     PARAKEET = "parakeet"
@@ -154,7 +141,6 @@ class SttProvider(Enum):
 
 class VoiceActivationSttProvider(Enum):
     OPENAI = "openai"
-    AZURE = "azure"
     WHISPERCPP = "whispercpp"
     FASTER_WHISPER = "fasterwhisper"
     PARAKEET = "parakeet"
@@ -168,7 +154,6 @@ class ConversationProvider(Enum):
     GROQ = "groq"
     OPENROUTER = "openrouter"
     LOCAL_LLM = "local_llm"
-    AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
     GOOGLE = "google"
     CEREBRAS = "cerebras"
@@ -194,7 +179,7 @@ class RecordingDevice(Enum):
 
 
 class WingmanProSttProvider(Enum):
-    # One cloud option instead of whisper and azure_speech: which model actually
+    # One cloud option: which model actually
     # transcribes is decided by the backend's model_routes table, not by the
     # client (backend migration, plan section 6.2).
     CLOUD = "cloud"
@@ -244,14 +229,6 @@ class CommandTagEnumModel(BaseEnumModel):
 
 class CustomPropertyTypeEnumModel(BaseEnumModel):
     property_type: CustomPropertyType
-
-
-class AzureApiVersionEnumModel(BaseEnumModel):
-    api_version: AzureApiVersion
-
-
-class AzureRegionEnumModel(BaseEnumModel):
-    region: AzureRegion
 
 
 class TtsVoiceGenderEnumModel(BaseEnumModel):
@@ -317,8 +294,6 @@ ENUM_TYPES = {
     "WingmanInitializationErrorType": WingmanInitializationErrorTypeModel,
     "CommandTag": CommandTagEnumModel,
     "CustomPropertyType": CustomPropertyTypeEnumModel,
-    "AzureApiVersion": AzureApiVersionEnumModel,
-    "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,

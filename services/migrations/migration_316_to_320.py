@@ -16,6 +16,16 @@ user's config:
   `fast` — instead of a raw model name like `gpt-4.1-mini`. The backend owns
   the routing table, so a stored model name no longer matches anything the
   model list offers and the picker would come up empty.
+* Azure is gone as a provider of any kind, including for people who brought
+  their own Azure account (docs/backend-migration/azure-ausbau.md). Anything
+  pointing at it is rewritten to a provider that still exists, and the whole
+  `azure:` block is dropped.
+* `voice_activation.azure.languages` becomes `voice_activation.languages`. The
+  list only ever sat under `azure` because that provider came first; the
+  Wingman backend uses it to narrow its auto-detection.
+
+The Azure names stay in this file on purpose: it is the only place that still
+has to recognise them, because it is what reads the old configs.
 """
 
 from services.migrations.base_migration import BaseMigration
@@ -26,6 +36,13 @@ NEW_BASE_URL = "https://api.wingman-ai.com"
 # from the Azure era.
 DEFAULT_DEPLOYMENT = "default"
 KNOWN_ALIASES = ("default", "fast")
+
+# Where an Azure setting lands. Someone who paid for their own Azure account
+# gets OpenAI, the closest equivalent they can point at their own key; local
+# speech recognition goes to Parakeet, which is the default anyway.
+AZURE_TTS_REPLACEMENT = "openai"
+AZURE_LLM_REPLACEMENT = "openai"
+AZURE_STT_REPLACEMENT = "parakeet"
 
 # Azure voice names carry the gender in the name itself, e.g.
 # "de-DE-KatjaNeural". Anything unknown lands on "nova", a neutral default.
@@ -72,6 +89,29 @@ class Migration316To320(BaseMigration):
             pro.pop("region", None)
             new["wingman_pro"] = pro
             self.log("Wingman Pro points at the new backend, region setting removed")
+
+        va = dict(new.get("voice_activation") or {})
+        if va:
+            azure = va.pop("azure", None)
+            # The language list lived under `azure` and is still needed; the
+            # region next to it is not.
+            if isinstance(azure, dict) and azure.get("languages"):
+                va["languages"] = azure["languages"]
+                self.log(
+                    f"voice activation languages moved out of the azure section: "
+                    f"{', '.join(azure['languages'])}"
+                )
+            va.setdefault("languages", ["en-US"])
+
+            if va.get("stt_provider") in ("azure", "azure_speech"):
+                self.log(
+                    f"voice activation '{va['stt_provider']}' -> "
+                    f"'{AZURE_STT_REPLACEMENT}' (Azure Speech is gone, this one "
+                    f"runs on your machine)"
+                )
+                va["stt_provider"] = AZURE_STT_REPLACEMENT
+            new["voice_activation"] = va
+
         return new
 
     def migrate_defaults(self, old: dict) -> dict:
@@ -106,12 +146,42 @@ class Migration316To320(BaseMigration):
             config["openai"] = openai_section
             self.log(f"{label}: speech output 'azure' -> 'openai', voice {old_voice or '—'} -> {new_voice}")
 
+        # Anything pointing at Azure, including a user's own Azure account.
+        features = dict(config.get("features") or {})
+        if features:
+            if features.get("tts_provider") == "azure":
+                features["tts_provider"] = AZURE_TTS_REPLACEMENT
+                self.log(f"{label}: speech output 'azure' -> '{AZURE_TTS_REPLACEMENT}'")
+            if features.get("stt_provider") in ("azure", "azure_speech"):
+                was = features["stt_provider"]
+                features["stt_provider"] = AZURE_STT_REPLACEMENT
+                self.log(f"{label}: speech recognition '{was}' -> '{AZURE_STT_REPLACEMENT}'")
+            if features.get("conversation_provider") == "azure":
+                features["conversation_provider"] = AZURE_LLM_REPLACEMENT
+                self.log(f"{label}: conversation 'azure' -> '{AZURE_LLM_REPLACEMENT}'")
+            config["features"] = features
+
+        # The transcription language list sat under azure.stt; it belongs to the
+        # Wingman Pro section now, which is the thing that uses it.
+        azure_cfg = config.get("azure")
+        if isinstance(azure_cfg, dict) and isinstance(azure_cfg.get("stt"), dict):
+            langs = azure_cfg["stt"].get("languages")
+            if langs:
+                pro["languages"] = langs
+                self.log(f"{label}: transcription languages kept: {', '.join(langs)}")
+        pro.setdefault("languages", ["en-US"])
+
         deployment = pro.get("conversation_deployment")
         if deployment not in KNOWN_ALIASES:
             pro["conversation_deployment"] = DEFAULT_DEPLOYMENT
             self.log(
                 f"{label}: conversation model '{deployment or '—'}' -> '{DEFAULT_DEPLOYMENT}'"
             )
+
+        # The azure section itself goes last, so the voice mapping above can
+        # still read the old voice out of it.
+        if config.pop("azure", None) is not None:
+            self.log(f"{label}: azure settings removed, the provider no longer exists")
 
         config["wingman_pro"] = pro
         return config

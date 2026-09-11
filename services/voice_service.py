@@ -1,9 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
-from api.enums import AzureRegion
 from api.interface import (
-    AzureTtsConfig,
     EdgeTtsConfig,
     ElevenlabsConfig,
     HumeConfig,
@@ -17,7 +15,7 @@ from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
 from providers.inworld import Inworld
-from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
+from providers.open_ai import OpenAi, OpenAiCompatibleTts
 from providers.wingman_subscription import WingmanSubscription
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
@@ -73,20 +71,6 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/voices/azure",
-            endpoint=self.get_azure_voices,
-            response_model=list[VoiceInfo],
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/voices/azure/wingman-pro",
-            endpoint=self.get_wingman_pro_azure_voices,
-            response_model=list[VoiceInfo],
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
             path="/voices/inworld/wingman-pro",
             endpoint=self.get_wingman_pro_inworld_voices,
             response_model=list[VoiceInfo],
@@ -121,12 +105,6 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voices/preview/azure",
-            endpoint=self.play_azure_tts,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/voices/preview/elevenlabs",
             endpoint=self.play_elevenlabs_tts,
             tags=tags,
@@ -157,12 +135,6 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voices/preview/wingman-pro/azure",
-            endpoint=self.play_wingman_pro_azure,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/voices/preview/wingman-pro/openai",
             endpoint=self.play_wingman_pro_openai,
             tags=tags,
@@ -174,23 +146,6 @@ class VoiceService:
             tags=tags,
         )
 
-    def __convert_azure_voice(self, voice):
-        # retrieved from Wingman Pro as serialized dict
-        if isinstance(voice, dict):
-            return VoiceInfo(
-                id=voice.get("short_name"),
-                name=voice.get("local_name"),
-                gender=voice.get("gender"),
-                locale=voice.get("locale"),
-            )
-        # coming directly from Azure API as a voice object
-        else:
-            return VoiceInfo(
-                id=voice.short_name,
-                name=voice.local_name,
-                gender=voice.gender.name,
-                locale=voice.locale,
-            )
 
     # GET /voices/elevenlabs
     async def get_elevenlabs_voices(self, api_key: str) -> list[VoiceInfo]:
@@ -233,26 +188,6 @@ class VoiceService:
         return await openai_compatible.get_available_voices(
             voices_endpoint=voices_endpoint
         )
-
-    # GET /voices/azure
-    def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
-        azure = OpenAiAzure()
-        voices = azure.get_available_voices(
-            api_key=api_key, region=region.value, locale=locale
-        )
-        result = [self.__convert_azure_voice(voice) for voice in voices]
-        return result
-
-    # GET /voices/azure/wingman-pro
-    def get_wingman_pro_azure_voices(self, locale: str = ""):
-        wingman_pro = WingmanSubscription(
-            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
-        )
-        voices = wingman_pro.get_available_voices(locale=locale)
-        if not voices:
-            return []
-        result = [self.__convert_azure_voice(voice) for voice in voices]
-        return result
 
     # GET /voices/inworld/wingman-pro
     def get_wingman_pro_inworld_voices(
@@ -328,21 +263,6 @@ class VoiceService:
             )
         )
 
-    # POST /play/azure
-    async def play_azure_tts(
-        self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
-    ):
-        azure = OpenAiAzure()
-        await self._run_playback(
-            azure.play_audio(
-                text=text,
-                api_key=api_key,
-                config=config,
-                sound_config=sound_config,
-                audio_player=self.audio_player,
-                wingman_name="system",
-            )
-        )
 
     # POST /play/elevenlabs
     async def play_elevenlabs_tts(
@@ -441,23 +361,6 @@ class VoiceService:
             )
         )
 
-    # POST /play/wingman-pro/azure
-    async def play_wingman_pro_azure(
-        self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
-    ):
-        wingman_pro = WingmanSubscription(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
-        )
-        await self._run_playback(
-            wingman_pro.generate_azure_speech(
-                text=text,
-                config=config,
-                sound_config=sound_config,
-                audio_player=self.audio_player,
-                wingman_name="system",
-            )
-        )
 
     # POST /play/wingman-pro/openai
     async def play_wingman_pro_openai(

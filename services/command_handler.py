@@ -289,7 +289,7 @@ class CommandHandler:
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
         if self.core.is_client_logged_in:
-            # retrieved keepalive / token refresh from Azure but Tower is still initialized
+            # keepalive / token refresh, but the Tower is already initialized
             return
 
         # Wait until config is loaded before proceeding — the server now starts

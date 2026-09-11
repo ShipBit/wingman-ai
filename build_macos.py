@@ -19,11 +19,9 @@ cmd = [
                 "lib",
                 "python3.11",
                 "site-packages",
-                "azure",
                 "cognitiveservices",
                 "speech",
             ),
-            "azure/cognitiveservices/speech",
         ]
     ),
     "--add-data",

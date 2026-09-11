@@ -78,12 +78,6 @@ class Wingman:
     is delegated to extracted service objects.
     """
 
-    AZURE_SERVICES = {
-        "tts": None,  # kept for potential future use
-        "whisper": None,
-        "conversation": None,
-    }
-
     def __init__(
         self,
         name: str,

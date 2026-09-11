@@ -227,9 +227,6 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
         config.elevenlabs.voice = voice
         config.elevenlabs.output_streaming = False
         return getattr(voice, "name", None) or getattr(voice, "id", voice), "Elevenlabs"
-    if provider == TtsProvider.AZURE:
-        config.azure.tts.voice = voice
-        return voice, "Azure TTS"
     if provider == TtsProvider.XVASYNTH:
         config.xvasynth.voice = voice
         return getattr(voice, "voice_name", voice), "XVASynth"
@@ -824,7 +821,6 @@ class SkillTts:
         mapping = {
             TtsProvider.OPENAI: lambda: config.openai.tts_voice,
             TtsProvider.ELEVENLABS: lambda: config.elevenlabs.voice,
-            TtsProvider.AZURE: lambda: config.azure.tts.voice,
             TtsProvider.EDGE_TTS: lambda: config.edge_tts.voice,
             TtsProvider.XVASYNTH: lambda: config.xvasynth.voice,
             TtsProvider.HUME: lambda: config.hume.voice,
@@ -881,7 +877,7 @@ class SkillTts:
                 except Exception:
                     return []
 
-        # Everything else (OpenAI, ElevenLabs, Azure, Hume, Inworld, OpenAI-compatible,
+        # Everything else (OpenAI, ElevenLabs, Hume, Inworld, OpenAI-compatible,
         # XVASynth) needs a secret and/or network call we don't make here.
         return []
 

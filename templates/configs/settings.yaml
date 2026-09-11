@@ -8,11 +8,9 @@ voice_activation:
   mute_toggle_key: "shift+x"
   energy_threshold: 0.01
   stt_provider: parakeet
-  azure:
-    region: westeurope
-    languages:
-      - en-US
-      - de-DE
+  languages:
+    - en-US
+    - de-DE
   whispercpp:
     host: http://127.0.0.1
     port: 8080

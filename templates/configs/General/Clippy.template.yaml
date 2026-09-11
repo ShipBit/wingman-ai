@@ -33,9 +33,6 @@ record_key: end
 is_voice_activation_default: true
 inworld:
   voice_id: Alex
-azure:
-  tts:
-    voice: en-US-AndrewMultilingualNeural
 commands:
   - actions:
       - keyboard:
