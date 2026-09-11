@@ -75,6 +75,10 @@ class CommandHandler:
                 await self.handle_client_logged_in(
                     ClientLoggedInCommand(**command), websocket
                 )
+            elif command_name == "client_logged_out":
+                await self.handle_client_logged_out(
+                    ClientLoggedOutCommand(**command), websocket
+                )
             else:
                 raise ValueError("Unknown command")
         except Exception as e:
@@ -324,6 +328,8 @@ class CommandHandler:
     async def handle_client_logged_out(
         self, command: ClientLoggedOutCommand, websocket: WebSocket
     ):
+        # Read the name before clearing it, so the log line says who left.
+        name = self.core.client_account_name
         self.core.is_client_logged_in = False
         self.core.client_plan = "Free"
         self.core.client_account_name = ""
@@ -332,7 +338,7 @@ class CommandHandler:
         self.core.config_manager.settings_config.user_name = None
 
         self.printr.print(
-            "User {command.account_name} logged out",
+            f"User {name or 'unknown'} logged out",
             toast=ToastType.NORMAL,
             source=LogSource.SYSTEM,
             source_name=self.source_name,
