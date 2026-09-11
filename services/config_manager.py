@@ -1277,8 +1277,24 @@ class ConfigManager:
         return False
 
     def read_default_config(self):
+        """The defaults every wingman inherits from, already repaired.
+
+        Sanitising here rather than at each caller is what makes it reliable:
+        `parse_config` hands this very dict to `Config(**default_config)`, so a
+        copy fixed somewhere downstream does not help. That is exactly what
+        happened on 2026-09-11 — the per-wingman merge logged a repair, and
+        startup still failed on the untouched original.
+        """
         config = self.read_config(self.default_config_path)
         config["wingmen"] = {}
+        for change in sanitize(NestedConfig, config):
+            self.printr.print(
+                f"defaults: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
         return config
 
     def read_config(self, file_path: str):
@@ -1479,19 +1495,9 @@ class ConfigManager:
 
     def load_defaults_config(self, silent_on_error: bool = False):
         """Load and validate Defaults config"""
+        # `read_default_config` has already repaired unknown enum values.
         parsed = self.read_default_config()
         if parsed:
-            # Same safety net as merge_configs. This file is the one every
-            # wingman inherits from, so an unknown provider here would take the
-            # whole config directory down rather than a single wingman.
-            for change in sanitize(NestedConfig, parsed):
-                self.printr.print(
-                    f"defaults: {change}",
-                    color=LogType.WARNING,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
             try:
                 validated = NestedConfig(**parsed)
                 return validated
