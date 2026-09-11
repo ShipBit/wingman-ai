@@ -32,10 +32,15 @@ from services.migrations.base_migration import BaseMigration
 
 NEW_BASE_URL = "https://api.wingman-ai.com"
 
-# The aliases /api/v1/models serves. Anything else in a config is a model name
-# from the Azure era.
-DEFAULT_DEPLOYMENT = "default"
-KNOWN_ALIASES = ("default", "fast")
+# What goes into `conversation_deployment`. Since 2026-09-11 the backend serves
+# real gateway ids instead of the aliases `default` and `fast`, so this is a
+# model name, not a role.
+#
+# It going stale is harmless by design: a model the plan does not offer is
+# answered with the plan default (`x-wingman-substituted`), and the client
+# rewrites the config the next time the settings are opened. Naming the current
+# default here only saves that one round.
+DEFAULT_DEPLOYMENT = "google/gemini-2.5-flash"
 
 # Where an Azure setting lands. Someone who paid for their own Azure account
 # gets OpenAI, the closest equivalent they can point at their own key; local
@@ -121,11 +126,13 @@ class Migration316To320(BaseMigration):
         return self._migrate_wingman_pro_section(dict(old), old.get("name", "wingman"))
 
     def _migrate_wingman_pro_section(self, config: dict, label: str) -> dict:
-        pro = config.get("wingman_pro")
-        if not isinstance(pro, dict):
-            return config
-
-        pro = dict(pro)
+        # A per-wingman YAML only overrides the keys that differ from the
+        # defaults, so most of them have no `wingman_pro` block at all. Bailing
+        # out here — which this used to do — left `features.conversation_provider:
+        # azure` untouched in exactly those files.
+        existing_pro = config.get("wingman_pro")
+        has_pro = isinstance(existing_pro, dict)
+        pro = dict(existing_pro) if has_pro else {}
 
         stt = pro.get("stt_provider")
         if stt in ("whisper", "azure_speech"):
@@ -169,19 +176,31 @@ class Migration316To320(BaseMigration):
             if langs:
                 pro["languages"] = langs
                 self.log(f"{label}: transcription languages kept: {', '.join(langs)}")
-        pro.setdefault("languages", ["en-US"])
+        if has_pro:
+            pro.setdefault("languages", ["en-US"])
 
-        deployment = pro.get("conversation_deployment")
-        if deployment not in KNOWN_ALIASES:
-            pro["conversation_deployment"] = DEFAULT_DEPLOYMENT
-            self.log(
-                f"{label}: conversation model '{deployment or '—'}' -> '{DEFAULT_DEPLOYMENT}'"
-            )
+        # Everything a config can hold here is wrong now: Azure deployment names
+        # ("gpt-4o-mini"), the 3.1 aliases ("default", "fast") and anything
+        # hand-typed. A gateway id always has the shape provider/model, so that
+        # is the test — it lets a model we add later pass without a code change.
+        if has_pro:
+            deployment = pro.get("conversation_deployment")
+            if not isinstance(deployment, str) or "/" not in deployment:
+                pro["conversation_deployment"] = DEFAULT_DEPLOYMENT
+                self.log(
+                    f"{label}: conversation model '{deployment or '—'}' -> "
+                    f"'{DEFAULT_DEPLOYMENT}'"
+                )
 
         # The azure section itself goes last, so the voice mapping above can
         # still read the old voice out of it.
         if config.pop("azure", None) is not None:
             self.log(f"{label}: azure settings removed, the provider no longer exists")
 
-        config["wingman_pro"] = pro
+        # Only write the block back if the file had one. Creating an empty
+        # `wingman_pro:` in a wingman that never had it would fail validation —
+        # its two provider fields are required — and it would also stop the
+        # wingman inheriting the defaults.
+        if has_pro:
+            config["wingman_pro"] = pro
         return config

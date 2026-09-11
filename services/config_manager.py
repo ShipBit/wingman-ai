@@ -23,6 +23,7 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
+from services.config_sanitizer import sanitize
 from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
 from services.system_manager import LOCAL_VERSION
@@ -1442,6 +1443,17 @@ class ConfigManager:
         """Load and validate Defaults config"""
         parsed = self.read_default_config()
         if parsed:
+            # Same safety net as merge_configs. This file is the one every
+            # wingman inherits from, so an unknown provider here would take the
+            # whole config directory down rather than a single wingman.
+            for change in sanitize(NestedConfig, parsed):
+                self.printr.print(
+                    f"defaults: {change}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
             try:
                 validated = NestedConfig(**parsed)
                 return validated
@@ -1932,6 +1944,20 @@ class ConfigManager:
         # discoverable_mcps - inherit from default if not overridden in wingman config
         if "discoverable_mcps" not in wingman and "discoverable_mcps" in default:
             merged["discoverable_mcps"] = default["discoverable_mcps"]
+
+        # A provider or model the config names may not exist any more — Azure is
+        # the current example, but the same happens whenever a vendor retires a
+        # model. Pydantic would refuse the whole wingman over one stale word, so
+        # unknown enum values are swapped for known ones first, preferring what
+        # the default config has at the same place.
+        for change in sanitize(WingmanConfig, merged, default):
+            self.printr.print(
+                f"{merged.get('name', 'wingman')}: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
 
         try:
             return WingmanConfig(**merged)
