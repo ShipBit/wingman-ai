@@ -117,9 +117,10 @@ class WingmanSubscription:
         # Get minimal reasoning effort for the model to reduce latency
         reasoning_params = get_minimal_reasoning_by_model(deployment)
 
-        # `deployment` is an alias now — "default" or "fast" — which the backend
-        # resolves through its routing table. Old configs hold a raw model name
-        # like gpt-4.1-mini; the backend ignores those and uses the default.
+        # `deployment` is a gateway model id, straight from the config — the
+        # same string the backend hands out in /api/v1/models. A config naming a
+        # model the plan no longer offers is not an error: the backend answers
+        # with the plan default and says so in `x-wingman-substituted`.
         data = {
             "messages": serialized_messages,
             "model": deployment,
