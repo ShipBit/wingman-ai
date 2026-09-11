@@ -173,7 +173,7 @@ hume:
     provider: ""
 inworld:
   tts_endpoint: https://api.inworld.ai/tts/v1/voice
-  model_id: inworld-tts-1
+  model_id: inworld-tts-2-flash
   voice_id: Deborah
   temperature: 1.1
   output_streaming: true
@@ -242,7 +242,7 @@ wingman_pro:
   languages:
     - en-US
   stt_provider: cloud
-  tts_provider: openai
+  tts_provider: inworld
   conversation_deployment: google/gemini-2.5-flash
 commands:
   - name: ResetConversationHistory

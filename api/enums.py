@@ -186,7 +186,9 @@ class WingmanProSttProvider(Enum):
 
 
 class WingmanProTtsProvider(Enum):
-    OPENAI = "openai"
+    # One provider since 2026-09-11. OpenAI's voices cost 15 dollars per million
+    # characters against Inworld's 5, and the reason they were kept — Inworld
+    # having two poor German voices — went away when Inworld shipped 17.
     INWORLD = "inworld"
 
 

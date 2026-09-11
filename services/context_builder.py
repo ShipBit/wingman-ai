@@ -77,9 +77,10 @@ class ContextBuilder:
                 and self._config.elevenlabs.tts_prompt
             ):
                 tts_prompt = self._config.elevenlabs.tts_prompt
-        elif self._config.features.tts_provider == TtsProvider.INWORLD or (
-            self._config.features.tts_provider == TtsProvider.WINGMAN_PRO
-            and self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD
+        elif self._config.features.tts_provider in (
+            TtsProvider.INWORLD,
+            # The subscription speaks through Inworld, so it takes the same prompt.
+            TtsProvider.WINGMAN_PRO,
         ):
             if self._config.inworld.use_tts_prompt and self._config.inworld.tts_prompt:
                 tts_prompt = self._config.inworld.tts_prompt

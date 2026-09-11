@@ -205,21 +205,15 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
     no provider rebuild — so it can be unit-tested in isolation. Provider switching is
     deliberately NOT handled here; this only ever touches the active provider.
     """
-    from api.enums import TtsProvider, WingmanProTtsProvider
+    from api.enums import TtsProvider
 
     provider = config.features.tts_provider
 
     if provider == TtsProvider.WINGMAN_PRO:
-        # Wingman Pro TTS is only ever OpenAI or Inworld (per WingmanProTtsProvider).
-        subprovider = config.wingman_pro.tts_provider
-        if subprovider == WingmanProTtsProvider.OPENAI:
-            config.openai.tts_voice = voice
-            return getattr(voice, "value", voice), "Wingman Pro / OpenAI TTS"
-        if subprovider == WingmanProTtsProvider.INWORLD:
-            config.inworld.voice_id = voice
-            config.inworld.output_streaming = False
-            return voice, "Wingman Pro / Inworld"
-        return None
+        # The subscription has one voice provider, Inworld.
+        config.inworld.voice_id = voice
+        config.inworld.output_streaming = False
+        return voice, "Wingman Pro / Inworld"
     if provider == TtsProvider.OPENAI:
         config.openai.tts_voice = voice
         return getattr(voice, "value", voice), "OpenAI"

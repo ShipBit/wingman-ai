@@ -150,40 +150,6 @@ class WingmanSubscription:
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
         return completion
 
-    async def generate_openai_speech(
-        self,
-        text: str,
-        voice: str,
-        model: str,
-        speed: float,
-        sound_config: SoundConfig,
-        audio_player: AudioPlayer,
-        wingman_name: str,
-    ):
-        data = {
-            "provider": "openai",
-            "input": text,
-            "voice": voice,
-            "speed": speed,
-        }
-        response = requests.post(
-            url=f"{self.settings.base_url}/api/v1/audio/speech",
-            headers=self._get_headers(),
-            json=data,
-            timeout=self.timeout,
-        )
-        if response is not None:
-            if response.status_code == 403:
-                self.send_unauthorized_error()
-                return
-            else:
-                response.raise_for_status()
-            await audio_player.play_with_effects(
-                input_data=response.content,
-                config=sound_config,
-                wingman_name=wingman_name,
-            )
-
     async def generate_inworld_speech(
         self,
         text: str,
@@ -426,28 +392,16 @@ class WingmanSubscriptionTts(TtsInterface):
         self._config = config
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
-        from api.enums import WingmanProTtsProvider
-        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
-            await self._ws.generate_openai_speech(
-                text=text,
-                voice=self._config.openai.tts_voice.value
-                if hasattr(self._config.openai.tts_voice, "value")
-                else str(self._config.openai.tts_voice),
-                model=self._config.openai.tts_model,
-                speed=self._config.openai.tts_speed,
-                sound_config=sound_config,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-            )
-        elif self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
-            await self._ws.generate_inworld_speech(
-                text=text,
-                config=self._config.inworld,
-                sound_config=sound_config,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-            )
-
+        # One provider, so nothing to dispatch on. `wingman_pro.tts_provider`
+        # still exists and still says "inworld" — keeping the field means a
+        # second provider can come back without a config migration.
+        await self._ws.generate_inworld_speech(
+            text=text,
+            config=self._config.inworld,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+        )
 
 @llm_provider(ConversationProvider.WINGMAN_PRO)
 class WingmanSubscriptionLlm(LlmInterface):

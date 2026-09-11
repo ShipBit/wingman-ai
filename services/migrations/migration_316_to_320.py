@@ -8,14 +8,14 @@ user's config:
   the new backend runs in one region, so there is nothing to choose.
 * `wingman_pro.stt_provider`: `whisper` and `azure_speech` both become `cloud`.
   The backend decides which model transcribes, the client no longer does.
-* `wingman_pro.tts_provider`: `azure` becomes `openai`. Azure Speech is gone, so
-  an Azure voice name has to become an OpenAI one — the mapping below picks a
-  voice of the same gender, and users who had a specific favourite will want to
-  pick again.
-* `wingman_pro.conversation_deployment` holds an alias now — `default` or
-  `fast` — instead of a raw model name like `gpt-4.1-mini`. The backend owns
-  the routing table, so a stored model name no longer matches anything the
-  model list offers and the picker would come up empty.
+* `wingman_pro.tts_provider`: `azure` and `openai` both become `inworld`, the
+  only speech provider the subscription still has. The mapping below keeps
+  gender and, for Azure names, language; someone who had a specific favourite
+  will want to pick again.
+* `wingman_pro.conversation_deployment` holds a gateway model id now, not an
+  Azure deployment name like `gpt-4.1-mini` and not the 3.1 aliases. A stored
+  name that the plan does not offer is answered with the plan default rather
+  than an error, so this only has to be plausible.
 * Azure is gone as a provider of any kind, including for people who brought
   their own Azure account (docs/backend-migration/azure-ausbau.md). Anything
   pointing at it is rewritten to a provider that still exists, and the whole
@@ -49,11 +49,23 @@ AZURE_TTS_REPLACEMENT = "openai"
 AZURE_LLM_REPLACEMENT = "openai"
 AZURE_STT_REPLACEMENT = "parakeet"
 
-# Azure voice names carry the gender in the name itself, e.g.
-# "de-DE-KatjaNeural". Anything unknown lands on "nova", a neutral default.
-FEMALE_OPENAI_VOICE = "nova"
-MALE_OPENAI_VOICE = "onyx"
-DEFAULT_OPENAI_VOICE = "nova"
+# Inworld voices, picked from the live catalogue on 2026-09-11. The subscription
+# has no other speech provider since OpenAI's voices were dropped: they cost
+# three times as much, and the reason to keep them — Inworld having two poor
+# German voices — ended when Inworld shipped 17 of them.
+#
+# An Azure voice name carries both language and gender: "de-DE-KatjaNeural".
+# Both are worth keeping, so a German speaker stays German.
+FEMALE_INWORLD_VOICE = "Ashley"
+MALE_INWORLD_VOICE = "Edward"
+FEMALE_INWORLD_VOICE_DE = "Johanna"
+MALE_INWORLD_VOICE_DE = "Matthias"
+DEFAULT_INWORLD_VOICE = FEMALE_INWORLD_VOICE
+
+# The OpenAI voices a 3.1.6 config can hold, by gender, so someone who already
+# moved off Azure keeps a voice of the same kind.
+OPENAI_FEMALE = ("nova", "shimmer", "alloy", "coral", "sage")
+OPENAI_MALE = ("onyx", "echo", "fable", "ash", "ballad", "verse")
 
 # The female Azure voices Wingman shipped with, lowercased for matching.
 KNOWN_FEMALE = (
@@ -69,15 +81,22 @@ KNOWN_MALE = (
 )
 
 
-def azure_voice_to_openai(voice: str | None) -> str:
+def voice_to_inworld(voice: str | None) -> str:
+    """An Azure or OpenAI voice name to the closest Inworld one.
+
+    Gender first, because that is what a user notices immediately, then
+    language: an Azure name starting with `de-` keeps a German voice.
+    """
     if not voice:
-        return DEFAULT_OPENAI_VOICE
+        return DEFAULT_INWORLD_VOICE
     name = str(voice).lower()
-    if any(part in name for part in KNOWN_FEMALE):
-        return FEMALE_OPENAI_VOICE
-    if any(part in name for part in KNOWN_MALE):
-        return MALE_OPENAI_VOICE
-    return DEFAULT_OPENAI_VOICE
+    german = name.startswith("de-") or name.startswith("de_")
+
+    if any(part in name for part in KNOWN_FEMALE) or name in OPENAI_FEMALE:
+        return FEMALE_INWORLD_VOICE_DE if german else FEMALE_INWORLD_VOICE
+    if any(part in name for part in KNOWN_MALE) or name in OPENAI_MALE:
+        return MALE_INWORLD_VOICE_DE if german else MALE_INWORLD_VOICE
+    return FEMALE_INWORLD_VOICE_DE if german else DEFAULT_INWORLD_VOICE
 
 
 class Migration316To320(BaseMigration):
@@ -139,19 +158,29 @@ class Migration316To320(BaseMigration):
             pro["stt_provider"] = "cloud"
             self.log(f"{label}: speech recognition '{stt}' -> 'cloud'")
 
+        # Both of the old values lead to Inworld now. `azure` kept its voice in
+        # its own section, `openai` in `openai.tts_voice`.
         tts = pro.get("tts_provider")
-        if tts == "azure":
-            pro["tts_provider"] = "openai"
-            azure = config.get("azure")
+        if tts in ("azure", "openai"):
+            pro["tts_provider"] = "inworld"
             old_voice = None
-            if isinstance(azure, dict) and isinstance(azure.get("tts"), dict):
-                old_voice = azure["tts"].get("voice")
-            new_voice = azure_voice_to_openai(old_voice)
+            if tts == "azure":
+                azure = config.get("azure")
+                if isinstance(azure, dict) and isinstance(azure.get("tts"), dict):
+                    old_voice = azure["tts"].get("voice")
+            else:
+                openai_section = config.get("openai")
+                if isinstance(openai_section, dict):
+                    old_voice = openai_section.get("tts_voice")
 
-            openai_section = dict(config.get("openai") or {})
-            openai_section["tts_voice"] = new_voice
-            config["openai"] = openai_section
-            self.log(f"{label}: speech output 'azure' -> 'openai', voice {old_voice or '—'} -> {new_voice}")
+            new_voice = voice_to_inworld(old_voice)
+            inworld_section = dict(config.get("inworld") or {})
+            inworld_section["voice_id"] = new_voice
+            config["inworld"] = inworld_section
+            self.log(
+                f"{label}: speech output '{tts}' -> 'inworld', "
+                f"voice {old_voice or '—'} -> {new_voice}"
+            )
 
         # Anything pointing at Azure, including a user's own Azure account.
         features = dict(config.get("features") or {})

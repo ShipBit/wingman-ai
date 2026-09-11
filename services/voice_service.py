@@ -135,12 +135,6 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voices/preview/wingman-pro/openai",
-            endpoint=self.play_wingman_pro_openai,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/voices/preview/wingman-pro/inworld",
             endpoint=self.play_wingman_pro_inworld,
             tags=tags,
@@ -361,26 +355,6 @@ class VoiceService:
             )
         )
 
-
-    # POST /play/wingman-pro/openai
-    async def play_wingman_pro_openai(
-        self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
-    ):
-        wingman_pro = WingmanSubscription(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
-        )
-        await self._run_playback(
-            wingman_pro.generate_openai_speech(
-                text=text,
-                voice=voice,
-                model=model,
-                speed=speed,
-                sound_config=sound_config,
-                audio_player=self.audio_player,
-                wingman_name="system",
-            )
-        )
 
     # POST /play/wingman-pro/inworld
     async def play_wingman_pro_inworld(

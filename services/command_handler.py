@@ -308,9 +308,6 @@ class CommandHandler:
         # Store username in settings for wingman access
         self.core.config_manager.settings_config.user_name = command.account_name
 
-        # Enforce plan-based TTS restrictions before initializing Tower
-        self.core.config_manager.enforce_plan_tts_restrictions(command.plan)
-
         self.printr.print(
             f"User {command.account_name} logged in ({command.plan})",
             toast=ToastType.NORMAL,

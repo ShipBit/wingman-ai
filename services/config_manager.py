@@ -12,7 +12,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 import yaml
-from api.enums import LogSource, LogType, SttProvider, WingmanProTtsProvider
+from api.enums import LogSource, LogType, SttProvider
 from api.interface import (
     Config,
     ConfigDirInfo,
@@ -1550,48 +1550,6 @@ class ConfigManager:
             f"Cascaded local STT provider change: {old_provider.value} -> {provider.value}",
             server_only=True,
         )
-
-    def enforce_plan_tts_restrictions(self, plan: str):
-        """Downgrade Inworld TTS to OpenAI for non-Ultra users across all configs.
-
-        Inworld voices are the Ultra feature; everyone else gets the OpenAI
-        voices, which the backend serves through the same endpoint. Before the
-        Before the backend migration this fell back to a provider that is gone.
-        """
-        if plan == "Ultra":
-            return
-
-        patched = False
-        fallback = WingmanProTtsProvider.OPENAI.value
-
-        # Patch defaults
-        if self.default_config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
-            self.default_config.wingman_pro.tts_provider = WingmanProTtsProvider.OPENAI
-            self.save_defaults_config()
-            patched = True
-
-        # Patch individual wingman configs
-        for config_dir in self.get_config_dirs():
-            config_path = path.join(self.config_dir, config_dir.directory)
-            for wingman_file in self.get_wingmen_configs(config_dir):
-                file_path = path.join(config_path, wingman_file.file)
-                raw = self.read_config(file_path)
-                if not raw:
-                    continue
-                wp = raw.get("wingman_pro")
-                if wp and wp.get("tts_provider") == WingmanProTtsProvider.INWORLD.value:
-                    wp["tts_provider"] = fallback
-                    self.write_config(file_path, raw)
-                    patched = True
-
-        if patched:
-            self.printr.print(
-                f"Downgraded Inworld TTS to OpenAI (plan: {plan})",
-                color=LogType.WARNING,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
-            )
 
     def perform_hardware_scan(self, system_manager):
         """Scans for hardware changes and updates settings accordingly."""
