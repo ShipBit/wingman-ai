@@ -32,8 +32,12 @@ else:
 # ============================================================================
 # Format: (source, destination_folder)
 datas = [
-    # Azure Speech SDK
-    (f'{SITE_PACKAGES}/azure/cognitiveservices/speech', 'azure/cognitiveservices/speech'),
+    # The Azure Speech SDK used to be bundled here. It went out with the provider
+    # on 2026-09-11 and `azure-cognitiveservices-speech` is no longer in
+    # requirements.txt. Leaving the entry would have failed the first CI build:
+    # PyInstaller aborts on an --add-data source that does not exist, and CI
+    # installs the venv from requirements.txt, so the path is simply not there.
+    # It survived locally only because the old package is still in the dev venv.
 
     # Application assets and resources
     ('assets', 'assets'),
