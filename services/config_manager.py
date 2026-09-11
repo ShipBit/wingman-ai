@@ -1,4 +1,5 @@
 import base64
+import os
 from enum import Enum
 import json
 from os import makedirs, path, remove, replace, walk
@@ -1430,14 +1431,51 @@ class ConfigManager:
         """Load and validate Settings config"""
         parsed = self.read_config(self.settings_config_path)
         if parsed:
+            # Same net as the wingman configs: `voice_activation.stt_provider`
+            # can still say `azure` in a settings.yaml carried over from 3.1.6.
+            for change in sanitize(SettingsConfig, parsed):
+                self.printr.print(
+                    f"settings: {change}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
             try:
                 validated = SettingsConfig(**parsed)
-                return validated
+                return self._apply_backend_override(validated)
             except ValidationError as e:
                 self.printr.toast_error(
                     f"Invalid config '{self.settings_config_path}':\n{str(e)}"
                 )
-        return SettingsConfig()
+        return self._apply_backend_override(SettingsConfig())
+
+    def _apply_backend_override(self, settings: SettingsConfig) -> SettingsConfig:
+        """Lets `WINGMAN_BACKEND_URL` point Core at a different backend.
+
+        Editing `settings.yaml` by hand to test against a local backend is easy
+        to do and easy to forget, and a forgotten one means the next real run
+        talks to localhost and fails with nothing obvious to look at. An
+        environment variable is scoped to the shell that set it, and Core says
+        out loud which backend it uses.
+
+        The value is not written back to the file: the override lasts exactly as
+        long as the variable does.
+        """
+        override = os.environ.get("WINGMAN_BACKEND_URL", "").strip()
+        if not override:
+            return settings
+
+        settings.wingman_pro.base_url = override.rstrip("/")
+        self.printr.print(
+            f"WINGMAN_BACKEND_URL is set: talking to {settings.wingman_pro.base_url} "
+            f"instead of the live backend",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        return settings
 
     def load_defaults_config(self, silent_on_error: bool = False):
         """Load and validate Defaults config"""
