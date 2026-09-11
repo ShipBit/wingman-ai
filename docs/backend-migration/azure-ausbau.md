@@ -108,6 +108,52 @@ Anbieterauswahl im Client kennt das neue Backend noch nicht:
 Diese drei Auswahlfelder werden in Etappe 5 gegen das ersetzt, was
 `/api/v1/models` und `/api/v1/voices` tatsächlich liefern.
 
+## Alle fünf Etappen erledigt, 2026-09-11
+
+Gemessen: **null Azure-Treffer** in Core und Client. Die 57 in
+`services/migrations/` bleiben, wie geplant — das ist die Umzugslogik.
+
+| | |
+|---|---|
+| Core | 745 Zeilen weg, 363 dazu, 21 Dateien |
+| Client | 1482 Zeilen weg, 354 dazu, 67 Dateien |
+| Zusammen | **netto rund 1500 Zeilen weniger** |
+
+Entfernt: `@azure/msal-browser`, `azure-cognitiveservices-speech` (14 MB samt
+nativer Bibliothek aus beiden Build-Skripten), `authService.ts`,
+`authConfig.ts`, `RegionPrompt.svelte`, `AzureVoiceSelection`,
+`AzureInstanceConfig`, `OpenAiAzure` mit vier Adaptern, alle Azure-Enums und
+-Configs, 25 Übersetzungstexte je Sprache, das Anbieterlogo.
+
+### Was dabei sonst noch aufgefallen ist
+
+**Zwölf Core-Routen waren nie registriert.** Die Handler existierten, die
+Registrierung fehlte — der Client rief also Methoden auf, die sein generierter
+Code nicht hatte. Betroffen: die acht „Verbindung testen"-Knöpfe in den
+Einstellungen, `enhance-backstory`, die beiden ElevenLabs-Endpunkte und
+`/models/wingman-pro`. Letzteres war **die Ursache für die leere Modellauswahl**
+— ich hatte die Route am 10.09. versehentlich zusammen mit der Regions-Route
+gelöscht. Alle zwölf sind jetzt verdrahtet.
+
+**Der „Azure-Workaround" beim Ton war keiner.** `get_azure_workaround_gain_boost`
+gleicht die Lautstärke gestreamter PCM-Audios aus — PocketTTS, Inworld, OpenAI
+und das Wingman-Backend nutzen ihn alle. Hätte man ihn mit Azure entfernt, wären
+sämtliche Radio-Effekte zu leise geworden. Heißt jetzt `get_streaming_gain_boost`.
+
+**Die Sprachliste lag unter `azure`.** `voice_activation.azure.languages` steuert
+die Auto-Erkennung der Cloud-Transkription und hat mit Azure nichts zu tun. Sie
+liegt jetzt unter `voice_activation.languages` und `wingman_pro.languages`; die
+Migration trägt sie mit. Die Sprachauswahl im Client leitet ihre Optionen nicht
+mehr aus Azure-Stimmen ab, sondern nutzt BCP-47-Tags, deren Namen `Intl.DisplayNames`
+in der eingestellten Sprache liefert.
+
+**Ein bereits migriertes Config-Verzeichnis heilt sich nicht.** Der
+Vorlagen-Abgleich (`backfill_from_template`) läuft nur *während* einer
+Migration. Wer schon auf `3_2_0` war, bevor ein Feld dazukam, startet nicht mehr
+— genau das ist beim Test passiert. Für echte Tester unkritisch, die kommen von
+3.1.6 und durchlaufen den Abgleich. Falls wir später wieder Pflichtfelder
+ergänzen: daran denken.
+
 ## Erledigt
 
 * **11.09.** Inworld-TTS antwortete mit 502. Ursache: Inworld verlangt eine
