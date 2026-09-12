@@ -3002,7 +3002,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         iterations = max(1, min(request.iterations, 20))
@@ -3231,7 +3231,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure the models are loaded.",
+                "error": "The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         from evals.memory_suite.harness import run_scenario
@@ -3257,7 +3257,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         def _run():
@@ -3290,7 +3290,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         iterations = max(1, min(iterations, 20))
@@ -3518,7 +3518,7 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False,
                 provider="local_ai_support",
-                error="Local AI service is not ready. Make sure models are loaded.",
+                error="The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         try:
             result = self.local_ai_service.support(
@@ -3543,7 +3543,7 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False,
                 provider="local_ai_embed",
-                error="Local AI service is not ready. Make sure models are loaded.",
+                error="The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         try:
             result = self.local_ai_service.embed(["hello world"])
@@ -3695,7 +3695,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
-                detail="Local AI service is not ready. Make sure models are loaded.",
+                detail="The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         result = self.local_ai_service.support(
             text=text, system_prompt=system_prompt
@@ -3813,7 +3813,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
-                detail="Local AI service is not ready. Make sure models are loaded.",
+                detail="The support model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         result = self.local_ai_service.embed(texts)
         if result is None:

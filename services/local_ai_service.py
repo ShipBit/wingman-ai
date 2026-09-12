@@ -156,6 +156,15 @@ class LocalAiService:
         if backend_changed or model_changed or config_changed:
             await self.initialize()
 
+    def update_subscription(self, subscription):
+        """The backend address changed — cloud support calls have to follow it.
+
+        Separate from :meth:`update_settings_async` because it comes from a
+        different part of the settings, and because the dev/prod switch
+        (`WINGMAN_BACKEND_URL`) moves it without any llama.cpp setting changing.
+        """
+        self.cloud.update_subscription(subscription)
+
     # ── Token budget API ───────────────────────────────────────────
 
     def _context_window(self) -> int:

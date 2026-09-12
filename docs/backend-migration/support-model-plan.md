@@ -50,3 +50,31 @@ Pro-Tarif streichen. Das ist eine eigene Änderung am Abo-Trichter.
 15. `LlamaCppSettings.svelte`: drei Tabs, Modellauswahl im Cloud-Modus,
     Download-Knopf nur im Lokal-Modus.
 16. Generiertes API-Modell neu ziehen, Texte in allen vier Sprachen.
+
+---
+
+## Stand 2026-09-12, umgesetzt
+
+Alles unten ist gebaut und gegen die Produktion geprüft (Wegwerf-Konto auf dem
+Free-Plan, danach gelöscht):
+
+| geprüft | Ergebnis |
+|---|---|
+| `/api/v1/models` für Free | Chat-Lane leer, Support-Lane mit beiden Modellen |
+| Faktenextraktion über `/api/v1/support/completions` | 200 in 1045 ms, korrektes JSON, 0,0000967 $ |
+| `top_k` im Request | wird verworfen, kein 400 vom Gateway |
+| festes Modell `alibaba/qwen3.7-flash` | wird bedient, `substituted: false` |
+| Modell außerhalb der Lane | Plan-Standard, `substituted: true` |
+| Chat auf dem Free-Plan | weiterhin 403 `no_route` |
+| Verbrauch | als eigene Modalität `support` je Modell verbucht |
+| `reasoning_tokens` | 0 |
+
+Abweichung vom Plan, bewusst: beim Start wird **das Embedding-Modell** (250 MB)
+doch geladen, wenn es fehlt und mindestens ein Wingman persistentes Gedächtnis
+anhat. Das Support-Modell (1,28 GB) wird nie mehr automatisch geladen. Ohne die
+Ausnahme wäre das Gedächtnis nach einer Neuinstallation still aus, weil es per
+Default an ist und die Vektoren lokal berechnet werden.
+
+Nicht umgesetzt, weil eigene Änderung: Free auch **Chat** geben und dafür den
+Trial im Pro-Tarif streichen. Dafür fehlen eine Chat-Lane für Free, eine
+Entscheidung über die Höhe des Limits und der Umbau des Abo-Trichters.
