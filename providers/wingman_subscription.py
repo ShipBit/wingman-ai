@@ -51,21 +51,29 @@ class WingmanSubscription:
         )
 
     def send_quota_error(self, response: requests.Response):
-        """The monthly allowance is used up. The backend says when it resets, and
-        that date is the only thing the user can act on."""
+        """The monthly allowance is used up.
+
+        The backend's own sentence is preferred: it knows the plan, and what a
+        free account should hear ("a subscription lifts the limit") is not what a
+        paying one should. Ours is the fallback for an answer we cannot read.
+        """
+        message = ""
         resets_at = ""
         try:
-            resets_at = response.json().get("resets_at", "")[:10]
+            body = response.json()
+            message = (body.get("message") or "").strip()
+            resets_at = (body.get("resets_at") or "")[:10]
         except Exception:
             pass
-        self.printr.print(
-            text=(
-                f"Your Wingman Pro allowance for this month is used up. It resets on {resets_at}."
+
+        if not message:
+            message = (
+                f"Your Wingman allowance for this month is used up. It resets on {resets_at}."
                 if resets_at
-                else "Your Wingman Pro allowance for this month is used up."
-            ),
-            color=LogType.ERROR,
-        )
+                else "Your Wingman allowance for this month is used up."
+            )
+
+        self.printr.print(text=message, color=LogType.ERROR)
 
     def send_server_error(self, response: requests.Response):
         self.printr.print(

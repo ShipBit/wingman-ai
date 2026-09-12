@@ -116,16 +116,17 @@ class WingmanSupport:
             return SupportResult(text=None)
 
         if response.status_code == 429:
-            resets_at = ""
+            # The backend's sentence knows the plan; ours only knows there is a
+            # limit. Either way, say what still works: the local model does.
+            message = ""
             try:
-                resets_at = response.json().get("resets_at", "")[:10]
+                message = (response.json().get("message") or "").strip()
             except Exception:
                 pass
             printr.toast_error(
-                "The monthly allowance is used up"
-                + (f" and resets on {resets_at}." if resets_at else ".")
-                + " Memory and summaries pause until then, or switch the support "
-                "model to Local in Settings."
+                (message or "The monthly allowance is used up.")
+                + " Memory and summaries pause until it resets, or switch the "
+                "support model to Local in Settings."
             )
             return SupportResult(text=None)
 
