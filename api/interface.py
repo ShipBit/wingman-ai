@@ -5,6 +5,7 @@ from api.enums import (
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
+    LocalAiMode,
     McpTransportType,
     CustomPropertyType,
     TtsVoiceGender,
@@ -1239,19 +1240,38 @@ class MemorySuiteRequest(BaseModel):
 
 
 class LlamaCppSettings(BaseModel):
-    run_locally: bool = False
+    mode: LocalAiMode = LocalAiMode.CLOUD
+    """Where the support model runs: on our backend, on this machine, or on a
+    llama-server the user runs elsewhere. Replaced the old `run_locally` flag,
+    which could only say local or remote."""
+    support_cloud_model: str = ""
+    """Gateway id of the cloud support model, empty means the plan's default.
+
+    Deliberately free text rather than an enum: the list lives in the backend and
+    changes without a Wingman release. An id the plan no longer offers is not an
+    error — the backend answers with the plan default and says so."""
     gpu_backend: str = "cpu"
     """GPU backend for llama-server: 'cpu' (default), 'vulkan' (works on all GPUs), 'cuda' (NVIDIA only, fastest)."""
     support_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int
-    """Context window size for the support model. Minimum 2048."""
+    """Context window size for the local support model. Minimum 2048."""
     n_threads: int
     """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
     support_remote_host: str
     support_remote_port: int
     embed_remote_host: str
     embed_remote_port: int
+
+    @property
+    def run_locally(self) -> bool:
+        """Whether llama.cpp runs on this machine.
+
+        True for LOCAL, and also for CLOUD: the embedding model stays here even
+        when the support model does not, because the vector database it feeds is
+        local and vectors from a different model would not be comparable.
+        """
+        return self.mode != LocalAiMode.SERVER
 
 
 class SettingsConfig(BaseModel):

@@ -119,17 +119,20 @@ class SkillLocalAI:
 
     @property
     def available(self) -> bool:
-        """Whether the local support model is loaded and ready."""
+        """Whether the support model can answer — locally or in the cloud."""
         svc = self._wingman.local_ai_service
         return svc is not None and svc.is_ready()
 
     @property
     def embed_available(self) -> bool:
-        """Whether the embedding model is loaded and ready."""
-        # Embed readiness is tied to the same is_ready() check — if the
-        # provider is ready, both support and embed models are loaded.
+        """Whether the embedding model is loaded and ready.
+
+        Its own check since the two models can now be in different places: in
+        cloud mode the support model answers over the network while embeddings
+        still run here, so one can be up while the other is not.
+        """
         svc = self._wingman.local_ai_service
-        return svc is not None and svc.is_ready()
+        return svc is not None and svc.embed_ready()
 
     @property
     def memory_available(self) -> bool:

@@ -75,7 +75,7 @@ def main():
     host = ModelHost(attach=args.attach,
                      support_port=args.support_port, embed_port=args.embed_port)
     mode = "attach (live server)" if args.attach else "managed (spawns servers)"
-    print(f"Local AI [{mode}]: run_locally={host.settings.run_locally}, "
+    print(f"Local AI [{mode}]: support={host.settings.mode.value}, "
           f"n_ctx={host.settings.n_ctx}, model={host.settings.support_model}")
     if not host.ensure_loaded():
         print("ERROR: could not load local models (close the desktop app / check downloads).")

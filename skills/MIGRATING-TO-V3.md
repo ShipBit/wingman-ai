@@ -29,7 +29,7 @@ it is under a feature noun on `self.wingman`: `ai`, `local_ai`, `tts`, `audio`, 
    `validate()` / `prepare()`.
 3. **No raw LLM calls.** `self.llm_call(...)` and `self.wingman.actual_llm_call(...)` are gone.
    Use `self.wingman.ai.generate(...)` (a single-turn, **capped** side-call),
-   `self.wingman.ai.converse(...)` (conversation-aware), or the free local model
+   `self.wingman.ai.converse(...)` (conversation-aware), or the small support model
    `self.wingman.local_ai.generate(...)` / `.summarize(...)`.
 4. **Config is read-only.** `self.wingman.config` reads live values; writing raises
    `FacadeError`. Change things through capabilities (`self.wingman.tts.set_voice(...)`, the
@@ -71,7 +71,7 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > (system + prompt + data, plus a flat estimate per image) is limited (Wingman Pro: a fixed
 > 8,000 tokens; own provider: `features.skill_max_input_tokens`, default 16,000). Over the cap
 > it raises `FacadeError`, or truncates if you pass `auto_shorten=True`. For bulk text, reduce
-> it first with the free `self.wingman.local_ai.summarize(...)`.
+> it first with the much cheaper `self.wingman.local_ai.summarize(...)`.
 
 #### Memory (now its own namespace)
 
@@ -118,7 +118,7 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 | `await self.wingman.add_assistant_message(c)` | `await self.wingman.conversation.add_assistant(c)` |
 | `await self.wingman.reset_conversation_history()` | `await self.wingman.conversation.reset()` |
 | condenser summary | `self.wingman.conversation.summary` |
-| summarize the live convo | `await self.wingman.conversation.summarize()` (free, local) |
+| summarize the live convo | `await self.wingman.conversation.summarize()` (support model) |
 
 #### Tools, commands & other skills
 

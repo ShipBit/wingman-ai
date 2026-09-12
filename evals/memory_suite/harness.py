@@ -41,8 +41,9 @@ class ModelHost:
         self._loaded = False
 
         if attach:
+            from api.enums import LocalAiMode
             from providers.llama_cpp_remote import LlamaCppRemote
-            self.settings.run_locally = False
+            self.settings.mode = LocalAiMode.SERVER
             self.settings.support_remote_host = attach_host
             self.settings.support_remote_port = support_port
             self.settings.embed_remote_host = attach_host
@@ -57,7 +58,7 @@ class ModelHost:
         self._cur_model = self.settings.support_model
 
     def ensure_loaded(self) -> bool:
-        if self.settings.run_locally:
+        if self.settings.mode.value == "local":
             if not self._loaded:
                 ok = self.provider.load_support_model() and self.provider.load_embed_model()
                 self._loaded = ok
@@ -73,7 +74,7 @@ class ModelHost:
         if changed and self.attached:
             print(f"   ⚠ profile '{profile.id}' changes n_ctx/model but we're attached "
                   "to a running server — that knob is ignored in attach mode.")
-        elif changed and self.settings.run_locally:
+        elif changed and self.settings.mode.value == "local":
             self.provider.unload_models()
             self._loaded = False
             self.settings.n_ctx = want_ctx
@@ -82,7 +83,7 @@ class ModelHost:
         return self.ensure_loaded()
 
     def shutdown(self):
-        if self.settings.run_locally and not self.attached:
+        if self.settings.mode.value == "local" and not self.attached:
             with contextlib.suppress(Exception):
                 self.provider.unload_models()
 

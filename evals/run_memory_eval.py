@@ -126,17 +126,29 @@ def _build_local_ai():
     from services.local_model_manager import LocalModelManager
     from services.settings_service import SettingsService
 
+    from api.enums import LocalAiMode
+    from providers.wingman_support import WingmanSupport
+
     config_manager = ConfigManager(REPO_ROOT)
     config_service = ConfigService(config_manager=config_manager)
     settings_service = SettingsService(
         config_manager=config_manager, config_service=config_service
     )
     settings = settings_service.settings.llama_cpp
+    # This harness measures the model on this machine, whatever the user's
+    # config says. Cloud would answer with a different model entirely and the
+    # numbers would not be comparable to the ones in FINDINGS.md.
+    settings.mode = LocalAiMode.LOCAL
 
     model_manager = LocalModelManager(settings=settings)
     provider = LlamaCppProvider(settings=settings, model_manager=model_manager)
     remote = LlamaCppRemote(settings=settings)
-    local_ai = LocalAiService(provider=provider, remote=remote, settings=settings)
+    cloud = WingmanSupport(
+        subscription=settings_service.settings.wingman_pro, settings=settings
+    )
+    local_ai = LocalAiService(
+        provider=provider, remote=remote, cloud=cloud, settings=settings
+    )
     return local_ai, provider, settings
 
 
@@ -153,10 +165,10 @@ def main() -> int:
     local_ai, provider, settings = _build_local_ai()
 
     print(
-        f"Local AI: run_locally={settings.run_locally}, n_ctx={settings.n_ctx} "
+        f"Local AI: mode={settings.mode.value}, n_ctx={settings.n_ctx} "
         "(extraction runs reasoning=OFF; see the reasoning diagnostic below)"
     )
-    if settings.run_locally:
+    if settings.mode.value == "local":
         print("Loading support + embed models (close the desktop app if this hangs)...")
         if not provider.load_support_model() or not provider.load_embed_model():
             print("ERROR: could not load local models. Are they downloaded and the "
@@ -202,7 +214,7 @@ def main() -> int:
         _measure_reasoning(local_ai, cases)
     finally:
         svc.close()
-        if settings.run_locally:
+        if settings.mode.value == "local":
             try:
                 provider.unload_models()
             except Exception:

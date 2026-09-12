@@ -23,6 +23,12 @@ user's config:
 * `voice_activation.azure.languages` becomes `voice_activation.languages`. The
   list only ever sat under `azure` because that provider came first; the
   Wingman backend uses it to narrow its auto-detection.
+* `llama_cpp.run_locally` becomes `llama_cpp.mode`, and everyone lands on
+  `cloud`. The support model behind memory and summarisation used to be a 2 GB
+  llama.cpp process on the user's machine; it now runs on the backend, scores
+  better in our own eval suite (0,98 against 0,89) and costs no hardware. The
+  embedding model stays local either way — the vectors already in the database
+  were computed by it.
 
 The Azure names stay in this file on purpose: it is the only place that still
 has to recognise them, because it is what reads the old configs.
@@ -107,6 +113,26 @@ class Migration316To320(BaseMigration):
 
     def migrate_settings(self, old: dict) -> dict:
         new = dict(old)
+
+        llama = dict(new.get("llama_cpp") or {})
+        if llama:
+            # `run_locally` said local or remote; `mode` says cloud, local or
+            # server. Everyone moves to cloud, including someone who had a remote
+            # llama-server: the old host and port stay in the config, so
+            # switching back is one click and no retyping.
+            ran_remotely = llama.pop("run_locally", None) is False
+            llama["mode"] = "cloud"
+            llama.setdefault("support_cloud_model", "")
+            new["llama_cpp"] = llama
+            self.log(
+                "support model moved to the cloud"
+                + (
+                    " (your own llama-server stays configured under 'Own server')"
+                    if ran_remotely
+                    else ""
+                )
+            )
+
         pro = dict(new.get("wingman_pro") or {})
         if pro:
             pro["base_url"] = NEW_BASE_URL

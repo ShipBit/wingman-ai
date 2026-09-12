@@ -26,6 +26,7 @@ from api.enums import (
     CommandTag,
     ConversationProvider,
     CoreState,
+    LocalAiMode,
     LogSource,
     LogType,
     VoiceActivationSttProvider,
@@ -61,6 +62,7 @@ from providers.parakeet import Parakeet
 from providers.google import GoogleGenAI
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
+from providers.wingman_support import WingmanSupport
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_subscription import WingmanSubscription
@@ -301,6 +303,15 @@ class WingmanCore(WebSocketUser):
             path="/models/wingman-pro",
             response_model=list,
             endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
+
+        # The second lane: the small model behind memory and summarisation.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/support",
+            response_model=list,
+            endpoint=self.get_wingman_support_models,
             tags=tags,
         )
 
@@ -728,9 +739,14 @@ class WingmanCore(WebSocketUser):
             model_manager=self.local_model_manager,
         )
         self.llama_cpp_remote = LlamaCppRemote(settings=llama_cpp_settings)
+        self.wingman_support = WingmanSupport(
+            subscription=self.settings_service.settings.wingman_pro,
+            settings=llama_cpp_settings,
+        )
         self.local_ai_service = LocalAiService(
             provider=self.llama_cpp_provider,
             remote=self.llama_cpp_remote,
+            cloud=self.wingman_support,
             settings=llama_cpp_settings,
         )
 
@@ -800,59 +816,18 @@ class WingmanCore(WebSocketUser):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self.pocket_tts.deferred_init)
 
-        # 5. Local AI download + init (settings-aware)
+        # 5. Local AI init
+        #
+        # The support model is not downloaded here any more. It runs in the cloud
+        # by default, and starting Wingman used to pull 1.28 GB of GGUF
+        # unannounced — that now happens when somebody picks Local in Settings.
+        #
+        # The embedding model is a different matter: it is 250 MB, it feeds the
+        # local vector database, and persistent memory is on by default. Skipping
+        # it would leave every fresh install with memory quietly not working.
         llama_settings = self.settings_service.settings.llama_cpp
-        if (
-            llama_settings.run_locally
-            and not self.local_model_manager.models_available()
-        ):
-            await self.printr.print_async(
-                "Local AI models not found — downloading automatically...",
-                color=LogType.INFO,
-                server_only=True,
-            )
-
-            progress_state = {}
-
-            def on_download_progress(filename, pct, downloaded_mb, total_mb):
-                progress_state["filename"] = filename
-                progress_state["pct"] = pct
-                progress_state["downloaded_mb"] = downloaded_mb
-                progress_state["total_mb"] = total_mb
-
-            download_task = asyncio.create_task(
-                self.local_model_manager.download_models(
-                    cuda_available=self.system_manager.is_cuda_available(),
-                    on_progress=on_download_progress,
-                )
-            )
-
-            while not download_task.done():
-                if progress_state:
-                    fname = progress_state.get("filename", "")
-                    pct = progress_state.get("pct", 0)
-                    dl_mb = progress_state.get("downloaded_mb", 0)
-                    t_mb = progress_state.get("total_mb", 0)
-                    short_name = (
-                        fname.split("-")[0]
-                        if "-" in fname
-                        else fname.replace(".gguf", "")
-                    )
-                    await self.set_core_state(
-                        CoreState.LOADING_CONFIG,
-                        message=f"Downloading Local AI model ({short_name})... ({dl_mb} / {t_mb} MB)",
-                        progress=pct / 100.0 if pct else None,
-                    )
-                await asyncio.sleep(0.5)
-
-            if not await download_task:
-                self.printr.toast_error(
-                    "Could not download the Local AI models. "
-                    "Please check your internet connection and retry the download "
-                    "in Settings > Local AI, or restart Wingman AI."
-                )
-
-        if llama_settings.run_locally and self.local_model_manager.models_available():
+        if llama_settings.mode != LocalAiMode.SERVER:
+            await self._ensure_embed_model()
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
                 message="Initializing Local AI...",
@@ -2807,26 +2782,49 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"OpenAI: \n{str(e)}")
             return []
 
-    async def get_wingman_pro_models(self):
+    async def _fetch_subscription_models(self) -> dict:
+        """The whole model list from the backend: chat models and support models.
+
+        One request for both, because the two pickers in the client are on screen
+        at the same time and the backend assembles them from the same catalogue.
+        """
         wingman_pro_token = await self.secret_keeper.retrieve(
             key="wingman_pro", requester="WingmanPro"
         )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        return body if isinstance(body, dict) else {"models": body}
+
+    async def get_wingman_pro_models(self):
         try:
-            response = requests.get(
-                url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
-                timeout=10,
-                headers={
-                    "Authorization": f"Bearer {wingman_pro_token}",
-                    "Content-Type": "application/json",
-                },
-            )
-            response.raise_for_status()
-            body = response.json()
-            # The new backend answers {plan, models:[{id,name}]}; the client wants
-            # the bare list, the way the old endpoint returned it.
-            return body.get("models", []) if isinstance(body, dict) else body
+            body = await self._fetch_subscription_models()
+            # The backend answers {plan, models:[{id,name}], support:{...}}; the
+            # client wants the bare list, the way the old endpoint returned it.
+            return body.get("models", [])
         except Exception as e:
             self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
+            return []
+
+    # GET /models/wingman-pro/support
+    async def get_wingman_support_models(self):
+        """The support models this plan offers, for the picker in Settings.
+
+        Fails quietly with an empty list rather than a toast: this is asked for
+        on every visit to the settings page, including by people with no
+        subscription, and "you are not signed in" is not news worth a popup.
+        """
+        try:
+            body = await self._fetch_subscription_models()
+            return (body.get("support") or {}).get("models", [])
+        except Exception:
             return []
 
     # GET /models/elevenlabs
@@ -2895,6 +2893,60 @@ class WingmanCore(WebSocketUser):
         if self._connection_manager:
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
+
+    async def _ensure_embed_model(self):
+        """Fetch the embedding model if memory needs it and it is not here yet.
+
+        Only the embedding model, and only when at least one wingman has
+        persistent memory switched on. The support model is never fetched
+        automatically — see the note at step 5 in ``startup``.
+        """
+        if self.local_model_manager.embed_model_available():
+            return
+
+        wingmen = self.tower.wingmen if self.tower else []
+        if not any(getattr(w.config, "persistent_memory", False) for w in wingmen):
+            return
+
+        await self.printr.print_async(
+            "Memory is on but the embedding model is missing — downloading it...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        progress_state = {}
+
+        def on_download_progress(filename, pct, downloaded_mb, total_mb):
+            progress_state["filename"] = filename
+            progress_state["pct"] = pct
+            progress_state["downloaded_mb"] = downloaded_mb
+            progress_state["total_mb"] = total_mb
+
+        download_task = asyncio.create_task(
+            self.local_model_manager.download_models(
+                cuda_available=self.system_manager.is_cuda_available(),
+                on_progress=on_download_progress,
+                support=False,
+            )
+        )
+
+        while not download_task.done():
+            if progress_state:
+                pct = progress_state.get("pct", 0)
+                dl_mb = progress_state.get("downloaded_mb", 0)
+                t_mb = progress_state.get("total_mb", 0)
+                await self.set_core_state(
+                    CoreState.LOADING_CONFIG,
+                    message=f"Downloading the memory model... ({dl_mb} / {t_mb} MB)",
+                    progress=pct / 100.0 if pct else None,
+                )
+            await asyncio.sleep(0.5)
+
+        if not await download_task:
+            self.printr.toast_error(
+                "Could not download the memory model. Memory stays off until it "
+                "is downloaded — retry in Settings > Local AI."
+            )
 
     # ── Local AI Endpoints ────────────────────────────────────────
 

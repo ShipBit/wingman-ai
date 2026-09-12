@@ -40,6 +40,7 @@ from services.local_ai_service import (  # noqa: E402
     LocalAiService,
 )
 from services.skill_local_ai import SamplingPreset  # noqa: E402
+from api.enums import LocalAiMode  # noqa: E402
 
 _results: list[tuple[str, bool, str]] = []
 
@@ -64,16 +65,20 @@ class _RecordingProvider:
         return SupportResult(text="ok")
 
 
-def _make_service(run_locally=True):
+def _make_service(mode=LocalAiMode.LOCAL):
     provider = _RecordingProvider()
     remote = _RecordingProvider()
-    settings = SimpleNamespace(n_ctx=4096, run_locally=run_locally)
-    return LocalAiService(provider=provider, remote=remote, settings=settings), provider, remote
+    cloud = _RecordingProvider()
+    settings = SimpleNamespace(n_ctx=4096, mode=mode)
+    service = LocalAiService(
+        provider=provider, remote=remote, cloud=cloud, settings=settings
+    )
+    return service, provider, remote, cloud
 
 
 # 1. Each preset resolves to its documented params and reaches the provider,
 #    without ever setting reasoning.
-svc, provider, _ = _make_service()
+svc, provider, _, _ = _make_service()
 for preset in SamplingPreset:
     svc.support(text="hello", system_prompt="sys", preset=preset)
     got = provider.last
@@ -108,7 +113,7 @@ svc.support(text="hello", system_prompt="sys", reasoning=False)
 check("reasoning=False flows through", provider.last["reasoning"] is False)
 
 # 5. Remote provider applies presets identically.
-svc_r, _, remote = _make_service(run_locally=False)
+svc_r, _, remote, _ = _make_service(mode=LocalAiMode.SERVER)
 svc_r.support(text="hello", system_prompt="sys", preset=SamplingPreset.BALANCED)
 got = remote.last
 check("remote path applies presets identically",
@@ -160,7 +165,7 @@ from services.local_ai_service import (  # noqa: E402
     _output_reservation,
 )
 
-svc_b, prov_b, _ = _make_service()  # n_ctx=4096
+svc_b, prov_b, _, _ = _make_service()  # n_ctx=4096
 safe_4k = int(4096 * SAFETY_MARGIN)
 b_off = svc_b.get_token_budget("sys", reasoning=False)
 b_on = svc_b.get_token_budget("sys", reasoning=True)

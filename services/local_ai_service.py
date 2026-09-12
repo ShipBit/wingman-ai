@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from api.enums import LogType
+from api.enums import LocalAiMode, LogType
 from api.interface import LlamaCppSettings
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
+from providers.wingman_support import WingmanSupport
 from services.local_model_manager import LocalModelManager
 from services.printr import Printr
 from services.token_utils import count_tokens, truncate_to_tokens
@@ -24,6 +25,15 @@ cl100k_base (used for estimation) and the model's actual tokenizer."""
 
 MIN_OUTPUT_TOKENS = 256
 """Minimum output tokens reserved for a non-thinking call."""
+
+CLOUD_CONTEXT_TOKENS = 128_000
+"""Context window assumed for a cloud support model.
+
+The real models offer far more — gemini-2.5-flash-lite has a million — but Core
+does not know which one answered, and an unbounded budget would mean a runaway
+tool response gets sent in full and billed in full. The largest thing we measured
+is a 78k-token trade table, so this never chunks anything real and still caps the
+pathological case."""
 
 REASONING_OUTPUT_TOKENS = 1024
 """Output tokens to reserve when reasoning is enabled. The <think> block shares
@@ -102,44 +112,61 @@ class LocalAiService:
         self,
         provider: LlamaCppProvider,
         remote: LlamaCppRemote,
+        cloud: WingmanSupport,
         settings: LlamaCppSettings,
     ):
         self.provider = provider
         self.remote = remote
+        self.cloud = cloud
         self.settings = settings
 
     async def update_settings_async(self, new_settings: LlamaCppSettings):
-        """Handle settings changes including local↔remote toggle."""
+        """Handle settings changes, including a switch between the three modes."""
         old = self.settings
         self.settings = new_settings
 
         self.provider.update_settings(new_settings)
         self.remote.update_settings(new_settings)
+        self.cloud.update_settings(new_settings)
 
-        if old.run_locally and not new_settings.run_locally:
+        if old.mode == new_settings.mode == LocalAiMode.SERVER:
+            return
+
+        if new_settings.mode == LocalAiMode.SERVER:
             await printr.print_async(
-                "Switched to remote mode — local models unloaded.",
+                "Support model moved to your own server — local models unloaded.",
                 color=LogType.INFO,
                 server_only=True,
             )
-        elif not old.run_locally and new_settings.run_locally:
+            return
+
+        if old.mode != new_settings.mode:
             await self.initialize()
-        elif old.run_locally and new_settings.run_locally:
-            # Backend or model changed while staying in local mode —
-            # provider already killed old processes, now re-initialize.
-            backend_changed = old.gpu_backend != new_settings.gpu_backend
-            model_changed = (
-                old.support_model != new_settings.support_model
-                or old.embed_model != new_settings.embed_model
-            )
-            config_changed = (
-                old.n_ctx != new_settings.n_ctx
-                or old.n_threads != new_settings.n_threads
-            )
-            if backend_changed or model_changed or config_changed:
-                await self.initialize()
+            return
+
+        # Same mode, but something the local processes were started with changed.
+        backend_changed = old.gpu_backend != new_settings.gpu_backend
+        model_changed = (
+            old.support_model != new_settings.support_model
+            or old.embed_model != new_settings.embed_model
+        )
+        config_changed = (
+            old.n_ctx != new_settings.n_ctx or old.n_threads != new_settings.n_threads
+        )
+        if backend_changed or model_changed or config_changed:
+            await self.initialize()
 
     # ── Token budget API ───────────────────────────────────────────
+
+    def _context_window(self) -> int:
+        """The context window to plan against, for whichever model is answering.
+
+        ``n_ctx`` is the user's setting for llama.cpp and means nothing to a
+        cloud model, which has its own — far larger — window.
+        """
+        if self.settings.mode == LocalAiMode.CLOUD:
+            return CLOUD_CONTEXT_TOKENS
+        return self.settings.n_ctx
 
     def get_token_budget(
         self, system_prompt: str = "", reasoning: bool = False
@@ -155,13 +182,14 @@ class LocalAiService:
         reserved (so chunked callers leave room for the <think> block), which
         lowers ``max_input_tokens`` and yields smaller chunks.
         """
-        safe_ctx = int(self.settings.n_ctx * SAFETY_MARGIN)
+        n_ctx = self._context_window()
+        safe_ctx = int(n_ctx * SAFETY_MARGIN)
         system_tokens = count_tokens(system_prompt) if system_prompt else 0
         min_output = _output_reservation(reasoning, safe_ctx)
         max_input = max(0, safe_ctx - system_tokens - min_output)
 
         return TokenBudget(
-            n_ctx=self.settings.n_ctx,
+            n_ctx=n_ctx,
             safe_ctx=safe_ctx,
             system_tokens=system_tokens,
             max_input_tokens=max_input,
@@ -203,7 +231,7 @@ class LocalAiService:
             from services.file import get_prompt
             system_prompt = get_prompt("support-default")
 
-        safe_ctx = int(self.settings.n_ctx * SAFETY_MARGIN)
+        safe_ctx = int(self._context_window() * SAFETY_MARGIN)
         system_tokens = count_tokens(system_prompt)
         # Reasoning shares the output budget with the <think> block, so reserve
         # more output (and truncate input more aggressively) on thinking calls.
@@ -233,7 +261,11 @@ class LocalAiService:
         k = k if k is not None else DEFAULT_TOP_K
         pp = pp if pp is not None else DEFAULT_PRESENCE_PENALTY
 
-        if self.settings.run_locally:
+        if self.settings.mode == LocalAiMode.CLOUD:
+            return self.cloud.support(
+                text, system_prompt, max_tokens, t, p, k, pp, reasoning
+            )
+        if self.settings.mode == LocalAiMode.LOCAL:
             return self.provider.support(
                 text, system_prompt, max_tokens, t, p, k, pp, reasoning
             )
@@ -244,18 +276,42 @@ class LocalAiService:
     # ── Embeddings ─────────────────────────────────────────────────
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
-        """Generate embeddings using the active provider (local or remote)."""
-        if self.settings.run_locally:
-            return self.provider.embed(texts)
-        return self.remote.embed(texts)
+        """Generate embeddings for the local vector database.
+
+        Cloud mode keeps these on this machine: the vectors already stored were
+        computed by this model, and ones from another model would not be
+        comparable to them. The embedding server is a sixth of the support
+        model's size, so it is not what was costing testers their hardware.
+        """
+        if self.settings.mode == LocalAiMode.SERVER:
+            return self.remote.embed(texts)
+        return self.provider.embed(texts)
 
     # ── Status ─────────────────────────────────────────────────────
 
     def is_ready(self) -> bool:
-        """Check if the active provider is ready."""
-        if self.settings.run_locally:
-            return self.provider.is_ready()
+        """Whether a support call can be made right now.
+
+        This gates every feature built on the support model, so it has to be
+        cheap: memory, condensation and tool compression each ask before they
+        start.
+        """
+        if self.settings.mode == LocalAiMode.CLOUD:
+            return self.cloud.is_ready()
+        if self.settings.mode == LocalAiMode.LOCAL:
+            return self.provider.support_is_ready()
         return self.remote.is_ready()
+
+    def embed_ready(self) -> bool:
+        """Whether embeddings can be computed — the other half of memory.
+
+        Separate from :meth:`is_ready` since cloud mode splits the two: the
+        support model answers over the network while the embedding model still
+        has to be downloaded and loaded here.
+        """
+        if self.settings.mode == LocalAiMode.SERVER:
+            return self.remote.is_ready()
+        return self.provider.embed_is_ready()
 
     def get_embed_model_name(self) -> str | None:
         """Return the embed model filename, or None if not configured."""
@@ -268,34 +324,56 @@ class LocalAiService:
         return splitext(basename(name))[0]
 
     async def initialize(self):
-        """Eagerly load local models if run_locally is on and models are available."""
-        if not self.settings.run_locally:
+        """Load whatever local models this mode needs, if they are on disk.
+
+        Nothing is downloaded here. A model arrives when the user asks for it in
+        Settings — starting Wingman used to pull 1.5 GB unannounced, which is
+        the wrong moment to spend somebody's bandwidth.
+        """
+        if self.settings.mode == LocalAiMode.SERVER:
             return
 
-        if not self.provider.model_manager.models_available():
+        needs_support = self.settings.mode == LocalAiMode.LOCAL
+
+        if needs_support and not self.provider.model_manager.support_model_available():
             printr.print(
-                "[Local AI] Skipping initialization — models not downloaded.",
+                "[Local AI] Support model is set to Local but not downloaded yet.",
                 color=LogType.WARNING,
                 server_only=True,
             )
-            return
+        if not self.provider.model_manager.embed_model_available():
+            printr.print(
+                "[Local AI] Embedding model not downloaded — memory stays off.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
 
         await printr.print_async(
             "[Local AI] Initializing local models...",
             color=LogType.INFO,
             server_only=True,
         )
-        ok_sum = self.provider.load_support_model()
-        ok_emb = self.provider.load_embed_model()
-        if ok_sum and ok_emb:
+
+        ok_sup = (
+            self.provider.load_support_model()
+            if needs_support and self.provider.model_manager.support_model_available()
+            else not needs_support
+        )
+        ok_emb = (
+            self.provider.load_embed_model()
+            if self.provider.model_manager.embed_model_available()
+            else False
+        )
+
+        if ok_sup and ok_emb:
             await printr.print_async(
-                "[Local AI] Both models loaded and ready.",
+                "[Local AI] Local models loaded and ready.",
                 color=LogType.INFO,
                 server_only=True,
             )
         else:
             await printr.print_async(
-                f"[Local AI] Model loading incomplete (support={'ok' if ok_sum else 'FAILED'}, embed={'ok' if ok_emb else 'FAILED'}).",
+                f"[Local AI] Model loading incomplete (support={'ok' if ok_sup else 'FAILED'}, embed={'ok' if ok_emb else 'FAILED'}).",
                 color=LogType.WARNING,
                 server_only=True,
             )

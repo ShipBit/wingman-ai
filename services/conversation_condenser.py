@@ -3,7 +3,7 @@
 import asyncio
 from typing import TYPE_CHECKING
 
-from api.enums import LogType, LogSource
+from api.enums import LocalAiMode, LogType, LogSource
 from services.file import get_prompt
 from services.printr import Printr
 from services.token_utils import count_tokens, truncate_to_tokens
@@ -17,6 +17,22 @@ if TYPE_CHECKING:
 printr = Printr()
 
 _CONDENSE_TIMEOUT = 120.0
+
+# How much conversation is allowed to pile up before it gets summarised, in
+# tokens. The real limit is the smaller of this and what the support model can
+# take in one pass.
+#
+# It used to be only the model's capacity, which worked while that model always
+# had a 4096-token window. A cloud support model has a million: the trigger would
+# never fire, the history would never be condensed, and the *chat* model's
+# context would overflow instead — the opposite of what condensation is for.
+#
+# Local stays where it was: with n_ctx 4096 the capacity works out around 3000
+# tokens, so this ceiling never binds and behaviour is unchanged. Cloud gets the
+# larger number because there is no reason to throw detail away early when the
+# model can hold it — each summarisation round loses something.
+_MAX_CONVERSATION_TOKENS = 6_000
+_MAX_CONVERSATION_TOKENS_CLOUD = 16_000
 
 
 class ConversationCondenser:
@@ -42,16 +58,23 @@ class ConversationCondenser:
         return self._is_condensing
 
     def get_support_capacity(self, local_ai_service: "LocalAiService") -> int:
-        """Get the effective input capacity of the support model for a single pass.
+        """How many conversation tokens one summarisation pass may cover.
 
-        Returns the number of conversation tokens that can fit in one summarization
-        pass, accounting for system prompt, framing text, and output budget.
+        The smaller of two numbers: what the support model can physically take
+        (system prompt and output budget already subtracted), and the ceiling we
+        set ourselves in ``_MAX_CONVERSATION_TOKENS``. Without the second, a
+        cloud model's million-token window would mean the history never gets
+        condensed at all.
         """
         system_prompt = get_prompt("condense-conversation")
         budget = local_ai_service.get_token_budget(system_prompt)
         # Subtract framing overhead (prefix/suffix around the conversation text)
         framing_overhead = 80
-        return max(0, budget.max_input_tokens - framing_overhead)
+        model_capacity = max(0, budget.max_input_tokens - framing_overhead)
+
+        cloud = local_ai_service.settings.mode == LocalAiMode.CLOUD
+        ceiling = _MAX_CONVERSATION_TOKENS_CLOUD if cloud else _MAX_CONVERSATION_TOKENS
+        return min(ceiling, model_capacity)
 
     async def maybe_condense(self, local_ai_service: "LocalAiService"):
         """Check if condensation should run and fire it as a background task.

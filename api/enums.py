@@ -148,6 +148,25 @@ class VoiceActivationSttProvider(Enum):
     GROQ = "groq"
 
 
+class LocalAiMode(Enum):
+    """Where the support model runs.
+
+    CLOUD is the default: the model behind memory, summarisation and tool-response
+    compression runs on our backend, which costs the user no RAM and no CPU while
+    a game is running. LOCAL is llama.cpp managed by Core on this machine. SERVER
+    is a llama-server the user runs somewhere else.
+
+    Embeddings follow: SERVER puts them on the remote llama-server, the other two
+    keep them on this machine. The vector database is local either way, and an
+    embedding computed by a different model would not be comparable to the ones
+    already stored.
+    """
+
+    CLOUD = "cloud"
+    LOCAL = "local"
+    SERVER = "server"
+
+
 class ConversationProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
@@ -285,6 +304,10 @@ class CoreStateEnumModel(BaseEnumModel):
     core_state: CoreState
 
 
+class LocalAiModeEnumModel(BaseEnumModel):
+    local_ai_mode: LocalAiMode
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -308,6 +331,7 @@ ENUM_TYPES = {
     "PerplexityModel": PerplexityModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
+    "LocalAiMode": LocalAiModeEnumModel,
     # Add new enums here as key-value pairs
 }
 

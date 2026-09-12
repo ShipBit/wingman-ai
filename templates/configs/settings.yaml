@@ -54,7 +54,12 @@ pocket_tts:
   host: "localhost"
   port: 5002
 llama_cpp:
-  run_locally: true
+  # cloud | local | server — where the support model runs. Cloud is the default:
+  # it costs the user no RAM and no CPU while a game is running.
+  mode: cloud
+  # Empty means the plan's default support model. A gateway id like
+  # google/gemini-2.5-flash-lite picks a specific one.
+  support_cloud_model: ""
   gpu_backend: cpu
   support_model: "Qwen3.5-2B-Q4_K_M.gguf"
   embed_model: "nomic-embed-text-v1.5.f16.gguf"
