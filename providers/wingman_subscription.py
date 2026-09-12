@@ -43,7 +43,28 @@ class WingmanSubscription:
         self.secret_keeper: SecretKeeper = SecretKeeper()
         self.timeout = timeout
 
-    def send_unauthorized_error(self):
+    def send_unauthorized_error(self, response: Optional[requests.Response] = None):
+        """Not allowed — but there are two very different reasons.
+
+        401 means no valid session: the client shows the login screen, which is
+        the right answer. 403 means the session is fine and the plan does not
+        cover this — telling someone who is signed in to sign in is a dead end,
+        so the backend's own sentence is shown instead ("This plan has no tts
+        access."). Free accounts hit this on speech, and before the split they
+        got a bare "Unauthorized" with nothing to act on.
+        """
+        if response is not None and response.status_code == 403:
+            message = ""
+            try:
+                message = (response.json().get("message") or "").strip()
+            except Exception:
+                pass
+            self.printr.print(
+                text=message or "Your plan does not include this feature.",
+                color=LogType.ERROR,
+            )
+            return
+
         self.printr.print(
             text="Unauthorized",
             command_tag=CommandTag.UNAUTHORIZED,
@@ -99,7 +120,7 @@ class WingmanSubscription:
                 timeout=self.timeout,
             )
         if response.status_code in (401, 403):
-            self.send_unauthorized_error()
+            self.send_unauthorized_error(response)
             return None
         if response.status_code == 429:
             self.send_quota_error(response)
@@ -143,7 +164,7 @@ class WingmanSubscription:
             timeout=self.timeout,
         )
         if response.status_code == 401 or response.status_code == 403:
-            self.send_unauthorized_error()
+            self.send_unauthorized_error(response)
             return None
         elif response.status_code == 429:
             self.send_quota_error(response)
@@ -195,7 +216,7 @@ class WingmanSubscription:
                     stream=True,
                 ) as response:
                     if response.status_code == 403:
-                        self.send_unauthorized_error()
+                        self.send_unauthorized_error(response)
                         return None
                     else:
                         response.raise_for_status()
@@ -250,7 +271,7 @@ class WingmanSubscription:
                 timeout=self.timeout,
             )
             if response.status_code == 403:
-                self.send_unauthorized_error()
+                self.send_unauthorized_error(response)
                 return
             else:
                 response.raise_for_status()
@@ -277,7 +298,7 @@ class WingmanSubscription:
         )
         if response is not None:
             if response.status_code == 403:
-                self.send_unauthorized_error()
+                self.send_unauthorized_error(response)
                 return
             else:
                 response.raise_for_status()
@@ -296,7 +317,7 @@ class WingmanSubscription:
             headers=self._get_headers(),
         )
         if response.status_code in (401, 403):
-            self.send_unauthorized_error()
+            self.send_unauthorized_error(response)
             return None
         response.raise_for_status()
 
@@ -325,7 +346,7 @@ class WingmanSubscription:
             headers=self._get_headers(),
         )
         if response.status_code == 403:
-            self.send_unauthorized_error()
+            self.send_unauthorized_error(response)
             return []
         else:
             response.raise_for_status()

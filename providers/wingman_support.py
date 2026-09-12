@@ -105,9 +105,24 @@ class WingmanSupport:
             )
             return SupportResult(text=None)
 
-        if response.status_code in (401, 403):
-            # 403 is also what a plan without a support lane answers. Both mean
-            # the same thing to the user: sign in, or switch to the local model.
+        if response.status_code == 403:
+            # Signed in, but this plan has no support lane. Sending them to the
+            # login screen would be a dead end — say what is missing instead.
+            message = ""
+            try:
+                message = (response.json().get("message") or "").strip()
+            except Exception:
+                pass
+            printr.print(
+                text=(message or "Your plan has no support model.")
+                + " Switch the support model to Local in Settings to keep memory "
+                "and summaries working.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return SupportResult(text=None)
+
+        if response.status_code == 401:
             printr.print(
                 text="Unauthorized",
                 command_tag=CommandTag.UNAUTHORIZED,

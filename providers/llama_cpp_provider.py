@@ -310,10 +310,23 @@ class LlamaCppProvider:
             return True
         return self.model_manager.download_llama_server_sync()
 
+    def _running(self, process: Optional[subprocess.Popen]) -> bool:
+        """Whether a handle still points at a live process.
+
+        `is not None` is not enough: a server that crashed, was killed, or lost
+        its port to a leftover from an earlier run leaves the handle behind. The
+        loaders below used to read that as "already running" and never start it
+        again — which showed up as memory silently not working after switching
+        the support model from Local back to Cloud.
+        """
+        return process is not None and process.poll() is None
+
     def load_support_model(self) -> bool:
         """Start the support model server. Returns True on success."""
-        if self._support_process is not None:
+        if self._running(self._support_process):
             return True
+        self._support_process = None
+        self._support_client = None
 
         if not self._ensure_binary():
             return False
@@ -378,8 +391,10 @@ class LlamaCppProvider:
 
     def load_embed_model(self) -> bool:
         """Start the embedding server. Returns True on success."""
-        if self._embed_process is not None:
+        if self._running(self._embed_process):
             return True
+        self._embed_process = None
+        self._embed_client = None
 
         if not self._ensure_binary():
             return False
@@ -599,7 +614,7 @@ class LlamaCppProvider:
 
     def is_ready(self) -> bool:
         """Check if any server process is running."""
-        return self._support_process is not None or self._embed_process is not None
+        return self._running(self._support_process) or self._running(self._embed_process)
 
     def support_is_ready(self) -> bool:
         """Whether the support model is loaded here.
@@ -609,11 +624,11 @@ class LlamaCppProvider:
         up", and a caller that confuses the two sends a summarisation request to
         an embedding server.
         """
-        return self._support_process is not None
+        return self._running(self._support_process)
 
     def embed_is_ready(self) -> bool:
         """Whether the embedding model is loaded here."""
-        return self._embed_process is not None
+        return self._running(self._embed_process)
 
     @staticmethod
     def _deduplicate_lines(text: str) -> str:
