@@ -2974,9 +2974,16 @@ class WingmanCore(WebSocketUser):
         return self.local_model_manager.get_embed_models()
 
     # POST /settings/local-ai/download-models
-    async def download_local_ai_models(self) -> dict:
+    async def download_local_ai_models(self, support: bool = True) -> dict:
+        """Fetch the local models.
+
+        ``support`` is off when the caller only needs embeddings — that is the
+        cloud mode case, where the 1.28 GB support model would be dead weight but
+        the 250 MB embedding model still feeds the vector database.
+        """
         success = await self.local_model_manager.download_models(
-            cuda_available=self.system_manager.is_cuda_available()
+            cuda_available=self.system_manager.is_cuda_available(),
+            support=support,
         )
         if success:
             await self.local_ai_service.initialize()
