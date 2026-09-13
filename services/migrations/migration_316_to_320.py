@@ -164,6 +164,30 @@ class Migration316To320(BaseMigration):
 
         return new
 
+    def migrate_secrets(self, old: dict) -> dict:
+        """Drop the Azure B2C token that 3.1.6 stored as `wingman_pro`.
+
+        Until the client hands Core a device token, Core sends whatever sits in
+        this key as a bearer to api.wingman-ai.com. After the migration that is
+        the old Azure access token — a credential issued for a different
+        service, now travelling to ours. The new backend answers 401, so nothing
+        works differently; the token just leaves the group of people it was
+        issued for, and it sits in plain text in secrets.yaml until the user
+        signs in again.
+
+        Device tokens start with `wgd_`. Anything else in this key is from the
+        Azure era and has no purpose in 3.2.
+        """
+        new = dict(old)
+        token = new.get("wingman_pro")
+        if isinstance(token, str) and token and not token.startswith("wgd_"):
+            self.log_highlight(
+                "Removed the old Wingman Pro token — sign in again in the client "
+                "to get a device token for the new backend."
+            )
+            new.pop("wingman_pro", None)
+        return new
+
     def migrate_defaults(self, old: dict) -> dict:
         return self._migrate_wingman_pro_section(dict(old), "defaults")
 
