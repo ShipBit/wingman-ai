@@ -24,7 +24,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Extract version from system_manager.py
         id: version
@@ -35,7 +35,7 @@ jobs:
           echo "Detected version: $version"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11.7'
 
@@ -56,7 +56,7 @@ jobs:
           pyinstaller WingmanAiCore.spec --noconfirm
 
       - name: Upload Windows Exe Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: core-windows-unsigned
           path: dist/WingmanAiCore/
@@ -69,8 +69,8 @@ jobs:
       version: ${{ needs.build-windows.outputs.version }}
       artifact_name: ${{ steps.artifact.outputs.artifact_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
         with:
           name: core-windows-unsigned
           path: WingmanAiCore
@@ -94,7 +94,7 @@ jobs:
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload Signed Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WingmanAiCore-${{ needs.build-windows.outputs.version }}-x86_64-pc-windows
           path: WingmanAiCore
