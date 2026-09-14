@@ -181,5 +181,6 @@ pocket-tts-voices/
 .superpowers/
 .worktrees/
 docs/superpowers/**/**
+docs/backend-migration/**/**
 
 .claude/settings.json

@@ -15,8 +15,8 @@ Three modes:
     --suite    the seven realistic memory-suite scenarios, the real comparison
     --cost     condensation and tool-response compression at realistic sizes
 
-Findings and the resulting recommendation:
-``docs/backend-migration/support-model-cloud.md``.
+Findings and the resulting recommendation live in the internal backend
+migration notes, which are not part of this repository.
 """
 
 from __future__ import annotations

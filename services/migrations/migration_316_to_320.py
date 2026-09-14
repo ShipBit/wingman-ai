@@ -1,8 +1,7 @@
 """Migration from version 3.1.6 to 3.2.0.
 
-3.2.0 moves Wingman Pro from the Azure backend to the new one
-(see docs/backend-migration/plan.md, section 6). Three things change in a
-user's config:
+3.2.0 moves Wingman Pro from the Azure backend to the new one. Three things
+change in a user's config:
 
 * `wingman_pro.base_url` points at api.wingman-ai.com, and `region` disappears —
   the new backend runs in one region, so there is nothing to choose.
@@ -17,7 +16,7 @@ user's config:
   name that the plan does not offer is answered with the plan default rather
   than an error, so this only has to be plausible.
 * Azure is gone as a provider of any kind, including for people who brought
-  their own Azure account (docs/backend-migration/azure-ausbau.md). Anything
+  their own Azure account. Anything
   pointing at it is rewritten to a provider that still exists, and the whole
   `azure:` block is dropped.
 * `voice_activation.azure.languages` becomes `voice_activation.languages`. The
