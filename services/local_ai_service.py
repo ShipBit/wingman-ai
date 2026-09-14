@@ -319,7 +319,7 @@ class LocalAiService:
         has to be downloaded and loaded here.
         """
         if self.settings.mode == LocalAiMode.SERVER:
-            return self.remote.is_ready()
+            return self.remote.embed_is_ready()
         return self.provider.embed_is_ready()
 
     def get_embed_model_name(self) -> str | None:
