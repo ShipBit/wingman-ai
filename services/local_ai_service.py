@@ -26,6 +26,19 @@ cl100k_base (used for estimation) and the model's actual tokenizer."""
 MIN_OUTPUT_TOKENS = 256
 """Minimum output tokens reserved for a non-thinking call."""
 
+CLOUD_MAX_OUTPUT_TOKENS = 8_192
+"""Hard ceiling on what a cloud support call may generate.
+
+Every support job is short: a summary, a handful of extracted facts, a squeezed
+tool response. Without this the budget is "whatever is left of the window", so a
+2,000-token extraction asks for roughly 113,000 tokens of output. Locally that
+could not happen — llama.cpp is bounded by ``n_ctx``, usually 4096.
+
+It normally costs nothing, because the model stops when it is done. It costs
+real money on the day a model gets stuck repeating itself, which is exactly what
+``_deduplicate_lines`` exists to clean up after.
+"""
+
 CLOUD_CONTEXT_TOKENS = 128_000
 """Context window assumed for a cloud support model.
 
@@ -250,6 +263,8 @@ class LocalAiService:
             text = truncate_to_tokens(text, max(0, max_input))
         input_tokens = system_tokens + count_tokens(text)
         max_tokens = max(min_output, safe_ctx - input_tokens)
+        if self.settings.mode == LocalAiMode.CLOUD:
+            max_tokens = min(max_tokens, CLOUD_MAX_OUTPUT_TOKENS)
 
         # Resolve sampling: explicit args > preset > Qwen3.5 default constants
         t = temperature

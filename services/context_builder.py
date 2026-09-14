@@ -233,25 +233,37 @@ class ContextBuilder:
         lookup runs against the same user message — so the prefix stays stable
         across the whole loop.
 
-        Works on the copy ``_llm_call`` built. The stored conversation is left
-        alone; otherwise another memory block would pile up in the history with
-        every turn.
+        Replaces the list entry, it does not write into the message.
+
+        ``_llm_call`` hands us ``self.conversation.messages.copy()``. That copies
+        the list, not the dictionaries inside it, so assigning to ``msg["content"]``
+        would edit the stored conversation. It did: the block was prepended once
+        per LLM call, so a turn with a tool round trip left two of them in the
+        history, and they piled up from there — into the summary, back out as
+        newly extracted memories, and into the client's history view.
+
+        Putting a new dictionary into the list leaves the stored one untouched.
         """
         memory = self._pending_memory_context
         if not memory:
             return ""
 
-        for msg in reversed(messages):
-            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-            if role != "user":
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if not isinstance(msg, dict):
+                # Only the messages we build ourselves are dictionaries, and the
+                # user turn always is. Anything else cannot be copied safely.
                 continue
-            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
             if isinstance(content, list):
                 # Multimodal: the text goes in front as its own part, so an
                 # attached image is left untouched.
-                msg["content"] = [{"type": "text", "text": memory}] + content
+                new_content = [{"type": "text", "text": memory}] + content
             else:
-                msg["content"] = f"{memory}\n\n{content or ''}".strip()
+                new_content = f"{memory}\n\n{content or ''}".strip()
+            messages[i] = {**msg, "content": new_content}
             return memory
 
         return ""
