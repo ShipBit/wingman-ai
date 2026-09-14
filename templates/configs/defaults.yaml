@@ -243,7 +243,8 @@ wingman_pro:
     - en-US
   stt_provider: cloud
   tts_provider: inworld
-  conversation_deployment: google/gemini-2.5-flash
+  # Empty means: whatever the plan lists as its default right now.
+  conversation_deployment: ''
 commands:
   - name: ResetConversationHistory
     instant_activation:

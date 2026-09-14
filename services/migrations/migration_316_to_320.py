@@ -45,7 +45,15 @@ NEW_BASE_URL = "https://api.wingman-ai.com"
 # answered with the plan default (`x-wingman-substituted`), and the client
 # rewrites the config the next time the settings are opened. Naming the current
 # default here only saves that one round.
-DEFAULT_DEPLOYMENT = "google/gemini-2.5-flash"
+FOLLOW_PLAN_DEFAULT = ""
+"""What `conversation_deployment` holds when the plan decides.
+
+Not a model name. The backend resolves an empty value to whatever its own plan
+default currently is, so we can change that in /admin without shipping a Wingman
+release and without a migration. Writing a concrete id here instead would pin
+every upgrading user to the model that happened to be the default on the day
+this file was written.
+"""
 
 # Where an Azure setting lands. Someone who paid for their own Azure account
 # gets OpenAI, the closest equivalent they can point at their own key; local
@@ -317,13 +325,18 @@ class Migration316To320(BaseMigration):
         # ("gpt-4o-mini"), the 3.1 aliases ("default", "fast") and anything
         # hand-typed. A gateway id always has the shape provider/model, so that
         # is the test — it lets a model we add later pass without a code change.
+        #
+        # Anything that fails it becomes the empty value, which means "whatever
+        # the plan offers as its default". A name that still parses is kept: that
+        # is a deliberate pick, and if the plan drops it later the backend serves
+        # its default anyway.
         if has_pro:
             deployment = pro.get("conversation_deployment")
             if not isinstance(deployment, str) or "/" not in deployment:
-                pro["conversation_deployment"] = DEFAULT_DEPLOYMENT
+                pro["conversation_deployment"] = FOLLOW_PLAN_DEFAULT
                 self.log(
                     f"{label}: conversation model '{deployment or '—'}' -> "
-                    f"'{DEFAULT_DEPLOYMENT}'"
+                    f"the plan default"
                 )
 
         # The azure section itself goes last, so the voice mapping above can

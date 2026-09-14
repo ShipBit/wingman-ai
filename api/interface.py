@@ -524,7 +524,16 @@ class LocalLlmConfig(BaseModel):
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    conversation_deployment: str
+
+    conversation_deployment: str = ""
+    """Gateway id of the chat model, or empty to follow the plan's default.
+
+    Empty is the normal case. The backend resolves it to whatever the plan lists
+    as default at that moment, so changing the default in /admin reaches every
+    user without a release and without a migration. A concrete id here is a
+    deliberate pick by the user; if the plan stops offering it, the backend
+    serves its default instead of failing.
+    """
 
     languages: list[str] = ["en-US"]
     """Languages the cloud transcription may auto-detect, as BCP-47 tags."""
