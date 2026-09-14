@@ -175,12 +175,6 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/generate-greeting",
-            endpoint=self.generate_greeting,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/ask-wingman-conversation-provider",
             endpoint=self.ask_wingman_conversation_provider,
             tags=tags,
@@ -1977,110 +1971,6 @@ class WingmanCore(WebSocketUser):
 
         play_thread = threading.Thread(target=run_async_process)
         play_thread.start()
-
-    # POST /generate-greeting
-    async def generate_greeting(self, wingman_name: str):
-        """Generate an in-character greeting using the support model. UI-only — not sent to TTS or conversation history."""
-        wingman = self.tower.get_wingman_by_name(wingman_name)
-        if not wingman:
-            return
-
-        config = wingman.config
-
-        backstory = ""
-        if config.prompts and config.prompts.backstory:
-            backstory = config.prompts.backstory
-
-        # Check for a previous session summary to personalize the greeting
-        session_summary = ""
-        if hasattr(wingman, "ensure_memory_initialized"):
-            wingman.ensure_memory_initialized()
-        mem_service = getattr(wingman, "persistent_memory_service", None)
-        if mem_service:
-            try:
-                summaries = mem_service.get_all(entry_type="session_summary")
-                if summaries:
-                    session_summary = summaries[0].content
-            except Exception as e:
-                await self.printr.print_async(
-                    text=f"[{wingman_name}] Failed to retrieve session summary: {e}",
-                    color=LogType.WARNING,
-                    source=LogSource.SYSTEM,
-                    server_only=True,
-                )
-
-        await self.printr.print_async(
-            text=f"[{wingman_name}] Greeting: mem_service={'yes' if mem_service else 'no'}, session_summary={'yes' if session_summary else 'no'}",
-            color=LogType.INFO,
-            source=LogSource.SYSTEM,
-            server_only=True,
-        )
-
-        from services.skill_local_ai import SamplingPreset
-
-        if session_summary:
-            system_prompt = get_prompt("greeting-returning").format(
-                name=config.name,
-                backstory=backstory,
-                session_summary=session_summary,
-            )
-            greeting_preset = SamplingPreset.CREATIVE
-        else:
-            system_prompt = get_prompt("greeting-default").format(
-                name=config.name,
-                backstory=backstory,
-            )
-            greeting_preset = SamplingPreset.BALANCED
-
-        try:
-            response = self.local_ai_service.support(
-                text="Generate your greeting.",
-                system_prompt=system_prompt,
-                preset=greeting_preset,
-            )
-
-            from services.memory_debug_log import log_memory_event
-
-            log_memory_event(
-                "greeting",
-                wingman_name,
-                variant="returning" if session_summary else "default",
-                preset=greeting_preset.name,
-                session_summary=session_summary or None,
-                raw_output=response.text if response else None,
-            )
-
-            if response and self._connection_manager:
-                text = response.text or ""
-                additional_data = None
-
-                # Extract <mem>...</mem> tagged memory segments
-                mem_segments = re.findall(r"<mem>(.*?)</mem>", text, re.DOTALL)
-                if mem_segments:
-                    additional_data = {
-                        "memory_segments": [s.strip() for s in mem_segments]
-                    }
-                # Strip the tags from the displayed text
-                text = re.sub(r"</?mem>", "", text)
-
-                # Broadcast directly to set wingman_name explicitly
-                # (printr uses stack inspection which won't find a Wingman instance here)
-                await self._connection_manager.broadcast(
-                    LogCommand(
-                        text=text,
-                        log_type=LogType.LOCALMODEL,
-                        source=LogSource.WINGMAN,
-                        source_name=wingman_name,
-                        wingman_name=wingman_name,
-                        additional_data=additional_data,
-                    )
-                )
-        except Exception as e:
-            await self.printr.print_async(
-                text=f"Could not generate greeting: {e}",
-                color=LogType.WARNING,
-                source=LogSource.SYSTEM,
-            )
 
     # POST /send-audio-to-wingman
     async def send_audio_to_wingman(
