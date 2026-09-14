@@ -269,8 +269,8 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   conversation condensation is on (Wingman Pro hardcoded; own providers config.features.skill_max_input_tokens).
 #   Over the cap -> FacadeError (or truncates if auto_shorten=True). Images are charged a flat
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
-summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the FREE local model
-resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # free local single-turn -> SupportResponse (.text)
+summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
+resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
 ```
 
 **Removed (do NOT use):** the raw LLM call (`self.llm_call(...)` / `actual_llm_call` — use `self.wingman.ai.generate`),

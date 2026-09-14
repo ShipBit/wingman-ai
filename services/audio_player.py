@@ -15,7 +15,7 @@ from services.printr import Printr
 from services.pub_sub import PubSub
 from services.sound_effects import (
     get_additional_layer_file,
-    get_azure_workaround_gain_boost,
+    get_streaming_gain_boost,
     get_sound_effects,
 )
 
@@ -416,7 +416,7 @@ class AudioPlayer:
                 mix_layer_file = get_additional_layer_file(effect)
                 # if we boost the actual audio, we need to boost the mixed layer as well
                 if use_gain_boost:
-                    mix_layer_gain_boost_db += get_azure_workaround_gain_boost(effect)
+                    mix_layer_gain_boost_db += get_streaming_gain_boost(effect)
 
         if mix_layer_file:
             noise_audio, noise_sample_rate = self.get_audio_from_file(

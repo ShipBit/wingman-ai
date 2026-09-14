@@ -1,4 +1,5 @@
 import base64
+import os
 from enum import Enum
 import json
 from os import makedirs, path, remove, replace, walk
@@ -11,7 +12,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 import yaml
-from api.enums import LogSource, LogType, SttProvider, WingmanProTtsProvider
+from api.enums import LogSource, LogType, SttProvider
 from api.interface import (
     Config,
     ConfigDirInfo,
@@ -23,6 +24,7 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
+from services.config_sanitizer import sanitize
 from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
 from services.system_manager import LOCAL_VERSION
@@ -1275,8 +1277,24 @@ class ConfigManager:
         return False
 
     def read_default_config(self):
+        """The defaults every wingman inherits from, already repaired.
+
+        Sanitising here rather than at each caller is what makes it reliable:
+        `parse_config` hands this very dict to `Config(**default_config)`, so a
+        copy fixed somewhere downstream does not help. That is exactly what
+        happened on 2026-09-11 — the per-wingman merge logged a repair, and
+        startup still failed on the untouched original.
+        """
         config = self.read_config(self.default_config_path)
         config["wingmen"] = {}
+        for change in sanitize(NestedConfig, config):
+            self.printr.print(
+                f"defaults: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
         return config
 
     def read_config(self, file_path: str):
@@ -1429,17 +1447,55 @@ class ConfigManager:
         """Load and validate Settings config"""
         parsed = self.read_config(self.settings_config_path)
         if parsed:
+            # Same net as the wingman configs: `voice_activation.stt_provider`
+            # can still say `azure` in a settings.yaml carried over from 3.1.6.
+            for change in sanitize(SettingsConfig, parsed):
+                self.printr.print(
+                    f"settings: {change}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
             try:
                 validated = SettingsConfig(**parsed)
-                return validated
+                return self._apply_backend_override(validated)
             except ValidationError as e:
                 self.printr.toast_error(
                     f"Invalid config '{self.settings_config_path}':\n{str(e)}"
                 )
-        return SettingsConfig()
+        return self._apply_backend_override(SettingsConfig())
+
+    def _apply_backend_override(self, settings: SettingsConfig) -> SettingsConfig:
+        """Lets `WINGMAN_BACKEND_URL` point Core at a different backend.
+
+        Editing `settings.yaml` by hand to test against a local backend is easy
+        to do and easy to forget, and a forgotten one means the next real run
+        talks to localhost and fails with nothing obvious to look at. An
+        environment variable is scoped to the shell that set it, and Core says
+        out loud which backend it uses.
+
+        The value is not written back to the file: the override lasts exactly as
+        long as the variable does.
+        """
+        override = os.environ.get("WINGMAN_BACKEND_URL", "").strip()
+        if not override:
+            return settings
+
+        settings.wingman_pro.base_url = override.rstrip("/")
+        self.printr.print(
+            f"WINGMAN_BACKEND_URL is set: talking to {settings.wingman_pro.base_url} "
+            f"instead of the live backend",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        return settings
 
     def load_defaults_config(self, silent_on_error: bool = False):
         """Load and validate Defaults config"""
+        # `read_default_config` has already repaired unknown enum values.
         parsed = self.read_default_config()
         if parsed:
             try:
@@ -1500,43 +1556,6 @@ class ConfigManager:
             f"Cascaded local STT provider change: {old_provider.value} -> {provider.value}",
             server_only=True,
         )
-
-    def enforce_plan_tts_restrictions(self, plan: str):
-        """Downgrade Inworld TTS to Azure for non-Ultra users across all configs."""
-        if plan == "Ultra":
-            return
-
-        patched = False
-        fallback = WingmanProTtsProvider.AZURE.value
-
-        # Patch defaults
-        if self.default_config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
-            self.default_config.wingman_pro.tts_provider = WingmanProTtsProvider.AZURE
-            self.save_defaults_config()
-            patched = True
-
-        # Patch individual wingman configs
-        for config_dir in self.get_config_dirs():
-            config_path = path.join(self.config_dir, config_dir.directory)
-            for wingman_file in self.get_wingmen_configs(config_dir):
-                file_path = path.join(config_path, wingman_file.file)
-                raw = self.read_config(file_path)
-                if not raw:
-                    continue
-                wp = raw.get("wingman_pro")
-                if wp and wp.get("tts_provider") == WingmanProTtsProvider.INWORLD.value:
-                    wp["tts_provider"] = fallback
-                    self.write_config(file_path, raw)
-                    patched = True
-
-        if patched:
-            self.printr.print(
-                f"Downgraded Inworld TTS to Azure (plan: {plan})",
-                color=LogType.WARNING,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
-            )
 
     def perform_hardware_scan(self, system_manager):
         """Scans for hardware changes and updates settings accordingly."""
@@ -1851,7 +1870,6 @@ class ConfigManager:
             "elevenlabs",
             "hume",
             "inworld",
-            "azure",
             "whispercpp",
             "fasterwhisper",
             "xvasynth",
@@ -1928,6 +1946,20 @@ class ConfigManager:
         # discoverable_mcps - inherit from default if not overridden in wingman config
         if "discoverable_mcps" not in wingman and "discoverable_mcps" in default:
             merged["discoverable_mcps"] = default["discoverable_mcps"]
+
+        # A provider or model the config names may not exist any more — Azure is
+        # the current example, but the same happens whenever a vendor retires a
+        # model. Pydantic would refuse the whole wingman over one stale word, so
+        # unknown enum values are swapped for known ones first, preferring what
+        # the default config has at the same place.
+        for change in sanitize(WingmanConfig, merged, default):
+            self.printr.print(
+                f"{merged.get('name', 'wingman')}: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
 
         try:
             return WingmanConfig(**merged)

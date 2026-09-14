@@ -34,6 +34,10 @@ class ContextBuilder:
         self._wingman_name = wingman_name
         self._last_compiled_context: str = ""
         self._memory_recall_notified: bool = False
+        # What ``build`` last found in memory. ``attach_memory`` picks it up
+        # from here; kept separate because it does not belong in the system
+        # prompt (see there).
+        self._pending_memory_context: str = ""
 
     async def build(
         self,
@@ -77,9 +81,10 @@ class ContextBuilder:
                 and self._config.elevenlabs.tts_prompt
             ):
                 tts_prompt = self._config.elevenlabs.tts_prompt
-        elif self._config.features.tts_provider == TtsProvider.INWORLD or (
-            self._config.features.tts_provider == TtsProvider.WINGMAN_PRO
-            and self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD
+        elif self._config.features.tts_provider in (
+            TtsProvider.INWORLD,
+            # The subscription speaks through Inworld, so it takes the same prompt.
+            TtsProvider.WINGMAN_PRO,
         ):
             if self._config.inworld.use_tts_prompt and self._config.inworld.tts_prompt:
                 tts_prompt = self._config.inworld.tts_prompt
@@ -194,16 +199,23 @@ class ContextBuilder:
         ):
             context += "\n\n" + conversation_summary_section
 
-        # Append persistent memory context
-        if persistent_memory_context:
-            context += "\n\n" + persistent_memory_context
+        # The block no longer goes here but onto the last user message — see
+        # attach_memory(). It is the only part of the system prompt that changes
+        # on every turn, and at the front of the prompt it makes the provider's
+        # prompt caching worthless: only a prefix is ever cached, and everything
+        # from the first difference onwards is billed in full. Measured
+        # 2026-09-14 through the gateway, same content, same token count: memory
+        # in front, 0 hits out of 10 and $0.00107 per turn; memory behind the
+        # history, 8 to 10 hits out of 10 and $0.00015 to $0.00034.
+        self._pending_memory_context = persistent_memory_context
 
         # Persistent memory tool instructions
         if persistent_memory_service:
             context += (
                 "\n\n# PERSISTENT MEMORY\n"
                 "You have persistent memory. Important facts and past conversation summaries "
-                "are provided in the [Memory] sections above (if any). "
+                "are provided in the [Memory] sections attached to the user's latest message "
+                "(if any). "
                 "You can use the `memory_remember`, `memory_recall`, and `memory_forget` tools when the user "
                 "explicitly asks you to remember, recall, or forget something. "
                 "You don't need to use `memory_remember` for routine information — that is handled automatically."
@@ -212,9 +224,64 @@ class ContextBuilder:
         self._last_compiled_context = context
         return context
 
+    def attach_memory(self, messages: list) -> str:
+        """Attach the recalled facts to the last user message and return them.
+
+        To the last *user* message, not to the end of the list: after a tool
+        round trip the list ends with a ``tool`` reply, and the second call has
+        to carry the same prefix as the first. The facts are identical — the
+        lookup runs against the same user message — so the prefix stays stable
+        across the whole loop.
+
+        Replaces the list entry, it does not write into the message.
+
+        ``_llm_call`` hands us ``self.conversation.messages.copy()``. That copies
+        the list, not the dictionaries inside it, so assigning to ``msg["content"]``
+        would edit the stored conversation. It did: the block was prepended once
+        per LLM call, so a turn with a tool round trip left two of them in the
+        history, and they piled up from there — into the summary, back out as
+        newly extracted memories, and into the client's history view.
+
+        Putting a new dictionary into the list leaves the stored one untouched.
+        """
+        memory = self._pending_memory_context
+        if not memory:
+            return ""
+
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if not isinstance(msg, dict):
+                # Only the messages we build ourselves are dictionaries, and the
+                # user turn always is. Anything else cannot be copied safely.
+                continue
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):
+                # Multimodal: the text goes in front as its own part, so an
+                # attached image is left untouched.
+                new_content = [{"type": "text", "text": memory}] + content
+            else:
+                new_content = f"{memory}\n\n{content or ''}".strip()
+            messages[i] = {**msg, "content": new_content}
+            return memory
+
+        return ""
+
     def get_last_context(self) -> str:
-        """Return the last compiled system context (cached from the most recent LLM call)."""
-        return self._last_compiled_context
+        """Return the last compiled system context (cached from the most recent LLM call).
+
+        The recalled facts are appended, with a note saying where they really
+        sit. Leaving them out would be the worse display: "view context" is meant
+        to show what the model saw.
+        """
+        if not self._pending_memory_context:
+            return self._last_compiled_context
+        return (
+            self._last_compiled_context
+            + "\n\n---\n# (attached to the last user message)\n\n"
+            + self._pending_memory_context
+        )
 
     def build_user_context(
         self,

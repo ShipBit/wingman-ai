@@ -14,7 +14,6 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 import requests
 import sounddevice as sd
 from showinfm import show_in_file_manager
-import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import (
@@ -24,10 +23,10 @@ from api.commands import (
     VoiceActivationMutedCommand,
 )
 from api.enums import (
-    AzureRegion,
     CommandTag,
     ConversationProvider,
     CoreState,
+    LocalAiMode,
     LogSource,
     LogType,
     VoiceActivationSttProvider,
@@ -36,7 +35,6 @@ from api.enums import (
 from api.interface import (
     AudioDevice,
     AudioFile,
-    AzureSttConfig,
     ChangelogEntry,
     CommandJoystickConfig,
     Config,
@@ -64,6 +62,7 @@ from providers.parakeet import Parakeet
 from providers.google import GoogleGenAI
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
+from providers.wingman_support import WingmanSupport
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_subscription import WingmanSubscription
@@ -172,12 +171,6 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/stop-recording-for-wingman",
             endpoint=self.stop_recording_for_wingman,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/generate-greeting",
-            endpoint=self.generate_greeting,
             tags=tags,
         )
         self.router.add_api_route(
@@ -295,6 +288,67 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_pocket_tts_models,
             tags=tags,
         )
+
+        # Feeds the model picker. This was removed by accident together with the
+        # region route on 2026-09-10, which left the picker showing nothing but
+        # the stored value.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
+
+        # The second lane: the small model behind memory and summarisation.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/support",
+            response_model=list,
+            endpoint=self.get_wingman_support_models,
+            tags=tags,
+        )
+
+        # Same story: handlers that exist but were never reachable, so the
+        # client called methods its generated API did not have.
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/enhance-backstory",
+            endpoint=self.api_enhance_backstory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-library/generate-sfx/elevenlabs",
+            endpoint=self.generate_sfx_elevenlabs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs/subscription-data",
+            endpoint=self.get_elevenlabs_subscription_data,
+            tags=tags,
+        )
+
+        # The "test connection" buttons in Settings call these. The handlers
+        # existed but were never registered, so every one of those buttons hit
+        # a method the generated client did not have.
+        for test_path, test_endpoint in (
+            ("/settings/test/whispercpp", self.test_whispercpp),
+            ("/settings/test/parakeet", self.test_parakeet),
+            ("/settings/test/xvasynth", self.test_xvasynth),
+            ("/settings/test/pocket-tts", self.test_pocket_tts),
+            ("/settings/test/local-ai-support", self.test_local_ai_support),
+            ("/settings/test/local-ai-embed", self.test_local_ai_embed),
+            ("/settings/test/hud-server", self.test_hud_server),
+            ("/settings/test/openai-compatible-tts", self.test_openai_compatible_tts),
+        ):
+            self.router.add_api_route(
+                methods=["POST"],
+                path=test_path,
+                endpoint=test_endpoint,
+                tags=tags,
+            )
         self.router.add_api_route(
             methods=["POST"],
             path="/pocket_tts/preload_voice",
@@ -531,120 +585,6 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
 
-        # Connection test endpoints
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/whispercpp",
-            endpoint=self.test_whispercpp,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/parakeet",
-            endpoint=self.test_parakeet,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/xvasynth",
-            endpoint=self.test_xvasynth,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/local-ai/support",
-            endpoint=self.test_local_ai_support,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/local-ai/embed",
-            endpoint=self.test_local_ai_embed,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/hud-server",
-            endpoint=self.test_hud_server,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/pocket-tts",
-            endpoint=self.test_pocket_tts,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/test/openai-compatible-tts",
-            endpoint=self.test_openai_compatible_tts,
-            response_model=TestConnectionResult,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/support",
-            endpoint=self.api_support,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/enhance-backstory",
-            endpoint=self.api_enhance_backstory,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/local-ai/enhance-backstory-budget",
-            endpoint=self.api_enhance_backstory_budget,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/local-ai/embed",
-            endpoint=self.api_embed,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/elevenlabs/generate-sfx",
-            endpoint=self.generate_sfx_elevenlabs,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/elevenlabs/subscription-data",
-            endpoint=self.get_elevenlabs_subscription_data,
-            response_model=dict,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/shutdown",
-            endpoint=self.shutdown,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/models/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_models,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/regions/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_regions,
-            tags=tags,
-        )
         self.router.add_api_route(
             methods=["GET"],
             path="/memories/{wingman_name}",
@@ -713,7 +653,6 @@ class WingmanCore(WebSocketUser):
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
 
-        self.azure_speech_recognizer: speechsdk.SpeechRecognizer = None
         self.is_listening = False
         # User's mute intent, independent of transient playback pauses. is_listening is
         # the actual recognizer state; mic_intent is what the user wants after playback.
@@ -794,9 +733,14 @@ class WingmanCore(WebSocketUser):
             model_manager=self.local_model_manager,
         )
         self.llama_cpp_remote = LlamaCppRemote(settings=llama_cpp_settings)
+        self.wingman_support = WingmanSupport(
+            subscription=self.settings_service.settings.wingman_pro,
+            settings=llama_cpp_settings,
+        )
         self.local_ai_service = LocalAiService(
             provider=self.llama_cpp_provider,
             remote=self.llama_cpp_remote,
+            cloud=self.wingman_support,
             settings=llama_cpp_settings,
         )
 
@@ -866,59 +810,18 @@ class WingmanCore(WebSocketUser):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self.pocket_tts.deferred_init)
 
-        # 5. Local AI download + init (settings-aware)
+        # 5. Local AI init
+        #
+        # The support model is not downloaded here any more. It runs in the cloud
+        # by default, and starting Wingman used to pull 1.28 GB of GGUF
+        # unannounced — that now happens when somebody picks Local in Settings.
+        #
+        # The embedding model is a different matter: it is 250 MB, it feeds the
+        # local vector database, and persistent memory is on by default. Skipping
+        # it would leave every fresh install with memory quietly not working.
         llama_settings = self.settings_service.settings.llama_cpp
-        if (
-            llama_settings.run_locally
-            and not self.local_model_manager.models_available()
-        ):
-            await self.printr.print_async(
-                "Local AI models not found — downloading automatically...",
-                color=LogType.INFO,
-                server_only=True,
-            )
-
-            progress_state = {}
-
-            def on_download_progress(filename, pct, downloaded_mb, total_mb):
-                progress_state["filename"] = filename
-                progress_state["pct"] = pct
-                progress_state["downloaded_mb"] = downloaded_mb
-                progress_state["total_mb"] = total_mb
-
-            download_task = asyncio.create_task(
-                self.local_model_manager.download_models(
-                    cuda_available=self.system_manager.is_cuda_available(),
-                    on_progress=on_download_progress,
-                )
-            )
-
-            while not download_task.done():
-                if progress_state:
-                    fname = progress_state.get("filename", "")
-                    pct = progress_state.get("pct", 0)
-                    dl_mb = progress_state.get("downloaded_mb", 0)
-                    t_mb = progress_state.get("total_mb", 0)
-                    short_name = (
-                        fname.split("-")[0]
-                        if "-" in fname
-                        else fname.replace(".gguf", "")
-                    )
-                    await self.set_core_state(
-                        CoreState.LOADING_CONFIG,
-                        message=f"Downloading Local AI model ({short_name})... ({dl_mb} / {t_mb} MB)",
-                        progress=pct / 100.0 if pct else None,
-                    )
-                await asyncio.sleep(0.5)
-
-            if not await download_task:
-                self.printr.toast_error(
-                    "Could not download the Local AI models. "
-                    "Please check your internet connection and retry the download "
-                    "in Settings > Local AI, or restart Wingman AI."
-                )
-
-        if llama_settings.run_locally and self.local_model_manager.models_available():
+        if llama_settings.mode != LocalAiMode.SERVER:
+            await self._ensure_embed_model()
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
                 message="Initializing Local AI...",
@@ -1660,16 +1563,12 @@ class WingmanCore(WebSocketUser):
                 wingman_name="system",
                 settings=self.settings_service.settings.wingman_pro,
             )
-            transcription = wingman_pro.transcribe_azure_speech(
+            transcription = wingman_pro.transcribe(
                 filename=recording_file,
-                config=AzureSttConfig(
-                    languages=self.settings_service.settings.voice_activation.azure.languages,
-                    # unused as Wingman Pro sets this at API level - just for Pydantic:
-                    region=AzureRegion.WESTEUROPE,
-                ),
+                languages=self.settings_service.settings.voice_activation.languages,
             )
             if transcription:
-                text = transcription.get("_text")
+                text = transcription.text
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
 
             def filter_and_clean_text(text):
@@ -1773,57 +1672,10 @@ class WingmanCore(WebSocketUser):
                 self._apply_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     async def set_voice_activation(self, is_enabled: bool):
-        if is_enabled:
-            if (
-                self.settings_service.settings.voice_activation.stt_provider
-                == VoiceActivationSttProvider.AZURE
-                and not self.azure_speech_recognizer
-            ):
-                await self.__init_azure_voice_activation()
-        else:
+        if not is_enabled:
             self._apply_voice_recognition(mute=True)
-            self.azure_speech_recognizer = None
 
-    # called when Azure Speech Recognizer recognized voice
-    def on_azure_voice_recognition(self, voice_event):
-        def run_async_process():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(wingman.process(transcript=text))
-            finally:
-                loop.close()
 
-        text = voice_event.result.text
-        wingman = self.tower.get_wingman_from_text(text)
-        if text and wingman:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
-
-    async def __init_azure_voice_activation(self):
-        if self.azure_speech_recognizer or not self.config_service.current_config:
-            return
-
-        key = await self.secret_keeper.retrieve(
-            requester="Voice Activation",
-            key="azure_tts",
-            prompt_if_missing=True,
-        )
-
-        speech_config = speechsdk.SpeechConfig(
-            region=self.settings_service.settings.voice_activation.azure.region.value,
-            subscription=key,
-        )
-
-        auto_detect_source_language_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-            languages=self.settings_service.settings.voice_activation.azure.languages
-        )
-
-        self.azure_speech_recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            auto_detect_source_language_config=auto_detect_source_language_config,
-        )
-        self.azure_speech_recognizer.recognized.connect(self.on_azure_voice_recognition)
 
     async def on_playback_started(self, wingman_name: str):
         await self.printr.print_async(
@@ -1896,26 +1748,14 @@ class WingmanCore(WebSocketUser):
             self.is_listening = target_listening
             if changed:
                 if target_listening:
-                    if (
-                        self.settings_service.settings.voice_activation.stt_provider
-                        == VoiceActivationSttProvider.AZURE
+                    if adjust_for_ambient_noise:
+                        self.audio_recorder.adjust_for_ambient_noise()
+                    if not self.audio_recorder.start_continuous_listening(
+                        va_settings=self.settings_service.settings.voice_activation
                     ):
-                        self.azure_speech_recognizer.start_continuous_recognition()
-                    else:
-                        if adjust_for_ambient_noise:
-                            self.audio_recorder.adjust_for_ambient_noise()
-                        if not self.audio_recorder.start_continuous_listening(
-                            va_settings=self.settings_service.settings.voice_activation
-                        ):
-                            self.is_listening = False
+                        self.is_listening = False
                 else:
-                    if (
-                        self.settings_service.settings.voice_activation.stt_provider
-                        == VoiceActivationSttProvider.AZURE
-                    ):
-                        self.azure_speech_recognizer.stop_continuous_recognition()
-                    else:
-                        self.audio_recorder.stop_continuous_listening()
+                    self.audio_recorder.stop_continuous_listening()
 
             command = VoiceActivationMutedCommand(muted=not self.is_listening)
             self._run_on_main_loop(self._connection_manager.broadcast(command))
@@ -2092,8 +1932,6 @@ class WingmanCore(WebSocketUser):
                     model_id = cfg.local_llm.conversation_model or ""
                 elif provider == ConversationProvider.WINGMAN_PRO and cfg.wingman_pro:
                     model_id = cfg.wingman_pro.conversation_deployment or ""
-                elif provider == ConversationProvider.AZURE and cfg.azure and cfg.azure.conversation:
-                    model_id = cfg.azure.conversation.deployment_name or ""
                 elif provider == ConversationProvider.PERPLEXITY and cfg.perplexity:
                     pmodel = cfg.perplexity.conversation_model
                     model_id = pmodel.value if hasattr(pmodel, "value") else str(pmodel)
@@ -2131,110 +1969,6 @@ class WingmanCore(WebSocketUser):
 
         play_thread = threading.Thread(target=run_async_process)
         play_thread.start()
-
-    # POST /generate-greeting
-    async def generate_greeting(self, wingman_name: str):
-        """Generate an in-character greeting using the support model. UI-only — not sent to TTS or conversation history."""
-        wingman = self.tower.get_wingman_by_name(wingman_name)
-        if not wingman:
-            return
-
-        config = wingman.config
-
-        backstory = ""
-        if config.prompts and config.prompts.backstory:
-            backstory = config.prompts.backstory
-
-        # Check for a previous session summary to personalize the greeting
-        session_summary = ""
-        if hasattr(wingman, "ensure_memory_initialized"):
-            wingman.ensure_memory_initialized()
-        mem_service = getattr(wingman, "persistent_memory_service", None)
-        if mem_service:
-            try:
-                summaries = mem_service.get_all(entry_type="session_summary")
-                if summaries:
-                    session_summary = summaries[0].content
-            except Exception as e:
-                await self.printr.print_async(
-                    text=f"[{wingman_name}] Failed to retrieve session summary: {e}",
-                    color=LogType.WARNING,
-                    source=LogSource.SYSTEM,
-                    server_only=True,
-                )
-
-        await self.printr.print_async(
-            text=f"[{wingman_name}] Greeting: mem_service={'yes' if mem_service else 'no'}, session_summary={'yes' if session_summary else 'no'}",
-            color=LogType.INFO,
-            source=LogSource.SYSTEM,
-            server_only=True,
-        )
-
-        from services.skill_local_ai import SamplingPreset
-
-        if session_summary:
-            system_prompt = get_prompt("greeting-returning").format(
-                name=config.name,
-                backstory=backstory,
-                session_summary=session_summary,
-            )
-            greeting_preset = SamplingPreset.CREATIVE
-        else:
-            system_prompt = get_prompt("greeting-default").format(
-                name=config.name,
-                backstory=backstory,
-            )
-            greeting_preset = SamplingPreset.BALANCED
-
-        try:
-            response = self.local_ai_service.support(
-                text="Generate your greeting.",
-                system_prompt=system_prompt,
-                preset=greeting_preset,
-            )
-
-            from services.memory_debug_log import log_memory_event
-
-            log_memory_event(
-                "greeting",
-                wingman_name,
-                variant="returning" if session_summary else "default",
-                preset=greeting_preset.name,
-                session_summary=session_summary or None,
-                raw_output=response.text if response else None,
-            )
-
-            if response and self._connection_manager:
-                text = response.text or ""
-                additional_data = None
-
-                # Extract <mem>...</mem> tagged memory segments
-                mem_segments = re.findall(r"<mem>(.*?)</mem>", text, re.DOTALL)
-                if mem_segments:
-                    additional_data = {
-                        "memory_segments": [s.strip() for s in mem_segments]
-                    }
-                # Strip the tags from the displayed text
-                text = re.sub(r"</?mem>", "", text)
-
-                # Broadcast directly to set wingman_name explicitly
-                # (printr uses stack inspection which won't find a Wingman instance here)
-                await self._connection_manager.broadcast(
-                    LogCommand(
-                        text=text,
-                        log_type=LogType.LOCALMODEL,
-                        source=LogSource.WINGMAN,
-                        source_name=wingman_name,
-                        wingman_name=wingman_name,
-                        additional_data=additional_data,
-                    )
-                )
-        except Exception as e:
-            await self.printr.print_async(
-                text=f"Could not generate greeting: {e}",
-                color=LogType.WARNING,
-                source=LogSource.SYSTEM,
-            )
 
     # POST /send-audio-to-wingman
     async def send_audio_to_wingman(
@@ -2936,46 +2670,49 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"OpenAI: \n{str(e)}")
             return []
 
-    async def get_wingman_pro_models(self):
+    async def _fetch_subscription_models(self) -> dict:
+        """The whole model list from the backend: chat models and support models.
+
+        One request for both, because the two pickers in the client are on screen
+        at the same time and the backend assembles them from the same catalogue.
+        """
         wingman_pro_token = await self.secret_keeper.retrieve(
             key="wingman_pro", requester="WingmanPro"
         )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        return body if isinstance(body, dict) else {"models": body}
+
+    async def get_wingman_pro_models(self):
         try:
-            response = requests.get(
-                url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
-                params={"region": self.settings_service.settings.wingman_pro.region},
-                timeout=10,
-                headers={
-                    "Authorization": f"Bearer {wingman_pro_token}",
-                    "Content-Type": "application/json",
-                },
-            )
-            response.raise_for_status()
-            model_list = response.json()
-            return model_list
+            body = await self._fetch_subscription_models()
+            # The backend answers {plan, models:[{id,name}], support:{...}}; the
+            # client wants the bare list, the way the old endpoint returned it.
+            return body.get("models", [])
         except Exception as e:
             self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
             return []
 
-    async def get_wingman_pro_regions(self):
-        wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
-        )
+    # GET /models/wingman-pro/support
+    async def get_wingman_support_models(self):
+        """The support models this plan offers, for the picker in Settings.
+
+        Fails quietly with an empty list rather than a toast: this is asked for
+        on every visit to the settings page, including by people with no
+        subscription, and "you are not signed in" is not news worth a popup.
+        """
         try:
-            response = requests.get(
-                url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-regions",
-                params={"region": self.settings_service.settings.wingman_pro.region},
-                timeout=10,
-                headers={
-                    "Authorization": f"Bearer {wingman_pro_token}",
-                    "Content-Type": "application/json",
-                },
-            )
-            response.raise_for_status()
-            model_list = response.json()
-            return model_list
-        except Exception as e:
-            self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
+            body = await self._fetch_subscription_models()
+            return (body.get("support") or {}).get("models", [])
+        except Exception:
             return []
 
     # GET /models/elevenlabs
@@ -3045,6 +2782,60 @@ class WingmanCore(WebSocketUser):
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
 
+    async def _ensure_embed_model(self):
+        """Fetch the embedding model if memory needs it and it is not here yet.
+
+        Only the embedding model, and only when at least one wingman has
+        persistent memory switched on. The support model is never fetched
+        automatically — see the note at step 5 in ``startup``.
+        """
+        if self.local_model_manager.embed_model_available():
+            return
+
+        wingmen = self.tower.wingmen if self.tower else []
+        if not any(getattr(w.config, "persistent_memory", False) for w in wingmen):
+            return
+
+        await self.printr.print_async(
+            "Memory is on but the embedding model is missing — downloading it...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        progress_state = {}
+
+        def on_download_progress(filename, pct, downloaded_mb, total_mb):
+            progress_state["filename"] = filename
+            progress_state["pct"] = pct
+            progress_state["downloaded_mb"] = downloaded_mb
+            progress_state["total_mb"] = total_mb
+
+        download_task = asyncio.create_task(
+            self.local_model_manager.download_models(
+                cuda_available=self.system_manager.is_cuda_available(),
+                on_progress=on_download_progress,
+                support=False,
+            )
+        )
+
+        while not download_task.done():
+            if progress_state:
+                pct = progress_state.get("pct", 0)
+                dl_mb = progress_state.get("downloaded_mb", 0)
+                t_mb = progress_state.get("total_mb", 0)
+                await self.set_core_state(
+                    CoreState.LOADING_CONFIG,
+                    message=f"Downloading the memory model... ({dl_mb} / {t_mb} MB)",
+                    progress=pct / 100.0 if pct else None,
+                )
+            await asyncio.sleep(0.5)
+
+        if not await download_task:
+            self.printr.toast_error(
+                "Could not download the memory model. Memory stays off until it "
+                "is downloaded — retry in Settings > Local AI."
+            )
+
     # ── Local AI Endpoints ────────────────────────────────────────
 
     # GET /settings/local-ai/status
@@ -3071,9 +2862,16 @@ class WingmanCore(WebSocketUser):
         return self.local_model_manager.get_embed_models()
 
     # POST /settings/local-ai/download-models
-    async def download_local_ai_models(self) -> dict:
+    async def download_local_ai_models(self, support: bool = True) -> dict:
+        """Fetch the local models.
+
+        ``support`` is off when the caller only needs embeddings — that is the
+        cloud mode case, where the 1.28 GB support model would be dead weight but
+        the 250 MB embedding model still feeds the vector database.
+        """
         success = await self.local_model_manager.download_models(
-            cuda_available=self.system_manager.is_cuda_available()
+            cuda_available=self.system_manager.is_cuda_available(),
+            support=support,
         )
         if success:
             await self.local_ai_service.initialize()
@@ -3092,7 +2890,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         iterations = max(1, min(request.iterations, 20))
@@ -3293,8 +3091,17 @@ class WingmanCore(WebSocketUser):
 
     # GET /settings/local-ai/playground/memory-scenarios
     async def playground_list_memory_scenarios(self) -> list[dict]:
-        """List the simulated conversations the Persistent Memory test suite can run."""
-        from evals.memory_suite.scenarios import SCENARIOS
+        """List the simulated conversations the Persistent Memory test suite can run.
+
+        The suite lives in the internal eval harness, which is not part of a
+        packaged build — it was never listed in ``WingmanAiCore.spec``. Running
+        from source with the harness present, this works; otherwise it returns
+        an empty list rather than a 500, and the Lab shows nothing to run.
+        """
+        try:
+            from evals.memory_suite.scenarios import SCENARIOS
+        except ImportError:
+            return []
 
         return [
             {
@@ -3321,12 +3128,21 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure the models are loaded.",
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
-        from evals.memory_suite.harness import run_scenario
-        from evals.memory_suite.profiles import DEFAULT
-        from evals.memory_suite.scenarios import get_scenarios
+        try:
+            from evals.memory_suite.harness import run_scenario
+            from evals.memory_suite.profiles import DEFAULT
+            from evals.memory_suite.scenarios import get_scenarios
+        except ImportError:
+            return {
+                "success": False,
+                "error": (
+                    "The memory test suite is not part of this build. It ships "
+                    "only with a source checkout of Wingman AI Core."
+                ),
+            }
 
         matches = get_scenarios(ids=[request.scenario_id]) if request.scenario_id else []
         if not matches:
@@ -3347,7 +3163,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         def _run():
@@ -3380,7 +3196,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
-                "error": "Local AI service is not ready. Make sure models are loaded.",
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
         iterations = max(1, min(iterations, 20))
@@ -3608,7 +3424,7 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False,
                 provider="local_ai_support",
-                error="Local AI service is not ready. Make sure models are loaded.",
+                error="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         try:
             result = self.local_ai_service.support(
@@ -3619,7 +3435,7 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False,
                 provider="local_ai_support",
-                error="Support model returned no result.",
+                error="Support Model returned no result.",
             )
         except Exception as e:
             return TestConnectionResult(
@@ -3628,12 +3444,19 @@ class WingmanCore(WebSocketUser):
 
     # POST /settings/test/local-ai/embed
     async def test_local_ai_embed(self) -> TestConnectionResult:
-        """Test the local AI embedding model."""
-        if not self.local_ai_service.is_ready():
+        """Test the local AI embedding model.
+
+        Gated on ``embed_ready``, not on ``is_ready``: in Cloud mode the two
+        come apart. The Support Model answers over the network while the Embed
+        Model still has to be downloaded here, so asking about the Support
+        Model would fail this test for anyone who is not signed in — even
+        though embedding works fine on their machine.
+        """
+        if not self.local_ai_service.embed_ready():
             return TestConnectionResult(
                 success=False,
                 provider="local_ai_embed",
-                error="Local AI service is not ready. Make sure models are loaded.",
+                error="The Embed Model is not ready. Download it in Settings.",
             )
         try:
             result = self.local_ai_service.embed(["hello world"])
@@ -3785,7 +3608,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
-                detail="Local AI service is not ready. Make sure models are loaded.",
+                detail="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         result = self.local_ai_service.support(
             text=text, system_prompt=system_prompt
@@ -3802,7 +3625,7 @@ class WingmanCore(WebSocketUser):
     ) -> dict:
         """Enhance a wingman backstory using that wingman's conversation LLM.
 
-        Uses the specific wingman's conversation provider (OpenAI, Azure, etc.)
+        Uses the specific wingman's conversation provider (OpenAI, Groq, etc.)
         — not the local support model — because backstory enhancement requires
         a capable model that can follow complex prompt-engineering rules.
         """
@@ -3903,7 +3726,7 @@ class WingmanCore(WebSocketUser):
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
-                detail="Local AI service is not ready. Make sure models are loaded.",
+                detail="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             )
         result = self.local_ai_service.embed(texts)
         if result is None:

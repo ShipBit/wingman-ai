@@ -281,12 +281,21 @@ class LocalModelManager:
         return False
 
     async def download_models(
-        self, cuda_available: bool = False, on_progress: callable = None
+        self,
+        cuda_available: bool = False,
+        on_progress: callable = None,
+        support: bool = True,
+        embed: bool = True,
     ) -> bool:
         """Download models and llama-server binaries asynchronously.
 
         Downloads the active backend binary plus CUDA if cuda_available is True.
         Returns True if all succeed.
+
+        ``support`` and ``embed`` say which of the two models to fetch. They are
+        separate because the support model is 1.28 GB and only needed when it
+        runs on this machine, while the embedding model is 250 MB and feeds the
+        local vector database no matter where the support model lives.
         """
         if self._downloading:
             printr.print(
@@ -299,19 +308,23 @@ class LocalModelManager:
         self._downloading = True
         try:
             loop = asyncio.get_event_loop()
-            # Download the support model matching the current settings selection
-            active_model = SUPPORT_MODELS.get(
-                self.settings.support_model, DEFAULT_SUPPORT_MODEL
-            )
-            support_ok = await loop.run_in_executor(
-                None, self._download_model, active_model, on_progress
-            )
-            active_embed = EMBED_MODELS.get(
-                self.settings.embed_model, DEFAULT_EMBED_MODEL
-            )
-            embed_ok = await loop.run_in_executor(
-                None, self._download_model, active_embed, on_progress
-            )
+            support_ok = True
+            if support:
+                # Download the support model matching the current settings selection
+                active_model = SUPPORT_MODELS.get(
+                    self.settings.support_model, DEFAULT_SUPPORT_MODEL
+                )
+                support_ok = await loop.run_in_executor(
+                    None, self._download_model, active_model, on_progress
+                )
+            embed_ok = True
+            if embed:
+                active_embed = EMBED_MODELS.get(
+                    self.settings.embed_model, DEFAULT_EMBED_MODEL
+                )
+                embed_ok = await loop.run_in_executor(
+                    None, self._download_model, active_embed, on_progress
+                )
 
             # Determine which backends to download
             backends_to_download: set[str] = set()

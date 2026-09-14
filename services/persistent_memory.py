@@ -23,11 +23,11 @@ printr = Printr()
 # Named constants
 MEMORY_MAX_TOKENS = 1024
 # Recall threshold for injecting stored facts into the prompt. Lowered from 0.5
-# to 0.4 after evals/memory_suite showed the embed model (nomic) frequently
+# to 0.4 after the internal eval suite showed the embed model (nomic) frequently
 # scores a relevant fact 0.40-0.49 against a natural follow-up question ("who do
 # I play with?" vs "Friend is named Mara"). build_memory_context returns a
 # token-capped SET of facts, so a slightly looser gate lands the right fact in
-# the batch without meaningful precision cost. See evals/memory_suite/FINDINGS.md.
+# the batch without meaningful precision cost.
 MEMORY_MIN_SIMILARITY = 0.4
 DEDUP_THRESHOLD = 0.9
 MAX_SESSION_SUMMARIES = 20
@@ -295,7 +295,7 @@ class PersistentMemoryService:
         system_prompt = get_prompt("extract-memories")
         # Reasoning is intentionally OFF here: on the bundled 2B model it rambles
         # 3000+ <think> tokens and truncates before emitting the JSON (0 facts) —
-        # proven by evals/run_memory_eval.py. The rewritten prompt already yields
+        # proven in the internal eval suite. The rewritten prompt already yields
         # clean facts without it. Skill authors / capable remote models can still
         # opt into reasoning via the per-call param.
         budget = self.local_ai_service.get_token_budget(system_prompt)

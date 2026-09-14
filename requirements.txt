@@ -1,6 +1,5 @@
 aiofiles==24.1.0
 av==16.0.1 # transitive dep of faster_whisper — pinned so builds don't float to new PyAV releases. av >= 17 ships a `_core` extension linking all FFmpeg DLLs incl. avdevice, which needs AVICAP32.dll — missing on GitHub Windows Server runners. `import av` then fails at build time and PyInstaller ships an incomplete av bundle (the spec hard-fails on this now)
-azure-cognitiveservices-speech==1.50.0
 backports-tarfile>=1.0.0
 edge-tts==7.2.8
 elevenlabslib==0.32.1

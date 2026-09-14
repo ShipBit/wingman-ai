@@ -205,21 +205,15 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
     no provider rebuild — so it can be unit-tested in isolation. Provider switching is
     deliberately NOT handled here; this only ever touches the active provider.
     """
-    from api.enums import TtsProvider, WingmanProTtsProvider
+    from api.enums import TtsProvider
 
     provider = config.features.tts_provider
 
     if provider == TtsProvider.WINGMAN_PRO:
-        # Wingman Pro TTS is only ever Azure or Inworld (per WingmanProTtsProvider).
-        subprovider = config.wingman_pro.tts_provider
-        if subprovider == WingmanProTtsProvider.AZURE:
-            config.azure.tts.voice = voice
-            return voice, "Wingman Pro / Azure TTS"
-        if subprovider == WingmanProTtsProvider.INWORLD:
-            config.inworld.voice_id = voice
-            config.inworld.output_streaming = False
-            return voice, "Wingman Pro / Inworld"
-        return None
+        # The subscription has one voice provider, Inworld.
+        config.inworld.voice_id = voice
+        config.inworld.output_streaming = False
+        return voice, "Wingman Pro / Inworld"
     if provider == TtsProvider.OPENAI:
         config.openai.tts_voice = voice
         return getattr(voice, "value", voice), "OpenAI"
@@ -227,9 +221,6 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
         config.elevenlabs.voice = voice
         config.elevenlabs.output_streaming = False
         return getattr(voice, "name", None) or getattr(voice, "id", voice), "Elevenlabs"
-    if provider == TtsProvider.AZURE:
-        config.azure.tts.voice = voice
-        return voice, "Azure TTS"
     if provider == TtsProvider.XVASYNTH:
         config.xvasynth.voice = voice
         return getattr(voice, "voice_name", voice), "XVASynth"
@@ -824,7 +815,6 @@ class SkillTts:
         mapping = {
             TtsProvider.OPENAI: lambda: config.openai.tts_voice,
             TtsProvider.ELEVENLABS: lambda: config.elevenlabs.voice,
-            TtsProvider.AZURE: lambda: config.azure.tts.voice,
             TtsProvider.EDGE_TTS: lambda: config.edge_tts.voice,
             TtsProvider.XVASYNTH: lambda: config.xvasynth.voice,
             TtsProvider.HUME: lambda: config.hume.voice,
@@ -881,7 +871,7 @@ class SkillTts:
                 except Exception:
                     return []
 
-        # Everything else (OpenAI, ElevenLabs, Azure, Hume, Inworld, OpenAI-compatible,
+        # Everything else (OpenAI, ElevenLabs, Hume, Inworld, OpenAI-compatible,
         # XVASynth) needs a secret and/or network call we don't make here.
         return []
 

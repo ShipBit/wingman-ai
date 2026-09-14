@@ -2,11 +2,10 @@ from typing import Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
-    AzureApiVersion,
-    AzureRegion,
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
+    LocalAiMode,
     McpTransportType,
     CustomPropertyType,
     TtsVoiceGender,
@@ -250,41 +249,6 @@ class ParakeetSttConfig(BaseModel):
 
 class ParakeetTranscript(BaseModel):
     text: str
-
-
-class AzureInstanceConfig(BaseModel):
-    api_base_url: str
-    """https://xxx.openai.azure.com/"""
-
-    api_version: AzureApiVersion
-    """The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference"""
-
-    deployment_name: str
-    """The deployment name e.g. 'whisper'"""
-
-
-class AzureTtsConfig(BaseModel):
-    region: AzureRegion
-    voice: str
-    output_streaming: bool
-
-
-class AzureSttConfig(BaseModel):
-    region: AzureRegion
-    languages: list[str]
-
-
-class AzureConfig(BaseModel):
-    """Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
-
-    If you configured some providers above to use Azure, you need to provide your Azure settings here.
-    Please also provide your Azure API keys in the secrets.yaml.
-    """
-
-    whisper: AzureInstanceConfig
-    conversation: AzureInstanceConfig
-    tts: AzureTtsConfig
-    stt: AzureSttConfig
 
 
 class ElevenlabsLanguage(BaseModel):
@@ -560,13 +524,24 @@ class LocalLlmConfig(BaseModel):
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    conversation_deployment: str
-    # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
+
+    conversation_deployment: str = ""
+    """Gateway id of the chat model, or empty to follow the plan's default.
+
+    Empty is the normal case. The backend resolves it to whatever the plan lists
+    as default at that moment, so changing the default in /admin reaches every
+    user without a release and without a migration. A concrete id here is a
+    deliberate pick by the user; if the plan stops offering it, the backend
+    serves its default instead of failing.
+    """
+
+    languages: list[str] = ["en-US"]
+    """Languages the cloud transcription may auto-detect, as BCP-47 tags."""
 
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    region: str
+    """Wingman backend. One region, so there is no endpoint to choose."""
 
 
 class SoundConfig(BaseModel):
@@ -599,7 +574,11 @@ class VoiceActivationSettings(BaseModel):
 
     stt_provider: VoiceActivationSttProvider
 
-    azure: AzureSttConfig
+    languages: list[str]
+    """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
+    en-US. Used by the Wingman backend; the local providers have their own
+    language settings."""
+
     whispercpp: WhispercppSettings
     fasterwhisper: FasterWhisperSettings
     parakeet: ParakeetSettings
@@ -1096,7 +1075,6 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     hume: HumeConfig
     inworld: InworldConfig
-    azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     pocket_tts: PocketTTSConfig
     whispercpp: WhispercppSttConfig
@@ -1271,19 +1249,38 @@ class MemorySuiteRequest(BaseModel):
 
 
 class LlamaCppSettings(BaseModel):
-    run_locally: bool = False
+    mode: LocalAiMode = LocalAiMode.CLOUD
+    """Where the support model runs: on our backend, on this machine, or on a
+    llama-server the user runs elsewhere. Replaced the old `run_locally` flag,
+    which could only say local or remote."""
+    support_cloud_model: str = ""
+    """Gateway id of the cloud support model, empty means the plan's default.
+
+    Deliberately free text rather than an enum: the list lives in the backend and
+    changes without a Wingman release. An id the plan no longer offers is not an
+    error — the backend answers with the plan default and says so."""
     gpu_backend: str = "cpu"
     """GPU backend for llama-server: 'cpu' (default), 'vulkan' (works on all GPUs), 'cuda' (NVIDIA only, fastest)."""
     support_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int
-    """Context window size for the support model. Minimum 2048."""
+    """Context window size for the local support model. Minimum 2048."""
     n_threads: int
     """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
     support_remote_host: str
     support_remote_port: int
     embed_remote_host: str
     embed_remote_port: int
+
+    @property
+    def run_locally(self) -> bool:
+        """Whether llama.cpp runs on this machine.
+
+        True for LOCAL, and also for CLOUD: the embedding model stays here even
+        when the support model does not, because the vector database it feeds is
+        local and vectors from a different model would not be comparable.
+        """
+        return self.mode != LocalAiMode.SERVER
 
 
 class SettingsConfig(BaseModel):

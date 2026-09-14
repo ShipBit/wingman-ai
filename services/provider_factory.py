@@ -127,24 +127,6 @@ class ProviderFactory:
 
             groq = OpenAi(api_key=api_key, base_url=self._config.groq.endpoint)
             return GroqStt(openai_instance=groq)
-        elif stt_enum == SttProvider.AZURE:
-            api_key = await self._retrieve_secret("azure", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAiAzure, AzureWhisperStt
-
-            return AzureWhisperStt(
-                azure_instance=OpenAiAzure(), api_key=api_key, config=self._config
-            )
-        elif stt_enum == SttProvider.AZURE_SPEECH:
-            api_key = await self._retrieve_secret("azure", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAiAzure, AzureSpeechStt
-
-            return AzureSpeechStt(
-                azure_instance=OpenAiAzure(), api_key=api_key, config=self._config
-            )
         elif stt_enum == SttProvider.WINGMAN_PRO:
             from providers.wingman_subscription import (
                 WingmanSubscription,
@@ -214,15 +196,6 @@ class ProviderFactory:
                 base_url=self._config.openai_compatible_tts.base_url,
             )
             return OpenAiCompatibleTtsAdapter(tts_instance=tts, config=self._config)
-        elif tts_enum == TtsProvider.AZURE:
-            api_key = await self._retrieve_secret("azure", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAiAzure, AzureTts
-
-            return AzureTts(
-                azure_instance=OpenAiAzure(), api_key=api_key, config=self._config
-            )
         elif tts_enum == TtsProvider.XVASYNTH:
             from providers.xvasynth import XVASynthTts
 
@@ -316,15 +289,6 @@ class ProviderFactory:
                     base_url=self._config.local_llm.endpoint,
                 )
             return LocalLlm(openai_instance=local_llm, config=self._config)
-        elif llm_enum == ConversationProvider.AZURE:
-            api_key = await self._retrieve_secret("azure", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAiAzure, AzureLlm
-
-            return AzureLlm(
-                azure_instance=OpenAiAzure(), api_key=api_key, config=self._config
-            )
         elif llm_enum == ConversationProvider.WINGMAN_PRO:
             from providers.wingman_subscription import (
                 WingmanSubscription,

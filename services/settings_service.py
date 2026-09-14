@@ -274,6 +274,9 @@ class SettingsService:
 
         # rest
         self.config_manager.settings_config.wingman_pro = settings.wingman_pro
+        if self.local_ai_service:
+            # The cloud support model talks to whatever base_url this holds.
+            self.local_ai_service.update_subscription(settings.wingman_pro)
         self.config_manager.settings_config.debug_mode = settings.debug_mode
         self.config_manager.settings_config.streamer_mode = settings.streamer_mode
 

@@ -2,6 +2,7 @@
 
 import json
 import random
+import re
 import uuid
 from typing import TYPE_CHECKING, Callable, Mapping, Optional
 
@@ -19,6 +20,21 @@ if TYPE_CHECKING:
     from api.interface import CommandConfig, SettingsConfig, WingmanConfig
 
 printr = Printr()
+
+# The note appended to a trimmed tool response, and the pattern that reads it
+# back. Trimming parses its own note so it can tell two cases apart: this message
+# is already at or below the limit we want (skip it, rewriting it would only
+# break the cache), or it was trimmed to a larger limit and now has to come down
+# further. The recorded original size survives every later pass, so the note
+# keeps saying how big the response really was.
+_TRIM_NOTE = (
+    "\n\n[...trimmed from ~{original} to ~{limit} tokens for conversation "
+    "history. Full response was processed.]"
+)
+_TRIM_NOTE_RE = re.compile(
+    r"\n\n\[\.\.\.trimmed from ~(\d+) to ~(\d+) tokens for conversation "
+    r"history\. Full response was processed\.\]$"
+)
 
 
 class ConversationManager:
@@ -171,41 +187,71 @@ class ConversationManager:
 
         return False
 
+    def _last_user_index(self) -> int:
+        """Index of the most recent user message, or -1 if there is none."""
+        for i in range(len(self.messages) - 1, -1, -1):
+            if self.get_message_role(self.messages[i]) == "user":
+                return i
+        return -1
+
     async def trim_tool_responses(
         self,
         max_tokens: int = 500,
+        fresh_max_tokens: int = 4000,
         is_condensing: bool = False,
     ):
-        """Trim oversized tool responses in conversation history.
+        """Shrink bulk tool output that the conversation has moved past.
 
-        Called after the LLM has finished processing a turn with tool calls.
-        The LLM already had full access to the data; this just prevents stale
-        bulk data from inflating the context on subsequent turns.
+        A skill can hand back a 78,000-token table. The model needs it once, to
+        answer; after that it sits in the history and every later turn pays for
+        it again.
 
-        If significant trimming occurs, broadcasts a condensation notification
-        so the client UI can display a summary indicator.
+        Tool responses from the current turn keep up to ``fresh_max_tokens``.
+        They are the ones the pilot is still talking about: asked "what is at
+        Lorville?" and then "which of those is cheapest?", the follow-up needs
+        the table, not the first 500 tokens of it. Once the next user message
+        arrives the response drops to ``max_tokens``.
+
+        The one-turn delay is nearly free for prompt caching. Rewriting a
+        message invalidates the provider's cache from that point on, so what it
+        costs is whatever comes *after* it — here, one assistant answer. Trimming
+        a message near the front of the history would be the expensive case.
+
+        A response already trimmed to this limit or a smaller one is left alone.
+        Without that check every call re-trimmed it: the note adds about 20
+        tokens, which puts the message back over the limit, so it was truncated
+        and re-noted on each of the four calls per turn until it converged. Each
+        rewrite broke the cache prefix for no gain.
 
         Args:
-            max_tokens: Maximum token count per tool response before trimming.
+            max_tokens: Cap for tool responses older than the current turn.
+            fresh_max_tokens: Cap for tool responses from the current turn.
             is_condensing: Whether condensation is currently running (suppresses
                 broadcast to avoid interfering with its own cycle).
         """
         total_tokens_saved = 0
-        for msg in self.messages:
+        fresh_from = self._last_user_index()
+
+        for index, msg in enumerate(self.messages):
             if self.get_message_role(msg) != "tool":
                 continue
             content = msg.get("content", "")
             if not content:
                 continue
-            token_count = count_tokens(content)
-            if token_count <= max_tokens:
+
+            limit = fresh_max_tokens if index > fresh_from >= 0 else max_tokens
+            note = _TRIM_NOTE_RE.search(content)
+            if note and int(note.group(2)) <= limit:
                 continue
-            total_tokens_saved += token_count - max_tokens
-            trimmed = truncate_to_tokens(content, max_tokens)
-            msg["content"] = (
-                f"{trimmed}\n\n[...trimmed from ~{token_count} to "
-                f"~{max_tokens} tokens for conversation history. "
-                f"Full response was processed.]"
+
+            token_count = count_tokens(content)
+            if token_count <= limit:
+                continue
+
+            total_tokens_saved += token_count - limit
+            original = int(note.group(1)) if note else token_count
+            msg["content"] = truncate_to_tokens(content, limit) + _TRIM_NOTE.format(
+                original=original, limit=limit
             )
 
         # Notify the client when significant trimming occurs so the UI can
@@ -324,9 +370,12 @@ class ConversationManager:
                 self._config.features.conversation_provider
                 == ConversationProvider.OPENAI
             ) or (
+                # Wingman Pro serves OpenAI models through the gateway, so the
+                # tool call ids are OpenAI-shaped. This used to sniff the model
+                # name for "gpt", which stopped working when the config started
+                # holding an alias ("default", "fast") instead.
                 self._config.features.conversation_provider
                 == ConversationProvider.WINGMAN_PRO
-                and "gpt" in self._config.wingman_pro.conversation_deployment.lower()
             ):
                 tool_id = f"call_{str(uuid.uuid4()).replace('-', '')}"
             elif (

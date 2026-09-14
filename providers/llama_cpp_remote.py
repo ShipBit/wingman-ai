@@ -183,6 +183,20 @@ class LlamaCppRemote:
         except Exception:
             return False
 
+    def embed_is_ready(self) -> bool:
+        """The same check against the embedding server.
+
+        Both run on their own host and port, so one can be up while the other
+        is down. Answering for embeddings by asking the support server made the
+        embed test report "not ready" whenever support was unreachable, however
+        healthy the embedding server was.
+        """
+        try:
+            self._embed_client.models.list()
+            return True
+        except Exception:
+            return False
+
     @staticmethod
     def _deduplicate_lines(text: str) -> str:
         """Remove duplicate lines from model output to fix small-model repetition loops."""

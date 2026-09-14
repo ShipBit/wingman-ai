@@ -1,6 +1,12 @@
 import os
 import subprocess
 
+# The Azure Speech SDK used to be bundled here. It went out with the provider on
+# 2026-09-11 and is no longer in requirements.txt, but this line survived —
+# harmless on a developer machine where the old package is still in the venv,
+# and a hard failure in CI, where the venv is built fresh and PyInstaller aborts
+# on an --add-data source that does not exist.
+
 cmd = [
     "pyinstaller",
     "main.py",  # your main file
@@ -11,21 +17,6 @@ cmd = [
     "assets/wingman-ai.ico",
     "--paths",
     f"{os.path.join('venv', 'lib', 'python3.11', 'site-packages')}",  # adapted with venv/lib/python3.11/site-packages
-    "--add-data",
-    os.pathsep.join(
-        [
-            os.path.join(
-                "venv",
-                "lib",
-                "python3.11",
-                "site-packages",
-                "azure",
-                "cognitiveservices",
-                "speech",
-            ),
-            "azure/cognitiveservices/speech",
-        ]
-    ),
     "--add-data",
     os.pathsep.join(["assets", "assets"]),
     "--add-data",

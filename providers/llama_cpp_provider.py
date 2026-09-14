@@ -310,10 +310,23 @@ class LlamaCppProvider:
             return True
         return self.model_manager.download_llama_server_sync()
 
+    def _running(self, process: Optional[subprocess.Popen]) -> bool:
+        """Whether a handle still points at a live process.
+
+        `is not None` is not enough: a server that crashed, was killed, or lost
+        its port to a leftover from an earlier run leaves the handle behind. The
+        loaders below used to read that as "already running" and never start it
+        again — which showed up as memory silently not working after switching
+        the support model from Local back to Cloud.
+        """
+        return process is not None and process.poll() is None
+
     def load_support_model(self) -> bool:
         """Start the support model server. Returns True on success."""
-        if self._support_process is not None:
+        if self._running(self._support_process):
             return True
+        self._support_process = None
+        self._support_client = None
 
         if not self._ensure_binary():
             return False
@@ -378,8 +391,10 @@ class LlamaCppProvider:
 
     def load_embed_model(self) -> bool:
         """Start the embedding server. Returns True on success."""
-        if self._embed_process is not None:
+        if self._running(self._embed_process):
             return True
+        self._embed_process = None
+        self._embed_client = None
 
         if not self._ensure_binary():
             return False
@@ -457,33 +472,48 @@ class LlamaCppProvider:
         gc.collect()
 
     def update_settings(self, new_settings: LlamaCppSettings):
-        """Update settings. If run_locally changed or models/backend changed, handle restart."""
+        """Update settings, stopping or restarting the servers as needed."""
+        from api.enums import LocalAiMode
+
         old = self.settings
         self.settings = new_settings
         self.model_manager.update_settings(new_settings)
 
-        if old.run_locally and not new_settings.run_locally:
+        if new_settings.mode == LocalAiMode.SERVER:
             self.unload_models()
-        elif new_settings.run_locally:
-            # Backend change requires full restart of both servers
-            backend_changed = old.gpu_backend != new_settings.gpu_backend
-            support_changed = backend_changed or (
-                old.support_model != new_settings.support_model
-                or old.n_ctx != new_settings.n_ctx
-                or old.n_threads != new_settings.n_threads
-            )
-            if support_changed and self._support_process is not None:
-                self._stop_process(self._support_process)
-                self._support_process = None
-                self._support_client = None
-            embed_changed = backend_changed or (
-                old.embed_model != new_settings.embed_model
-                or old.n_threads != new_settings.n_threads
-            )
-            if embed_changed and self._embed_process is not None:
-                self._stop_process(self._embed_process)
-                self._embed_process = None
-                self._embed_client = None
+            return
+
+        # Cloud mode keeps the embedding server and drops the support server:
+        # the vector database still needs embeddings computed here, but nothing
+        # is going to ask this machine for a summary any more.
+        if (
+            new_settings.mode == LocalAiMode.CLOUD
+            and self._support_process is not None
+        ):
+            self._stop_process(self._support_process)
+            self._support_process = None
+            self._support_client = None
+
+        # A changed backend needs both servers restarted; a changed model or
+        # thread count only the one it belongs to.
+        backend_changed = old.gpu_backend != new_settings.gpu_backend
+        support_changed = backend_changed or (
+            old.support_model != new_settings.support_model
+            or old.n_ctx != new_settings.n_ctx
+            or old.n_threads != new_settings.n_threads
+        )
+        if support_changed and self._support_process is not None:
+            self._stop_process(self._support_process)
+            self._support_process = None
+            self._support_client = None
+        embed_changed = backend_changed or (
+            old.embed_model != new_settings.embed_model
+            or old.n_threads != new_settings.n_threads
+        )
+        if embed_changed and self._embed_process is not None:
+            self._stop_process(self._embed_process)
+            self._embed_process = None
+            self._embed_client = None
 
     def support(
         self,
@@ -583,8 +613,22 @@ class LlamaCppProvider:
             return None
 
     def is_ready(self) -> bool:
-        """Check if server processes are running."""
-        return self._support_process is not None or self._embed_process is not None
+        """Check if any server process is running."""
+        return self._running(self._support_process) or self._running(self._embed_process)
+
+    def support_is_ready(self) -> bool:
+        """Whether the support model is loaded here.
+
+        Distinct from :meth:`is_ready` since cloud mode runs the embedding server
+        on its own — "a process is up" no longer implies "the support model is
+        up", and a caller that confuses the two sends a summarisation request to
+        an embedding server.
+        """
+        return self._running(self._support_process)
+
+    def embed_is_ready(self) -> bool:
+        """Whether the embedding model is loaded here."""
+        return self._running(self._embed_process)
 
     @staticmethod
     def _deduplicate_lines(text: str) -> str:

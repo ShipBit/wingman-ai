@@ -78,12 +78,6 @@ class Wingman:
     is delegated to extracted service objects.
     """
 
-    AZURE_SERVICES = {
-        "tts": None,  # kept for potential future use
-        "whisper": None,
-        "conversation": None,
-    }
-
     def __init__(
         self,
         name: str,
@@ -561,7 +555,7 @@ class Wingman:
             tool_timings.extend(iteration_timings)
 
             if instant_response:
-                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -580,7 +574,7 @@ class Wingman:
                 llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
                 if completion is None:
-                    await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                    await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                     self.metrics.add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
@@ -605,7 +599,7 @@ class Wingman:
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
-                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -618,7 +612,7 @@ class Wingman:
                 )
                 return None, None, None, interrupt
 
-        await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+        await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
 
         self.metrics.add_benchmark_snapshot(
             benchmark, "LLM Processing", llm_processing_time_ms
@@ -866,8 +860,16 @@ class Wingman:
         return self.context_builder.get_last_context()
 
     async def add_context(self, messages):
+        """Put the system prompt in front and the memories behind.
+
+        The order is the whole point: in front goes what does not change over a
+        session (backstory, skills, instructions), behind it what changes on
+        every turn. Only then can the provider reuse the prefix, and in a long
+        conversation that prefix is almost the entire request.
+        """
         context = await self.get_context()
         messages.insert(0, {"role": "system", "content": context})
+        self.context_builder.attach_memory(messages)
 
     # ───────────────── TTS / play_to_user ───────────────── #
 
