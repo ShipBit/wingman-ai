@@ -15,6 +15,7 @@ The rule is always the same — an unknown value becomes a known one, and the
 substitution is logged. Nothing here ever raises.
 """
 
+import types
 from enum import Enum
 from typing import Any, Union, get_args, get_origin
 
@@ -22,9 +23,20 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 
+def _is_union(origin: Any) -> bool:
+    """True for both spellings of a union.
+
+    ``Optional[X]`` and ``Union[X, None]`` have ``typing.Union`` as their origin.
+    ``X | None`` does not — since Python 3.10 that is a ``types.UnionType``, a
+    different object. Checking only for ``typing.Union`` silently skips every
+    field written in the pipe form, which is the form anyone adds today.
+    """
+    return origin is Union or origin is types.UnionType
+
+
 def _unwrap_optional(annotation: Any) -> Any:
-    """`Optional[X]` and `X | None` both arrive as a Union with NoneType."""
-    if get_origin(annotation) is Union:
+    """`Optional[X]` and `X | None` both arrive as a union with NoneType."""
+    if _is_union(get_origin(annotation)):
         args = [a for a in get_args(annotation) if a is not type(None)]
         if len(args) == 1:
             return args[0]
@@ -142,7 +154,7 @@ def sanitize(
 
         # A union of several real types, not just `X | None`. `_unwrap_optional`
         # left it alone, so pick the branch that fits what is actually stored.
-        if origin is Union:
+        if _is_union(origin):
             plain, listed = _model_candidates(annotation)
             if isinstance(value, dict) and plain:
                 match = _best_match(plain, value)

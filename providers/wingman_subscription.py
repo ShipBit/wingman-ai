@@ -215,7 +215,7 @@ class WingmanSubscription:
                     timeout=self.timeout,
                     stream=True,
                 ) as response:
-                    if response.status_code == 403:
+                    if response.status_code in (401, 403):
                         self.send_unauthorized_error(response)
                         return None
                     else:
@@ -270,7 +270,7 @@ class WingmanSubscription:
                 json=data,
                 timeout=self.timeout,
             )
-            if response.status_code == 403:
+            if response.status_code in (401, 403):
                 self.send_unauthorized_error(response)
                 return
             else:
@@ -297,7 +297,7 @@ class WingmanSubscription:
             timeout=self.timeout,
         )
         if response is not None:
-            if response.status_code == 403:
+            if response.status_code in (401, 403):
                 self.send_unauthorized_error(response)
                 return
             else:
@@ -345,7 +345,7 @@ class WingmanSubscription:
             timeout=self.timeout,
             headers=self._get_headers(),
         )
-        if response.status_code == 403:
+        if response.status_code in (401, 403):
             self.send_unauthorized_error(response)
             return []
         else:
@@ -370,15 +370,6 @@ class WingmanSubscription:
         return {
             "Authorization": f"Bearer {token}",
         }
-
-    def __resolve_gender(self, enum_value: int):
-        if enum_value == 1:
-            return "Female"
-        if enum_value == 2:
-            return "Male"
-        if enum_value == 3:
-            return "Neutral"
-        return "Unknown"
 
     def __remove_nones(self, obj):
         """Recursive function to remove None values from a data structure."""
@@ -410,8 +401,7 @@ class WingmanSubscriptionStt(SttInterface):
         result = self._ws.transcribe(filename=filename, languages=languages)
         if result is None:
             return None
-        text = result.get("_text") if isinstance(result, dict) else result.text
-        return Transcript(text=text) if text else None
+        return Transcript(text=result.text) if result.text else None
 
 
 @tts_provider(TtsProvider.WINGMAN_PRO)

@@ -35,6 +35,14 @@ class WingmanSupport:
         self.timeout = 180
         """Long on purpose: squeezing a 78k-token tool response takes about five
         seconds on gemini-2.5-flash-lite and seventeen on qwen3.7-flash."""
+        self._reported_status: Optional[int] = None
+        """The refusal we already told the user about.
+
+        One turn makes several support calls — memory extraction, condensation,
+        tool-response compression. Without this, a used-up allowance fires a
+        toast on each of them, several times per turn, for the rest of the
+        month. Cleared on the next answer that works, so a genuinely new problem
+        is reported again."""
 
     def update_settings(self, new_settings: LlamaCppSettings):
         self.settings = new_settings
@@ -108,6 +116,9 @@ class WingmanSupport:
         if response.status_code == 403:
             # Signed in, but this plan has no support lane. Sending them to the
             # login screen would be a dead end — say what is missing instead.
+            if self._reported_status == 403:
+                return SupportResult(text=None)
+            self._reported_status = 403
             message = ""
             try:
                 message = (response.json().get("message") or "").strip()
@@ -133,6 +144,9 @@ class WingmanSupport:
         if response.status_code == 429:
             # The backend's sentence knows the plan; ours only knows there is a
             # limit. Either way, say what still works: the local model does.
+            if self._reported_status == 429:
+                return SupportResult(text=None)
+            self._reported_status = 429
             message = ""
             try:
                 message = (response.json().get("message") or "").strip()
@@ -153,6 +167,7 @@ class WingmanSupport:
             )
             return SupportResult(text=None)
 
+        self._reported_status = None
         try:
             body = response.json()
             choice = body["choices"][0]

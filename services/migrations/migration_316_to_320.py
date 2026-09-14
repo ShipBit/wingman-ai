@@ -83,6 +83,9 @@ KNOWN_MALE = (
     "conrad", "bernd", "christoph", "kasper", "killian", "klaus", "ralf",
     "guy", "davis", "tony", "jason", "brandon", "christopher", "eric",
     "jacob", "brian", "henri", "claude", "alvaro", "ryan", "william",
+    # Andrew was the Clippy template's voice, one of the three Azure voices
+    # 3.1.6 shipped. Without it Clippy users come out with a female default.
+    "andrew",
 )
 
 
@@ -249,14 +252,36 @@ class Migration316To320(BaseMigration):
                 if isinstance(openai_section, dict):
                     old_voice = openai_section.get("tts_voice")
 
-            new_voice = voice_to_inworld(old_voice)
-            inworld_section = dict(config.get("inworld") or {})
-            inworld_section["voice_id"] = new_voice
-            config["inworld"] = inworld_section
-            self.log(
-                f"{label}: speech output '{tts}' -> 'inworld', "
-                f"voice {old_voice or '—'} -> {new_voice}"
+            # Only touch the shared `inworld` section when this config actually
+            # speaks through Wingman Pro. `tts_provider: azure` was the shipped
+            # 3.1.6 default, so it is set in nearly every file — including those
+            # of people who drive Inworld with their own key and picked a voice
+            # there. Overwriting that would silently replace their choice with
+            # one mapped from an Azure voice they never used.
+            #
+            # A per-wingman file without `features.tts_provider` inherits from
+            # defaults.yaml, which is migrated in the same run, so skipping it
+            # here loses nothing.
+            features_now = config.get("features")
+            uses_pro_tts = (
+                isinstance(features_now, dict)
+                and features_now.get("tts_provider") == "wingman_pro"
             )
+            if uses_pro_tts:
+                new_voice = voice_to_inworld(old_voice)
+                inworld_section = dict(config.get("inworld") or {})
+                inworld_section["voice_id"] = new_voice
+                config["inworld"] = inworld_section
+                self.log(
+                    f"{label}: speech output '{tts}' -> 'inworld', "
+                    f"voice {old_voice or '—'} -> {new_voice}"
+                )
+            else:
+                self.log(
+                    f"{label}: Wingman Pro speech output '{tts}' -> 'inworld'; "
+                    f"the inworld voice is left as it is, this config does not "
+                    f"speak through Wingman Pro"
+                )
 
         # Anything pointing at Azure, including a user's own Azure account.
         features = dict(config.get("features") or {})
@@ -282,8 +307,11 @@ class Migration316To320(BaseMigration):
             if langs:
                 pro["languages"] = langs
                 self.log(f"{label}: transcription languages kept: {', '.join(langs)}")
-        if has_pro:
-            pro.setdefault("languages", ["en-US"])
+        # No default here on purpose. WingmanProConfig.languages already defaults
+        # to ["en-US"], and writing it into a per-wingman file would pin that
+        # wingman: the config diff keeps any list that differs from the default
+        # file, so a German user whose defaults say [de-DE, en-US] would end up
+        # with one wingman stuck on English.
 
         # Everything a config can hold here is wrong now: Azure deployment names
         # ("gpt-4o-mini"), the 3.1 aliases ("default", "fast") and anything

@@ -1568,9 +1568,7 @@ class WingmanCore(WebSocketUser):
                 languages=self.settings_service.settings.voice_activation.languages,
             )
             if transcription:
-                text = getattr(transcription, "text", None) or (
-                    transcription.get("_text") if isinstance(transcription, dict) else None
-                )
+                text = transcription.text
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
 
             def filter_and_clean_text(text):
@@ -3093,8 +3091,17 @@ class WingmanCore(WebSocketUser):
 
     # GET /settings/local-ai/playground/memory-scenarios
     async def playground_list_memory_scenarios(self) -> list[dict]:
-        """List the simulated conversations the Persistent Memory test suite can run."""
-        from evals.memory_suite.scenarios import SCENARIOS
+        """List the simulated conversations the Persistent Memory test suite can run.
+
+        The suite lives in the internal eval harness, which is not part of a
+        packaged build — it was never listed in ``WingmanAiCore.spec``. Running
+        from source with the harness present, this works; otherwise it returns
+        an empty list rather than a 500, and the Lab shows nothing to run.
+        """
+        try:
+            from evals.memory_suite.scenarios import SCENARIOS
+        except ImportError:
+            return []
 
         return [
             {
@@ -3124,9 +3131,18 @@ class WingmanCore(WebSocketUser):
                 "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
             }
 
-        from evals.memory_suite.harness import run_scenario
-        from evals.memory_suite.profiles import DEFAULT
-        from evals.memory_suite.scenarios import get_scenarios
+        try:
+            from evals.memory_suite.harness import run_scenario
+            from evals.memory_suite.profiles import DEFAULT
+            from evals.memory_suite.scenarios import get_scenarios
+        except ImportError:
+            return {
+                "success": False,
+                "error": (
+                    "The memory test suite is not part of this build. It ships "
+                    "only with a source checkout of Wingman AI Core."
+                ),
+            }
 
         matches = get_scenarios(ids=[request.scenario_id]) if request.scenario_id else []
         if not matches:
