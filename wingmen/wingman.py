@@ -555,7 +555,7 @@ class Wingman:
             tool_timings.extend(iteration_timings)
 
             if instant_response:
-                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -574,7 +574,7 @@ class Wingman:
                 llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
                 if completion is None:
-                    await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                    await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                     self.metrics.add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
@@ -599,7 +599,7 @@ class Wingman:
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
-                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -612,7 +612,7 @@ class Wingman:
                 )
                 return None, None, None, interrupt
 
-        await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
+        await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
 
         self.metrics.add_benchmark_snapshot(
             benchmark, "LLM Processing", llm_processing_time_ms

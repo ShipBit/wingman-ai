@@ -125,6 +125,41 @@ For a model running on the pilot's own machine at zero cost, losing one
 passing mention per six long sessions is an acceptable trade. No need to drop
 it and no need for a separate prompt for it — which was the open question.
 
+## Prompt and framing are one unit
+
+The system prompt is only half of what the model reads. The condenser wraps the
+conversation in a header and a suffix, and for a while that suffix still said:
+
+> Now list every fact from the conversation above as bullet points.
+> Start from the FIRST message, end at the LAST. Include all names,
+> preferences, and creative content.
+
+That is the transcript instruction again, sitting *after* the conversation —
+the strongest position in the prompt — while the system prompt asked for a short
+fact sheet. The first bake-off did not catch it because the eval built its own
+framing and left the suffix out. The numbers were real; they just were not
+measuring what production sent.
+
+Both now come from the same constants in `services/conversation_condenser.py`,
+which `prompt_variants.user_prompt()` imports. The suffix is down to one line —
+the rule that no secret, API key, credential, password or token may ever enter a
+summary, which belongs next to the text rather than in a prompt file anyone can
+swap out in the eval.
+
+Rerun with the corrected framing: `qwen3.7-flash` 1.000, `gpt-4.1-mini` 1.000,
+`gemini-2.5-flash-lite` 0.972 on one pass and 1.000 on three repeats of the case
+it dropped. The suffix costs nothing measurable.
+
+## Read single runs with the noise in mind
+
+Sampling runs at temperature 0.3, so one case can swing. `long_session` is the
+one that swings: it hinges on "Lorville", named once about twenty messages
+before the end, and models drop it at the edge of their attention. Four runs of
+`gemini-2.5-flash-lite` on that case scored 0.833, 1.000, 1.000, 1.000.
+
+A single 0.833 on `long_session` is noise. A model that scores low across
+several cases, or leaks tool names, is a real result.
+
 ## Running this again
 
 Before a new model goes into a plan:

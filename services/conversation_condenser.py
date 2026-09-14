@@ -50,6 +50,39 @@ _CONDENSE_TIMEOUT = 120.0
 _MAX_CONVERSATION_TOKENS = 6_000
 _MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
+# The text wrapped around the conversation before it goes to the support model.
+#
+# These are module constants because ``evals/condense_suite`` imports them. The
+# system prompt and this framing are one unit — the model reads them together —
+# so measuring one without the other says nothing. They drifted apart once: the
+# system prompt was rewritten to ask for a short fact sheet while the suffix here
+# still said "list every fact ... include all names, preferences and creative
+# content", which is the instruction that produced summaries as long as their
+# source.
+CONDENSE_SUMMARY_HEADER = (
+    "EXISTING SUMMARY (incorporate and update — do not repeat verbatim):\n"
+)
+CONDENSE_CONVERSATION_HEADER = "CONVERSATION TO SUMMARIZE:\n"
+
+# The only rule that belongs here rather than in the prompt file: it is about
+# what must never leave the machine, and it has to hold for every prompt variant
+# anyone tries in the eval suite.
+CONDENSE_SUFFIX = (
+    "\n\n---\n"
+    "Never include secrets, API keys, credentials, passwords or tokens."
+)
+
+CONDENSE_MERGE_HEADER = "PARTIAL SUMMARIES TO MERGE:\n"
+CONDENSE_MERGE_SUFFIX = (
+    "\n\n---\n"
+    "Merge these into one bullet list in the same format. Drop duplicates."
+)
+
+
+def condense_chunk_header(part: int, total: int) -> str:
+    """Header for one chunk when the history does not fit in a single pass."""
+    return f"CONVERSATION TO SUMMARIZE (part {part}/{total}):\n"
+
 
 def find_cutoff(messages: list, keep_recent: int, role_of) -> int:
     """The index from which the history may be summarised.
@@ -337,7 +370,7 @@ class ConversationCondenser:
             existing_summary_section = ""
             if self._conversation.conversation_summary:
                 existing_summary_section = (
-                    "EXISTING SUMMARY (incorporate and update — do not repeat verbatim):\n"
+                    CONDENSE_SUMMARY_HEADER
                     + self._conversation.conversation_summary
                     + "\n\n"
                 )
@@ -346,13 +379,9 @@ class ConversationCondenser:
             budget = local_ai_service.get_token_budget(system_prompt)
 
             user_prompt_prefix = (
-                existing_summary_section + "CONVERSATION TO SUMMARIZE:\n"
+                existing_summary_section + CONDENSE_CONVERSATION_HEADER
             )
-            user_prompt_suffix = (
-                "\n\n---\n"
-                "Now list every fact from the conversation above as bullet points.\n"
-                "Start from the FIRST message, end at the LAST. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
-            )
+            user_prompt_suffix = CONDENSE_SUFFIX
             prefix_suffix_tokens = count_tokens(user_prompt_prefix) + count_tokens(
                 user_prompt_suffix
             )
@@ -553,8 +582,8 @@ class ConversationCondenser:
         for i, chunk in enumerate(chunks):
             user_prompt = (
                 f"{existing_summary_section if i == 0 else ''}"
-                f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
-                "---\nList every fact from the above as bullet points. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
+                f"{condense_chunk_header(i + 1, len(chunks))}{chunk}"
+                f"{CONDENSE_SUFFIX}"
             )
 
             # Safety: if chunk input exceeds budget, truncate chunk text
@@ -566,8 +595,8 @@ class ConversationCondenser:
                     chunk = truncate_to_tokens(chunk, safe_text_tokens)
                     user_prompt = (
                         f"{existing_summary_section if i == 0 else ''}"
-                        f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
-                        "---\nList every fact from the above as bullet points. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
+                        f"{condense_chunk_header(i + 1, len(chunks))}{chunk}"
+                        f"{CONDENSE_SUFFIX}"
                     )
                 await printr.print_async(
                     f"Chunk {i + 1}/{len(chunks)} exceeded context budget, truncated to fit.",
@@ -615,8 +644,8 @@ class ConversationCondenser:
         )
         merge_prompt = (
             f"{existing_summary_section}"
-            f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
-            "Merge these into a single coherent summary. Keep all key facts:"
+            f"{CONDENSE_MERGE_HEADER}{combined}"
+            f"{CONDENSE_MERGE_SUFFIX}"
         )
 
         # Safety: truncate combined summaries if they exceed budget
@@ -627,8 +656,8 @@ class ConversationCondenser:
                 combined = truncate_to_tokens(combined, safe_combined)
                 merge_prompt = (
                     f"{existing_summary_section}"
-                    f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
-                    "Merge these into a single coherent summary. Keep all key facts:"
+                    f"{CONDENSE_MERGE_HEADER}{combined}"
+                    f"{CONDENSE_MERGE_SUFFIX}"
                 )
             await printr.print_async(
                 f"Merge input exceeded context budget, truncated to fit.",

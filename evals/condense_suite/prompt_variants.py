@@ -116,12 +116,21 @@ VARIANTS = {
 
 
 def user_prompt(conversation_text: str, existing_summary: str = "") -> str:
-    """The user half, shaped like the one ``conversation_condenser`` builds."""
+    """The user half, built from the same constants production uses.
+
+    Imported rather than copied on purpose. A measured score only transfers to
+    production if the model saw the same text, and a hand-copied version of this
+    framing drifted out of sync with the condenser once already.
+    """
+    from services.conversation_condenser import (
+        CONDENSE_CONVERSATION_HEADER,
+        CONDENSE_SUFFIX,
+        CONDENSE_SUMMARY_HEADER,
+    )
+
     prefix = ""
     if existing_summary:
-        prefix = (
-            "EXISTING SUMMARY (incorporate and update — do not repeat verbatim):\n"
-            + existing_summary
-            + "\n\n"
-        )
-    return f"{prefix}CONVERSATION TO SUMMARISE:\n{conversation_text}"
+        prefix = CONDENSE_SUMMARY_HEADER + existing_summary + "\n\n"
+    return (
+        f"{prefix}{CONDENSE_CONVERSATION_HEADER}{conversation_text}{CONDENSE_SUFFIX}"
+    )
