@@ -182,5 +182,10 @@ pocket-tts-voices/
 .worktrees/
 docs/superpowers/**/**
 docs/backend-migration/**/**
+# Internal engineering tooling: measured model costs, candidate models
+# and the reasoning behind the catalogue.
+evals/
+# Local Serena config and cache.
+.serena/
 
 .claude/settings.json

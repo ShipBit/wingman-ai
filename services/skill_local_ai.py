@@ -56,8 +56,8 @@ class SamplingPreset(Enum):
     Attributes (temperature, top_p, top_k, presence_penalty):
         PRECISE:   (0.1, 0.95, 20, 0.5) — Extraction, structured data, JSON. Near
                    deterministic: at temp 0.6 the 2B drops/duplicates facts ~33%
-                   of the time; at 0.1 it is ~98% reliable (measured via
-                   evals/characterize_local_ai.py). Use for any parse/transform.
+                   of the time; at 0.1 it is ~98% reliable (measured in the
+                   internal eval suite). Use for any parse/transform.
         BALANCED:  (1.0, 0.95, 20, 1.5) — Summaries, condensation, paraphrasing.
         CREATIVE:  (1.0, 1.0, 20, 2.0) — Greetings, flavor text, roleplay, dialogue.
     """

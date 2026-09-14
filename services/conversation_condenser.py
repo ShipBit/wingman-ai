@@ -52,7 +52,7 @@ _MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
 # The text wrapped around the conversation before it goes to the support model.
 #
-# These are module constants because ``evals/condense_suite`` imports them. The
+# These are module constants because the internal eval suite imports them. The
 # system prompt and this framing are one unit — the model reads them together —
 # so measuring one without the other says nothing. They drifted apart once: the
 # system prompt was rewritten to ask for a short fact sheet while the suffix here
