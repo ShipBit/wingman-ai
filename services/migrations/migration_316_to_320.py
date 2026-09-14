@@ -194,6 +194,33 @@ class Migration316To320(BaseMigration):
     def migrate_wingman(self, old: dict) -> dict:
         return self._migrate_wingman_pro_section(dict(old), old.get("name", "wingman"))
 
+    # Was 3.1.6 als Standard mitbrachte, und was daraus wird. Angefasst wird
+    # nur, wer noch genau auf dem alten Wert steht — wer selbst etwas anderes
+    # eingestellt hat, behält es.
+    CONDENSE_DEFAULTS = {
+        "condense_max_messages": (50, 150),
+        "condense_keep_recent": (6, 12),
+    }
+
+    def _migrate_condense_defaults(self, features: dict, label: str) -> None:
+        """Zieht die Zusammenfassungs-Schwellen auf die neuen Standardwerte nach.
+
+        Der Auslöser für die Zusammenfassung hängt an zwei Zahlen: einer
+        Tokengrenze (steht in ``conversation_condenser``) und dieser
+        Nachrichtenzahl. Die Tokengrenze steigt in 3.2.0 von 16.000 auf 40.000,
+        weil der Verlauf seit dem Umbau des Prompts vom Anbieter
+        zwischengespeichert wird und ein längeres Gespräch damit kaum mehr
+        kostet. Bliebe ``condense_max_messages`` bei 50, würde die alte Zahl
+        weiterhin zuerst greifen und von der neuen Grenze käme nichts an.
+
+        ``condense_keep_recent`` von 6 auf 12: sechs Nachrichten sind drei
+        Wortwechsel, und danach klingt der Wingman kurz, als hätte er ausgesetzt.
+        """
+        for key, (was, becomes) in self.CONDENSE_DEFAULTS.items():
+            if features.get(key) == was:
+                features[key] = becomes
+                self.log(f"{label}: {key} {was} -> {becomes}")
+
     def _migrate_wingman_pro_section(self, config: dict, label: str) -> dict:
         # A per-wingman YAML only overrides the keys that differ from the
         # defaults, so most of them have no `wingman_pro` block at all. Bailing
@@ -235,6 +262,7 @@ class Migration316To320(BaseMigration):
         # Anything pointing at Azure, including a user's own Azure account.
         features = dict(config.get("features") or {})
         if features:
+            self._migrate_condense_defaults(features, label)
             if features.get("tts_provider") == "azure":
                 features["tts_provider"] = AZURE_TTS_REPLACEMENT
                 self.log(f"{label}: speech output 'azure' -> '{AZURE_TTS_REPLACEMENT}'")

@@ -31,8 +31,24 @@ _CONDENSE_TIMEOUT = 120.0
 # tokens, so this ceiling never binds and behaviour is unchanged. Cloud gets the
 # larger number because there is no reason to throw detail away early when the
 # model can hold it — each summarisation round loses something.
+#
+# Cloud stand bis 2026-09-14 auf 16.000, was bei dem Auslöser unten rund 8.300
+# echten Tokens entspricht — nach etwa einer Stunde Spielzeit die erste
+# Zusammenfassung, bei drei bis vier pro Sitzung. Das war eine Zahl aus der
+# Zeit, als der Verlauf jeden Zug zum vollen Preis mitging.
+#
+# Seit der Gedächtnisblock hinter dem Verlauf steht (context_builder), ist der
+# Verlauf ein stabiler Vorspann und wird vom Anbieter zwischengespeichert:
+# gemessen 10 von 10 Treffern mit 98 % Anteil, also ein Zehntel des Preises für
+# den wiederholten Teil. 40.000 kosten damit ungefähr so viel wie vorher 4.000
+# und geben rund zweieinhalb Stunden Gespräch, bevor etwas zusammengefasst wird.
+#
+# Nicht höher, aus drei Gründen: jeder Zug bezahlt den ganzen Verlauf, auch
+# gecacht; die Antwort wird ab irgendeinem Punkt nicht besser, nur langsamer;
+# und der pathologische Fall — eine 78k-Tokens-Tabelle aus einem Skill — soll
+# weiter gedeckelt bleiben.
 _MAX_CONVERSATION_TOKENS = 6_000
-_MAX_CONVERSATION_TOKENS_CLOUD = 16_000
+_MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
 
 class ConversationCondenser:

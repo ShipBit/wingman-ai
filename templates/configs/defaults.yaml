@@ -63,8 +63,8 @@ features:
   use_generic_instant_responses: false
   condense_conversation: true
   compress_tool_responses: true
-  condense_max_messages: 50
-  condense_keep_recent: 6
+  condense_max_messages: 150
+  condense_keep_recent: 12
   skill_max_input_tokens: 16000
 sound:
   effects: []
