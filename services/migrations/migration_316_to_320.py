@@ -194,27 +194,27 @@ class Migration316To320(BaseMigration):
     def migrate_wingman(self, old: dict) -> dict:
         return self._migrate_wingman_pro_section(dict(old), old.get("name", "wingman"))
 
-    # Was 3.1.6 als Standard mitbrachte, und was daraus wird. Angefasst wird
-    # nur, wer noch genau auf dem alten Wert steht — wer selbst etwas anderes
-    # eingestellt hat, behält es.
+    # What 3.1.6 shipped as the default, and what it becomes. Only a config
+    # still sitting on the old value is touched — anyone who set their own number
+    # keeps it.
     CONDENSE_DEFAULTS = {
         "condense_max_messages": (50, 150),
         "condense_keep_recent": (6, 12),
     }
 
     def _migrate_condense_defaults(self, features: dict, label: str) -> None:
-        """Zieht die Zusammenfassungs-Schwellen auf die neuen Standardwerte nach.
+        """Move the condensation thresholds to the new defaults.
 
-        Der Auslöser für die Zusammenfassung hängt an zwei Zahlen: einer
-        Tokengrenze (steht in ``conversation_condenser``) und dieser
-        Nachrichtenzahl. Die Tokengrenze steigt in 3.2.0 von 16.000 auf 40.000,
-        weil der Verlauf seit dem Umbau des Prompts vom Anbieter
-        zwischengespeichert wird und ein längeres Gespräch damit kaum mehr
-        kostet. Bliebe ``condense_max_messages`` bei 50, würde die alte Zahl
-        weiterhin zuerst greifen und von der neuen Grenze käme nichts an.
+        Two numbers decide when the conversation gets summarised: a token ceiling
+        (in ``conversation_condenser``) and this message count. The token ceiling
+        rises from 16,000 to 40,000 in 3.2.0, because the provider now caches the
+        history after the prompt was restructured, which makes a longer
+        conversation barely more expensive. If ``condense_max_messages`` stayed at
+        50, the old number would keep firing first and none of the new ceiling
+        would reach the user.
 
-        ``condense_keep_recent`` von 6 auf 12: sechs Nachrichten sind drei
-        Wortwechsel, und danach klingt der Wingman kurz, als hätte er ausgesetzt.
+        ``condense_keep_recent`` from 6 to 12: six messages are three exchanges,
+        and after that the wingman sounds like it briefly blacked out.
         """
         for key, (was, becomes) in self.CONDENSE_DEFAULTS.items():
             if features.get(key) == was:

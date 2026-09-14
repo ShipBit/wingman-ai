@@ -34,9 +34,9 @@ class ContextBuilder:
         self._wingman_name = wingman_name
         self._last_compiled_context: str = ""
         self._memory_recall_notified: bool = False
-        # Was ``build`` zuletzt an Erinnerungen gefunden hat. ``attach_memory``
-        # holt es hier ab; getrennt gehalten, weil es nicht in den System-Prompt
-        # gehört (siehe dort).
+        # What ``build`` last found in memory. ``attach_memory`` picks it up
+        # from here; kept separate because it does not belong in the system
+        # prompt (see there).
         self._pending_memory_context: str = ""
 
     async def build(
@@ -199,14 +199,14 @@ class ContextBuilder:
         ):
             context += "\n\n" + conversation_summary_section
 
-        # Der Block wandert nicht mehr hierher, sondern an die letzte Nutzerfrage
-        # — siehe attach_memory(). Er ist der einzige Teil des System-Prompts,
-        # der sich bei jedem Zug ändert, und vorne im Prompt macht er das
-        # Prompt-Caching des Anbieters wertlos: gecacht wird immer nur ein
-        # Vorspann, und alles ab der ersten Abweichung zählt voll. Gemessen am
-        # 2026-09-14 über das Gateway, gleicher Inhalt, gleiche Tokenzahl:
-        # Gedächtnis vorn 0 von 10 Treffern und $0,00107 je Zug, Gedächtnis
-        # hinter dem Verlauf 8 bis 10 von 10 Treffern und $0,00015 bis $0,00034.
+        # The block no longer goes here but onto the last user message — see
+        # attach_memory(). It is the only part of the system prompt that changes
+        # on every turn, and at the front of the prompt it makes the provider's
+        # prompt caching worthless: only a prefix is ever cached, and everything
+        # from the first difference onwards is billed in full. Measured
+        # 2026-09-14 through the gateway, same content, same token count: memory
+        # in front, 0 hits out of 10 and $0.00107 per turn; memory behind the
+        # history, 8 to 10 hits out of 10 and $0.00015 to $0.00034.
         self._pending_memory_context = persistent_memory_context
 
         # Persistent memory tool instructions
@@ -225,17 +225,17 @@ class ContextBuilder:
         return context
 
     def attach_memory(self, messages: list) -> str:
-        """Hängt die erinnerten Fakten an die letzte Nutzerfrage und gibt sie zurück.
+        """Attach the recalled facts to the last user message and return them.
 
-        An die letzte *Nutzer*nachricht, nicht ans Ende der Liste: in einer
-        Werkzeugschleife steht am Ende eine ``tool``-Antwort, und der zweite
-        Aufruf soll denselben Vorspann haben wie der erste. Die Fakten sind
-        dieselben — die Suche läuft ja über dieselbe Nutzerfrage —, also bleibt
-        der Prefix über die ganze Schleife stabil.
+        To the last *user* message, not to the end of the list: after a tool
+        round trip the list ends with a ``tool`` reply, and the second call has
+        to carry the same prefix as the first. The facts are identical — the
+        lookup runs against the same user message — so the prefix stays stable
+        across the whole loop.
 
-        Arbeitet auf der Kopie, die ``_llm_call`` gebaut hat. Die gespeicherte
-        Unterhaltung bleibt unberührt, sonst sammelte sich mit jedem Zug ein
-        weiterer Gedächtnisblock im Verlauf an.
+        Works on the copy ``_llm_call`` built. The stored conversation is left
+        alone; otherwise another memory block would pile up in the history with
+        every turn.
         """
         memory = self._pending_memory_context
         if not memory:
@@ -247,8 +247,8 @@ class ContextBuilder:
                 continue
             content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
             if isinstance(content, list):
-                # Multimodal: der Text kommt als eigener Teil davor, damit ein
-                # angehängtes Bild unangetastet bleibt.
+                # Multimodal: the text goes in front as its own part, so an
+                # attached image is left untouched.
                 msg["content"] = [{"type": "text", "text": memory}] + content
             else:
                 msg["content"] = f"{memory}\n\n{content or ''}".strip()
@@ -259,15 +259,15 @@ class ContextBuilder:
     def get_last_context(self) -> str:
         """Return the last compiled system context (cached from the most recent LLM call).
 
-        Die erinnerten Fakten stehen hinten dran, mit einem Hinweis darauf, wo
-        sie wirklich hängen. Sie ganz wegzulassen wäre die schlechtere Anzeige:
-        „Kontext ansehen" soll zeigen, was das Modell gesehen hat.
+        The recalled facts are appended, with a note saying where they really
+        sit. Leaving them out would be the worse display: "view context" is meant
+        to show what the model saw.
         """
         if not self._pending_memory_context:
             return self._last_compiled_context
         return (
             self._last_compiled_context
-            + "\n\n---\n# (an die letzte Nutzerfrage angehängt)\n\n"
+            + "\n\n---\n# (attached to the last user message)\n\n"
             + self._pending_memory_context
         )
 

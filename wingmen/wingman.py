@@ -860,13 +860,12 @@ class Wingman:
         return self.context_builder.get_last_context()
 
     async def add_context(self, messages):
-        """Setzt den System-Prompt davor und die Erinnerungen dahinter.
+        """Put the system prompt in front and the memories behind.
 
-        Die Reihenfolge ist der ganze Punkt: vorn steht, was sich über eine
-        Sitzung nicht ändert (Backstory, Skills, Anweisungen), hinten das, was
-        sich bei jedem Zug ändert. Nur so kann der Anbieter den Vorspann
-        wiederverwenden, und der ist bei einem langen Gespräch fast die gesamte
-        Anfrage.
+        The order is the whole point: in front goes what does not change over a
+        session (backstory, skills, instructions), behind it what changes on
+        every turn. Only then can the provider reuse the prefix, and in a long
+        conversation that prefix is almost the entire request.
         """
         context = await self.get_context()
         messages.insert(0, {"role": "system", "content": context})

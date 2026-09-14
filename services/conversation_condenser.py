@@ -32,44 +32,42 @@ _CONDENSE_TIMEOUT = 120.0
 # larger number because there is no reason to throw detail away early when the
 # model can hold it — each summarisation round loses something.
 #
-# Cloud stand bis 2026-09-14 auf 16.000, was bei dem Auslöser unten rund 8.300
-# echten Tokens entspricht — nach etwa einer Stunde Spielzeit die erste
-# Zusammenfassung, bei drei bis vier pro Sitzung. Das war eine Zahl aus der
-# Zeit, als der Verlauf jeden Zug zum vollen Preis mitging.
+# Cloud sat at 16,000 until 2026-09-14, which the trigger below turns into about
+# 8,300 real tokens: the first summary after roughly an hour of play, three or
+# four per session. That number is from the time when every turn paid full price
+# for the whole history.
 #
-# Seit der Gedächtnisblock hinter dem Verlauf steht (context_builder), ist der
-# Verlauf ein stabiler Vorspann und wird vom Anbieter zwischengespeichert:
-# gemessen 10 von 10 Treffern mit 98 % Anteil, also ein Zehntel des Preises für
-# den wiederholten Teil. 40.000 kosten damit ungefähr so viel wie vorher 4.000
-# und geben rund zweieinhalb Stunden Gespräch, bevor etwas zusammengefasst wird.
+# Since the memory block moved behind the history (see context_builder), the
+# history is a stable prefix and the provider caches it: measured 10 hits out of
+# 10 covering 98% of the tokens, so a tenth of the price for the repeated part.
+# 40,000 now costs about what 4,000 used to, and buys around two and a half
+# hours of conversation before anything gets summarised.
 #
-# Nicht höher, aus drei Gründen: jeder Zug bezahlt den ganzen Verlauf, auch
-# gecacht; die Antwort wird ab irgendeinem Punkt nicht besser, nur langsamer;
-# und der pathologische Fall — eine 78k-Tokens-Tabelle aus einem Skill — soll
-# weiter gedeckelt bleiben.
+# Not higher, for three reasons: every turn pays for the whole history, cached
+# or not; the answer stops getting better past some point and only gets slower;
+# and the pathological case — a 78k-token table from a skill — has to stay
+# capped.
 _MAX_CONVERSATION_TOKENS = 6_000
 _MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
 
 def find_cutoff(messages: list, keep_recent: int, role_of) -> int:
-    """Ab welchem Index der Verlauf zusammengefasst werden darf.
+    """The index from which the history may be summarised.
 
-    Behalten werden die letzten ``keep_recent`` Nutzernachrichten und alles, was
-    dazwischen steht. Der Schnitt liegt damit auf einer Nutzernachricht, und
-    eine Werkzeuggruppe — ``assistant`` mit ``tool_calls``, dann die
-    ``tool``-Antworten — steht immer vollständig zwischen zwei Nutzernachrichten.
-    Sie kann also nicht zerrissen werden.
+    Keeps the last ``keep_recent`` user messages and everything between them.
+    The cut therefore lands on a user message, and a tool group — ``assistant``
+    with ``tool_calls``, then the ``tool`` replies — always sits complete between
+    two user messages. It cannot be torn apart.
 
-    Das ist der Grund für die zweite Schleife: fällt der Schnitt doch einmal auf
-    eine ``tool``-Antwort, wandert er vorwärts, bis die Gruppe komplett im
-    behaltenen Teil liegt. Eine verwaiste ``tool``-Antwort ist kein Schönheitsfehler,
-    sondern je nach Modell ein harter Abbruch — gemessen am 2026-09-14:
-    ``google/gemini-2.5-flash`` antwortet normal weiter, ``openai/gpt-4.1-mini``
-    lehnt die Anfrage mit 400 ab („No tool call found for function call output").
-    Auf unserem Standardmodell würde ein Fehler hier also gar nicht auffallen und
-    nur die Nutzer treffen, die ein anderes Modell gewählt haben.
+    That is what the second loop is for: should the cut ever land on a ``tool``
+    reply, it walks forward until the whole group is inside the kept part. An
+    orphaned ``tool`` reply is not a cosmetic flaw but, depending on the model, a
+    hard failure. Measured 2026-09-14: ``google/gemini-2.5-flash`` answers
+    normally, ``openai/gpt-4.1-mini`` rejects the request with 400 ("No tool call
+    found for function call output"). A mistake here would therefore be invisible
+    on our default model and would only hit the users who picked another one.
 
-    Gibt 0 zurück, wenn es nichts zusammenzufassen gibt.
+    Returns 0 when there is nothing to summarise.
     """
     kept = 0
     cutoff = len(messages)
