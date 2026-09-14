@@ -34,6 +34,10 @@ class ContextBuilder:
         self._wingman_name = wingman_name
         self._last_compiled_context: str = ""
         self._memory_recall_notified: bool = False
+        # Was ``build`` zuletzt an Erinnerungen gefunden hat. ``attach_memory``
+        # holt es hier ab; getrennt gehalten, weil es nicht in den System-Prompt
+        # gehört (siehe dort).
+        self._pending_memory_context: str = ""
 
     async def build(
         self,
@@ -195,16 +199,23 @@ class ContextBuilder:
         ):
             context += "\n\n" + conversation_summary_section
 
-        # Append persistent memory context
-        if persistent_memory_context:
-            context += "\n\n" + persistent_memory_context
+        # Der Block wandert nicht mehr hierher, sondern an die letzte Nutzerfrage
+        # — siehe attach_memory(). Er ist der einzige Teil des System-Prompts,
+        # der sich bei jedem Zug ändert, und vorne im Prompt macht er das
+        # Prompt-Caching des Anbieters wertlos: gecacht wird immer nur ein
+        # Vorspann, und alles ab der ersten Abweichung zählt voll. Gemessen am
+        # 2026-09-14 über das Gateway, gleicher Inhalt, gleiche Tokenzahl:
+        # Gedächtnis vorn 0 von 10 Treffern und $0,00107 je Zug, Gedächtnis
+        # hinter dem Verlauf 8 bis 10 von 10 Treffern und $0,00015 bis $0,00034.
+        self._pending_memory_context = persistent_memory_context
 
         # Persistent memory tool instructions
         if persistent_memory_service:
             context += (
                 "\n\n# PERSISTENT MEMORY\n"
                 "You have persistent memory. Important facts and past conversation summaries "
-                "are provided in the [Memory] sections above (if any). "
+                "are provided in the [Memory] sections attached to the user's latest message "
+                "(if any). "
                 "You can use the `memory_remember`, `memory_recall`, and `memory_forget` tools when the user "
                 "explicitly asks you to remember, recall, or forget something. "
                 "You don't need to use `memory_remember` for routine information — that is handled automatically."
@@ -213,9 +224,52 @@ class ContextBuilder:
         self._last_compiled_context = context
         return context
 
+    def attach_memory(self, messages: list) -> str:
+        """Hängt die erinnerten Fakten an die letzte Nutzerfrage und gibt sie zurück.
+
+        An die letzte *Nutzer*nachricht, nicht ans Ende der Liste: in einer
+        Werkzeugschleife steht am Ende eine ``tool``-Antwort, und der zweite
+        Aufruf soll denselben Vorspann haben wie der erste. Die Fakten sind
+        dieselben — die Suche läuft ja über dieselbe Nutzerfrage —, also bleibt
+        der Prefix über die ganze Schleife stabil.
+
+        Arbeitet auf der Kopie, die ``_llm_call`` gebaut hat. Die gespeicherte
+        Unterhaltung bleibt unberührt, sonst sammelte sich mit jedem Zug ein
+        weiterer Gedächtnisblock im Verlauf an.
+        """
+        memory = self._pending_memory_context
+        if not memory:
+            return ""
+
+        for msg in reversed(messages):
+            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+            if role != "user":
+                continue
+            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            if isinstance(content, list):
+                # Multimodal: der Text kommt als eigener Teil davor, damit ein
+                # angehängtes Bild unangetastet bleibt.
+                msg["content"] = [{"type": "text", "text": memory}] + content
+            else:
+                msg["content"] = f"{memory}\n\n{content or ''}".strip()
+            return memory
+
+        return ""
+
     def get_last_context(self) -> str:
-        """Return the last compiled system context (cached from the most recent LLM call)."""
-        return self._last_compiled_context
+        """Return the last compiled system context (cached from the most recent LLM call).
+
+        Die erinnerten Fakten stehen hinten dran, mit einem Hinweis darauf, wo
+        sie wirklich hängen. Sie ganz wegzulassen wäre die schlechtere Anzeige:
+        „Kontext ansehen" soll zeigen, was das Modell gesehen hat.
+        """
+        if not self._pending_memory_context:
+            return self._last_compiled_context
+        return (
+            self._last_compiled_context
+            + "\n\n---\n# (an die letzte Nutzerfrage angehängt)\n\n"
+            + self._pending_memory_context
+        )
 
     def build_user_context(
         self,

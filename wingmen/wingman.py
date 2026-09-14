@@ -860,8 +860,17 @@ class Wingman:
         return self.context_builder.get_last_context()
 
     async def add_context(self, messages):
+        """Setzt den System-Prompt davor und die Erinnerungen dahinter.
+
+        Die Reihenfolge ist der ganze Punkt: vorn steht, was sich über eine
+        Sitzung nicht ändert (Backstory, Skills, Anweisungen), hinten das, was
+        sich bei jedem Zug ändert. Nur so kann der Anbieter den Vorspann
+        wiederverwenden, und der ist bei einem langen Gespräch fast die gesamte
+        Anfrage.
+        """
         context = await self.get_context()
         messages.insert(0, {"role": "system", "content": context})
+        self.context_builder.attach_memory(messages)
 
     # ───────────────── TTS / play_to_user ───────────────── #
 
