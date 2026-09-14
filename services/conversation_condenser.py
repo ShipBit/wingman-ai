@@ -51,6 +51,44 @@ _MAX_CONVERSATION_TOKENS = 6_000
 _MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
 
+def find_cutoff(messages: list, keep_recent: int, role_of) -> int:
+    """Ab welchem Index der Verlauf zusammengefasst werden darf.
+
+    Behalten werden die letzten ``keep_recent`` Nutzernachrichten und alles, was
+    dazwischen steht. Der Schnitt liegt damit auf einer Nutzernachricht, und
+    eine Werkzeuggruppe — ``assistant`` mit ``tool_calls``, dann die
+    ``tool``-Antworten — steht immer vollständig zwischen zwei Nutzernachrichten.
+    Sie kann also nicht zerrissen werden.
+
+    Das ist der Grund für die zweite Schleife: fällt der Schnitt doch einmal auf
+    eine ``tool``-Antwort, wandert er vorwärts, bis die Gruppe komplett im
+    behaltenen Teil liegt. Eine verwaiste ``tool``-Antwort ist kein Schönheitsfehler,
+    sondern je nach Modell ein harter Abbruch — gemessen am 2026-09-14:
+    ``google/gemini-2.5-flash`` antwortet normal weiter, ``openai/gpt-4.1-mini``
+    lehnt die Anfrage mit 400 ab („No tool call found for function call output").
+    Auf unserem Standardmodell würde ein Fehler hier also gar nicht auffallen und
+    nur die Nutzer treffen, die ein anderes Modell gewählt haben.
+
+    Gibt 0 zurück, wenn es nichts zusammenzufassen gibt.
+    """
+    kept = 0
+    cutoff = len(messages)
+    for i in range(len(messages) - 1, -1, -1):
+        if role_of(messages[i]) == "user":
+            kept += 1
+            if kept == keep_recent:
+                cutoff = i
+                break
+
+    if cutoff <= 0 or cutoff >= len(messages):
+        return 0
+
+    while cutoff < len(messages) and role_of(messages[cutoff]) == "tool":
+        cutoff += 1
+
+    return cutoff if cutoff < len(messages) else 0
+
+
 class ConversationCondenser:
     def __init__(
         self,
@@ -249,41 +287,16 @@ class ConversationCondenser:
                 )
                 return
 
-            # Find the cutoff: keep the most recent `keep_recent` user messages
-            kept_user_count = 0
-            cutoff_index = len(self._conversation.messages)
-            for i in range(len(self._conversation.messages) - 1, -1, -1):
-                if (
-                    self._conversation.get_message_role(
-                        self._conversation.messages[i]
-                    )
-                    == "user"
-                ):
-                    kept_user_count += 1
-                    if kept_user_count == keep_recent:
-                        cutoff_index = i
-                        break
+            cutoff_index = find_cutoff(
+                self._conversation.messages,
+                keep_recent,
+                self._conversation.get_message_role,
+            )
 
             if cutoff_index <= 0:
                 await printr.print_async(
-                    f"Condensation skipped — cutoff_index={cutoff_index}, nothing to condense (kept_user_count={kept_user_count}, keep_recent={keep_recent}, total={len(self._conversation.messages)}).",
-                    color=LogType.LOCALMODEL,
-                    source_name=self._wingman_name,
-                    source=LogSource.WINGMAN,
-                )
-                return
-
-            # Adjust cutoff forward to avoid orphaning tool responses
-            while cutoff_index < len(self._conversation.messages):
-                msg = self._conversation.messages[cutoff_index]
-                if self._conversation.get_message_role(msg) == "tool":
-                    cutoff_index += 1
-                else:
-                    break
-
-            if cutoff_index <= 0:
-                await printr.print_async(
-                    "Condensation skipped — no messages to condense after tool adjustment.",
+                    f"Condensation skipped — cutoff_index={cutoff_index}, nothing to condense "
+                    f"(keep_recent={keep_recent}, total={len(self._conversation.messages)}).",
                     color=LogType.LOCALMODEL,
                     source_name=self._wingman_name,
                     source=LogSource.WINGMAN,
