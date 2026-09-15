@@ -24,18 +24,22 @@ ELEVENLABS_SERVER = {
     "name": "elevenlabs",
     "display_name": "ElevenLabs",
     "description": (
-        "ElevenLabs audio. Text to speech, voice cloning, sound effects, music, "
-        "speech to text. Browse the voice library and manage conversational agents."
+        "ElevenLabs generative media. Generate images and video from a prompt, "
+        "turn text into speech, transcribe audio, design new voices and browse "
+        "the voice library."
     ),
     "discovery_keywords": [
         "ElevenLabs",
+        "11labs",
+        "generate an image",
+        "create a picture",
+        "generate a video",
         "text to speech",
+        "read this out loud",
         "voice",
-        "voice clone",
-        "sound effect",
+        "design a voice",
         "transcribe",
         "speech to text",
-        "audio generation",
     ],
     "type": "http",
     "url": "https://api.us.elevenlabs.io/v1/mcp",
