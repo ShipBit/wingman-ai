@@ -100,6 +100,8 @@ class TurnMetrics:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 is_local=is_local,
+                history_tokens=self.conversation.estimate_tokens(),
+                summary_tokens=count_tokens(self.conversation.conversation_summary or ""),
             )
         )
 

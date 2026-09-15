@@ -597,7 +597,6 @@ class FeaturesConfig(BaseModel):
     tts_provider: TtsProvider
     stt_provider: SttProvider
     conversation_provider: ConversationProvider
-    remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
     condense_conversation: bool
@@ -606,19 +605,23 @@ class FeaturesConfig(BaseModel):
     approaches the support model's context window capacity, saving tokens while
     preserving key information."""
     compress_tool_responses: bool
-    """Compress large tool/MCP responses using local AI embeddings and summarization.
-    Reduces token usage by replacing large responses with summaries while preserving
-    detail access via semantic retrieval."""
+    """Let the support model summarize a tool/MCP response that is over the
+    per-response cap (see ``skill_max_input_tokens``) instead of cutting it. Off, or
+    with no support model ready, the response is cut structurally: whole JSON entries
+    or whole lines, with a note saying what is missing. Responses under the cap are
+    never touched either way."""
     condense_max_messages: int
     """Maximum number of user messages before forcing condensation, regardless of token count.
     Acts as a safety cap to prevent unbounded message list growth."""
-    condense_keep_recent: int
-    """Number of recent user messages (and their associated assistant/tool messages) to
-    always keep verbatim. Older messages get condensed into the running summary."""
+    condense_keep_recent_tokens: int = 8000
+    """How much recent history (in tokens) a condensation keeps verbatim. Whole turns,
+    always at least the latest one. Older messages get condensed into the running
+    summary. Capped at a third of what the support model can summarize in one pass."""
     skill_max_input_tokens: int = 16000
-    """Max input tokens a skill may send to the main model in one ctx.ai.generate
-    side-call. Only enforced while ``condense_conversation`` is enabled. Wingman Pro
-    hardcodes a lower limit (8000) that users cannot change."""
+    """Max tokens skill-originated content may feed the main model at once: a
+    ctx.ai.generate side-call, or a single tool/MCP response. The side-call cap is
+    only enforced while ``condense_conversation`` is enabled; the tool-response cap is
+    always on. Wingman Pro hardcodes a lower limit (8000) that users cannot change."""
 
 
 class AudioFile(BaseModel):

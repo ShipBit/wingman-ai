@@ -230,11 +230,14 @@ class LocalAiService:
         top_k: int | None = None,
         presence_penalty: float | None = None,
         reasoning: bool | None = None,
+        max_output_tokens: int | None = None,
     ) -> "SupportResult":
         """Process text using the support model (local or remote).
 
-        The output token budget is always computed automatically from the
-        context window (``n_ctx``).
+        The output token budget is computed automatically from the context
+        window (``n_ctx``). ``max_output_tokens`` lowers it further for calls
+        whose answer must stay small — a summary that is allowed to be as long
+        as the window costs money on the day the model decides to use it all.
 
         Sampling resolution order (highest priority first):
         1. Per-call keyword arguments (temperature, top_p, etc.)
@@ -265,6 +268,8 @@ class LocalAiService:
         max_tokens = max(min_output, safe_ctx - input_tokens)
         if self.settings.mode == LocalAiMode.CLOUD:
             max_tokens = min(max_tokens, CLOUD_MAX_OUTPUT_TOKENS)
+        if max_output_tokens is not None:
+            max_tokens = max(1, min(max_tokens, max_output_tokens))
 
         # Resolve sampling: explicit args > preset > Qwen3.5 default constants
         t = temperature

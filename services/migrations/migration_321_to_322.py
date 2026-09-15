@@ -131,6 +131,31 @@ class Migration321To322(BaseMigration):
     old_version = "3_2_1"
     new_version = "3_2_2"
 
+    # Two feature keys 3.2.2 no longer reads. `remember_messages` deleted old
+    # turns outright, with no summary, and had no UI since the redesign;
+    # condensation does that job. `condense_keep_recent` counted user messages
+    # and is replaced by `condense_keep_recent_tokens`, a token budget — twelve
+    # turns of trading play were 23,000 tokens, twelve turns of chat 3,000, and
+    # a message count cannot tell the two apart. The new key comes from the
+    # template backfill with its default; the old value is not converted, no
+    # number of messages maps to a number of tokens.
+    DROPPED_FEATURES = ("remember_messages", "condense_keep_recent")
+
+    def _drop_features(self, config: dict, label: str) -> dict:
+        features = config.get("features")
+        if isinstance(features, dict):
+            for key in self.DROPPED_FEATURES:
+                if key in features:
+                    features.pop(key)
+                    self.log(f"{label}: removed features.{key}")
+        return config
+
+    def migrate_defaults(self, old: dict) -> dict:
+        return self._drop_features(dict(old), "defaults")
+
+    def migrate_wingman(self, old: dict) -> dict:
+        return self._drop_features(dict(old), old.get("name", "wingman"))
+
     def migrate_mcp(self, old: dict, new: dict) -> dict:
         """Turn the 3.2.1 glob filters into the 3.2.2 disabled list."""
         if not old:

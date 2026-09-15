@@ -55,7 +55,6 @@ from services.mcp_client import McpClient
 from services.capability_registry import CapabilityRegistry
 from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
-from services.tool_response_cache import ToolResponseCompressor
 from services.turn_metrics import TurnMetrics
 from services.instant_response_generator import InstantResponseGenerator
 from skills.skill_base import Skill
@@ -175,7 +174,6 @@ class Wingman:
         self.persistent_memory_service = None
         self._memory_recall_notified = False
         self._background_tasks: set[asyncio.Task] = set()
-        self._tool_response_compressor = ToolResponseCompressor()
 
         # --- Image generation (lazy) ---
         self._image_subscription = None
@@ -772,7 +770,9 @@ class Wingman:
         await self.conversation.add_user_message(
             content,
             images=images,
-            condense_fn=lambda: self.condenser.maybe_condense(self.local_ai_service),
+            condense_fn=lambda: self.condenser.maybe_condense(
+                self.local_ai_service, self.metrics.last_turn_prompt_tokens
+            ),
         )
 
     async def reset_conversation_history(self):
