@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import atexit
 import faulthandler
+import html
 from enum import Enum
 from os import path
 import os
@@ -51,11 +52,12 @@ if getattr(sys, "frozen", False):
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from api.commands import WebSocketCommandModel
+from api.commands import McpOAuthStateChangedCommand, WebSocketCommandModel
 from api.interface import BenchmarkResult, CoreStatusResponse
 from api.enums import ENUM_TYPES, CoreState, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
@@ -65,6 +67,7 @@ from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.mcp_oauth import CALLBACK_PATH, get_oauth_service
 from services.system_manager import LOCAL_VERSION, SystemManager
 from wingman_core import WingmanCore
 port = None
@@ -422,6 +425,59 @@ async def ping():
     return core.get_status()
 
 
+@app.get(CALLBACK_PATH, tags=["main"], include_in_schema=False)
+async def mcp_oauth_callback(
+    code: str | None = None, state: str | None = None, error: str | None = None
+):
+    """Where an MCP authorization server sends the user's browser back.
+
+    This is a loopback redirect, the same one every native MCP client uses. It
+    has to live on the app itself rather than on a router, because the path is
+    baked into the redirect URI that was registered with the provider.
+
+    It is kept out of the OpenAPI schema on purpose: it is not part of the API
+    the client calls, and generating a method for it would only invite someone
+    to call it.
+    """
+    accepted, message = await get_oauth_service().handle_callback(code, state, error)
+    return HTMLResponse(
+        content=_callback_page(accepted, message),
+        status_code=200 if accepted else 400,
+    )
+
+
+def _callback_page(accepted: bool, message: str) -> str:
+    """The page the user lands on after consenting.
+
+    Deliberately one self-contained file with no requests of its own: it is
+    served by Core to an ordinary browser that has no access to the app's assets,
+    and it is the last thing standing between a user and a working MCP server.
+    """
+    title = "Wingman AI is connected" if accepted else "Authorization failed"
+    accent = "#4ade80" if accepted else "#f87171"
+    # The message is whatever the authorization server put in `error`, or its
+    # token-endpoint error text. Anyone who can make a browser open this URL
+    # controls it, and a script running on Core's origin can read /secrets.
+    message = html.escape(message)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  body {{ margin:0; min-height:100vh; display:flex; align-items:center;
+         justify-content:center; background:#0f1115; color:#e6e8ee;
+         font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }}
+  main {{ max-width:26rem; padding:2.5rem; text-align:center; }}
+  h1 {{ font-size:1.25rem; margin:0 0 .75rem; color:{accent}; }}
+  p {{ margin:0; line-height:1.6; color:#a8adbd; }}
+</style></head>
+<body><main>
+  <h1>{title}</h1>
+  <p>{message}</p>
+  <p style="margin-top:1rem">You can close this tab and go back to Wingman AI.</p>
+</main></body></html>"""
+
+
 @app.get("/client/plan", tags=["main"], response_model=str)
 async def get_client_plan():
     return core.client_plan
@@ -450,6 +506,33 @@ async def get_dummy_benchmark():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
+    # The OAuth redirect URI points at this process, so the service cannot know
+    # it until the port is known. Do it before uvicorn binds: a user cannot reach
+    # the settings UI before the server is up, but the redirect URI is read the
+    # moment anyone asks for a server's OAuth status.
+    oauth_service = get_oauth_service()
+    oauth_service.set_callback_origin(host, port)
+    async def on_oauth_state_changed(mcp_name: str, is_authorized: bool, error):
+        # Reconnect before telling the client: it reloads the server list on
+        # this command, and the list has to show the server connected, not the
+        # "needs authorization" error from boot next to an "Authorized" badge.
+        if is_authorized:
+            try:
+                await core.config_service.reconnect_wingmen_using_mcp(mcp_name)
+            except Exception as e:
+                printr.print(
+                    f"Could not reconnect wingmen after authorizing '{mcp_name}': {e}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+        await connection_manager.broadcast(
+            McpOAuthStateChangedCommand(
+                mcp_name=mcp_name, is_authorized=is_authorized, error=error
+            )
+        )
+
+    oauth_service.set_state_changed_handler(on_oauth_state_changed)
+
     # Start uvicorn FIRST so Client can connect and see progress updates
     try:
         uvi_config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")

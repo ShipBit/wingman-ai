@@ -67,6 +67,58 @@ servers:
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/versetime/mcp
     discoverable_by_default: false
 
+  # ElevenLabs' hosted server only accepts an OAuth token — it answers 401 to an
+  # API key. Pressing Authorize in a wingman's MCP settings opens the consent
+  # page and stores the token; see docs/mcp-oauth.md.
+  #
+  # ElevenLabs has no dynamic client registration, so `oauth_client_id` has to
+  # name a client id metadata document. The one below is served by Wingman's own
+  # worker.
+  - name: elevenlabs
+    display_name: ElevenLabs
+    description: ElevenLabs generative media. Generate images and video from a prompt, turn text into speech, transcribe audio, design new voices and browse the voice library.
+    discovery_keywords:
+      - ElevenLabs
+      - 11labs
+      - generate an image
+      - create a picture
+      - generate a video
+      - text to speech
+      - read this out loud
+      - voice
+      - design a voice
+      - transcribe
+      - speech to text
+    type: http
+    url: https://api.us.elevenlabs.io/v1/mcp
+    auth: oauth
+    oauth_client_id: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client
+    # Every generator runs through a flow, so `flows` is not optional: without
+    # it even speech answers 403. `image_video_generation` covers the two
+    # visual tools. `convai_read` is gone with the agents_* tools.
+    oauth_scopes:
+      - flows
+      - image_video_generation
+      - text_to_speech
+      - voice_generation
+      - speech_history_read
+    # ElevenLabs offers 111 tools measuring roughly 222,000 tokens, more than
+    # most context windows hold. `creative_*` alone still brings 29 and 20,384,
+    # and two thirds of those edit a canvas Wingman does not have or upload
+    # files it cannot upload. Two of them say in their own description never
+    # to call them. These seven are what a voice assistant reaches for, at
+    # 6,782 tokens. `get_flow_run_status` is not optional: generation is
+    # asynchronous and without it a result never comes back.
+    tools_allow:
+      - creative_generate_image
+      - creative_generate_video
+      - creative_generate_speech
+      - creative_edit_image
+      - creative_transcribe_audio
+      - creative_list_voices
+      - creative_get_flow_run_status
+    discoverable_by_default: false
+
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.

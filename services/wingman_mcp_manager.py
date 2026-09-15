@@ -6,17 +6,19 @@ handling, enable/disable, parallel init) in one focused service.
 
 import asyncio
 import traceback
-from typing import Callable
+from typing import Any, Callable, Optional
 
 from api.commands import McpStateChangedCommand
 from api.enums import (
     LogSource,
     LogType,
+    McpAuthType,
     McpTransportType,
     WingmanInitializationErrorType,
 )
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from services.mcp_client import McpClient
+from services.mcp_oauth import get_oauth_service
 from services.mcp_registry import McpRegistry
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -58,28 +60,37 @@ class WingmanMcpManager:
 
     async def _prepare_connection_params(
         self, mcp_config, log_secret_found: bool = False
-    ) -> tuple[dict, float]:
-        """Build request headers (with secret-injected auth) and resolve the timeout."""
+    ) -> tuple[dict, float, Optional[Any]]:
+        """Build the headers, the timeout and the auth hook for one server.
+
+        The auth hook is None for everything but OAuth servers, where it is a
+        provider that sends a stored token and refreshes it when it has expired,
+        but never opens a browser — see `services/mcp_oauth.py`.
+        """
         headers: dict = {}
         if mcp_config.headers:
             headers.update(mcp_config.headers)
 
-        secret_key = f"mcp_{mcp_config.name}"
-        api_key = await self.secret_keeper.retrieve(
-            requester=self.wingman_name,
-            key=secret_key,
-            prompt_if_missing=False,
-        )
-        if api_key:
-            if log_secret_found:
-                printr.print(
-                    f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
-                    color=LogType.INFO,
-                    source_name=self.wingman_name,
-                    server_only=True,
-                )
-            if not any(k.lower() in _AUTH_HEADER_KEYS for k in headers.keys()):
-                headers["Authorization"] = f"Bearer {api_key}"
+        auth = None
+        if mcp_config.auth == McpAuthType.OAUTH:
+            auth = get_oauth_service().build_silent_provider(mcp_config)
+        elif mcp_config.auth == McpAuthType.API_KEY:
+            secret_key = f"mcp_{mcp_config.name}"
+            api_key = await self.secret_keeper.retrieve(
+                requester=self.wingman_name,
+                key=secret_key,
+                prompt_if_missing=False,
+            )
+            if api_key:
+                if log_secret_found:
+                    printr.print(
+                        f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
+                        color=LogType.INFO,
+                        source_name=self.wingman_name,
+                        server_only=True,
+                    )
+                if not any(k.lower() in _AUTH_HEADER_KEYS for k in headers.keys()):
+                    headers["Authorization"] = f"Bearer {api_key}"
 
         default_timeout = (
             _STDIO_DEFAULT_TIMEOUT
@@ -89,7 +100,7 @@ class WingmanMcpManager:
         timeout = (
             float(mcp_config.timeout) if mcp_config.timeout else default_timeout
         )
-        return headers, timeout
+        return headers, timeout, auth
 
     def _broadcast_mcp_state_changed(self):
         if printr._connection_manager:
@@ -121,12 +132,13 @@ class WingmanMcpManager:
             return False, f"MCP server '{mcp_name}' not found in mcp.yaml."
 
         try:
-            headers, timeout = await self._prepare_connection_params(mcp_config)
+            headers, timeout, auth = await self._prepare_connection_params(mcp_config)
 
             connection = await asyncio.wait_for(
                 self.mcp_registry.register_server(
                     config=mcp_config,
                     headers=headers if headers else None,
+                    auth=auth,
                 ),
                 timeout=timeout,
             )
@@ -190,7 +202,7 @@ class WingmanMcpManager:
         async def connect_mcp(mcp_config):
             local_errors = []
             try:
-                headers, timeout = await self._prepare_connection_params(
+                headers, timeout, auth = await self._prepare_connection_params(
                     mcp_config, log_secret_found=True
                 )
 
@@ -199,6 +211,7 @@ class WingmanMcpManager:
                         self.mcp_registry.register_server(
                             config=mcp_config,
                             headers=headers if headers else None,
+                            auth=auth,
                         ),
                         timeout=timeout,
                     )

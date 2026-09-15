@@ -219,6 +219,20 @@ class McpTransportType(Enum):
     SSE = "sse"
 
 
+class McpAuthType(Enum):
+    """How Wingman authenticates against an MCP server.
+
+    NONE is the default and sends nothing. API_KEY is what Wingman did before
+    3.2.1: the secret `mcp_<name>` goes out as a bearer header. OAUTH runs an
+    authorization code grant with PKCE and sends the resulting access token,
+    refreshing it when it expires.
+    """
+
+    NONE = "none"
+    API_KEY = "api_key"
+    OAUTH = "oauth"
+
+
 # Pydantic models for enums
 class BaseEnumModel(BaseModel):
     class Config:
