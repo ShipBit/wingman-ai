@@ -189,3 +189,5 @@ evals/
 .serena/
 
 .claude/settings.json
+
+.vscode/launch.json
