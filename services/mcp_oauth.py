@@ -60,6 +60,7 @@ try:
     from mcp.shared.auth import (
         OAuthClientInformationFull,
         OAuthClientMetadata,
+        OAuthMetadata,
         OAuthToken,
     )
 
@@ -85,6 +86,9 @@ except ImportError:
         pass
 
     class OAuthClientInformationFull(BaseModel):  # type: ignore[no-redef]
+        pass
+
+    class OAuthMetadata(BaseModel):  # type: ignore[no-redef]
         pass
 
 
@@ -259,10 +263,23 @@ class _ConfiguredScopeMetadata(OAuthClientMetadata):
 
 
 class _WingmanOAuthProvider(OAuthClientProvider):
-    """`OAuthClientProvider` that believes the expiry it was given.
+    """`OAuthClientProvider` that can refresh a token it loaded from disk.
 
-    The base class loads a stored token without deriving its expiry, so a token
-    restored from disk looks valid forever. See the module docstring.
+    Two things the base class only ever learns during a browser flow, and
+    therefore does not know when it starts from stored state:
+
+    * **The expiry.** It loads a token without deriving one, so a token restored
+      from disk looks valid forever. See the module docstring.
+    * **The token endpoint.** `_get_token_endpoint` reads it from
+      `context.oauth_metadata`, which is only filled by the discovery step inside
+      the 401 branch. On a provider that starts with a valid-looking token there
+      is no 401 and no discovery, so a refresh falls back to `<origin>/token`.
+      Against ElevenLabs that is a 404 — the real one is `/v1/oauth/token` — and
+      the SDK then drops through to the full browser flow. Every user would have
+      been asked to authorize again every hour, with a working refresh token
+      sitting in the file.
+
+    So the metadata is discovered once and kept next to the token.
     """
 
     async def _initialize(self) -> None:
@@ -270,6 +287,92 @@ class _WingmanOAuthProvider(OAuthClientProvider):
         tokens = self.context.current_tokens
         if tokens and tokens.expires_in is not None:
             self.context.update_token_expiry(tokens)
+
+        # Only needed to refresh. A provider with nothing stored discovers this
+        # on its own during the flow it is about to run.
+        if tokens and tokens.refresh_token and not self.context.oauth_metadata:
+            metadata = await self._authorization_server_metadata()
+            if metadata:
+                self.context.oauth_metadata = metadata
+
+    async def _authorization_server_metadata(self) -> Optional[Any]:
+        """The authorization server's metadata, from storage or from the network.
+
+        Cached in the token bundle after the first lookup, so the common case —
+        Core starting up with servers to reconnect — costs no extra requests.
+        """
+        storage = self.context.storage
+        if not isinstance(storage, WingmanTokenStorage):
+            return None
+
+        bundle = storage.read()
+        stored = bundle.get("oauth_metadata")
+        if stored:
+            try:
+                return OAuthMetadata.model_validate(stored)
+            except Exception:
+                pass  # Written by an older version, or by hand. Rediscover it.
+
+        metadata = await _discover_authorization_server(self.context.server_url)
+        if metadata:
+            bundle = storage.read()
+            bundle["oauth_metadata"] = metadata.model_dump(
+                exclude_none=True, mode="json"
+            )
+            await storage._write(bundle)
+        return metadata
+
+
+async def _discover_authorization_server(server_url: str) -> Optional[Any]:
+    """Walk the two-step discovery an MCP client does on its first 401.
+
+    The resource points at its authorization server, and that server publishes
+    where its token endpoint is. The SDK's own URL builders are used so this
+    follows the same fallbacks the spec asks for, including the legacy paths.
+    """
+    try:
+        from mcp.client.auth.utils import (
+            build_oauth_authorization_server_metadata_discovery_urls,
+            build_protected_resource_metadata_discovery_urls,
+            create_oauth_metadata_request,
+            handle_auth_metadata_response,
+            handle_protected_resource_response,
+        )
+    except ImportError:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            auth_server_url: Optional[str] = None
+            for url in build_protected_resource_metadata_discovery_urls(
+                None, server_url
+            ):
+                request = create_oauth_metadata_request(url)
+                prm = await handle_protected_resource_response(
+                    await client.send(request)
+                )
+                if prm and prm.authorization_servers:
+                    auth_server_url = str(prm.authorization_servers[0])
+                    break
+
+            for url in build_oauth_authorization_server_metadata_discovery_urls(
+                auth_server_url, server_url
+            ):
+                request = create_oauth_metadata_request(url)
+                ok, metadata = await handle_auth_metadata_response(
+                    await client.send(request)
+                )
+                if not ok:
+                    break
+                if metadata:
+                    return metadata
+    except Exception as e:
+        printr.print(
+            f"Could not look up the authorization server for {server_url}: {e}",
+            color=LogType.WARNING,
+            server_only=True,
+        )
+    return None
 
 
 class _PendingFlow:
