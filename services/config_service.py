@@ -998,15 +998,28 @@ class ConfigService:
             return
 
         await get_oauth_service().revoke(mcp_server)
-
-        if self.tower:
-            for wingman in self.tower.wingmen:
-                if hasattr(wingman, "init_mcps"):
-                    await wingman.init_mcps()
+        await self.reconnect_wingmen_using_mcp(mcp_name)
 
         self.printr.toast(
             f"Signed out of '{mcp_server.display_name or mcp_server.name}'."
         )
+
+    async def reconnect_wingmen_using_mcp(self, mcp_name: str) -> None:
+        """Rebuild the MCP connections of every wingman that has this server enabled.
+
+        Called after a token is stored or discarded. A wingman that failed to
+        connect at boot because the server was not yet authorized is not in the
+        registry at all, and one that connected on a token just revoked still
+        is; either way the state it shows is wrong until it connects again.
+        Wingmen that do not use the server are left alone, so their other
+        servers are not torn down for nothing.
+        """
+        if not self.tower:
+            return
+        for wingman in self.tower.wingmen:
+            discoverable = getattr(wingman.config, "discoverable_mcps", None) or []
+            if mcp_name in discoverable and hasattr(wingman, "init_mcps"):
+                await wingman.init_mcps()
 
     # POST /wingman-mcps/connect
     async def connect_wingman_mcp(

@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import atexit
 import faulthandler
+import html
 from enum import Enum
 from os import path
 import os
@@ -454,6 +455,10 @@ def _callback_page(accepted: bool, message: str) -> str:
     """
     title = "Wingman AI is connected" if accepted else "Authorization failed"
     accent = "#4ade80" if accepted else "#f87171"
+    # The message is whatever the authorization server put in `error`, or its
+    # token-endpoint error text. Anyone who can make a browser open this URL
+    # controls it, and a script running on Core's origin can read /secrets.
+    message = html.escape(message)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -507,13 +512,26 @@ async def async_main(host: str, port: int, sidecar: bool):
     # moment anyone asks for a server's OAuth status.
     oauth_service = get_oauth_service()
     oauth_service.set_callback_origin(host, port)
-    oauth_service.set_state_changed_handler(
-        lambda mcp_name, is_authorized, error: connection_manager.broadcast(
+    async def on_oauth_state_changed(mcp_name: str, is_authorized: bool, error):
+        # Reconnect before telling the client: it reloads the server list on
+        # this command, and the list has to show the server connected, not the
+        # "needs authorization" error from boot next to an "Authorized" badge.
+        if is_authorized:
+            try:
+                await core.config_service.reconnect_wingmen_using_mcp(mcp_name)
+            except Exception as e:
+                printr.print(
+                    f"Could not reconnect wingmen after authorizing '{mcp_name}': {e}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+        await connection_manager.broadcast(
             McpOAuthStateChangedCommand(
                 mcp_name=mcp_name, is_authorized=is_authorized, error=error
             )
         )
-    )
+
+    oauth_service.set_state_changed_handler(on_oauth_state_changed)
 
     # Start uvicorn FIRST so Client can connect and see progress updates
     try:

@@ -48,6 +48,12 @@ The consequence to know about: Core has to run on the same machine as the
 browser. A Core on a remote host cannot complete the flow, because the
 provider redirects the user's own browser to *their* localhost.
 
+The other consequence: OAuth is verified for the streamable-HTTP transport,
+which is what ElevenLabs uses. SSE connections run on their own thread with
+their own event loop, and the provider is built on the main loop, so a token
+refresh on an SSE server would write to `secrets.yaml` from that thread. It has
+not been tested.
+
 ## Registration: two paths
 
 The MCP spec expects Dynamic Client Registration (RFC 7591) and the Python SDK

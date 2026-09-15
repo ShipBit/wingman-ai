@@ -483,6 +483,12 @@ class McpOAuthService:
             # registration endpoint. Seeding storage with it makes the SDK's
             # `_register_client` return early, so it never posts to a /register
             # that would answer 404.
+            #
+            # The SDK also has a native `client_metadata_url` argument for this,
+            # but it only accepts an HTTPS URL and only uses it when the server
+            # advertises `client_id_metadata_document_supported`. Seeding covers
+            # that case and a plain client id a provider handed out, which is
+            # what the settings field promises to accept.
             metadata = self._client_metadata(config)
             fallback = OAuthClientInformationFull(
                 client_id=config.oauth_client_id,
@@ -685,10 +691,15 @@ class McpOAuthService:
         return True, "Wingman is connected."
 
     def _matching(self, state: Optional[str]) -> list[_PendingFlow]:
-        if state and state in self._by_state:
-            return [self._by_state[state]]
-        # No state match. If exactly one flow is running it is unambiguous which
-        # one this is; the SDK still rejects a mismatched state on its own side.
+        if state:
+            # A state that names no flow is not ours. Handing it to the one flow
+            # that happens to be running would make the SDK abort that flow on
+            # its state check, so a stray request could kill a real
+            # authorization mid-consent.
+            flow = self._by_state.get(state)
+            return [flow] if flow else []
+        # No state at all. If exactly one flow is running it is unambiguous
+        # which one this is; the SDK still checks the state on its own side.
         if len(self._flows) == 1:
             return list(self._flows.values())
         return []
