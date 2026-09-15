@@ -96,7 +96,7 @@ Core:
 | `api/enums.py` | `McpAuthType` |
 | `api/interface.py` | `auth`, `oauth_client_id`, `oauth_scopes` on `McpServerConfig`; OAuth status models |
 | `services/mcp_oauth.py` | new — token storage, flow, provider factory |
-| `services/mcp_client.py` | pass an `httpx.Auth` into the transports |
+| `services/mcp_client.py` | pass an `httpx.Auth` into the transports; apply the tool filter |
 | `services/wingman_mcp_manager.py` | build the silent provider per server |
 | `services/config_service.py` | authorize / status / revoke endpoints |
 | `main.py` | the `/mcp/oauth/callback` route |
@@ -107,7 +107,7 @@ Client:
 
 | File | Change |
 | --- | --- |
-| `src/lib/Configuration/McpServerEditor.svelte` | auth type, client id, scopes |
+| `src/lib/Configuration/McpServerEditor.svelte` | auth type, client id, scopes, tool filter |
 | `src/lib/Configuration/McpConfig.svelte` | authorize / sign out, state badge |
 | `src/services/mcpOAuthService.ts` | new — start the flow, open the browser |
 | `messages/{en,de,fr,es}.json` | strings |
@@ -125,13 +125,46 @@ Two things about that server are not obvious and both cost a debugging round:
   id metadata document added to the worker repository on the branch
   `feat/oauth-client-metadata`.
 
-**That worker branch is not deployed.** Until someone runs `wrangler deploy`, the
-URL 404s and ElevenLabs has nothing to fetch, so pressing Authorize ends at an
-unknown client. Everything else on the path is verified: discovery, the
-authorization URL, the callback, the token exchange and the failure pages.
+The worker branch is merged and deployed. The whole path is verified against the
+live server: discovery, the authorization URL, consent in a browser, the
+callback, the token exchange, a silent refresh of an expired token, and the
+failure pages.
 
 A user who has their own client id can paste it into the server's settings
 instead; the field is editable in the UI.
+
+## Refreshing a stored token
+
+A provider built from stored state never runs discovery, because discovery only
+happens inside the SDK's 401 branch and a stored token does not produce a 401.
+`_get_token_endpoint` then falls back to `<origin>/token`, which against
+ElevenLabs is a 404 — the real one is `/v1/oauth/token` — and the SDK drops
+through to the full browser flow.
+
+Left alone that would have asked every user to authorize again every hour, with
+a working refresh token sitting in the file. So the authorization server's
+metadata is discovered once and cached in the token bundle next to the token.
+
+## Tool count
+
+A server's tool definitions go into the prompt in full once the model activates
+that server, and stay there until the conversation is reset. Some servers are
+far too large for that.
+
+| ElevenLabs | tools | tokens |
+| --- | --- | --- |
+| everything | 111 | 222,142 |
+| without the two largest | 109 | 101,151 |
+| `creative_*` | 29 | 20,384 |
+
+`agents_run_tests` alone is 72,840 tokens: a one-line description and a schema
+carrying 336 definitions, the whole agent data model. `agents_create_draft` is
+another 48,151.
+
+`tools_allow` and `tools_deny` on `McpServerConfig` take glob patterns and are
+applied in `McpClient._build_tools`, the one place every transport converges.
+The ElevenLabs entry ships with `creative_*`, which is speech, transcription,
+voices, images and video.
 
 ## Scopes
 
