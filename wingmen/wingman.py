@@ -332,6 +332,10 @@ class Wingman:
                     )
                 except Exception:
                     pass
+            try:
+                await self.persistent_memory_service.maybe_consolidate()
+            except Exception:
+                pass
             self.persistent_memory_service.close()
 
         # Unsubscribe from secret events to prevent duplicate handlers
@@ -781,6 +785,7 @@ class Wingman:
                 await self.persistent_memory_service.extract_memories(
                     self.conversation.messages, generate_summary=True
                 )
+                await self.persistent_memory_service.maybe_consolidate()
             except Exception:
                 pass
 

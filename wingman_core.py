@@ -615,6 +615,12 @@ class WingmanCore(WebSocketUser):
             endpoint=self.test_memory_extraction,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/memories/{wingman_name}/consolidate",
+            endpoint=self.consolidate_memories,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_manager.perform_hardware_scan(self.system_manager)
@@ -3873,6 +3879,30 @@ class WingmanCore(WebSocketUser):
             self.printr.toast(f"All memories cleared for {wingman_name}.")
             return True
         return False
+
+    # POST /memories/{wingman_name}/consolidate
+    async def consolidate_memories(self, wingman_name: str) -> dict:
+        """Tidy a wingman's facts with one support-model pass: merge duplicates,
+        drop moments that were stored as facts, keep the newer of two
+        contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            raise HTTPException(404, f"Wingman '{wingman_name}' not found")
+        wingman.ensure_memory_initialized()
+        svc = wingman.persistent_memory_service
+        if not svc:
+            raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(503, "The Support Model is not ready.")
+
+        outcome = await svc.consolidate()
+        if outcome["changed"]:
+            self.printr.toast(
+                f"Memories tidied for {wingman_name}: {outcome['before']} → {outcome['after']} facts."
+            )
+        else:
+            self.printr.toast(f"Memories of {wingman_name} were already tidy.")
+        return outcome
 
     # POST /memories/{wingman_name}/test-extraction
     async def test_memory_extraction(
