@@ -95,6 +95,13 @@ servers:
       - voice_generation
       - speech_history_read
       - convai_read
+    # ElevenLabs offers 111 tools. Their schemas come to roughly 222,000 tokens,
+    # more than most context windows hold, and `agents_run_tests` alone is 72,000
+    # because it drags in the whole agent data model. The creative tools are the
+    # ones a voice assistant wants — speech, transcription, voices, images,
+    # video — and they fit in about 20,000.
+    tools_allow:
+      - creative_*
     discoverable_by_default: false
 
   - name: wingman_no_mans_sky

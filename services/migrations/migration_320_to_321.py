@@ -49,6 +49,9 @@ ELEVENLABS_SERVER = {
         "speech_history_read",
         "convai_read",
     ],
+    # 111 tools, roughly 222,000 tokens of schema. The creative ones are what a
+    # voice assistant wants and fit in about 20,000. See `tools_allow`.
+    "tools_allow": ["creative_*"],
     "discoverable_by_default": False,
 }
 

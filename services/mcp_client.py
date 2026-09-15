@@ -29,6 +29,7 @@ import concurrent.futures
 import json
 import logging
 import threading
+from fnmatch import fnmatch
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -316,29 +317,7 @@ class McpClient:
 
                     # Fetch available tools
                     tools_response = await session.list_tools()
-                    connection.tools = []
-
-                    for tool in tools_response.tools:
-                        prefixed_name = f"mcp_{connection.config.name}_{tool.name}"
-                        # Convert input schema to dict if present
-                        input_schema = None
-                        if tool.inputSchema:
-                            # The inputSchema is already a dict-like object
-                            input_schema = (
-                                dict(tool.inputSchema)
-                                if hasattr(tool.inputSchema, "items")
-                                else tool.inputSchema
-                            )
-
-                        tool_info = McpToolInfo(
-                            name=tool.name,
-                            prefixed_name=prefixed_name,
-                            description=tool.description
-                            or f"Tool from {connection.config.display_name}",
-                            server_name=connection.config.name,
-                            input_schema=input_schema,
-                        )
-                        connection.tools.append(tool_info)
+                    connection.tools = self._build_tools(connection, tools_response)
 
             # Mark as connected (even though we don't keep a persistent session)
             connection.is_connected = True
@@ -440,27 +419,9 @@ class McpClient:
 
                             # Fetch tools
                             tools_response = await session.list_tools()
-                            connection.tools = []
-
-                            for tool in tools_response.tools:
-                                prefixed_name = f"mcp_{connection.config.name}_{tool.name}"
-                                input_schema = None
-                                if tool.inputSchema:
-                                    input_schema = (
-                                        dict(tool.inputSchema)
-                                        if hasattr(tool.inputSchema, "items")
-                                        else tool.inputSchema
-                                    )
-
-                                tool_info = McpToolInfo(
-                                    name=tool.name,
-                                    prefixed_name=prefixed_name,
-                                    description=tool.description
-                                    or f"Tool from {connection.config.display_name}",
-                                    server_name=connection.config.name,
-                                    input_schema=input_schema,
-                                )
-                                connection.tools.append(tool_info)
+                            connection.tools = self._build_tools(
+                                connection, tools_response
+                            )
 
                             # Store session reference for tool calls
                             sse_session_holder["session"] = session
@@ -513,6 +474,70 @@ class McpClient:
             await self._cleanup_connection(connection)
             raise Exception(connection.sse_error)
 
+    @staticmethod
+    def _build_tools(connection: McpConnection, tools_response: Any) -> list[McpToolInfo]:
+        """Turn a server's tool list into what this wingman will actually offer.
+
+        The filter is applied here, at the one place every transport passes
+        through, so a server's own list is never the thing that reaches the model
+        unless the config says so. See `tools_allow` on `McpServerConfig` for why
+        that matters: a large server's schemas can be bigger than the context
+        window.
+        """
+        config = connection.config
+        allow = config.tools_allow or None
+        deny = config.tools_deny or None
+
+        tools: list[McpToolInfo] = []
+        skipped = 0
+
+        for tool in tools_response.tools:
+            if allow and not any(fnmatch(tool.name, pattern) for pattern in allow):
+                skipped += 1
+                continue
+            if deny and any(fnmatch(tool.name, pattern) for pattern in deny):
+                skipped += 1
+                continue
+
+            # Create prefixed tool name to avoid collisions
+            prefixed_name = f"mcp_{config.name}_{tool.name}"
+            # Convert input schema to dict if present
+            input_schema = None
+            if tool.inputSchema:
+                # The inputSchema is already a dict-like object
+                input_schema = (
+                    dict(tool.inputSchema)
+                    if hasattr(tool.inputSchema, "items")
+                    else tool.inputSchema
+                )
+
+            tools.append(
+                McpToolInfo(
+                    name=tool.name,
+                    prefixed_name=prefixed_name,
+                    description=tool.description or f"Tool from {config.display_name}",
+                    server_name=config.name,
+                    input_schema=input_schema,
+                )
+            )
+
+        if skipped:
+            printr.print(
+                f"MCP {config.display_name}: keeping {len(tools)} of "
+                f"{len(tools_response.tools)} tools, {skipped} filtered out by config",
+                color=LogType.MCP,
+                server_only=True,
+            )
+        if allow and not tools:
+            printr.print(
+                f"MCP {config.display_name}: the tool filter matched nothing, so this "
+                "server offers no tools. Check tools_allow.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+
+        return tools
+
     async def _fetch_tools(self, connection: McpConnection) -> None:
         """Fetch and store available tools from the connected server."""
         if not connection.session:
@@ -520,29 +545,7 @@ class McpClient:
 
         try:
             tools_response = await connection.session.list_tools()
-            connection.tools = []
-
-            for tool in tools_response.tools:
-                # Create prefixed tool name to avoid collisions
-                prefixed_name = f"mcp_{connection.config.name}_{tool.name}"
-                # Convert input schema to dict if present
-                input_schema = None
-                if tool.inputSchema:
-                    input_schema = (
-                        dict(tool.inputSchema)
-                        if hasattr(tool.inputSchema, "items")
-                        else tool.inputSchema
-                    )
-
-                tool_info = McpToolInfo(
-                    name=tool.name,
-                    prefixed_name=prefixed_name,
-                    description=tool.description
-                    or f"Tool from {connection.config.display_name}",
-                    server_name=connection.config.name,
-                    input_schema=input_schema,
-                )
-                connection.tools.append(tool_info)
+            connection.tools = self._build_tools(connection, tools_response)
 
         except Exception as e:
             printr.print(

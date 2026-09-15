@@ -962,6 +962,23 @@ class McpServerConfig(BaseModel):
     oauth_scopes: Optional[list[str]] = None
     """OAuth scopes to request. Empty means whatever the server grants by default."""
 
+    tools_allow: Optional[list[str]] = None
+    """Tool names to keep, `*` and `?` allowed. Empty means keep everything.
+
+    A server's tool definitions go into the prompt in full once the server is
+    activated, and some servers are far too large for that. ElevenLabs offers 111
+    tools whose schemas come to roughly 222,000 tokens, more than most context
+    windows hold; two of them account for over half. Narrowing to `creative_*`
+    brings it to about 20,000.
+    """
+
+    tools_deny: Optional[list[str]] = None
+    """Tool names to drop, `*` and `?` allowed. Applied after `tools_allow`.
+
+    The way to keep a large server minus a few oversized tools, rather than
+    listing everything you want by hand.
+    """
+
     # STDIO transport settings
     command: Optional[str] = None
     """Command to run for stdio transport (e.g., 'docker', 'python', 'npx')."""
