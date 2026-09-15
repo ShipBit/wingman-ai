@@ -2,7 +2,7 @@ import asyncio
 import shutil
 from typing import Optional
 from fastapi import APIRouter, HTTPException
-from api.enums import LogSource, LogType
+from api.enums import LogSource, LogType, McpAuthType
 from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
@@ -12,6 +12,8 @@ from api.interface import (
     DuplicateWingmanResult,
     McpConfig,
     McpConnectResult,
+    McpOAuthStartResult,
+    McpOAuthStatus,
     McpServerConfig,
     McpServerState,
     NestedConfig,
@@ -24,6 +26,7 @@ from api.interface import (
     WingmanSkillState,
 )
 from services.config_manager import ConfigManager
+from services.mcp_oauth import get_oauth_service
 from services.config_migration_service import ConfigMigrationService
 from services.file import get_custom_skills_dir
 from services.module_manager import ModuleManager
@@ -234,6 +237,26 @@ class ConfigService:
             methods=["DELETE"],
             path="/mcp-servers",
             endpoint=self.delete_mcp_server,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/mcp-servers/oauth/authorize",
+            endpoint=self.authorize_mcp_server,
+            response_model=McpOAuthStartResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/mcp-servers/oauth/status",
+            endpoint=self.get_mcp_oauth_status,
+            response_model=McpOAuthStatus,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/mcp-servers/oauth",
+            endpoint=self.revoke_mcp_oauth,
             tags=tags,
         )
         self.router.add_api_route(
@@ -736,6 +759,12 @@ class ConfigService:
                     else:
                         error = registry.get_server_error(mcp_server.name)
 
+                # Only OAuth servers carry a status. For everything else it stays
+                # None, so the UI has nothing to render and nothing to explain.
+                oauth = None
+                if mcp_server.auth == McpAuthType.OAUTH:
+                    oauth = get_oauth_service().status(mcp_server)
+
                 result.append(
                     McpServerState(
                         config=mcp_server,
@@ -743,6 +772,7 @@ class ConfigService:
                         is_connected=is_connected,
                         tools=tools,
                         error=error,
+                        oauth=oauth,
                     )
                 )
 
@@ -916,6 +946,67 @@ class ConfigService:
         except Exception as e:
             self.printr.toast_error(str(e))
             raise e
+
+    def _find_mcp_server(self, mcp_name: str) -> Optional[McpServerConfig]:
+        """The configured server by name, or None."""
+        mcp_config = self.config_manager.mcp_config
+        if not mcp_config or not mcp_config.servers:
+            return None
+        return next((s for s in mcp_config.servers if s.name == mcp_name), None)
+
+    # POST /mcp-servers/oauth/authorize
+    async def authorize_mcp_server(self, mcp_name: str) -> McpOAuthStartResult:
+        """Begin an OAuth flow and hand back the consent page to open.
+
+        This returns as soon as there is a URL to show. The flow itself keeps
+        running in Core, waiting for the browser to come back to
+        `/mcp/oauth/callback`, and announces its outcome with an
+        `mcp_oauth_state_changed` command.
+        """
+        mcp_server = self._find_mcp_server(mcp_name)
+        if not mcp_server:
+            return McpOAuthStartResult(
+                success=False,
+                server_name=mcp_name,
+                error=f"MCP server '{mcp_name}' not found.",
+            )
+
+        result = await get_oauth_service().start_authorization(mcp_server)
+        if not result.success and result.error:
+            self.printr.toast_error(result.error)
+        return result
+
+    # GET /mcp-servers/oauth/status
+    async def get_mcp_oauth_status(self, mcp_name: str) -> McpOAuthStatus:
+        """Whether Wingman holds a token for this server. Touches no network."""
+        mcp_server = self._find_mcp_server(mcp_name)
+        if not mcp_server:
+            return McpOAuthStatus(server_name=mcp_name, is_authorized=False)
+        return get_oauth_service().status(mcp_server)
+
+    # DELETE /mcp-servers/oauth
+    async def revoke_mcp_oauth(self, mcp_name: str):
+        """Forget the stored token and reconnect every wingman using this server.
+
+        Reconnecting matters: without it a wingman keeps a live connection built
+        on the token that was just discarded, and the server looks authorized
+        until the next restart.
+        """
+        mcp_server = self._find_mcp_server(mcp_name)
+        if not mcp_server:
+            self.printr.toast_error(f"MCP server '{mcp_name}' not found.")
+            return
+
+        await get_oauth_service().revoke(mcp_server)
+
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                if hasattr(wingman, "init_mcps"):
+                    await wingman.init_mcps()
+
+        self.printr.toast(
+            f"Signed out of '{mcp_server.display_name or mcp_server.name}'."
+        )
 
     # POST /wingman-mcps/connect
     async def connect_wingman_mcp(

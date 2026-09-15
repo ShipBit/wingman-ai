@@ -177,6 +177,7 @@ class McpRegistry:
         config: McpServerConfig,
         headers: Optional[dict[str, str]] = None,
         auto_activate: bool = False,
+        auth: Optional[Any] = None,
     ) -> McpConnection:
         """
         Register and connect to an MCP server.
@@ -185,11 +186,12 @@ class McpRegistry:
             config: Server configuration
             headers: Optional headers (e.g., API keys from SecretKeeper)
             auto_activate: Whether to automatically activate the server
+            auth: Optional httpx.Auth for OAuth servers
 
         Returns:
             The connection object
         """
-        connection = await self._client.connect(config, headers)
+        connection = await self._client.connect(config, headers, auth)
 
         if connection.is_connected:
             self._connections[config.name] = connection

@@ -67,6 +67,36 @@ servers:
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/versetime/mcp
     discoverable_by_default: false
 
+  # ElevenLabs' hosted server only accepts an OAuth token — it answers 401 to an
+  # API key. Pressing Authorize in a wingman's MCP settings opens the consent
+  # page and stores the token; see docs/mcp-oauth.md.
+  #
+  # ElevenLabs has no dynamic client registration, so `oauth_client_id` has to
+  # name a client id metadata document. The one below is served by Wingman's own
+  # worker.
+  - name: elevenlabs
+    display_name: ElevenLabs
+    description: ElevenLabs audio. Text to speech, voice cloning, sound effects, music, speech to text. Browse the voice library and manage conversational agents.
+    discovery_keywords:
+      - ElevenLabs
+      - text to speech
+      - voice
+      - voice clone
+      - sound effect
+      - transcribe
+      - speech to text
+      - audio generation
+    type: http
+    url: https://api.us.elevenlabs.io/v1/mcp
+    auth: oauth
+    oauth_client_id: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client
+    oauth_scopes:
+      - text_to_speech
+      - voice_generation
+      - speech_history_read
+      - convai_read
+    discoverable_by_default: false
+
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.

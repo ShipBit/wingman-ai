@@ -6,6 +6,7 @@ from api.enums import (
     CoreState,
     ImageGenerationProvider,
     LocalAiMode,
+    McpAuthType,
     McpTransportType,
     CustomPropertyType,
     TtsVoiceGender,
@@ -941,6 +942,26 @@ class McpServerConfig(BaseModel):
     headers: Optional[dict[str, str]] = None
     """Optional headers for HTTP requests. API keys should use SecretKeeper with 'mcp_<name>' prefix."""
 
+    auth: McpAuthType = McpAuthType.API_KEY
+    """How to authenticate against this server.
+
+    Defaults to API_KEY, which is what every server did before 3.2.1 and costs
+    nothing when no secret is stored: the bearer header is only added if the
+    secret `mcp_<name>` exists. OAUTH runs an authorization code grant instead.
+    """
+
+    oauth_client_id: Optional[str] = None
+    """OAuth client id to use instead of registering one dynamically.
+
+    Leave empty for servers that support Dynamic Client Registration (RFC 7591) —
+    the usual case, and Wingman registers itself on first use. Set it for servers
+    that have no registration endpoint, such as ElevenLabs, which expects a
+    client id metadata document URL here.
+    """
+
+    oauth_scopes: Optional[list[str]] = None
+    """OAuth scopes to request. Empty means whatever the server grants by default."""
+
     # STDIO transport settings
     command: Optional[str] = None
     """Command to run for stdio transport (e.g., 'docker', 'python', 'npx')."""
@@ -1017,6 +1038,56 @@ class McpServerState(BaseModel):
 
     error: Optional[str] = None
     """Error message if connection failed."""
+
+    oauth: Optional["McpOAuthStatus"] = None
+    """OAuth state, present only for servers whose auth is 'oauth'."""
+
+
+class McpOAuthStatus(BaseModel):
+    """Whether Wingman holds a usable OAuth token for an MCP server."""
+
+    server_name: str
+    """The MCP server this status belongs to."""
+
+    is_authorized: bool
+    """True when a token is stored. It may still be expired — see `is_expired`."""
+
+    is_expired: bool = False
+    """True when the stored access token has passed its expiry.
+
+    Not fatal on its own: a refresh token, when the server issued one, renews it
+    silently on the next request.
+    """
+
+    can_refresh: bool = False
+    """True when a refresh token is stored, so an expired token renews itself."""
+
+    scopes: Optional[list[str]] = None
+    """Scopes the server granted, as reported in the token response."""
+
+    expires_at: Optional[float] = None
+    """Unix timestamp the access token expires at, if the server said."""
+
+
+class McpOAuthStartResult(BaseModel):
+    """Result of asking Core to begin an OAuth flow."""
+
+    success: bool
+    """False when the URL could not be built — see `error`."""
+
+    server_name: str
+    """The MCP server the flow belongs to."""
+
+    authorization_url: Optional[str] = None
+    """The consent page to open in the user's browser."""
+
+    error: Optional[str] = None
+    """Why the flow could not be started."""
+
+
+# McpServerState refers to McpOAuthStatus before it exists, so the reference has
+# to be resolved once both are defined.
+McpServerState.model_rebuild()
 
 
 class TestConnectionResult(BaseModel):

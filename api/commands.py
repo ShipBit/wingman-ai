@@ -107,6 +107,23 @@ class McpStateChangedCommand(WebSocketCommandModel):
     """The wingman whose MCP state changed."""
 
 
+class McpOAuthStateChangedCommand(WebSocketCommandModel):
+    """Sent when an MCP OAuth flow finishes, either way.
+
+    The client starts a flow and then has nothing to poll: the user is in a
+    browser, and the token arrives on a completely different route. This is how
+    the settings UI learns it can stop showing a spinner.
+    """
+
+    command: Literal["mcp_oauth_state_changed"] = "mcp_oauth_state_changed"
+    mcp_name: str
+    """The MCP server whose authorization state changed."""
+    is_authorized: bool
+    """True when a token was stored, False when the attempt failed."""
+    error: Optional[str] = None
+    """Why it failed, when it did."""
+
+
 class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):
     command: Literal["audio_library_playback_finished"] = (
         "audio_library_playback_finished"

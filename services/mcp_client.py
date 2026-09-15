@@ -33,8 +33,9 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from api.enums import LogType, McpTransportType
+from api.enums import LogType, McpAuthType, McpTransportType
 from api.interface import McpServerConfig, McpToolInfo
+from services.mcp_oauth import NeedsAuthorization
 from services.printr import Printr
 
 printr = Printr()
@@ -75,6 +76,11 @@ class McpConnection:
 
     # HTTP/SSE connections store merged headers for per-call connections
     merged_headers: dict[str, str] = field(default_factory=dict)
+
+    # OAuth providers are httpx.Auth hooks. They are kept on the connection
+    # because HTTP reconnects per call and SSE reconnects on failure, and both
+    # have to send the same credential the first connect used.
+    auth: Any = None
 
     # Connection resources that need cleanup (for STDIO only - HTTP uses per-call)
     read_stream: Any = None
@@ -123,7 +129,9 @@ class McpClient:
         Format authentication errors with clear instructions.
 
         Checks if the exception is a 401 authentication error and returns
-        a user-friendly message with instructions on how to add the required secret.
+        a user-friendly message with instructions on how to fix it. What "fix it"
+        means depends on the server's auth mode: an API-key server needs a secret,
+        an OAuth server needs the user to press Authorize.
 
         Args:
             config: The MCP server configuration
@@ -132,16 +140,36 @@ class McpClient:
         Returns:
             Formatted error message
         """
-        # Check if this is an ExceptionGroup (from anyio TaskGroup)
-        # and extract nested exceptions
-        exceptions_to_check = [exception]
+        if config.auth == McpAuthType.OAUTH:
+            remedy = (
+                f"MCP server '{config.display_name}' needs authorization. "
+                "Open the wingman's MCP settings and press Authorize."
+            )
+        else:
+            remedy = (
+                f"MCP server '{config.display_name}' requires authentication. "
+                f"Please add a secret called mcp_{config.name}."
+            )
 
-        if hasattr(exception, "exceptions"):
-            # This is an ExceptionGroup, get the nested exceptions
-            exceptions_to_check.extend(exception.exceptions)
+        # anyio task groups raise ExceptionGroups, and a failure deep in a
+        # transport arrives nested more than one level down, so flatten the whole
+        # tree rather than just its first layer.
+        exceptions_to_check: list[BaseException] = []
+        pending: list[BaseException] = [exception]
+        while pending:
+            current = pending.pop()
+            exceptions_to_check.append(current)
+            nested = getattr(current, "exceptions", None)
+            if nested:
+                pending.extend(nested)
 
         # Check all exceptions for 401/auth errors
         for exc in exceptions_to_check:
+            # The silent OAuth provider raises this instead of opening a browser.
+            # It already carries the sentence a user needs.
+            if isinstance(exc, NeedsAuthorization):
+                return str(exc)
+
             error_str = str(exc).lower()
 
             # Check for 401 in string representation
@@ -150,7 +178,7 @@ class McpClient:
                 or "unauthorized" in error_str
                 or "authentication" in error_str
             ):
-                return f"MCP server '{config.display_name}' requires authentication. Please add a secret called mcp_{config.name}."
+                return remedy
 
             # Check if it's an httpx.HTTPStatusError with 401 status code
             if hasattr(exc, "response"):
@@ -160,7 +188,7 @@ class McpClient:
                     and hasattr(response, "status_code")
                     and response.status_code == 401
                 ):
-                    return f"MCP server '{config.display_name}' requires authentication. Please add a secret called mcp_{config.name}."
+                    return remedy
 
         # Return original error for non-auth issues
         return str(exception)
@@ -182,6 +210,7 @@ class McpClient:
         self,
         config: McpServerConfig,
         headers: Optional[dict[str, str]] = None,
+        auth: Optional[Any] = None,
     ) -> McpConnection:
         """
         Connect to an MCP server.
@@ -189,6 +218,10 @@ class McpClient:
         Args:
             config: The MCP server configuration
             headers: Optional headers to merge with config headers (for secrets)
+            auth: Optional httpx.Auth, used for OAuth servers. It adds the access
+                token, refreshes it when it has expired, and — for the silent
+                provider Wingman builds at connect time — raises rather than
+                opening a browser when only a user could continue.
 
         Returns:
             McpConnection with connection state and available tools
@@ -208,7 +241,7 @@ class McpClient:
             # Cleanup failed connection before retry
             await self._cleanup_connection(existing)
 
-        connection = McpConnection(config=config)
+        connection = McpConnection(config=config, auth=auth)
 
         try:
             # Merge headers from config and provided headers
@@ -274,6 +307,7 @@ class McpClient:
             async with streamablehttp_client(
                 url=config.url,
                 headers=headers if headers else None,
+                auth=connection.auth,
                 timeout=30,
                 sse_read_timeout=30,
             ) as (read_stream, write_stream, _):
@@ -397,6 +431,7 @@ class McpClient:
                     async with sse_client(
                         url=config.url,
                         headers=headers if headers else None,
+                        auth=connection.auth,
                         timeout=30,
                         sse_read_timeout=300,  # 5 min keep-alive
                     ) as (read_stream, write_stream):
@@ -632,6 +667,7 @@ class McpClient:
         async with streamablehttp_client(
             url=config.url,
             headers=connection.merged_headers if connection.merged_headers else None,
+            auth=connection.auth,
             timeout=timeout,
             sse_read_timeout=timeout,
         ) as (read_stream, write_stream, _):
