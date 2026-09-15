@@ -93,18 +93,30 @@ servers:
     url: https://api.us.elevenlabs.io/v1/mcp
     auth: oauth
     oauth_client_id: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client
+    # Every generator runs through a flow, so `flows` is not optional: without
+    # it even speech answers 403. `image_video_generation` covers the two
+    # visual tools. `convai_read` is gone with the agents_* tools.
     oauth_scopes:
+      - flows
+      - image_video_generation
       - text_to_speech
       - voice_generation
       - speech_history_read
-      - convai_read
-    # ElevenLabs offers 111 tools. Their schemas come to roughly 222,000 tokens,
-    # more than most context windows hold, and `agents_run_tests` alone is 72,000
-    # because it drags in the whole agent data model. The creative tools are the
-    # ones a voice assistant wants — speech, transcription, voices, images,
-    # video — and they fit in about 20,000.
+    # ElevenLabs offers 111 tools measuring roughly 222,000 tokens, more than
+    # most context windows hold. `creative_*` alone still brings 29 and 20,384,
+    # and two thirds of those edit a canvas Wingman does not have or upload
+    # files it cannot upload. Two of them say in their own description never
+    # to call them. These seven are what a voice assistant reaches for, at
+    # 6,782 tokens. `get_flow_run_status` is not optional: generation is
+    # asynchronous and without it a result never comes back.
     tools_allow:
-      - creative_*
+      - creative_generate_image
+      - creative_generate_video
+      - creative_generate_speech
+      - creative_edit_image
+      - creative_transcribe_audio
+      - creative_list_voices
+      - creative_get_flow_run_status
     discoverable_by_default: false
 
   - name: wingman_no_mans_sky

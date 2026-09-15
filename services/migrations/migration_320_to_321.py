@@ -47,15 +47,26 @@ ELEVENLABS_SERVER = {
     "oauth_client_id": (
         "https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client"
     ),
+    # Every generator runs through a flow, so `flows` is not optional: without
+    # it even speech answers 403.
     "oauth_scopes": [
+        "flows",
+        "image_video_generation",
         "text_to_speech",
         "voice_generation",
         "speech_history_read",
-        "convai_read",
     ],
-    # 111 tools, roughly 222,000 tokens of schema. The creative ones are what a
-    # voice assistant wants and fit in about 20,000. See `tools_allow`.
-    "tools_allow": ["creative_*"],
+    # 111 tools, roughly 222,000 tokens of schema. These seven are what a voice
+    # assistant reaches for, at 6,782. See `tools_allow` on McpServerConfig.
+    "tools_allow": [
+        "creative_generate_image",
+        "creative_generate_video",
+        "creative_generate_speech",
+        "creative_edit_image",
+        "creative_transcribe_audio",
+        "creative_list_voices",
+        "creative_get_flow_run_status",
+    ],
     "discoverable_by_default": False,
 }
 
