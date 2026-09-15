@@ -1034,6 +1034,7 @@ class Wingman:
             self._propagate_config(config)
 
             await self._update_skill_configs(config)
+            await self.skill_manager.apply_disabled_tools(config)
 
             if not skip_config_validation:
                 errors = await self.validate()

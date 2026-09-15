@@ -962,21 +962,16 @@ class McpServerConfig(BaseModel):
     oauth_scopes: Optional[list[str]] = None
     """OAuth scopes to request. Empty means whatever the server grants by default."""
 
-    tools_allow: Optional[list[str]] = None
-    """Tool names to keep, `*` and `?` allowed. Empty means keep everything.
+    disabled_tools: Optional[list[str]] = None
+    """Tool names (as the server reports them) that are hidden from the model.
 
-    A server's tool definitions go into the prompt in full once the server is
-    activated, and some servers are far too large for that. ElevenLabs offers 111
-    tools whose schemas come to roughly 222,000 tokens, more than most context
-    windows hold; two of them account for over half. Narrowing to `creative_*`
-    brings it to about 20,000.
-    """
+    Every tool a server offers is still listed in the UI, but a disabled one is
+    left out of the prompt and cannot be called. Empty means everything is on.
 
-    tools_deny: Optional[list[str]] = None
-    """Tool names to drop, `*` and `?` allowed. Applied after `tools_allow`.
-
-    The way to keep a large server minus a few oversized tools, rather than
-    listing everything you want by hand.
+    This matters for size: a server's tool definitions go into the prompt in
+    full once the server is activated, and some servers are far too large for
+    that. ElevenLabs offers 111 tools whose schemas come to roughly 222,000
+    tokens; the seven a voice assistant needs come to about 6,800.
     """
 
     # STDIO transport settings
@@ -1036,6 +1031,9 @@ class McpToolInfo(BaseModel):
 
     input_schema: Optional[dict] = None
     """JSON Schema for the tool's input parameters."""
+
+    is_enabled: bool = True
+    """False when the tool is in the server's `disabled_tools` list."""
 
 
 class McpServerState(BaseModel):
@@ -1187,6 +1185,14 @@ class NestedConfig(BaseModel):
     This is a whitelist - only MCP servers in this list are available at runtime.
     Empty list means no MCP servers are discoverable.
     Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
+
+    disabled_skill_tools: list[str] = []
+    """Skill tool names this wingman hides from the model.
+
+    A skill stays enabled, but a tool listed here is left out of the prompt and
+    cannot be called. Tool names are unique across skills, so no skill prefix is
+    needed. Empty means every tool of every enabled skill is on.
+    """
 
 
 class WingmanConfig(NestedConfig):

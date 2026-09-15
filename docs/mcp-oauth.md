@@ -167,10 +167,21 @@ far too large for that.
 carrying 336 definitions, the whole agent data model. `agents_create_draft` is
 another 48,151.
 
-`tools_allow` and `tools_deny` on `McpServerConfig` take glob patterns and are
-applied in `McpClient._build_tools`, the one place every transport converges.
-The ElevenLabs entry ships with `creative_*`, which is speech, transcription,
-voices, images and video.
+Every tool a server offers is listed in the wingman's MCP settings with a
+switch. Switching one off puts its name into `disabled_tools` on the server in
+`mcp.yaml`, and `McpClient._build_tools` marks it `is_enabled: false`. The
+model never sees it: `get_tool_definitions` skips it, the discovery manifest
+leaves it out, and the registry refuses a call to it by name. The ElevenLabs
+entry ships with 104 of its 111 tools off, leaving speech, transcription, the
+voice list, image, video, image edit and `get_flow_run_status`.
+
+Skills work the same way from the wingman's side: `disabled_skill_tools` on the
+wingman config, applied through `Skill.get_enabled_tools`, which is what the
+registry and the prompt builder read. `get_tools` stays the full list for the
+UI.
+
+Both are blacklists on purpose: a tool the server or skill adds later is on
+until someone switches it off.
 
 ## Scopes
 

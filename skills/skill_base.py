@@ -441,6 +441,11 @@ class Skill:
         self._decorated_tools: dict[str, ToolDefinition] = {}
         self._collect_decorated_tools()
 
+        # Tool names the wingman has switched off for this skill. Set by the
+        # skill manager from the wingman's `disabled_skill_tools`; the framework
+        # reads tools through `get_enabled_tools`, so these never reach the model.
+        self.disabled_tools: set[str] = set()
+
         self._command_actions: dict[str, CommandActionDefinition] = {}
         self._collect_command_actions()
 
@@ -676,6 +681,20 @@ class Skill:
             tools.append((tool_def.tool_name, tool_def.tool_schema))
         return tools
 
+    def get_enabled_tools(self) -> list[tuple[str, dict]]:
+        """The skill's tools minus the ones the wingman switched off.
+
+        This is what the framework registers and hands to the model. `get_tools`
+        stays the full list, so the UI can show every tool with its switch.
+        """
+        if not self.disabled_tools:
+            return self.get_tools()
+        return [
+            (name, schema)
+            for name, schema in self.get_tools()
+            if name not in self.disabled_tools
+        ]
+
     def get_tools_description(self) -> str:
         """
         Auto-generate a prompt section describing all tools in this skill.
@@ -687,7 +706,7 @@ class Skill:
         Returns:
             A formatted string listing all tools and their descriptions.
         """
-        tools = self.get_tools()
+        tools = self.get_enabled_tools()
         if not tools:
             return ""
 

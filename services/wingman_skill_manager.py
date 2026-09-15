@@ -125,7 +125,45 @@ class WingmanSkillManager:
         )
         if skill:
             skill.threaded_execution = self._wingman.threaded_execution
+            skill.disabled_tools = self._disabled_tools_for(skill)
         return skill
+
+    def _disabled_tools_for(self, skill: Skill) -> set[str]:
+        """The wingman's disabled tool names that this skill actually has."""
+        disabled = set(self.config.disabled_skill_tools or [])
+        if not disabled:
+            return set()
+        return {name for name, _ in skill.get_tools() if name in disabled}
+
+    async def apply_disabled_tools(self, config: WingmanConfig) -> None:
+        """Re-apply `disabled_skill_tools` after the wingman's config changed.
+
+        Touches only skills whose disabled set actually differs, and never
+        unloads one: the tool maps and the registry manifest are rebuilt, the
+        skill instance and its activation state stay.
+        """
+        self.config = config
+        changed = False
+        for skill in self.skills:
+            desired = self._disabled_tools_for(skill)
+            if desired == skill.disabled_tools:
+                continue
+            changed = True
+            all_names = {name for name, _ in skill.get_tools()}
+            for tool_name in all_names:
+                self.tool_skills.pop(tool_name, None)
+            self.skill_tools = [
+                t
+                for t in self.skill_tools
+                if t.get("function", {}).get("name") not in all_names
+            ]
+            skill.disabled_tools = desired
+            for tool_name, tool in skill.get_enabled_tools():
+                self.tool_skills[tool_name] = skill
+                self.skill_tools.append(tool)
+            self.skill_registry.refresh_skill(skill)
+        if changed:
+            self._sync_conversation_skill_context()
 
     # ──────────────────────────── Public API ─────────────────────────────────── #
 
@@ -212,7 +250,7 @@ class WingmanSkillManager:
     async def prepare_skill(self, skill: Skill):
         registered_tool_names: list[str] = []
         try:
-            for tool_name, tool in skill.get_tools():
+            for tool_name, tool in skill.get_enabled_tools():
                 self.tool_skills[tool_name] = skill
                 self.skill_tools.append(tool)
                 registered_tool_names.append(tool_name)
@@ -258,6 +296,8 @@ class WingmanSkillManager:
     async def unprepare_skill(self, skill: Skill):
         try:
             for tool_name, _ in skill.get_tools():
+                # The full list on purpose: a tool switched off after prepare
+                # would otherwise stay in the maps.
                 self.tool_skills.pop(tool_name, None)
                 self.skill_tools = [
                     t

@@ -29,7 +29,6 @@ import concurrent.futures
 import json
 import logging
 import threading
-from fnmatch import fnmatch
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -478,27 +477,16 @@ class McpClient:
     def _build_tools(connection: McpConnection, tools_response: Any) -> list[McpToolInfo]:
         """Turn a server's tool list into what this wingman will actually offer.
 
-        The filter is applied here, at the one place every transport passes
-        through, so a server's own list is never the thing that reaches the model
-        unless the config says so. See `tools_allow` on `McpServerConfig` for why
-        that matters: a large server's schemas can be bigger than the context
-        window.
+        Every tool is kept, so the UI can show the whole list with a switch on
+        each. A tool in the config's `disabled_tools` is marked off here, at the
+        one place every transport passes through, and `get_tool_definitions`
+        leaves it out of what the model sees.
         """
         config = connection.config
-        allow = config.tools_allow or None
-        deny = config.tools_deny or None
+        disabled = set(config.disabled_tools or [])
 
         tools: list[McpToolInfo] = []
-        skipped = 0
-
         for tool in tools_response.tools:
-            if allow and not any(fnmatch(tool.name, pattern) for pattern in allow):
-                skipped += 1
-                continue
-            if deny and any(fnmatch(tool.name, pattern) for pattern in deny):
-                skipped += 1
-                continue
-
             # Create prefixed tool name to avoid collisions
             prefixed_name = f"mcp_{config.name}_{tool.name}"
             # Convert input schema to dict if present
@@ -518,20 +506,22 @@ class McpClient:
                     description=tool.description or f"Tool from {config.display_name}",
                     server_name=config.name,
                     input_schema=input_schema,
+                    is_enabled=tool.name not in disabled,
                 )
             )
 
-        if skipped:
+        off = sum(1 for t in tools if not t.is_enabled)
+        if off:
             printr.print(
-                f"MCP {config.display_name}: keeping {len(tools)} of "
-                f"{len(tools_response.tools)} tools, {skipped} filtered out by config",
+                f"MCP {config.display_name}: {len(tools) - off} of {len(tools)} tools "
+                f"enabled, {off} switched off in config",
                 color=LogType.MCP,
                 server_only=True,
             )
-        if allow and not tools:
+        if tools and off == len(tools):
             printr.print(
-                f"MCP {config.display_name}: the tool filter matched nothing, so this "
-                "server offers no tools. Check tools_allow.",
+                f"MCP {config.display_name}: every tool is switched off, so this "
+                "server offers the model nothing.",
                 color=LogType.WARNING,
                 server_only=True,
             )
@@ -904,6 +894,8 @@ class McpClient:
 
         definitions = []
         for tool_info in connection.tools:
+            if not tool_info.is_enabled:
+                continue
             # Build OpenAI-compatible tool definition
             # Use the cached input schema if available
             if tool_info.input_schema:

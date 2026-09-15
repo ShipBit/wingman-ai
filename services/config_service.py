@@ -241,6 +241,12 @@ class ConfigService:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/mcp-servers/tools/toggle",
+            endpoint=self.toggle_mcp_server_tool,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/mcp-servers/oauth/authorize",
             endpoint=self.authorize_mcp_server,
             response_model=McpOAuthStartResult,
@@ -953,6 +959,33 @@ class ConfigService:
         if not mcp_config or not mcp_config.servers:
             return None
         return next((s for s in mcp_config.servers if s.name == mcp_name), None)
+
+    # POST /mcp-servers/tools/toggle
+    async def toggle_mcp_server_tool(
+        self, mcp_name: str, tool_name: str, enabled: bool
+    ):
+        """Switch one of a server's tools on or off for the model.
+
+        The list lives on the server in mcp.yaml, so it applies to every wingman
+        using that server. Live connections are updated in place rather than
+        reconnected: one switch must not tear down every server of every wingman.
+        """
+        mcp_server = self._find_mcp_server(mcp_name)
+        if not mcp_server:
+            self.printr.toast_error(f"MCP server '{mcp_name}' not found.")
+            return
+
+        disabled = [t for t in (mcp_server.disabled_tools or []) if t != tool_name]
+        if not enabled:
+            disabled.append(tool_name)
+        mcp_server.disabled_tools = disabled or None
+        self.config_manager.save_mcp_config()
+
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                registry = getattr(wingman, "mcp_registry", None)
+                if registry:
+                    await registry.set_disabled_tools(mcp_name, disabled)
 
     # POST /mcp-servers/oauth/authorize
     async def authorize_mcp_server(self, mcp_name: str) -> McpOAuthStartResult:
