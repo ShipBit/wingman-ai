@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from api.interface import WingmanConfig
     from wingmen.facade import (
-        SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts,
+        SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
         SkillSettings,
     )
@@ -57,6 +57,7 @@ class WingmanContext:
         self.__ai = None
         self.__local_ai = None
         self.__tts = None
+        self.__stt = None
         self.__audio = None
         self.__commands = None
         self.__tools = None
@@ -135,6 +136,13 @@ class WingmanContext:
             from wingmen.facade import SkillTts
             self.__tts = SkillTts(self.__wingman)
         return self.__tts
+
+    @property
+    def stt(self) -> "SkillStt":
+        if self.__stt is None:
+            from wingmen.facade import SkillStt
+            self.__stt = SkillStt(self.__wingman)
+        return self.__stt
 
     @property
     def audio(self) -> "SkillAudio":

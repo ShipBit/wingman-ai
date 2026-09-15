@@ -88,6 +88,14 @@ class ContextBuilder:
         ):
             if self._config.inworld.use_tts_prompt and self._config.inworld.tts_prompt:
                 tts_prompt = self._config.inworld.tts_prompt
+                # Steering instructions ("[calm and measured]") only work on
+                # inworld-tts-2; the flash model ignores them, and the shipped
+                # prompt says so. The delivery block is appended for tts-2 only,
+                # so a user's edited prompt stays one text and still gets it.
+                if (self._config.inworld.model_id or "").strip() == "inworld-tts-2":
+                    from services.file import get_prompt
+
+                    tts_prompt = tts_prompt.rstrip() + "\n\n" + get_prompt("inworld-tts2-delivery")
         elif self._config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE:
             if (
                 self._config.openai_compatible_tts.use_tts_prompt

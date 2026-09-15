@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Awaitable
 from api.enums import LogType
 from services.benchmark import Benchmark
 from services.printr import Printr
-from services.tool_response_cache import ToolResponseCompressor
+from services.tool_response_limiter import ToolResponseLimiter
 
 if TYPE_CHECKING:
     from api.interface import CommandConfig, WingmanConfig, SettingsConfig
@@ -37,7 +37,7 @@ class ToolExecutor:
         self._config = config
         self._settings = settings
         self._wingman_name = wingman_name
-        self._tool_response_compressor = ToolResponseCompressor()
+        self._tool_response_limiter = ToolResponseLimiter()
 
     # ------------------------------------------------------------------
     # fix_tool_calls  (was _fix_tool_calls)
@@ -180,38 +180,27 @@ class ToolExecutor:
                 if tool_label:
                     tool_timings.append((tool_label, tool_time_ms))
 
-                # Compress large tool responses via local AI before the cloud LLM sees them
-                if (
-                    tool_call.id
-                    and self._config.features.compress_tool_responses
+                # Never feed an oversized tool/MCP response to the (paid) main model.
+                # Same cap as ctx.ai.generate, always on. Over the cap the response is
+                # summarized by the support model when the user allows it, cut otherwise.
+                from wingmen.facade import skill_input_cap
+
+                summarizer = (
+                    local_ai_service
+                    if self._config.features.compress_tool_responses
                     and local_ai_service
                     and local_ai_service.is_ready()
-                    and self._tool_response_compressor.should_compress(
-                        str(function_response)
-                    )
-                ):
-                    function_response = await self._tool_response_compressor.compress(
-                        response_text=str(function_response),
-                        local_ai_service=local_ai_service,
-                        wingman_name=self._wingman_name,
-                        tool_name=function_name,
-                    )
-
-                # Hard backstop: even when compression is off or unavailable, never feed
-                # an oversized tool/MCP response to the (paid) main model. Same cap + gating
-                # as ctx.ai.generate. Truncate (not reject) — the tool already executed.
-                if self._config.features.condense_conversation:
-                    from wingmen.facade import skill_input_cap
-                    from services.token_utils import count_tokens, truncate_to_tokens
-
-                    cap = skill_input_cap(self._config)
-                    resp_str = str(function_response)
-                    if count_tokens(resp_str) > cap:
-                        function_response = (
-                            truncate_to_tokens(resp_str, cap)
-                            + "\n\n[response truncated: exceeded the per-response token "
-                            "limit — compress or paginate]"
-                        )
+                    else None
+                )
+                limited = await self._tool_response_limiter.limit(
+                    response_text=str(function_response),
+                    cap=skill_input_cap(self._config),
+                    tool_name=function_name,
+                    wingman_name=self._wingman_name,
+                    local_ai_service=summarizer,
+                )
+                if limited != str(function_response):
+                    function_response = limited
 
                 if tool_call.id:
                     # updating the dummy tool response with the actual response

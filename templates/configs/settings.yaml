@@ -3,19 +3,22 @@ audio: {}
 streamer_mode: false
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
-voice_activation:
-  enabled: false
-  mute_toggle_key: "shift+x"
-  energy_threshold: 0.01
-  stt_provider: parakeet
+stt:
+  # Which provider transcribes what you say. One choice for every wingman and
+  # for both ways of talking (record key and voice activation).
+  provider: parakeet
+  # Languages the cloud provider may auto-detect. The local providers have
+  # their own language field.
   languages:
     - en-US
     - de-DE
-  whispercpp:
+  parakeet:
+    run_locally: true
+    model_variant: v3
+    execution_provider: cpu
     host: http://127.0.0.1
-    port: 8080
-    enable: false
-  whispercpp_config:
+    port: 9876
+  parakeet_config:
     temperature: 0.0
   fasterwhisper:
     model_size: base
@@ -29,15 +32,15 @@ voice_activation:
     language_detection_threshold: 0.5
     multilingual: false
     hotwords: []
-    additional_hotwords: []
-  parakeet:
-    run_locally: true
-    model_variant: v3
-    execution_provider: cpu
+  whispercpp:
     host: http://127.0.0.1
-    port: 9876
-  parakeet_config:
+    port: 8080
+  whispercpp_config:
     temperature: 0.0
+voice_activation:
+  enabled: false
+  mute_toggle_key: "shift+x"
+  energy_threshold: 0.01
 wingman_pro:
   base_url: https://api.wingman-ai.com
 xvasynth:

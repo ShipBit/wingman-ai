@@ -1,45 +1,49 @@
-Read the conversation and pull out durable personal facts about the USER, plus a short summary.
+Read the conversation and pull out durable personal facts about the USER, plus a short state of play.
 
-A DURABLE FACT is something the user actually stated that is still true next week. Good kinds:
-- Their name, age, or where they live in real life
-- Things they own, named specifically (a ship model, hardware, gear)
-- Orgs or clans they belong to, or friends they name
-- Goals they are working toward
-- Likes, dislikes, personality traits, their star sign
+A DURABLE FACT is something the user actually stated that is still true next month. Every fact has exactly one kind:
+- identity: their name, age, where they live in real life, star sign
+- possession: things they own, named specifically (a ship model, hardware, gear)
+- relationship: friends or people they name
+- affiliation: orgs, clans, crews they belong to
+- goal: something they are working toward
+- preference: likes, dislikes, personality traits, how they want to be addressed
 
-NEVER extract these:
-- Where the user is, is parked, or is heading right now in the game (locations are not durable)
-- Anything the ASSISTANT said, recommended, looked up, or provided
+NEVER extract these — they are moments, not facts:
+- Where the user is, is parked, is docked, or is heading right now (locations are never facts)
+- What just happened: an attack, damage, a timer, a purchase in progress, a delivery
+- The current time or date, ship status readouts, system checks
+- Anything the ASSISTANT said, recommended, looked up, or read out
 - Prices, credits, cargo amounts, trade routes, ship stats, or game lore
 
 Rules:
-- Scan EVERY user message from the first to the last before answering. Facts are spread across the whole conversation, not just the opening — a ship named in the third message and a goal in the tenth BOTH count. Capture ALL of them; a typical session has five to eight. Do not stop after the first one or two.
-- Only include facts the user ACTUALLY stated. Never pad the list with a kind that was not mentioned, and NEVER write placeholder facts like "Name is unknown", "Star sign is unknown", or "Owns no items". When the user said nothing durable, the facts list MUST be empty: [].
-- A current location is NEVER a fact. Where the user is, is parked, or is heading must never appear in the facts list — in any language (German "bei Hurston unterwegs" / "gerade bei X" is a location, not a fact).
+- Scan EVERY user message from the first to the last. Facts are spread across the whole conversation — a ship named in the third message and a goal in the tenth BOTH count. Capture ALL of them; a typical session has three to eight.
+- Only include facts the user ACTUALLY stated. Never pad the list, never write placeholders like "Name is unknown". When the user said nothing durable, the facts list MUST be empty: [].
 - Each fact must name the specific thing. Skip anything vague like "is interested in space".
+- Assistant messages may be cut short with […]. That is on purpose; nothing in them is a fact anyway.
 - Distinguish aUEC (in-game currency) from SCU (cargo units); never confuse them.
 
-SUMMARY: 2-4 sentences on what the user did this session and how it ended.
+STATE OF PLAY: 2-3 sentences for the next session. What the user is working on, what is still open, how the session ended. Not a list of what they asked; the wingman does not need to know that the user asked for the time.
 
 Output ONE line of compact JSON and nothing else:
-{"summary":"...","facts":["...","..."]}
+{"summary":"...","facts":[{"kind":"...","text":"..."}]}
 
 Two worked examples.
 
-1) Facts are spread across many turns -- scan the WHOLE conversation and extract every one (note "parked at New Babbage" is a current location and the assistant's lines are NOT facts):
+1) Facts are spread across many turns — scan the WHOLE conversation and extract every one (note "parked at New Babbage" is a current location, the attack is an event, and the assistant's lines are NOT facts):
   user: Hey, I'm Mia.
   assistant: Good to see you, Mia.
   user: I finally bought a Drake Cutlass Black.
   assistant: A solid ship.
-  user: I'm parked at New Babbage right now though.
-  assistant: Safe travels.
+  user: I'm parked at New Babbage right now though. Got jumped by two pirates on the way in.
+  assistant: Glad you made it. Shields are at forty percent, propulsion nominal. […]
   user: My org is the Red Foxes and I usually fly with my friend Leo.
   assistant: Sounds like a good crew.
   user: I love salvage runs but I can't stand mining. Long term I'm saving up for a Reclaimer.
-  {"summary":"Mia bought a Drake Cutlass Black, flies with her org the Red Foxes and her friend Leo, enjoys salvage but dislikes mining, and is saving for a Reclaimer.","facts":["Name is Mia","Owns a Drake Cutlass Black","Member of the Red Foxes org","Friend is named Leo","Enjoys salvage runs","Dislikes mining","Goal: save up for a Reclaimer"]}
+  {"summary":"Mia is settling into her new Cutlass Black after a rough arrival at New Babbage and wants to do salvage runs with Leo. She is saving for a Reclaimer.","facts":[{"kind":"identity","text":"Name is Mia"},{"kind":"possession","text":"Owns a Drake Cutlass Black"},{"kind":"affiliation","text":"Member of the Red Foxes org"},{"kind":"relationship","text":"Friend is named Leo"},{"kind":"preference","text":"Enjoys salvage runs"},{"kind":"preference","text":"Dislikes mining"},{"kind":"goal","text":"Saving up for a Reclaimer"}]}
 
-2) No durable facts -- just a greeting and a current location, so the list is EMPTY (do not invent placeholders):
+2) No durable facts — a greeting, a location, a status check, so the list is EMPTY (do not invent placeholders):
   user: hey there
   assistant: Greetings, pilot.
-  user: just cruising from Daymar to Yela, almost there
-  {"summary":"The user greeted the assistant while travelling from Daymar to Yela.","facts":[]}
+  user: just cruising from Daymar to Yela, almost there. how are my shields?
+  assistant: Shields at one hundred percent, all systems nominal. […]
+  {"summary":"A short flight from Daymar to Yela with a routine systems check; nothing left open.","facts":[]}

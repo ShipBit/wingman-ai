@@ -179,10 +179,6 @@ class Helper:
             VehicleDataAccess(),
         ]
 
-        wingman = self.get_wingmen()
-        wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords or []
-        original_hotwords_count = len(wingman_hotwords)
-
         uex_hotwords = ["UEX"]
         for data_access in data_access_instances:
             data = data_access.load()
@@ -192,14 +188,11 @@ class Helper:
                     uex_hotwords.append(item_name)
         uex_hotwords = list(set(uex_hotwords)) # remove duplicates
 
+        stt = self.get_wingmen().stt
         if unload:
-            wingman_hotwords = [word for word in wingman_hotwords if word not in uex_hotwords]
+            hotword_change = -stt.remove_hotwords(uex_hotwords)
         else:
-            wingman_hotwords.extend(uex_hotwords)
-            wingman_hotwords = list(set(wingman_hotwords))
-
-        self.get_wingmen().config.fasterwhisper.additional_hotwords = wingman_hotwords
-        hotword_change = len(wingman_hotwords) - original_hotwords_count
+            hotword_change = stt.add_hotwords(uex_hotwords)
         if hotword_change < 0:
             self.__handler_debug.write(
                 f"Removed {abs(hotword_change)} hotwords from FasterWhisper."

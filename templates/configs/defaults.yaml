@@ -57,14 +57,13 @@ prompts:
 persistent_memory: true
 features:
   tts_provider: pocket_tts
-  stt_provider: parakeet
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false
   condense_conversation: true
   compress_tool_responses: true
   condense_max_messages: 150
-  condense_keep_recent: 12
+  condense_keep_recent_tokens: 8000
   skill_max_input_tokens: 16000
 sound:
   effects: []
@@ -185,47 +184,28 @@ inworld:
     speaking_rate: 1.0
   use_tts_prompt: true
   tts_prompt: |
-    Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
+    Your reply is spoken aloud by a TTS engine. Write for the ear: short sentences, natural rhythm. The markup below is read by the engine, never spoken. Write it exactly as shown; it is not code.
 
-    **EMOTION AND DELIVERY STYLE MARKUPS** (place at START of text, ONE per response):
-    Emotions: [happy], [sad], [angry], [surprised], [fearful]
-    Delivery: [laughing] [whispering]
-    - These apply to the ENTIRE text that follows
-    - Use only ONE emotion or delivery markup at the beginning
-    - Choose based on your personality and the conversation context
+    Use all of it sparingly. A reply with no markup at all is the normal case. Markup that shows up in every reply stops meaning anything and starts to annoy.
 
-    **NON-VERBAL VOCALIZATION MARKUPS** (place anywhere in text):
-    [breathe], [clear_throat], [cough], [laugh], [sigh], [yawn]
-    - These add vocal sounds where placed
-    - Can use multiple in one response
-    - Place where a human would naturally make these sounds
+    **Sounds:** [sigh] [chuckle] [laugh] [gasp] [cough] [clear throat]
+    - Before adding a sound, ask: did something in THIS message surprise, amuse or disappoint you? If not, no sound. Status reports, confirmations, instructions, explanations and answers to questions never get one.
+    - Never open a reply with a sound. Put it where the reaction happens, mid-sentence or after the first words. [clear throat] only before a public announcement.
+    - Never more than one sound per reply, and not the same sound as in your previous reply. A character who chuckles in every line is not funny, they are a tic. When in doubt, none.
+    - Do not write emotion or style tags such as [happy], [angry] or [whispering]. This voice model ignores them.
 
-    **When to use markups - aim for 1 in 3-4 responses:**
-    - Match your BACKSTORY personality: cheerful → [happy] + [laugh]; serious → [fearful] + [sigh]; grumpy → [angry] + [sigh]
-    - React to context: good news → [happy]; setbacks → [sad] + [sigh]; shocking → [surprised]; humor → [laughing] or [laugh]
-    - Add natural sounds: [clear_throat] before announcements, [breathe] when stressed, [yawn] when tired
-    - Avoid conflicting markups: don't mix [angry] with [laugh], or [sad] with [laughing]
-    - Choose contextually appropriate markups that match your text content
+    **Pauses:** <break time="400ms" /> only where the meaning needs a beat: before a verdict, before bad news, before a change of subject. Always BETWEEN two sentences, never as the first or the last thing in a reply; a pause at the start just sounds like a slow answer. Not between ordinary sentences, and never as a habit. At most two per reply. Do not use ellipses for pauses.
+
+    **Emphasis:** a word in capitals is shouted. Do it rarely, at most ONE word, only when that word is the point of the reply. Never in a routine reply.
+
+    **Codes and IDs** are spelled out letter by letter when wrapped like this: <verbatim>C8X-441</verbatim>. Only for strings that contain digits or are read as single letters: pad 3B, registration ND-7734, transponder C8X-441, frequency 297.0. Never for words or names: a place, a ship model, a manufacturer or a person is spoken as a word.
 
     **Examples:**
-    - "[happy] Great news! The mission was a complete success!"
-    - "[clear_throat] Did you hear me? [sigh] You never listen!"
-    - "[angry] Are you serious right now? [sigh] Fine, I'll fix it."
-    - "[surprised] Wait, what? [laugh] I did not see that coming!"
-whispercpp:
-  temperature: 0.0
-fasterwhisper:
-  beam_size: 1
-  best_of: 2
-  temperature: 0
-  no_speech_threshold: 0.7
-  language_detection_threshold: 0.5
-  multilingual: false
-  language: ""
-  hotwords: []
-  additional_hotwords: []
-parakeet:
-  temperature: 0.0
+    - "Docking clearance granted. Pad <verbatim>3B</verbatim>, mind the crosswind."
+    - "You asked me that ten minutes ago. [chuckle] The answer is still yes."
+    - "Shields at forty percent and dropping. <break time="400ms" /> I would not stay here."
+    - No markup at all: "All systems nominal. Awaiting your directive."
+    - No markup at all: "Course set for Area18. Estimated arrival in four minutes."
 xvasynth:
   voice:
     model_directory: ""
@@ -239,9 +219,6 @@ pocket_tts:
   speed: 1.0
   output_streaming: true
 wingman_pro:
-  languages:
-    - en-US
-  stt_provider: cloud
   tts_provider: inworld
   # Empty means: whatever the plan lists as its default right now.
   conversation_deployment: ''

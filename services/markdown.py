@@ -380,6 +380,24 @@ def cleanup_text(text: str):
     # Clean up extra whitespace that may result from removals
     text = re.sub(r"[ \t]+", " ", text)  # collapse horizontal whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)  # collapse excessive newlines
+    text = strip_edge_breaks(text)
     text = text.strip()
 
     return text, contains_links, contains_code_blocks
+
+
+_EDGE_BREAK_RE = re.compile(
+    r"^(?:\s*<break\s+time=\"[^\"]*\"\s*/?>\s*)+|(?:\s*<break\s+time=\"[^\"]*\"\s*/?>\s*)+$",
+    re.IGNORECASE,
+)
+
+
+def strip_edge_breaks(text: str) -> str:
+    """Drop TTS pause tags at the very start or end of a reply.
+
+    A pause is only heard as a pause between two sentences. At the start it is
+    a reply that arrives late; at the end it is dead air before the next turn.
+    The prompt says so too, but a model that ignores it must not reach the
+    engine.
+    """
+    return _EDGE_BREAK_RE.sub("", text)

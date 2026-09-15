@@ -181,6 +181,12 @@ class ConversationTokenUsageCommand(WebSocketCommandModel):
     """Tokens in the LLM response."""
     is_local: bool = False
     """True for LOCAL_LLM provider (free, not billed)."""
+    history_tokens: int = 0
+    """Estimated tokens of the conversation history inside ``prompt_tokens`` — the
+    part condensation and trimming can shrink. The rest is system prompt, memory
+    and tool definitions."""
+    summary_tokens: int = 0
+    """Estimated tokens of the running conversation summary, if any."""
 
 
 class SkillRegisteredCommand(WebSocketCommandModel):

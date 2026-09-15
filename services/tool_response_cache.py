@@ -12,21 +12,22 @@ TOOL_RESPONSE_PROMPT_NAME = "support-tool-response"
 
 
 class ToolResponseCompressor:
-    """Compresses large tool responses using the local AI summarization model.
+    """Chunked summarization of text that does not fit the support model in one call.
 
-    When a tool response exceeds COMPRESS_THRESHOLD tokens, it is:
+    Used by the skill facade's ``local_ai.summarize`` when a skill hands over
+    more text than the support model's window takes. Tool responses on their way
+    into the conversation do not come through here any more — that is
+    ``ToolResponseLimiter``, which caps first and summarizes in one call.
+
+    The text is:
     1. Chunked (JSON-aware or newline-boundary)
-    2. Summarized via the local LLM (batched, capped at MAX_SUMMARIZE_CHUNKS)
-    3. The conversation gets the compressed summary instead of the full response
+    2. Summarized via the support model (batched, capped at MAX_SUMMARIZE_CHUNKS)
+    3. Merged into one summary
     """
 
-    COMPRESS_THRESHOLD = 4000
     CHUNK_TARGET_TOKENS = 400
     MAX_SUMMARIZE_CHUNKS = 30
     SKIP_SUMMARIZE_THRESHOLD = 100  # chunks — above this, skip LLM summarization
-
-    def should_compress(self, response_text: str) -> bool:
-        return count_tokens(response_text) >= self.COMPRESS_THRESHOLD
 
     async def compress(
         self,
@@ -35,22 +36,13 @@ class ToolResponseCompressor:
         wingman_name: str = "",
         tool_name: str = "",
     ) -> str:
-        """Compress a tool response via local AI summarization.
-
-        Returns the compressed text to store in conversation history.
-        """
+        """Summarize ``response_text`` in chunks and return the merged summary."""
         original_tokens = count_tokens(response_text)
 
-        token_label = (
-            f"~{original_tokens // 1000}k"
-            if original_tokens >= 1000
-            else f"~{original_tokens}"
-        )
-        tool_info = f" from '{tool_name}'" if tool_name else ""
+        tool_info = f" for '{tool_name}'" if tool_name else ""
         await printr.print_async(
-            f"Compressing massive tool response{tool_info} with {token_label} tokens "
-            f"before sending it to the LLM. If this is coming from a custom "
-            f"skill, please contact the author and ask them to optimize token usage.",
+            f"Summarizing ~{original_tokens:,} tokens{tool_info} in chunks with the "
+            f"support model.",
             color=LogType.LOCALMODEL,
             source_name=wingman_name,
             source=LogSource.WINGMAN,
@@ -95,26 +87,20 @@ class ToolResponseCompressor:
         summary_tokens = count_tokens(summary)
 
         await printr.print_async(
-            f"Tool response compressed "
-            f"(~{original_tokens} → ~{summary_tokens} tokens).",
+            f"Summarized (~{original_tokens:,} → ~{summary_tokens:,} tokens).",
             color=LogType.LOCALMODEL,
             source_name=wingman_name,
             source=LogSource.WINGMAN,
         )
 
-        # 3. Format compressed response for conversation
         cap_note = ""
         if capped:
             cap_note = (
-                f"\n[Note: Summary covers first portion. "
-                f"Full response was ~{original_tokens} tokens.]"
+                f"\n[Note: Summary covers the first portion only. "
+                f"Full text was ~{original_tokens} tokens.]"
             )
 
-        return (
-            f"[COMPRESSED TOOL RESPONSE — original ~{original_tokens} tokens "
-            f"→ ~{summary_tokens} tokens]\n"
-            f"{summary}{cap_note}"
-        )
+        return f"{summary}{cap_note}"
 
     # ── chunking ────────────────────────────────────────────────
 

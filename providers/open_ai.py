@@ -4,15 +4,15 @@ import re
 from typing import TYPE_CHECKING, Literal, Mapping, Union
 import httpx
 from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError
-from api.enums import ConversationProvider, LogType, SttProvider, TtsProvider
+from api.enums import ConversationProvider, LogType, TtsProvider
 
 from api.interface import (
     SoundConfig,
     VoiceInfo,
 )
 from providers.interfaces import (
-    SttInterface, TtsInterface, LlmInterface,
-    Transcript, stt_provider, tts_provider, llm_provider,
+    TtsInterface, LlmInterface,
+    tts_provider, llm_provider,
 )
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
@@ -448,20 +448,6 @@ class OpenAiCompatibleTts:
                 )
 
 
-@stt_provider(SttProvider.OPENAI)
-class OpenAiStt(SttInterface):
-    """OpenAI Whisper STT via the unified interface."""
-
-    def __init__(self, openai_instance: "OpenAi"):
-        self._openai = openai_instance
-
-    async def transcribe(self, filename: str) -> Transcript | None:
-        result = self._openai.transcribe(filename=filename)
-        if result is None:
-            return None
-        return Transcript(text=result.text)
-
-
 @tts_provider(TtsProvider.OPENAI)
 class OpenAiTts(TtsInterface):
     """OpenAI TTS via the unified interface."""
@@ -497,22 +483,6 @@ class OpenAiLlm(LlmInterface):
             tools=tools,
             model=self._config.openai.conversation_model,
         )
-
-
-@stt_provider(SttProvider.GROQ)
-class GroqStt(SttInterface):
-    """Groq Whisper STT (uses OpenAi-compatible client)."""
-
-    def __init__(self, openai_instance: "OpenAi"):
-        self._openai = openai_instance
-
-    async def transcribe(self, filename: str) -> Transcript | None:
-        result = self._openai.transcribe(
-            filename=filename, model="whisper-large-v3-turbo"
-        )
-        if result is None:
-            return None
-        return Transcript(text=result.text)
 
 
 @llm_provider(ConversationProvider.MISTRAL)

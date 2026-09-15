@@ -8,10 +8,7 @@ from api.interface import (
     WingmanInitializationError,
     ConfigDirInfo,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.parakeet import Parakeet
 from providers.pocket_tts import PocketTTS
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
@@ -32,9 +29,6 @@ class Tower:
         config_manager: ConfigManager,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
-        parakeet: Parakeet,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         settings_service=None,
@@ -48,9 +42,6 @@ class Tower:
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
-        self.parakeet = parakeet
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
 
@@ -116,9 +107,6 @@ class Tower:
                 settings=settings,
                 audio_player=self.audio_player,
                 audio_library=self.audio_library,
-                whispercpp=self.whispercpp,
-                fasterwhisper=self.fasterwhisper,
-                parakeet=self.parakeet,
                 xvasynth=self.xvasynth,
                 pocket_tts=self.pocket_tts,
                 tower=self,

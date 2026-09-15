@@ -29,7 +29,7 @@ from api.enums import (
     LocalAiMode,
     LogSource,
     LogType,
-    VoiceActivationSttProvider,
+    SttProvider,
     WingmanInitializationErrorType,
 )
 from api.interface import (
@@ -63,9 +63,7 @@ from providers.google import GoogleGenAI
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
 from providers.wingman_support import WingmanSupport
-from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
-from providers.wingman_subscription import WingmanSubscription
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -81,6 +79,7 @@ from services.file import (
 )
 from services.model_downloader import ModelDownloader
 from services.stt_provider_manager import SttProviderManager
+from services.stt_service import SttService
 from services.local_ai_service import LocalAiService
 from services.token_utils import count_tokens
 from services.local_model_manager import LocalModelManager
@@ -615,6 +614,12 @@ class WingmanCore(WebSocketUser):
             endpoint=self.test_memory_extraction,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/memories/{wingman_name}/consolidate",
+            endpoint=self.consolidate_memories,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_manager.perform_hardware_scan(self.system_manager)
@@ -696,13 +701,22 @@ class WingmanCore(WebSocketUser):
         )
 
         self.whispercpp = Whispercpp(
-            settings=self.settings_service.settings.voice_activation.whispercpp,
+            settings=self.settings_service.settings.stt.whispercpp,
         )
         self.fasterwhisper = FasterWhisper(
-            settings=self.settings_service.settings.voice_activation.fasterwhisper,
+            settings=self.settings_service.settings.stt.fasterwhisper,
         )
         self.parakeet = Parakeet(
-            settings=self.settings_service.settings.voice_activation.parakeet,
+            settings=self.settings_service.settings.stt.parakeet,
+        )
+        # Push-to-talk and voice activation both transcribe through this one.
+        self.stt_service = SttService(
+            settings_service=self.settings_service,
+            secret_keeper=self.secret_keeper,
+            whispercpp=self.whispercpp,
+            fasterwhisper=self.fasterwhisper,
+            parakeet=self.parakeet,
+            get_hotwords=self._stt_hotwords,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(
@@ -1324,9 +1338,6 @@ class WingmanCore(WebSocketUser):
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             audio_library=self.audio_library,
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
-            parakeet=self.parakeet,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
             settings_service=self.settings_service,
@@ -1510,20 +1521,8 @@ class WingmanCore(WebSocketUser):
 
             self._emit_voice_state()
 
-            def run_async_process():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    if isinstance(wingman, Wingman):
-                        loop.run_until_complete(
-                            wingman.process(audio_input_wav=str(recorded_audio_wav))
-                        )
-                finally:
-                    loop.close()
-
-            if recorded_audio_wav:
-                play_thread = threading.Thread(target=run_async_process)
-                play_thread.start()
+            if recorded_audio_wav and isinstance(wingman, Wingman):
+                self._transcribe_and_process(str(recorded_audio_wav), wingman)
 
     def on_key(self, key):
         if key.event_type == "down":
@@ -1546,113 +1545,50 @@ class WingmanCore(WebSocketUser):
             self.on_release(mouse_button=event.button)
 
     # called when AudioRecorder regonized voice
-    def on_audio_recorder_speech_recorded(self, recording_file: str):
-        def run_async_process():
+    def _stt_hotwords(self) -> list[str]:
+        """Words the local decoder should recognise: the name of every wingman
+        in the active config plus whatever their skills added at runtime."""
+        if not self.tower:
+            return []
+        words: list[str] = []
+        for wingman in self.tower.wingmen:
+            words.append(wingman.name)
+            words.extend(wingman.stt_hotwords)
+        return words
+
+    def _transcribe_and_process(self, recording_file: str, wingman: Wingman | None):
+        """Turn a recording into text on a worker thread and hand it to a wingman.
+
+        ``wingman`` is the one whose record key was held. For voice activation it
+        is None and the text decides: the wingman whose name is in it, or the
+        default one.
+        """
+
+        def run():
+            benchmark = Benchmark(label="Voice transcription")
+            text = self.stt_service.transcribe(recording_file)
+            if not text:
+                return
+            target = wingman or self.tower.get_wingman_from_text(text)
+            if not target:
+                return
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(wingman.process(transcript=text))
+                loop.run_until_complete(
+                    target.process(
+                        transcript=text, transcription_benchmark=benchmark.finish()
+                    )
+                )
             finally:
                 loop.close()
 
-        provider = self.settings_service.settings.voice_activation.stt_provider
-        text = None
+        threading.Thread(target=run).start()
 
-        if provider == VoiceActivationSttProvider.WINGMAN_PRO:
-            wingman_pro = WingmanSubscription(
-                wingman_name="system",
-                settings=self.settings_service.settings.wingman_pro,
-            )
-            transcription = wingman_pro.transcribe(
-                filename=recording_file,
-                languages=self.settings_service.settings.voice_activation.languages,
-            )
-            if transcription:
-                text = transcription.text
-        elif provider == VoiceActivationSttProvider.WHISPERCPP:
-
-            def filter_and_clean_text(text):
-                # First, save the original text for comparison
-                original_text = text
-                # Remove the ambient noise descriptions
-                noise_pattern = r"(\(.*?\))|(\[.*?\])|(\*.*?\*)"
-                text = re.sub(noise_pattern, "", text)
-                # Remove extra spaces, newlines, and commas
-                cleanup_pattern = r"[\s,]+"
-                text = re.sub(cleanup_pattern, " ", text)
-                # Strip leading and trailing whitespaces
-                text = text.strip()
-
-                return original_text != text, text
-
-            transcription = self.whispercpp.transcribe(
-                filename=recording_file,
-                config=self.settings_service.settings.voice_activation.whispercpp_config,
-            )
-            if transcription:
-                cleaned, text = filter_and_clean_text(transcription.text)
-                if cleaned:
-                    self.printr.print(
-                        f"Cleaned original transcription: {transcription.text}",
-                        server_only=True,
-                        color=LogType.SYSTEM,
-                    )
-        elif provider == VoiceActivationSttProvider.OPENAI:
-            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
-            openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
-            transcription = openai.transcribe(filename=recording_file)
-            text = transcription.text
-        elif provider == VoiceActivationSttProvider.GROQ:
-            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
-            groq = OpenAi(
-                api_key=self.secret_keeper.secrets["groq"],
-                base_url="https://api.groq.com/openai/v1/",
-            )
-            transcription = groq.transcribe(
-                filename=recording_file, model="whisper-large-v3-turbo"
-            )
-            text = transcription.text
-        elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            combined_hotwords: list[str] = []
-
-            # add the default hotwords from settings
-            default_hotwords = (
-                self.settings_service.settings.voice_activation.fasterwhisper_config.hotwords
-            )
-            if default_hotwords and len(default_hotwords) > 0:
-                combined_hotwords.extend(default_hotwords)
-
-            for wingman in self.tower.wingmen:
-                # add the wingman names explicitly
-                combined_hotwords.append(wingman.name)
-                # and their additional hotwords
-                wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords
-                if wingman_hotwords and len(wingman_hotwords) > 0:
-                    combined_hotwords.extend(wingman_hotwords)
-
-            transcription = self.fasterwhisper.transcribe(
-                config=self.settings_service.settings.voice_activation.fasterwhisper_config,
-                filename=recording_file,
-                hotwords=list(set(combined_hotwords)),
-            )
-            text = transcription.text
-        elif provider == VoiceActivationSttProvider.PARAKEET:
-            transcription = self.parakeet.transcribe(
-                config=self.settings_service.settings.voice_activation.parakeet_config,
-                filename=recording_file,
-            )
-            if transcription:
-                text = transcription.text
-
-        if text:
-            wingman = self.tower.get_wingman_from_text(text)
-            if wingman:
-                play_thread = threading.Thread(target=run_async_process)
-                play_thread.start()
-        else:
-            self.printr.print(
-                "ignored empty transcription - probably just noise.", server_only=True
-            )
+    def on_audio_recorder_speech_recorded(self, recording_file: str):
+        if not self.tower:
+            return
+        self._transcribe_and_process(recording_file, wingman=None)
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
         # devices: [input_device, output_device]
@@ -3322,7 +3258,7 @@ class WingmanCore(WebSocketUser):
     # POST /settings/test/whispercpp
     async def test_whispercpp(self) -> TestConnectionResult:
         """Test the whisper.cpp server by sending a short audio file for transcription."""
-        settings = self.settings_service.settings.voice_activation.whispercpp
+        settings = self.settings_service.settings.stt.whispercpp
         try:
             response = requests.get(
                 url=f"{settings.host}:{settings.port}",
@@ -3349,10 +3285,9 @@ class WingmanCore(WebSocketUser):
     # POST /settings/test/parakeet
     async def test_parakeet(self) -> TestConnectionResult:
         """Test Parakeet by transcribing a short audio sample (locally or remotely)."""
-        settings = self.settings_service.settings.voice_activation.parakeet
+        settings = self.settings_service.settings.stt.parakeet
 
-        stt_provider = self.settings_service.settings.voice_activation.stt_provider
-        if stt_provider != VoiceActivationSttProvider.PARAKEET:
+        if self.settings_service.settings.stt.provider != SttProvider.PARAKEET:
             return TestConnectionResult(
                 success=False,
                 provider="parakeet",
@@ -3873,6 +3808,30 @@ class WingmanCore(WebSocketUser):
             self.printr.toast(f"All memories cleared for {wingman_name}.")
             return True
         return False
+
+    # POST /memories/{wingman_name}/consolidate
+    async def consolidate_memories(self, wingman_name: str) -> dict:
+        """Tidy a wingman's facts with one support-model pass: merge duplicates,
+        drop moments that were stored as facts, keep the newer of two
+        contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            raise HTTPException(404, f"Wingman '{wingman_name}' not found")
+        wingman.ensure_memory_initialized()
+        svc = wingman.persistent_memory_service
+        if not svc:
+            raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(503, "The Support Model is not ready.")
+
+        outcome = await svc.consolidate()
+        if outcome["changed"]:
+            self.printr.toast(
+                f"Memories tidied for {wingman_name}: {outcome['before']} → {outcome['after']} facts."
+            )
+        else:
+            self.printr.toast(f"Memories of {wingman_name} were already tidy.")
+        return outcome
 
     # POST /memories/{wingman_name}/test-extraction
     async def test_memory_extraction(

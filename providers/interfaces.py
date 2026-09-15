@@ -1,4 +1,4 @@
-"""Unified provider interfaces for STT, TTS, and LLM providers.
+"""Unified provider interfaces for TTS and LLM providers.
 
 ABCs define required contracts — providers that don't implement them crash at instantiation.
 Protocols define optional capabilities — check with isinstance() before calling.
@@ -6,10 +6,9 @@ Registration decorators map config enum values to provider classes for ProviderF
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from api.enums import ConversationProvider, SttProvider, TtsProvider
+from api.enums import ConversationProvider, TtsProvider
 
 if TYPE_CHECKING:
     from openai.types.chat import ChatCompletion
@@ -19,30 +18,8 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Unified return types
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Transcript:
-    """Unified STT result. Every provider wraps its native result into this."""
-
-    text: str
-    language: str | None = None
-    confidence: float | None = None
-
-
-# ---------------------------------------------------------------------------
 # Core ABCs (required contracts)
 # ---------------------------------------------------------------------------
-
-class SttInterface(ABC):
-    """Speech-to-text provider interface."""
-
-    @abstractmethod
-    async def transcribe(self, filename: str) -> Transcript | None:
-        """Transcribe an audio file to text."""
-        ...
-
 
 class TtsInterface(ABC):
     """Text-to-speech provider interface."""
@@ -116,20 +93,8 @@ class HasMinimalReasoning(Protocol):
 # Registration decorators + registries
 # ---------------------------------------------------------------------------
 
-_STT_REGISTRY: dict[SttProvider, type[SttInterface]] = {}
 _TTS_REGISTRY: dict[TtsProvider, type[TtsInterface]] = {}
 _LLM_REGISTRY: dict[ConversationProvider, type[LlmInterface]] = {}
-
-
-def stt_provider(*provider_enums: SttProvider):
-    """Register a class as the STT provider for given enum value(s)."""
-
-    def decorator(cls):
-        for enum_val in provider_enums:
-            _STT_REGISTRY[enum_val] = cls
-        return cls
-
-    return decorator
 
 
 def tts_provider(*provider_enums: TtsProvider):
@@ -152,11 +117,6 @@ def llm_provider(*provider_enums: ConversationProvider):
         return cls
 
     return decorator
-
-
-def get_stt_class(provider: SttProvider) -> type[SttInterface] | None:
-    """Look up the registered STT provider class for an enum value."""
-    return _STT_REGISTRY.get(provider)
 
 
 def get_tts_class(provider: TtsProvider) -> type[TtsInterface] | None:

@@ -13,9 +13,7 @@ from api.enums import (
     SoundEffect,
     SttProvider,
     TtsProvider,
-    VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
 )
@@ -163,7 +161,6 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSettings(BaseModel):
-    enable: bool
     host: str
     port: int
 
@@ -211,7 +208,8 @@ class FasterWhisperSttConfig(BaseModel):
     beam_size: int
     language: Optional[str] = None
     hotwords: list[str]
-    additional_hotwords: list[str]
+    """Words the decoder is nudged towards. The names of the active config's
+    wingmen are added at transcription time, so they need not be listed here."""
     best_of: int
     temperature: float
     no_speech_threshold: float
@@ -236,15 +234,12 @@ class ParakeetSettings(BaseModel):
     execution_provider: str
     """cpu, directml, coreml, or cuda"""
     language: Optional[str] = None
-    """Global default language for Parakeet transcription. Individual wingmen may
-    override this via their per-wingman parakeet_config.language; when that is
-    empty, the global value here is used."""
+    """Transcription language. Empty means auto-detect."""
     host: str
     port: int
 
 
 class ParakeetSttConfig(BaseModel):
-    language: Optional[str] = None
     temperature: float
 
 
@@ -523,7 +518,6 @@ class LocalLlmConfig(BaseModel):
 
 
 class WingmanProConfig(BaseModel):
-    stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
 
     conversation_deployment: str = ""
@@ -536,8 +530,6 @@ class WingmanProConfig(BaseModel):
     serves its default instead of failing.
     """
 
-    languages: list[str] = ["en-US"]
-    """Languages the cloud transcription may auto-detect, as BCP-47 tags."""
 
 
 class WingmanProSettings(BaseModel):
@@ -560,7 +552,9 @@ class SoundConfig(BaseModel):
 
 
 class VoiceActivationSettings(BaseModel):
-    """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
+    """Hands-free listening. Off means the user holds a wingman's record key.
+    Which provider transcribes is not decided here but in ``SttSettings``:
+    push-to-talk and voice activation share it."""
 
     enabled: bool
     """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
@@ -573,7 +567,12 @@ class VoiceActivationSettings(BaseModel):
     energy_threshold: float
     """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
 
-    stt_provider: VoiceActivationSttProvider
+
+class SttSettings(BaseModel):
+    """Speech-to-text, configured once for every wingman and for both ways of
+    talking (record key and voice activation)."""
+
+    provider: SttProvider
 
     languages: list[str]
     """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
@@ -595,9 +594,7 @@ class FeaturesConfig(BaseModel):
     """
 
     tts_provider: TtsProvider
-    stt_provider: SttProvider
     conversation_provider: ConversationProvider
-    remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
     condense_conversation: bool
@@ -606,19 +603,23 @@ class FeaturesConfig(BaseModel):
     approaches the support model's context window capacity, saving tokens while
     preserving key information."""
     compress_tool_responses: bool
-    """Compress large tool/MCP responses using local AI embeddings and summarization.
-    Reduces token usage by replacing large responses with summaries while preserving
-    detail access via semantic retrieval."""
+    """Let the support model summarize a tool/MCP response that is over the
+    per-response cap (see ``skill_max_input_tokens``) instead of cutting it. Off, or
+    with no support model ready, the response is cut structurally: whole JSON entries
+    or whole lines, with a note saying what is missing. Responses under the cap are
+    never touched either way."""
     condense_max_messages: int
     """Maximum number of user messages before forcing condensation, regardless of token count.
     Acts as a safety cap to prevent unbounded message list growth."""
-    condense_keep_recent: int
-    """Number of recent user messages (and their associated assistant/tool messages) to
-    always keep verbatim. Older messages get condensed into the running summary."""
+    condense_keep_recent_tokens: int = 8000
+    """How much recent history (in tokens) a condensation keeps verbatim. Whole turns,
+    always at least the latest one. Older messages get condensed into the running
+    summary. Capped at a third of what the support model can summarize in one pass."""
     skill_max_input_tokens: int = 16000
-    """Max input tokens a skill may send to the main model in one ctx.ai.generate
-    side-call. Only enforced while ``condense_conversation`` is enabled. Wingman Pro
-    hardcodes a lower limit (8000) that users cannot change."""
+    """Max tokens skill-originated content may feed the main model at once: a
+    ctx.ai.generate side-call, or a single tool/MCP response. The side-call cap is
+    only enforced while ``condense_conversation`` is enabled; the tool-response cap is
+    always on. Wingman Pro hardcodes a lower limit (8000) that users cannot change."""
 
 
 class AudioFile(BaseModel):
@@ -1163,9 +1164,6 @@ class NestedConfig(BaseModel):
     inworld: InworldConfig
     xvasynth: XVASynthTtsConfig
     pocket_tts: PocketTTSConfig
-    whispercpp: WhispercppSttConfig
-    fasterwhisper: FasterWhisperSttConfig
-    parakeet: ParakeetSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     xai: XaiConfig
@@ -1379,6 +1377,7 @@ class LlamaCppSettings(BaseModel):
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
+    stt: SttSettings
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
