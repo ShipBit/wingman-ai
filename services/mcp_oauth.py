@@ -276,8 +276,9 @@ class _PendingFlow:
     """One in-progress browser flow.
 
     `authorization_url` resolves as soon as the SDK has a consent page to show.
-    `callback` resolves when the browser comes back. `finished` resolves when the
-    token has been exchanged, or the attempt has failed.
+    `callback` resolves when the browser comes back. `outcome` resolves when the
+    token has been exchanged, with None on success and the error message
+    otherwise.
     """
 
     def __init__(self, server_name: str):
@@ -316,10 +317,10 @@ class _PendingFlow:
 class McpOAuthService:
     """Runs and stores MCP OAuth for the whole of Core.
 
-    One instance, held by `WingmanCore`, because the redirect URI is a property
-    of the process — there is exactly one HTTP port listening for callbacks — and
-    because a flow started from the settings UI has to be finishable by a request
-    that arrives on an unrelated route.
+    One instance per process, reached through `get_oauth_service()`, because the
+    redirect URI is a property of the process — there is exactly one HTTP port
+    listening for callbacks — and because a flow started from the settings UI has
+    to be finishable by a request arriving on an unrelated route.
     """
 
     def __init__(self, secret_keeper: Any):
