@@ -53,13 +53,40 @@ from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from pydantic import PrivateAttr
-from mcp.client.auth import OAuthClientProvider, TokenStorage
-from mcp.shared.auth import (
-    OAuthClientInformationFull,
-    OAuthClientMetadata,
-    OAuthToken,
-)
+from pydantic import BaseModel, PrivateAttr
+
+try:
+    from mcp.client.auth import OAuthClientProvider, TokenStorage
+    from mcp.shared.auth import (
+        OAuthClientInformationFull,
+        OAuthClientMetadata,
+        OAuthToken,
+    )
+
+    OAUTH_AVAILABLE = True
+except ImportError:
+    # `mcp_client` degrades gracefully when the MCP SDK is not installed, and it
+    # imports this module for `NeedsAuthorization`. Without these stand-ins that
+    # graceful path would turn into an ImportError at startup — the one place it
+    # was written to avoid.
+    OAUTH_AVAILABLE = False
+
+    class TokenStorage:  # type: ignore[no-redef]
+        pass
+
+    class OAuthClientProvider:  # type: ignore[no-redef]
+        def __init__(self, **_kwargs):
+            raise RuntimeError("MCP SDK not installed.")
+
+    class OAuthToken(BaseModel):  # type: ignore[no-redef]
+        pass
+
+    class OAuthClientMetadata(BaseModel):  # type: ignore[no-redef]
+        pass
+
+    class OAuthClientInformationFull(BaseModel):  # type: ignore[no-redef]
+        pass
+
 
 from api.enums import LogType, McpAuthType
 from api.interface import McpOAuthStartResult, McpOAuthStatus, McpServerConfig
@@ -347,7 +374,7 @@ class McpOAuthService:
 
     def _storage(self, config: McpServerConfig) -> WingmanTokenStorage:
         fallback = None
-        if config.oauth_client_id:
+        if config.oauth_client_id and OAUTH_AVAILABLE:
             # A configured client id is the escape hatch for servers with no
             # registration endpoint. Seeding storage with it makes the SDK's
             # `_register_client` return early, so it never posts to a /register
@@ -367,7 +394,7 @@ class McpOAuthService:
         Returns None for servers that are not on OAuth, so the caller can pass
         the result straight through to the transport.
         """
-        if config.auth != McpAuthType.OAUTH:
+        if config.auth != McpAuthType.OAUTH or not OAUTH_AVAILABLE:
             return None
 
         async def refuse_redirect(_url: str) -> None:
@@ -394,6 +421,12 @@ class McpOAuthService:
         The flow keeps running after this returns: it is parked on the callback
         future until the browser comes back to `/mcp/oauth/callback`.
         """
+        if not OAUTH_AVAILABLE:
+            return McpOAuthStartResult(
+                success=False,
+                server_name=config.name,
+                error="MCP SDK not installed. Run 'pip install mcp' to enable MCP support.",
+            )
         if config.auth != McpAuthType.OAUTH:
             return McpOAuthStartResult(
                 success=False,
