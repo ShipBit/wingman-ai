@@ -150,11 +150,28 @@ class Migration321To322(BaseMigration):
                     self.log(f"{label}: removed features.{key}")
         return config
 
+    def _replace_inworld_prompt(self, config: dict, label: str) -> dict:
+        """Drop the Inworld TTS prompt so the template backfill writes the 3.2.2 one.
+
+        For everyone, edited or not. The old prompt asked for a sound
+        "regularly", listed [breathe] first and spent half its lines on emotion
+        tags that inworld-tts-2-flash ignores; the result was a "[breathe]" at
+        the start of every reply. The new text was tuned against every chat
+        model in the plan, and a hand-edited copy of the old one carries the
+        same flaw. Anyone who wants their own prompt back edits it again.
+        """
+        inworld = config.get("inworld")
+        if isinstance(inworld, dict) and "tts_prompt" in inworld:
+            inworld.pop("tts_prompt")
+            self.log(f"{label}: replaced the Inworld TTS prompt with the 3.2.2 version")
+        return config
+
     def migrate_defaults(self, old: dict) -> dict:
-        return self._drop_features(dict(old), "defaults")
+        return self._replace_inworld_prompt(self._drop_features(dict(old), "defaults"), "defaults")
 
     def migrate_wingman(self, old: dict) -> dict:
-        return self._drop_features(dict(old), old.get("name", "wingman"))
+        label = old.get("name", "wingman")
+        return self._replace_inworld_prompt(self._drop_features(dict(old), label), label)
 
     def migrate_mcp(self, old: dict, new: dict) -> dict:
         """Turn the 3.2.1 glob filters into the 3.2.2 disabled list."""
