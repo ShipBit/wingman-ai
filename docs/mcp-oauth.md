@@ -80,7 +80,9 @@ unauthorized server would hang until someone noticed.
 So there are two kinds of provider:
 
 * **interactive** — built only by the authorize endpoint. Its callback handler
-  waits on a future that the `/mcp/oauth/callback` route resolves.
+  waits on a future that the `/mcp/oauth/callback` route resolves. That route
+  then waits for the token exchange before answering the browser, so the page a
+  user lands on says what happened rather than what was about to be attempted.
 * **silent** — built at connect time. It reuses a stored token and refreshes it
   when it is expired, but its callback handler raises immediately. A server that
   was never authorized fails fast with "needs authorization" instead of hanging.
@@ -110,11 +112,35 @@ Client:
 | `src/services/mcpOAuthService.ts` | new — start the flow, open the browser |
 | `messages/{en,de,fr,es}.json` | strings |
 
-## The one thing that is not solved
+## The ElevenLabs entry, and the one step left
 
-ElevenLabs has no public client id and no way to register one. The template ships
-the server with `oauth_client_id` empty and the field is editable in the UI, so a
-user who has one can paste it. Giving Wingman a working one out of the box means
-publishing a client id metadata document at an HTTPS URL Wingman controls —
-`wingman-ai-mcp-servers` is the natural host — and that is a deploy, not a code
-change.
+Two things about that server are not obvious and both cost a debugging round:
+
+* **Use the regional URL.** Its protected resource metadata declares the resource
+  as `https://api.us.elevenlabs.io/v1/mcp`. Connect to `https://api.elevenlabs.io/v1/mcp`
+  and the SDK refuses the mismatch before any browser opens. The template uses
+  the regional one.
+* **Its client id is a URL.** `oauth_client_id` points at
+  `https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client`, a client
+  id metadata document added to the worker repository on the branch
+  `feat/oauth-client-metadata`.
+
+**That worker branch is not deployed.** Until someone runs `wrangler deploy`, the
+URL 404s and ElevenLabs has nothing to fetch, so pressing Authorize ends at an
+unknown client. Everything else on the path is verified: discovery, the
+authorization URL, the callback, the token exchange and the failure pages.
+
+A user who has their own client id can paste it into the server's settings
+instead; the field is editable in the UI.
+
+## Scopes
+
+The MCP spec tells a client to request every scope the protected resource
+advertises, and the SDK implements that by overwriting whatever the application
+asked for. Against ElevenLabs that turns a request for text-to-speech into a
+request for all seven scopes, including writing conversational agents and
+generating video.
+
+`oauth_scopes` in `mcp.yaml` therefore wins over the SDK's choice. Leaving it
+empty keeps the spec behaviour, which is what a server that advertises nothing
+useful needs.

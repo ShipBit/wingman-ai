@@ -83,6 +83,11 @@ _URL_TIMEOUT = 30.0
 # How long a user has to finish the consent page before the flow is abandoned.
 _CONSENT_TIMEOUT = 300.0
 
+# How long the callback route waits for the token exchange before answering the
+# browser. It is the code-for-token round trip plus one MCP handshake, so seconds
+# rather than minutes, and the page says "finishing up" if it runs over.
+_EXCHANGE_TIMEOUT = 30.0
+
 # Treat a token as expired slightly early, so one that dies mid-request gets
 # refreshed beforehand instead of costing a failed call.
 _EXPIRY_SKEW = 30.0
@@ -254,6 +259,10 @@ class _PendingFlow:
         loop = asyncio.get_event_loop()
         self.authorization_url: asyncio.Future[str] = loop.create_future()
         self.callback: asyncio.Future[tuple[str, Optional[str]]] = loop.create_future()
+        # Resolves with the error message, or None when the token was stored.
+        # The callback route waits on this so the page it renders says what
+        # actually happened rather than what was about to be attempted.
+        self.outcome: asyncio.Future[Optional[str]] = loop.create_future()
         self.task: Optional[asyncio.Task] = None
 
     def fail(self, error: BaseException) -> None:
@@ -261,6 +270,8 @@ class _PendingFlow:
             if not future.done():
                 future.set_exception(error)
             self._swallow(future)
+        if not self.outcome.done():
+            self.outcome.set_result(str(error) or error.__class__.__name__)
 
     @staticmethod
     def _swallow(future: asyncio.Future) -> None:
@@ -488,6 +499,8 @@ class McpOAuthService:
                 server_only=True,
             )
         finally:
+            if not flow.outcome.done():
+                flow.outcome.set_result(error)
             self._forget(flow)
 
         if self._on_state_changed:
@@ -517,6 +530,21 @@ class McpOAuthService:
         for flow in flows:
             if not flow.callback.done():
                 flow.callback.set_result((code, state))
+
+        # Wait for the token exchange before answering. Handing the code over is
+        # not the same as it working: a stale or replayed code fails here, and a
+        # page that said "connected" before finding that out would be lying to
+        # the one person who could act on it.
+        flow = flows[0]
+        try:
+            outcome = await asyncio.wait_for(flow.outcome, timeout=_EXCHANGE_TIMEOUT)
+        except asyncio.TimeoutError:
+            return True, "Wingman is finishing up. Check the wingman's MCP settings."
+        except asyncio.CancelledError:
+            return False, "The authorization was cancelled."
+
+        if outcome:
+            return False, outcome
         return True, "Wingman is connected."
 
     def _matching(self, state: Optional[str]) -> list[_PendingFlow]:
