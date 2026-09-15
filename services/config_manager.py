@@ -12,7 +12,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 import yaml
-from api.enums import LogSource, LogType, SttProvider
+from api.enums import LogSource, LogType
 from api.interface import (
     Config,
     ConfigDirInfo,
@@ -1447,8 +1447,8 @@ class ConfigManager:
         """Load and validate Settings config"""
         parsed = self.read_config(self.settings_config_path)
         if parsed:
-            # Same net as the wingman configs: `voice_activation.stt_provider`
-            # can still say `azure` in a settings.yaml carried over from 3.1.6.
+            # Same net as the wingman configs: `stt.provider` can still hold a
+            # value carried over from an old settings.yaml.
             for change in sanitize(SettingsConfig, parsed):
                 self.printr.print(
                     f"settings: {change}",
@@ -1526,37 +1526,6 @@ class ConfigManager:
         """Write Defaults config to file"""
         return self.write_config(self.default_config_path, self.default_config)
 
-    def cascade_local_stt_provider(self, provider: SttProvider):
-        """Update stt_provider in defaults and all wingman configs that override it."""
-        old_provider = self.default_config.features.stt_provider
-        if old_provider == provider:
-            return
-
-        # Update defaults
-        self.default_config.features.stt_provider = provider
-        self.save_defaults_config()
-
-        # Update wingman configs that explicitly override stt_provider to the old value
-        for config_dir in self.get_config_dirs():
-            config_path = path.join(self.config_dir, config_dir.directory)
-            for wingman_file in self.get_wingmen_configs(config_dir):
-                file_path = path.join(config_path, wingman_file.file)
-                raw = self.read_config(file_path)
-                if not raw:
-                    continue
-                features = raw.get("features")
-                if (
-                    features
-                    and features.get("stt_provider") == old_provider.value
-                ):
-                    features["stt_provider"] = provider.value
-                    self.write_config(file_path, raw)
-
-        self.printr.print(
-            f"Cascaded local STT provider change: {old_provider.value} -> {provider.value}",
-            server_only=True,
-        )
-
     def perform_hardware_scan(self, system_manager):
         """Scans for hardware changes and updates settings accordingly."""
         if self.settings_config.hardware_scan_performed:
@@ -1572,9 +1541,9 @@ class ConfigManager:
 
         changes = False
         if system_manager.is_cuda_available():
-            self.settings_config.voice_activation.fasterwhisper.device = "cuda"
-            self.settings_config.voice_activation.fasterwhisper.compute_type = "auto"
-            self.settings_config.voice_activation.parakeet.execution_provider = "cuda"
+            self.settings_config.stt.fasterwhisper.device = "cuda"
+            self.settings_config.stt.fasterwhisper.compute_type = "auto"
+            self.settings_config.stt.parakeet.execution_provider = "cuda"
             self.printr.print(
                 f"- GPU detected: {system_manager.get_gpu_name()}",
                 color=LogType.STARTUP,
@@ -1591,8 +1560,8 @@ class ConfigManager:
             )
             changes = True
         else:
-            self.settings_config.voice_activation.fasterwhisper.device = "cpu"
-            self.settings_config.voice_activation.parakeet.execution_provider = "cpu"
+            self.settings_config.stt.fasterwhisper.device = "cpu"
+            self.settings_config.stt.parakeet.execution_provider = "cpu"
             self.printr.print(
                 "- No NVIDIA GPU detected, STT providers will use CPU",
                 color=LogType.STARTUP,
@@ -1870,13 +1839,10 @@ class ConfigManager:
             "elevenlabs",
             "hume",
             "inworld",
-            "whispercpp",
-            "fasterwhisper",
             "xvasynth",
             "pocket_tts",
             "wingman_pro",
             "perplexity",
-            "parakeet",
             "xai",
             "openai_compatible_tts",
         ]:

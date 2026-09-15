@@ -303,21 +303,21 @@ class ConfigMigrationService:
         )
         self.log(f"- detected GPU: {gpu_name or 'None'}")
         self.log(
-            f"- setting voice_activation.fasterwhisper.device to '{device}' (CUDA {'available' if cuda_available else 'not available'})"
+            f"- setting stt.fasterwhisper.device to '{device}' (CUDA {'available' if cuda_available else 'not available'})"
         )
         self.log(
-            f"- setting voice_activation.fasterwhisper.compute_type to '{compute_type}'"
+            f"- setting stt.fasterwhisper.compute_type to '{compute_type}'"
         )
 
         # Update the settings config
         settings = self.config_manager.settings_config
         if (
             settings
-            and settings.voice_activation
-            and settings.voice_activation.fasterwhisper
+            and settings.stt
+            and settings.stt.fasterwhisper
         ):
-            settings.voice_activation.fasterwhisper.device = device
-            settings.voice_activation.fasterwhisper.compute_type = compute_type
+            settings.stt.fasterwhisper.device = device
+            settings.stt.fasterwhisper.compute_type = compute_type
             self.config_manager.save_settings_config()
             self.log("- settings saved successfully")
 

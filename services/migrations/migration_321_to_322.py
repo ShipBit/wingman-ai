@@ -11,6 +11,15 @@ whitelists, the equivalent blacklist is written here: the 104 tools that are
 not the seven a voice assistant reaches for. For any other server that carried
 glob fields, they are dropped with a warning — the tool names are only known
 once the server is connected, so a glob cannot be turned into names here.
+
+Speech-to-text also moves in 3.2.2. It used to be chosen twice: once per
+wingman (`features.stt_provider`, read when a record key was held) and once
+in settings (`voice_activation.stt_provider`, read when voice activation
+heard something). The same recording could take two different engines. Now
+there is one `stt` block in settings.yaml and nothing in the wingman files.
+Everyone is put on local Parakeet: it runs on the machine, costs nothing, is
+fast, and handles 25 languages. The other providers stay selectable in
+Settings for anyone it does not work for.
 """
 
 from services.migrations.base_migration import BaseMigration
@@ -139,7 +148,29 @@ class Migration321To322(BaseMigration):
     # a message count cannot tell the two apart. The new key comes from the
     # template backfill with its default; the old value is not converted, no
     # number of messages maps to a number of tokens.
-    DROPPED_FEATURES = ("remember_messages", "condense_keep_recent")
+    DROPPED_FEATURES = ("remember_messages", "condense_keep_recent", "stt_provider")
+
+    # Per-wingman STT tuning that has no home any more. The global equivalents
+    # live under `stt` in settings.yaml.
+    DROPPED_STT_SECTIONS = ("parakeet", "fasterwhisper", "whispercpp")
+    DROPPED_WINGMAN_PRO_KEYS = ("stt_provider", "languages")
+
+    # The three fields that are about listening, not about transcribing.
+    VOICE_ACTIVATION_KEYS = (
+        "enabled",
+        "mute_toggle_key",
+        "mute_toggle_key_codes",
+        "energy_threshold",
+    )
+    STT_SECTIONS = (
+        "languages",
+        "parakeet",
+        "parakeet_config",
+        "fasterwhisper",
+        "fasterwhisper_config",
+        "whispercpp",
+        "whispercpp_config",
+    )
 
     def _drop_features(self, config: dict, label: str) -> dict:
         features = config.get("features")
@@ -166,12 +197,77 @@ class Migration321To322(BaseMigration):
             self.log(f"{label}: replaced the Inworld TTS prompt with the 3.2.2 version")
         return config
 
+    def _drop_stt(self, config: dict, label: str) -> dict:
+        """Speech-to-text is a global setting now; nothing of it stays here."""
+        for key in self.DROPPED_STT_SECTIONS:
+            if key in config:
+                config.pop(key)
+                self.log(f"{label}: removed the {key} section (speech-to-text is set in Settings now)")
+        pro = config.get("wingman_pro")
+        if isinstance(pro, dict):
+            for key in self.DROPPED_WINGMAN_PRO_KEYS:
+                if key in pro:
+                    pro.pop(key)
+                    self.log(f"{label}: removed wingman_pro.{key}")
+        return config
+
+    def _migrate_wingman_config(self, old: dict, label: str) -> dict:
+        config = dict(old)
+        config = self._drop_features(config, label)
+        config = self._replace_inworld_prompt(config, label)
+        return self._drop_stt(config, label)
+
+    def migrate_settings(self, old: dict) -> dict:
+        """Split `voice_activation` into listening (stays) and transcribing (new `stt`)."""
+        new = dict(old)
+        va = old.get("voice_activation")
+        if not isinstance(va, dict):
+            return new
+
+        stt: dict = dict(new.get("stt") or {})
+        for key in self.STT_SECTIONS:
+            if key in va and key not in stt:
+                stt[key] = va[key]
+
+        was = va.get("stt_provider")
+        stt["provider"] = "parakeet"
+        parakeet = dict(stt.get("parakeet") or {})
+        if parakeet.get("run_locally") is False:
+            parakeet["run_locally"] = True
+            self.log("settings: Parakeet now runs on this machine (was remote)")
+        if parakeet:
+            stt["parakeet"] = parakeet
+        if was and was != "parakeet":
+            self.log_warning(
+                f"settings: speech-to-text '{was}' -> 'parakeet'. Parakeet is the "
+                "provider we recommend; the old one can be picked again in Settings."
+            )
+        elif not was:
+            self.log("settings: speech-to-text set to 'parakeet'")
+
+        # Fields that no longer exist
+        parakeet_config = stt.get("parakeet_config")
+        if isinstance(parakeet_config, dict) and "language" in parakeet_config:
+            parakeet_config.pop("language")
+        fasterwhisper_config = stt.get("fasterwhisper_config")
+        if isinstance(fasterwhisper_config, dict) and "additional_hotwords" in fasterwhisper_config:
+            fasterwhisper_config.pop("additional_hotwords")
+        whispercpp = stt.get("whispercpp")
+        if isinstance(whispercpp, dict) and "enable" in whispercpp:
+            whispercpp.pop("enable")
+
+        new["stt"] = stt
+        new["voice_activation"] = {
+            key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va
+        }
+        self.log("settings: moved the speech-to-text settings out of voice_activation into stt")
+        return new
+
     def migrate_defaults(self, old: dict) -> dict:
-        return self._replace_inworld_prompt(self._drop_features(dict(old), "defaults"), "defaults")
+        return self._migrate_wingman_config(old, "defaults")
 
     def migrate_wingman(self, old: dict) -> dict:
-        label = old.get("name", "wingman")
-        return self._replace_inworld_prompt(self._drop_features(dict(old), label), label)
+        return self._migrate_wingman_config(old, old.get("name", "wingman"))
 
     def migrate_mcp(self, old: dict, new: dict) -> dict:
         """Turn the 3.2.1 glob filters into the 3.2.2 disabled list."""

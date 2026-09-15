@@ -2,7 +2,7 @@ import asyncio
 import os
 from typing import Awaitable, Callable, Optional
 
-from api.enums import LogType, VoiceActivationSttProvider
+from api.enums import LogType, SttProvider
 from api.interface import ParakeetSttConfig, FasterWhisperSttConfig
 from providers.faster_whisper import FasterWhisper
 from providers.parakeet import Parakeet
@@ -88,7 +88,7 @@ class SttProviderManager:
         self.fasterwhisper = fasterwhisper
         self.app_root_path = app_root_path
         self.printr = Printr()
-        self.active_provider: VoiceActivationSttProvider | None = None
+        self.active_provider: SttProvider | None = None
         # Serializes initialize/switch_provider: a settings-triggered switch
         # must not race the startup init (or another switch) into downloading
         # and loading the same model twice concurrently.
@@ -104,13 +104,13 @@ class SttProviderManager:
             on_status: Async callback (message, progress_or_none) for UI updates.
         """
         async with self._init_lock:
-            va_settings = self.settings_service.settings.voice_activation
-            provider = va_settings.stt_provider
+            stt_settings = self.settings_service.settings.stt
+            provider = stt_settings.provider
 
             # Check if this is a local provider that needs download + init
-            if provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
+            if provider == SttProvider.PARAKEET and stt_settings.parakeet.run_locally:
                 await self._initialize_parakeet(on_status)
-            elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
+            elif provider == SttProvider.FASTER_WHISPER:
                 await self._initialize_fasterwhisper(on_status)
             else:
                 # Remote/cloud provider — nothing to download or init
@@ -127,7 +127,7 @@ class SttProviderManager:
         on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Download and initialize Parakeet."""
-        pk_settings = self.settings_service.settings.voice_activation.parakeet
+        pk_settings = self.settings_service.settings.stt.parakeet
 
         # Download model
         variant = pk_settings.model_variant
@@ -179,7 +179,7 @@ class SttProviderManager:
         on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Download and initialize FasterWhisper."""
-        fw_settings = self.settings_service.settings.voice_activation.fasterwhisper
+        fw_settings = self.settings_service.settings.stt.fasterwhisper
         model_size = fw_settings.model_size
 
         try:
@@ -227,7 +227,7 @@ class SttProviderManager:
 
     async def switch_provider(
         self,
-        new_provider: VoiceActivationSttProvider,
+        new_provider: SttProvider,
         on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Switch active STT provider. Unloads old, downloads + loads new.
@@ -240,16 +240,16 @@ class SttProviderManager:
             old_provider = self.active_provider
 
             # Unload current provider
-            if old_provider == VoiceActivationSttProvider.PARAKEET:
+            if old_provider == SttProvider.PARAKEET:
                 self.parakeet.unload()
-            elif old_provider == VoiceActivationSttProvider.FASTER_WHISPER:
+            elif old_provider == SttProvider.FASTER_WHISPER:
                 self.fasterwhisper.unload()
 
             # Initialize new provider
-            va_settings = self.settings_service.settings.voice_activation
-            if new_provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
+            stt_settings = self.settings_service.settings.stt
+            if new_provider == SttProvider.PARAKEET and stt_settings.parakeet.run_locally:
                 await self._initialize_parakeet(on_status)
-            elif new_provider == VoiceActivationSttProvider.FASTER_WHISPER:
+            elif new_provider == SttProvider.FASTER_WHISPER:
                 await self._initialize_fasterwhisper(on_status)
 
             self.active_provider = new_provider
@@ -287,7 +287,7 @@ class SttProviderManager:
         config = FasterWhisperSttConfig(
             beam_size=1, best_of=1, temperature=0.0,
             no_speech_threshold=0.7, language_detection_threshold=0.5,
-            multilingual=False, language=None, hotwords=[], additional_hotwords=[],
+            multilingual=False, language=None, hotwords=[],
         )
         try:
             result = self.fasterwhisper.transcribe(

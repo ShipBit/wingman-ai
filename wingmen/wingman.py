@@ -19,6 +19,7 @@ from typing import (
 from openai import APIConnectionError
 from openai.types.chat import ChatCompletion
 from api.interface import (
+    BenchmarkResult,
     CommandConfig,
     SettingsConfig,
     SkillConfig,
@@ -32,11 +33,10 @@ from api.enums import (
     ImageGenerationProvider,
     LogSource,
     LogType,
-    SttProvider,
     TtsProvider,
     WingmanInitializationErrorType,
 )
-from providers.interfaces import LlmInterface, SttInterface, TtsInterface
+from providers.interfaces import LlmInterface, TtsInterface
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -72,9 +72,10 @@ class Wingman:
     save/load, skill management, provider routing, conversation management,
     tool execution, context building, and condensation.
 
-    Providers are resolved via :class:`ProviderFactory` into three
-    interface slots: ``stt``, ``tts``, ``llm``.  Heavy orchestration logic
-    is delegated to extracted service objects.
+    Providers are resolved via :class:`ProviderFactory` into two interface
+    slots: ``tts`` and ``llm``. Speech-to-text is not a wingman concern: the
+    core transcribes with the provider from Settings and hands in the text.
+    Heavy orchestration logic is delegated to extracted service objects.
     """
 
     def __init__(
@@ -84,9 +85,6 @@ class Wingman:
         settings: SettingsConfig,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
-        whispercpp=None,
-        fasterwhisper=None,
-        parakeet=None,
         xvasynth=None,
         pocket_tts=None,
         tower: "Tower" = None,
@@ -109,16 +107,16 @@ class Wingman:
 
         # Shared provider singletons (passed from Tower)
         self._shared_providers = {
-            "whispercpp": whispercpp,
-            "fasterwhisper": fasterwhisper,
-            "parakeet": parakeet,
             "xvasynth": xvasynth,
             "pocket_tts": pocket_tts,
         }
 
         # --- Provider interface slots (populated by validate → ProviderFactory) ---
-        self.stt: SttInterface | None = None
         self.tts: TtsInterface | None = None
+        # Words the local speech decoder is nudged towards while this wingman
+        # runs. Skills add them through ctx.stt; the core reads them when it
+        # transcribes. Runtime only, never saved.
+        self.stt_hotwords: list[str] = []
         self.llm: LlmInterface | None = None
 
         # --- Extracted services ---
@@ -278,7 +276,6 @@ class Wingman:
                 shared_providers=self._shared_providers,
                 wingman_name=self.name,
             )
-            self.stt = await factory.create_stt(errors)
             self.tts = await factory.create_tts(errors)
             self.llm = await factory.create_llm(errors)
         except Exception as e:
@@ -394,15 +391,21 @@ class Wingman:
 
     # ──────────────────────────── The main processing loop ──────────────────────── #
 
-    async def process(self, audio_input_wav: str = None, transcript: str = None, images: list[tuple[str, str]] = None):
+    async def process(
+        self,
+        transcript: str,
+        images: list[tuple[str, str]] = None,
+        transcription_benchmark: BenchmarkResult | None = None,
+    ):
+        """Answer what the user said.
+
+        ``transcript`` is text already: typed in the chat or transcribed by the
+        core's STT service. ``transcription_benchmark`` is that service's timing,
+        shown next to the user's message like it was when transcription happened
+        here.
+        """
         try:
             process_result = None
-
-            benchmark_transcribe = None
-            if not transcript:
-                benchmark_transcribe = Benchmark(label="Voice transcription")
-                transcript = await self._transcribe(audio_input_wav)
-
             interrupt = None
             if transcript:
                 additional_data = None
@@ -413,9 +416,7 @@ class Wingman:
                     color=LogType.USER,
                     source_name="User",
                     source=LogSource.USER,
-                    benchmark_result=(
-                        benchmark_transcribe.finish() if benchmark_transcribe else None
-                    ),
+                    benchmark_result=transcription_benchmark,
                     additional_data=additional_data,
                 )
 
@@ -456,26 +457,6 @@ class Wingman:
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-
-    # ───────────────── Transcription ───────────────── #
-
-    async def _transcribe(self, audio_input_wav: str) -> str | None:
-        if not self.stt:
-            return None
-        try:
-            transcript = await self.stt.transcribe(filename=audio_input_wav)
-            if transcript:
-                # Wingman Pro might return a serialized dict instead of a real object
-                if isinstance(transcript, dict):
-                    return transcript.get("_text")
-                return transcript.text
-        except Exception as e:
-            await printr.print_async(
-                f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}",
-                color=LogType.ERROR,
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-        return None
 
     # ───────────────── Response orchestration ───────────────── #
 
@@ -1024,7 +1005,7 @@ class Wingman:
         # Provider adapters (ProviderFactory) also capture the config object —
         # rebind so setting changes saved without revalidation (e.g. a new TTS
         # voice) apply to live playback immediately.
-        for provider in (self.stt, self.tts, self.llm):
+        for provider in (self.tts, self.llm):
             if provider is not None and hasattr(provider, "_config"):
                 provider._config = config
 
@@ -1131,7 +1112,6 @@ class Wingman:
             uses_wingman_pro = any([
                 self.config.features.conversation_provider == ConversationProvider.WINGMAN_PRO,
                 self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
-                self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
                 self.config.features.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO,
             ])
             if uses_wingman_pro:

@@ -11,18 +11,15 @@ from typing import TYPE_CHECKING
 from api.enums import (
     ConversationProvider,
     ImageGenerationProvider,
-    SttProvider,
     TtsProvider,
     WingmanInitializationErrorType,
 )
 from api.interface import WingmanInitializationError
 from providers.interfaces import (
     LlmInterface,
-    SttInterface,
     TtsInterface,
     Validatable,
     get_llm_class,
-    get_stt_class,
     get_tts_class,
 )
 from services.printr import Printr
@@ -36,9 +33,6 @@ printr = Printr()
 
 # Import all provider modules so their decorators run and populate the registries.
 # These imports have no other side effects.
-import providers.faster_whisper  # noqa: F401
-import providers.parakeet  # noqa: F401
-import providers.whispercpp  # noqa: F401
 import providers.open_ai  # noqa: F401
 import providers.google  # noqa: F401
 import providers.x_ai  # noqa: F401
@@ -52,7 +46,7 @@ import providers.wingman_subscription  # noqa: F401
 
 
 class ProviderFactory:
-    """Creates STT, TTS, and LLM provider instances from config."""
+    """Creates TTS and LLM provider instances from config."""
 
     def __init__(
         self,
@@ -86,59 +80,6 @@ class ProviderFactory:
                 )
             )
         return secret
-
-    async def create_stt(
-        self, errors: list[WingmanInitializationError]
-    ) -> SttInterface | None:
-        """Create the STT provider from config."""
-        stt_enum = self._config.features.stt_provider
-        # Shared singleton providers — wrap in adapter
-        if stt_enum == SttProvider.FASTER_WHISPER:
-            from providers.faster_whisper import FasterWhisperStt
-
-            return FasterWhisperStt(
-                shared=self._shared["fasterwhisper"],
-                config=self._config,
-                wingman_name=self._wingman_name,
-            )
-        elif stt_enum == SttProvider.PARAKEET:
-            from providers.parakeet import ParakeetStt
-
-            return ParakeetStt(shared=self._shared["parakeet"], config=self._config)
-        elif stt_enum == SttProvider.WHISPERCPP:
-            from providers.whispercpp import WhispercppStt
-
-            return WhispercppStt(shared=self._shared["whispercpp"], config=self._config)
-        elif stt_enum == SttProvider.OPENAI:
-            api_key = await self._retrieve_secret("openai", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAi, OpenAiStt
-
-            openai = OpenAi(
-                api_key=api_key, organization=self._config.openai.organization
-            )
-            return OpenAiStt(openai_instance=openai)
-        elif stt_enum == SttProvider.GROQ:
-            api_key = await self._retrieve_secret("groq", errors)
-            if not api_key:
-                return None
-            from providers.open_ai import OpenAi, GroqStt
-
-            groq = OpenAi(api_key=api_key, base_url=self._config.groq.endpoint)
-            return GroqStt(openai_instance=groq)
-        elif stt_enum == SttProvider.WINGMAN_PRO:
-            from providers.wingman_subscription import (
-                WingmanSubscription,
-                WingmanSubscriptionStt,
-            )
-
-            ws = WingmanSubscription(
-                wingman_name=self._wingman_name,
-                settings=self._settings.wingman_pro,
-            )
-            return WingmanSubscriptionStt(ws_instance=ws, config=self._config)
-        return None
 
     async def create_tts(
         self, errors: list[WingmanInitializationError]

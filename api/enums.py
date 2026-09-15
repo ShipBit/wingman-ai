@@ -139,15 +139,6 @@ class SttProvider(Enum):
     GROQ = "groq"
 
 
-class VoiceActivationSttProvider(Enum):
-    OPENAI = "openai"
-    WHISPERCPP = "whispercpp"
-    FASTER_WHISPER = "fasterwhisper"
-    PARAKEET = "parakeet"
-    WINGMAN_PRO = "wingman_pro"
-    GROQ = "groq"
-
-
 class LocalAiMode(Enum):
     """Where the support model runs.
 
@@ -195,13 +186,6 @@ class RecordingDevice(Enum):
     KEYBOARD = "keyboard"
     MOUSE = "mouse"
     JOYSTICK = "joystick"
-
-
-class WingmanProSttProvider(Enum):
-    # One cloud option: which model actually
-    # transcribes is decided by the backend's model_routes table, not by the
-    # client (backend migration, plan section 6.2).
-    CLOUD = "cloud"
 
 
 class WingmanProTtsProvider(Enum):
@@ -286,10 +270,6 @@ class SttProviderEnumModel(BaseEnumModel):
     stt_provider: SttProvider
 
 
-class VoiceActivationSttProviderEnumModel(BaseEnumModel):
-    stt_provider: VoiceActivationSttProvider
-
-
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
 
@@ -304,10 +284,6 @@ class KeyboardRecordingTypeModel(BaseEnumModel):
 
 class RecordingDeviceModel(BaseEnumModel):
     recording_device: RecordingDevice
-
-
-class WingmanProSttProviderModel(BaseEnumModel):
-    stt_provider: WingmanProSttProvider
 
 
 class WingmanProTtsProviderModel(BaseEnumModel):
@@ -337,10 +313,8 @@ ENUM_TYPES = {
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
-    "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
-    "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "PerplexityModel": PerplexityModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,

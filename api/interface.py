@@ -13,9 +13,7 @@ from api.enums import (
     SoundEffect,
     SttProvider,
     TtsProvider,
-    VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
 )
@@ -163,7 +161,6 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSettings(BaseModel):
-    enable: bool
     host: str
     port: int
 
@@ -211,7 +208,8 @@ class FasterWhisperSttConfig(BaseModel):
     beam_size: int
     language: Optional[str] = None
     hotwords: list[str]
-    additional_hotwords: list[str]
+    """Words the decoder is nudged towards. The names of the active config's
+    wingmen are added at transcription time, so they need not be listed here."""
     best_of: int
     temperature: float
     no_speech_threshold: float
@@ -236,15 +234,12 @@ class ParakeetSettings(BaseModel):
     execution_provider: str
     """cpu, directml, coreml, or cuda"""
     language: Optional[str] = None
-    """Global default language for Parakeet transcription. Individual wingmen may
-    override this via their per-wingman parakeet_config.language; when that is
-    empty, the global value here is used."""
+    """Transcription language. Empty means auto-detect."""
     host: str
     port: int
 
 
 class ParakeetSttConfig(BaseModel):
-    language: Optional[str] = None
     temperature: float
 
 
@@ -523,7 +518,6 @@ class LocalLlmConfig(BaseModel):
 
 
 class WingmanProConfig(BaseModel):
-    stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
 
     conversation_deployment: str = ""
@@ -536,8 +530,6 @@ class WingmanProConfig(BaseModel):
     serves its default instead of failing.
     """
 
-    languages: list[str] = ["en-US"]
-    """Languages the cloud transcription may auto-detect, as BCP-47 tags."""
 
 
 class WingmanProSettings(BaseModel):
@@ -560,7 +552,9 @@ class SoundConfig(BaseModel):
 
 
 class VoiceActivationSettings(BaseModel):
-    """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
+    """Hands-free listening. Off means the user holds a wingman's record key.
+    Which provider transcribes is not decided here but in ``SttSettings``:
+    push-to-talk and voice activation share it."""
 
     enabled: bool
     """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
@@ -573,7 +567,12 @@ class VoiceActivationSettings(BaseModel):
     energy_threshold: float
     """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
 
-    stt_provider: VoiceActivationSttProvider
+
+class SttSettings(BaseModel):
+    """Speech-to-text, configured once for every wingman and for both ways of
+    talking (record key and voice activation)."""
+
+    provider: SttProvider
 
     languages: list[str]
     """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
@@ -595,7 +594,6 @@ class FeaturesConfig(BaseModel):
     """
 
     tts_provider: TtsProvider
-    stt_provider: SttProvider
     conversation_provider: ConversationProvider
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
@@ -1166,9 +1164,6 @@ class NestedConfig(BaseModel):
     inworld: InworldConfig
     xvasynth: XVASynthTtsConfig
     pocket_tts: PocketTTSConfig
-    whispercpp: WhispercppSttConfig
-    fasterwhisper: FasterWhisperSttConfig
-    parakeet: ParakeetSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     xai: XaiConfig
@@ -1382,6 +1377,7 @@ class LlamaCppSettings(BaseModel):
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
+    stt: SttSettings
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings

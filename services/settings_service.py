@@ -2,7 +2,7 @@ from copy import deepcopy
 from typing import Awaitable, Callable, Optional
 from fastapi import APIRouter
 import sounddevice as sd
-from api.enums import LogType, SttProvider, ToastType, VoiceActivationSttProvider
+from api.enums import LogType, SttProvider, ToastType
 from api.interface import (
     AudioSettings,
     AudioDeviceSettings,
@@ -108,71 +108,43 @@ class SettingsService:
     async def save_settings(self, settings: SettingsConfig):
         old = deepcopy(self.config_manager.settings_config)
 
-        # STT provider switch — route through SttProviderManager
-        old_stt = old.voice_activation.stt_provider
-        new_stt = settings.voice_activation.stt_provider
-        if new_stt != old_stt and self.stt_provider_manager:
-            # Apply new settings BEFORE switching so the manager reads fresh values
-            self.parakeet.settings = settings.voice_activation.parakeet
-            self.fasterwhisper.settings = settings.voice_activation.fasterwhisper
-            self.config_manager.settings_config.voice_activation = settings.voice_activation
-            # Provider changed — let the manager handle unload/load
+        # Speech-to-text. One block for every wingman and both ways of talking.
+        old_stt = old.stt
+        new_stt = settings.stt
+        # The shared providers hold a reference to their settings object;
+        # hand them the new one before anything reads it.
+        self.parakeet.settings = new_stt.parakeet
+        self.fasterwhisper.settings = new_stt.fasterwhisper
+        self.config_manager.settings_config.stt = new_stt
+
+        reload_needed = new_stt.provider != old_stt.provider
+        if new_stt.provider == SttProvider.PARAKEET:
+            old_pk, new_pk = old_stt.parakeet, new_stt.parakeet
+            reload_needed = reload_needed or (
+                old_pk.model_variant != new_pk.model_variant
+                or old_pk.execution_provider != new_pk.execution_provider
+                or old_pk.run_locally != new_pk.run_locally
+            )
+        elif new_stt.provider == SttProvider.FASTER_WHISPER:
+            old_fw, new_fw = old_stt.fasterwhisper, new_stt.fasterwhisper
+            reload_needed = reload_needed or (
+                old_fw.model_size != new_fw.model_size
+                or old_fw.device != new_fw.device
+                or old_fw.compute_type != new_fw.compute_type
+            )
+        if reload_needed and self.stt_provider_manager:
+            # Let the manager unload the old model and download/load the new one.
             try:
                 await self.stt_provider_manager.switch_provider(
-                    new_stt, on_status=self.stt_status_callback
+                    new_stt.provider, on_status=self.stt_status_callback
                 )
             finally:
                 if self.stt_done_callback:
                     await self.stt_done_callback()
-            # Cascade the local stt_provider to wingman configs (disk + defaults)
-            if new_stt == VoiceActivationSttProvider.PARAKEET:
-                new_stt_provider = SttProvider.PARAKEET
-                self.config_manager.cascade_local_stt_provider(new_stt_provider)
-            elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
-                new_stt_provider = SttProvider.FASTER_WHISPER
-                self.config_manager.cascade_local_stt_provider(new_stt_provider)
-            else:
-                new_stt_provider = None
-            # Also update running wingmen's in-memory config
-            if new_stt_provider and self.config_service.tower:
-                for wingman in self.config_service.tower.wingmen:
-                    wingman.config.features.stt_provider = new_stt_provider
-        elif new_stt == VoiceActivationSttProvider.PARAKEET:
-            # Same provider, check if parakeet settings changed
-            old_pk = old.voice_activation.parakeet
-            new_pk = settings.voice_activation.parakeet
-            if (old_pk.model_variant != new_pk.model_variant
-                or old_pk.execution_provider != new_pk.execution_provider
-                or old_pk.run_locally != new_pk.run_locally):
-                self.parakeet.settings = new_pk
-                if self.stt_provider_manager:
-                    try:
-                        await self.stt_provider_manager.switch_provider(
-                            new_stt, on_status=self.stt_status_callback
-                        )
-                    finally:
-                        if self.stt_done_callback:
-                            await self.stt_done_callback()
-            else:
-                self.parakeet.settings = new_pk
-        elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
-            # Same provider, check if fasterwhisper settings changed
-            old_fw = old.voice_activation.fasterwhisper
-            new_fw = settings.voice_activation.fasterwhisper
-            if (old_fw.model_size != new_fw.model_size
-                or old_fw.device != new_fw.device
-                or old_fw.compute_type != new_fw.compute_type):
-                self.fasterwhisper.settings = new_fw
-                if self.stt_provider_manager:
-                    try:
-                        await self.stt_provider_manager.switch_provider(
-                            new_stt, on_status=self.stt_status_callback
-                        )
-                    finally:
-                        if self.stt_done_callback:
-                            await self.stt_done_callback()
-            else:
-                self.fasterwhisper.settings = new_fw
+            self.printr.print(
+                f"Speech-to-text provider: {new_stt.provider.value}.",
+                server_only=True,
+            )
 
         # audio devices
         if (
@@ -195,7 +167,7 @@ class SettingsService:
                 "Whispercpp is not initialized. Please run SettingsService.initialize()",
             )
             return
-        self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
+        self.whispercpp.update_settings(settings=settings.stt.whispercpp)
 
         # XVASynth
         if not self.xvasynth:
@@ -230,10 +202,8 @@ class SettingsService:
 
             # Cascade to STT language (FasterWhisper + Parakeet)
             stt_lang = None if new_spoken == "multilingual" else new_spoken
-            settings.voice_activation.fasterwhisper_config.language = stt_lang
-            self.config_manager.settings_config.voice_activation.fasterwhisper_config.language = stt_lang
-            settings.voice_activation.parakeet.language = stt_lang
-            self.config_manager.settings_config.voice_activation.parakeet.language = stt_lang
+            settings.stt.fasterwhisper_config.language = stt_lang
+            settings.stt.parakeet.language = stt_lang
 
             self.printr.print(
                 f"Spoken language changed to '{new_spoken}'. "
@@ -264,8 +234,6 @@ class SettingsService:
         if (
             settings.voice_activation.energy_threshold
             != old.voice_activation.energy_threshold
-            or settings.voice_activation.stt_provider
-            != old.voice_activation.stt_provider
         ):
             await self.settings_events.publish(
                 "va_settings_changed", settings.voice_activation

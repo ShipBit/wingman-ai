@@ -6,7 +6,6 @@ from api.enums import (
     CommandTag,
     ConversationProvider,
     LogType,
-    SttProvider,
     TtsProvider,
 )
 from api.interface import (
@@ -16,11 +15,8 @@ from api.interface import (
     WingmanProSettings,
 )
 from providers.interfaces import (
-    SttInterface,
     TtsInterface,
     LlmInterface,
-    Transcript,
-    stt_provider,
     tts_provider,
     llm_provider,
 )
@@ -386,22 +382,6 @@ class WingmanSubscription:
 # ---------------------------------------------------------------------------
 # Adapter classes — bridge WingmanSubscription into unified provider interfaces
 # ---------------------------------------------------------------------------
-
-
-@stt_provider(SttProvider.WINGMAN_PRO)
-class WingmanSubscriptionStt(SttInterface):
-    def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
-        self._ws = ws_instance
-        self._config = config
-
-    async def transcribe(self, filename: str) -> Transcript | None:
-        # One cloud provider, so no dispatch. The backend decides which model
-        # transcribes; the language list only narrows its auto-detection.
-        languages = self._config.wingman_pro.languages
-        result = self._ws.transcribe(filename=filename, languages=languages)
-        if result is None:
-            return None
-        return Transcript(text=result.text) if result.text else None
 
 
 @tts_provider(TtsProvider.WINGMAN_PRO)

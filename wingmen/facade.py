@@ -916,6 +916,43 @@ class SkillTts:
         return f"Switched {self._wingman.name}'s voice to {voice_name} ({provider_label})."
 
 
+class SkillStt:
+    """Sanctioned speech-to-text capabilities for skills.
+
+    Which provider transcribes is a global setting and stays out of reach. What
+    a skill may do is teach the local decoder words: hotwords are names the
+    engine is nudged towards (FasterWhisper reads them, the other providers do
+    not). They live for the wingman's runtime only and are never written to
+    a config file.
+    """
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    @property
+    def hotwords(self) -> list[str]:
+        """The hotwords this wingman has added, in insertion order."""
+        return list(self._wingman.stt_hotwords)
+
+    def add_hotwords(self, words: list[str]) -> int:
+        """Add words to the hotword list. Returns how many were new."""
+        current = self._wingman.stt_hotwords
+        before = len(current)
+        for word in words:
+            word = str(word).strip()
+            if word and word not in current:
+                current.append(word)
+        return len(current) - before
+
+    def remove_hotwords(self, words: list[str]) -> int:
+        """Remove words from the hotword list. Returns how many were removed."""
+        drop = {str(word).strip() for word in words}
+        current = self._wingman.stt_hotwords
+        before = len(current)
+        current[:] = [word for word in current if word not in drop]
+        return before - len(current)
+
+
 class SkillConversation:
     """Read + append to the live conversation, and summarize it (free, local)."""
 

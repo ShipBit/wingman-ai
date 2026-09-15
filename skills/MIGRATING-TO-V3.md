@@ -17,7 +17,7 @@ using the checklist + mapping table below.
 **The one rule:** `self.` is *this skill* (its identity, config, storage, decorators,
 lifecycle hooks). `self.wingman` is *the runtime* (everything about the wingman/app, grouped
 into feature namespaces). No capability lives on both. If you reach for a runtime capability,
-it is under a feature noun on `self.wingman`: `ai`, `local_ai`, `tts`, `audio`, `commands`,
+it is under a feature noun on `self.wingman`: `ai`, `local_ai`, `tts`, `stt`, `audio`, `commands`,
 `tools`, `conversation`, `memory`, `secrets`, `skills`.
 
 ### The 5 breaking changes

@@ -57,7 +57,6 @@ prompts:
 persistent_memory: true
 features:
   tts_provider: pocket_tts
-  stt_provider: parakeet
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false
@@ -207,20 +206,6 @@ inworld:
     - "Shields at forty percent and dropping. <break time="400ms" /> I would not stay here."
     - No markup at all: "All systems nominal. Awaiting your directive."
     - No markup at all: "Course set for Area18. Estimated arrival in four minutes."
-whispercpp:
-  temperature: 0.0
-fasterwhisper:
-  beam_size: 1
-  best_of: 2
-  temperature: 0
-  no_speech_threshold: 0.7
-  language_detection_threshold: 0.5
-  multilingual: false
-  language: ""
-  hotwords: []
-  additional_hotwords: []
-parakeet:
-  temperature: 0.0
 xvasynth:
   voice:
     model_directory: ""
@@ -234,9 +219,6 @@ pocket_tts:
   speed: 1.0
   output_streaming: true
 wingman_pro:
-  languages:
-    - en-US
-  stt_provider: cloud
   tts_provider: inworld
   # Empty means: whatever the plan lists as its default right now.
   conversation_deployment: ''
