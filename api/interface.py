@@ -115,6 +115,9 @@ class MicStatusResponse(BaseModel):
     booleans below are derived from it."""
     listening: bool
     """True when voice activation is on and the mic is not muted (nor paused for playback)."""
+    muted: bool = False
+    """True only when the user muted the mic (switch or hotkey). A held
+    push-to-talk key or a speaking wingman does not count."""
     voice_activation_enabled: bool
     """Whether voice activation (vs push-to-talk) is configured."""
     playing: bool

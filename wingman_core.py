@@ -1086,6 +1086,7 @@ class WingmanCore(WebSocketUser):
         return MicStatusResponse(
             state=state.value,
             listening=state == ListenState.ARMED,
+            muted=state == ListenState.MUTED,
             voice_activation_enabled=bool(
                 self.settings_service.settings.voice_activation.enabled
             ),
@@ -1757,10 +1758,16 @@ class WingmanCore(WebSocketUser):
         )
 
     def _on_listen_state_changed(self, state: ListenState) -> None:
-        """From the controller, on whichever thread caused the change."""
+        """From the controller, on whichever thread caused the change.
+
+        The client's mute switch means one thing: the user does not want to
+        be heard right now, say while talking to friends on Discord. It is
+        the user's own setting, so only MUTED counts; a held push-to-talk key
+        or a wingman speaking must not flip it.
+        """
         self._run_on_main_loop(
             self._connection_manager.broadcast(
-                VoiceActivationMutedCommand(muted=state != ListenState.ARMED)
+                VoiceActivationMutedCommand(muted=state == ListenState.MUTED)
             )
         )
         self._emit_voice_state()
