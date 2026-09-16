@@ -1,6 +1,7 @@
 # Star Citizen: places, moons, stations, outposts and commodities as people say them.
 # Distilled 2026-09-16 from the UEX location labels and the commodity list; plain
 # English words were left out, the speech models know those already.
+Aberdeen
 AcryliPlex Composite
 Adair Retreat
 Adir
@@ -12,10 +13,11 @@ Amiant Pod
 Amioshi Plague
 Aphorite
 Apoxygenite
-ArcCorp
 Arccorp
+ArcCorp
 ArcCorp Daymar
 ArcCorp Yela
+Area 18
 Arial
 Ashland
 Aslarite
@@ -28,6 +30,7 @@ Awala
 Baijini
 Baijini above ArcCorp
 Baijini Clinic
+Baijini Point
 Balto Blind
 Barrens
 Barton Flats
@@ -41,6 +44,7 @@ Bexalite
 Biological Samples
 Birbari
 Blackrock Exchange
+Bloom
 Blue Bilva
 Borase
 Brentworth Care
@@ -50,6 +54,7 @@ Bud Growery
 Bueno Ravine
 Cadmium Allinide
 Cafe Musain
+Calliope
 Caplan Circuit
 Carinite
 Cave Kopion Horn
@@ -58,9 +63,11 @@ Cellin farming
 Cellin Rayari
 Cellin Terra Mills
 Chawla Beach
+Checkmate
 Checkmate Habs
 Chilad
 CK13-GID Seed Blend
+Clio
 Cloudrest Retreat
 Combat Supplies
 Compboard
@@ -71,6 +78,7 @@ Covalex Gundo
 Covalex Shipping Gundo
 Coven
 Criska
+Crusader
 Cry-Astro
 Cry-Astro Service
 CryoPod
@@ -107,6 +115,7 @@ Endgame Clinic
 Endgame Habs
 Erden
 Eriesium
+Euterpe
 Everus Harbor
 Everus Harbor Clinic
 Fairo
@@ -140,6 +149,7 @@ Gaffney Compound-D
 Gallete Family Farms
 Gallete Farms
 Gandan
+Gaslight
 Gaslight Habs
 Gasping Weevil Eggs
 Genmod Seeds
@@ -149,6 +159,7 @@ Golden Medmon
 Golden Riviera
 Gonzo
 Gray Gardens
+Grim HEX
 Hadanite
 Hard Knocks
 Hartmoore
@@ -180,6 +191,7 @@ Irradiated Valakkar Pearl (Grade AA)
 Irradiated Valakkar Pearl (Grade AAA)
 Irradiated Valakkar Pearl (Grade B)
 Irradiated Valakkar Pearl (Grade C)
+Ita
 Iteke
 Jaclium
 Jahlium
@@ -194,6 +206,7 @@ Keeger Belt
 Kel-To Rx Clinic
 Kelo Bottom
 Kinder Plots
+Klescher
 Klescher Rehabilitation
 Klescher Rehabilitation Facilities
 Klipra
@@ -278,6 +291,7 @@ Orbituary Clinic
 Orbituary Habs
 Organics
 Organs
+Orison
 Orphanage
 Osoian Hides
 Ostler Claim
@@ -299,6 +313,7 @@ Prashad
 Pressurized Ice
 Processed Food
 Prota
+Pyro
 Pyro II
 Pyro III
 Pyro IV
@@ -307,6 +322,7 @@ Quantainium
 QV Breaker
 Ranta Dung
 Rat Nest Habs
+Rat's Nest
 Rayari
 Rayari Anvik Research
 Rayari Cantwell Research
@@ -330,9 +346,11 @@ Reyes Compound-D
 Riccite
 Rico Remains
 Riker Memorial
+Rod's Fuel & Supplies
 Rolo Crater
 RS1 Odysey Spacesuits
 Ruin Habs
+Ruin Station
 Ruptura Alignment I
 Ruptura Alignment II
 Ruptura Alignment III
@@ -349,12 +367,14 @@ Savannah Kopion Horn
 Savrilium
 Scarper Turn
 SCR
+Seraphim Station
 Shades
 Shadowfall
 Shady Glen Farms
 Shallow Fields
 Shanks
 Sharga
+Shepherd's Rest
 Ship Decoy Countermeasures
 Ship Noise Countermeasures
 Shubin
@@ -373,6 +393,7 @@ Stanton Gateway
 Stanton System
 Starfarer
 Starlight Service Habs
+Starlight Service Station
 Stileron
 Stims
 Stonetree
