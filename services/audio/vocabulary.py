@@ -118,7 +118,13 @@ class Vocabulary:
 # --- finding candidates in a configuration ---
 
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|[_\-]+")
-_SENTENCE_START = re.compile(r"(?:^|[.!?:\n]\s*|[\"“(]\s*)([A-ZÄÖÜ][\w'-]*)")
+# Where a capital letter says nothing about the word: sentence starts, line
+# starts (with or without a bullet, number, markdown emphasis or quote), and
+# the word in front of a colon, which is a heading.
+_SENTENCE_START = re.compile(
+    r"(?:^|[.!?\n]|:\s)[\s\-*#>\d.)\"“'(_]*([A-ZÄÖÜ][\w'-]*)|([A-ZÄÖÜ][\w'-]*)\s*:",
+    re.MULTILINE,
+)
 _CAPITALISED = re.compile(r"\b([A-ZÄÖÜ][a-zäöüß'-]{2,}(?:\s+[A-ZÄÖÜ][a-zäöüß'-]{2,}){0,2})\b")
 
 # Words that start sentences in prompts all the time and are not names.
@@ -130,20 +136,26 @@ _COMMON = {
 }
 
 
-def detect_from_text(text: str) -> list[str]:
-    """Capitalised words that do not start a sentence: proper nouns, mostly."""
+def detect_from_text(text: str, titles: bool = False) -> list[str]:
+    """Capitalised words that do not start a sentence: proper nouns, mostly.
+    With `titles` the sentence-start rule is off: a spoken trigger like
+    "Flight Ready" is a name as a whole."""
     if not text:
         return []
-    starts = {m.group(1) for m in _SENTENCE_START.finditer(text)}
+    starts = set() if titles else {m.group(1) or m.group(2) for m in _SENTENCE_START.finditer(text)}
     found: list[str] = []
     for m in _CAPITALISED.finditer(text):
         phrase = " ".join(m.group(1).split())
-        head = phrase.split()[0]
-        if head in starts and len(phrase.split()) == 1:
+        words = phrase.split()
+        # A phrase that starts a sentence loses its first word; what is left
+        # may still be a name ("Reference Star Citizen" -> "Star Citizen").
+        while words and words[0] in starts:
+            words = words[1:]
+        if not words:
             continue
-        if head.lower() in _COMMON:
+        if len(words) == 1 and words[0].lower() in _COMMON:
             continue
-        found.append(phrase)
+        found.append(" ".join(words))
     return found
 
 
@@ -158,7 +170,7 @@ def detect_from_config(config) -> list[str]:
         for command in wingman.commands or []:
             words.extend(p for p in _CAMEL.split(command.name) if len(p) >= MIN_WORD_LENGTH)
             for phrase in command.instant_activation or []:
-                words.extend(detect_from_text(phrase))
+                words.extend(detect_from_text(phrase, titles=True))
         prompts = wingman.prompts
         if prompts:
             words.extend(detect_from_text(prompts.backstory or ""))
