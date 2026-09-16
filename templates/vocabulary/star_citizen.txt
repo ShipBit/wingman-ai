@@ -1,7 +1,7 @@
 # Star Citizen: places, moons, stations, outposts and commodities as people say them.
 # Distilled 2026-09-16 from the UEX location labels and the commodity list; plain
 # English words were left out, the speech models know those already. A name that
-# is also an English word is listed as `=Name`: exact hits get the casing, nothing
+# is also an English word is listed in quotes, `"Name"`: exact hits get the casing, nothing
 # nearby is pulled in.
 Aberdeen
 AcryliPlex Composite
@@ -20,7 +20,7 @@ ArcCorp
 ArcCorp Daymar
 ArcCorp Yela
 Area 18
-=Arial
+"Arial"
 Ashland
 Aslarite
 Atlasium
@@ -34,7 +34,7 @@ Baijini above ArcCorp
 Baijini Clinic
 Baijini Point
 Balto Blind
-=Barrens
+"Barrens"
 Barton Flats
 Baud Compound-A
 Baud Compound-B
@@ -46,17 +46,17 @@ Bexalite
 Biological Samples
 Birbari
 Blackrock Exchange
-=Bloom
+"Bloom"
 Blue Bilva
 Borase
 Brentworth Care
 Brio Breaker Yard
-=Buckets
+"Buckets"
 Bud Growery
 Bueno Ravine
 Cadmium Allinide
 Cafe Musain
-=Calliope
+"Calliope"
 Caplan Circuit
 Carinite
 Cave Kopion Horn
@@ -65,11 +65,11 @@ Cellin farming
 Cellin Rayari
 Cellin Terra Mills
 Chawla Beach
-=Checkmate
+"Checkmate"
 Checkmate Habs
 Chilad
 CK13-GID Seed Blend
-=Clio
+"Clio"
 Cloudrest Retreat
 Combat Supplies
 Compboard
@@ -80,7 +80,7 @@ Covalex Gundo
 Covalex Shipping Gundo
 Coven
 Criska
-=Crusader
+"Crusader"
 Cry-Astro
 Cry-Astro Service
 CryoPod
@@ -112,7 +112,7 @@ Dupree Industrial Manufacturing
 Dymantium
 DynaFlex
 Elespo
-=Endgame
+"Endgame"
 Endgame Clinic
 Endgame Habs
 Erden
@@ -151,7 +151,7 @@ Gaffney Compound-D
 Gallete Family Farms
 Gallete Farms
 Gandan
-=Gaslight
+"Gaslight"
 Gaslight Habs
 Gasping Weevil Eggs
 Genmod Seeds
@@ -193,7 +193,7 @@ Irradiated Valakkar Pearl (Grade AA)
 Irradiated Valakkar Pearl (Grade AAA)
 Irradiated Valakkar Pearl (Grade B)
 Irradiated Valakkar Pearl (Grade C)
-=Ita
+"Ita"
 Iteke
 Jaclium
 Jahlium
@@ -293,7 +293,7 @@ Orbituary Clinic
 Orbituary Habs
 Organics
 Organs
-=Orison
+"Orison"
 Orphanage
 Osoian Hides
 Ostler Claim
@@ -315,7 +315,7 @@ Prashad
 Pressurized Ice
 Processed Food
 Prota
-=Pyro
+"Pyro"
 Pyro II
 Pyro III
 Pyro IV

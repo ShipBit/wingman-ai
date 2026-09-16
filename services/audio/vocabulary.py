@@ -15,8 +15,9 @@ Fuzzy matching corrects spellings, not hearing: a word the model dropped or
 replaced with something unrelated stays wrong. For those there is the second
 kind of entry, `heard=correct`: an exact replacement, "Jump down=Jumptown".
 That is what a wingman writes when the user says "from now on spell it X".
-A third form, `=Crusader`, is exact-only: the name is also an ordinary word,
-so it fixes the casing when heard as such and never pulls "crusade" in.
+A third form, `"Crusader"` in quotes, is exact-only: the name is also an
+ordinary word, so it fixes the casing when heard as such and never pulls
+"crusade" in.
 """
 
 import os
@@ -51,10 +52,10 @@ def join_spelled(text: str) -> str:
 
 def parse_entry(entry: str) -> tuple[str, str | None]:
     """(correct spelling, what was heard or None) for one list entry. An
-    exact-only entry `=Word` comes back as ("Word", "Word")."""
+    exact-only entry `"Word"` comes back as ("Word", "Word")."""
     entry = " ".join(str(entry).split())
-    if entry.startswith("="):
-        word = entry[1:].strip()
+    if len(entry) >= 3 and entry[0] in "\"“" and entry[-1] in "\"”":
+        word = entry[1:-1].strip()
         return word, word
     m = _MAPPING.match(entry)
     if m:

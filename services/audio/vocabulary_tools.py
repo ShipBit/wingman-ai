@@ -69,7 +69,7 @@ def run_vocabulary_tool(
         if not correct:
             return "No spelling given."
         # "Heard" equal to "correct" means: keep it as typed, exact only.
-        entry = f"={correct}" if heard and heard.lower() == correct.lower() else format_entry(correct, heard)
+        entry = f'"{correct}"' if heard and heard.lower() == correct.lower() else format_entry(correct, heard)
         added = settings_service.add_vocabulary([entry])
         fixed = fix_memories(persistent_memory_service, correct, heard) if heard else 0
         tail = f" {fixed} memories were corrected too." if fixed else ""
