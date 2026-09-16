@@ -1,6 +1,4 @@
 import asyncio
-import re
-from rapidfuzz.distance import Levenshtein
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     Config,
@@ -14,31 +12,13 @@ from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
+from services.name_match import find_name, words_of
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 
 
 printr = Printr()
-
-
-# How much of a sentence may carry the wingman's name.
-NAME_WINDOW_WORDS = 8
-
-
-def name_edit_allowance(name: str) -> int:
-    """How many letters a heard name may differ by and still count.
-
-    One for short names ("Ava" heard as "Eva"), two for the usual length
-    ("Computer" heard as "Computa"), three for long ones. "Complete" is three
-    edits from "Computer" and is rejected at that length.
-    """
-    length = len(name)
-    if length <= 5:
-        return 1
-    if length <= 9:
-        return 2
-    return 3
 
 
 class Tower:
@@ -204,19 +184,12 @@ class Tower:
         sends the sentence to the wrong wingman or nowhere. Only the opening of
         the sentence is searched, that is where people put a name.
         """
-        words = re.findall(r"[\w'-]+", text.lower())[:NAME_WINDOW_WORDS]
+        words = words_of(text)
         best: tuple[int, Wingman | None] = (10**6, None)
         for wingman in self.wingmen:
-            name = " ".join(wingman.config.name.lower().split())
-            name_words = name.split()
-            if not name_words or len(name_words) > len(words):
-                continue
-            allowance = name_edit_allowance(name)
-            for i in range(len(words) - len(name_words) + 1):
-                candidate = " ".join(words[i : i + len(name_words)])
-                distance = Levenshtein.distance(candidate, name, score_cutoff=allowance)
-                if distance <= allowance and distance < best[0]:
-                    best = (distance, wingman)
+            found = find_name(words, wingman.config.name)
+            if found is not None and found[2] < best[0]:
+                best = (found[2], wingman)
         if best[1] is not None:
             return best[1]
 
