@@ -238,6 +238,11 @@ class Migration321To322(BaseMigration):
         if parakeet.get("run_locally") is False:
             parakeet["run_locally"] = True
             self.log("settings: Parakeet now runs on this machine (was remote)")
+        # The old template put this machine as the server address. Picking
+        # "Remote" then failed at once, there is no server here. Empty means
+        # "not set" now; a real address of the user's stays.
+        if str(parakeet.get("host") or "").rstrip("/") in ("http://127.0.0.1", "http://localhost", "127.0.0.1", "localhost"):
+            parakeet["host"] = ""
         if parakeet:
             stt["parakeet"] = parakeet
         if was and was != "parakeet":
