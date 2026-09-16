@@ -1,4 +1,5 @@
 from copy import deepcopy
+from os import path
 from typing import Awaitable, Callable, Optional
 from fastapi import APIRouter
 import sounddevice as sd
@@ -120,6 +121,27 @@ class SettingsService:
                 f"Speech vocabulary: added {', '.join(added)}", server_only=True, color=LogType.INFO
             )
         return added
+
+    def seed_vocabulary(self) -> list[str]:
+        """Put the names people say every day into the list, once: every
+        wingman of every configuration, and the signed-in user. Runs at start
+        and after login; the list dedupes, so a second run adds nothing."""
+        names: list[str] = []
+        for config_dir in self.config_manager.get_config_dirs():
+            if getattr(config_dir, "is_deleted", False):
+                continue
+            for wingman_file in self.config_manager.get_wingmen_configs(config_dir):
+                if getattr(wingman_file, "is_deleted", False):
+                    continue
+                raw = self.config_manager.read_config(
+                    path.join(self.config_manager.config_dir, config_dir.directory, wingman_file.file)
+                )
+                name = (raw or {}).get("name") or wingman_file.name
+                if name:
+                    names.append(str(name))
+        if self.settings.user_name:
+            names.append(self.settings.user_name)
+        return self.add_vocabulary(names)
 
     def remove_vocabulary(self, words: list[str]) -> int:
         """Drop every entry whose correct spelling or heard form matches."""

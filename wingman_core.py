@@ -106,7 +106,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
-from services.audio.vocabulary import detect_from_config, list_presets, spoken_names
+from services.audio.vocabulary import list_presets, spoken_names
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -174,15 +174,6 @@ class WingmanCore(WebSocketUser):
             path="/voice-activation/status",
             endpoint=self.get_mic_status,
             response_model=MicStatusResponse,
-            tags=tags,
-        )
-        # Special words for the transcript correction, read from the active
-        # configuration: wingman names, commands, proper nouns in prompts.
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/stt/vocabulary/detect",
-            endpoint=self.detect_stt_vocabulary,
-            response_model=list[str],
             tags=tags,
         )
         # Bundled word lists per game, added to the vocabulary with one click.
@@ -901,6 +892,10 @@ class WingmanCore(WebSocketUser):
         # 3. Voice activation
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
+
+        # The names people say every day go into the speech vocabulary: every
+        # wingman of every configuration. Dedupes, so restarts add nothing.
+        self.settings_service.seed_vocabulary()
 
         # 4. TTS initialization (settings-aware, deferred from __init__)
         pocket_settings = self.settings_service.settings.pocket_tts
@@ -1762,15 +1757,6 @@ class WingmanCore(WebSocketUser):
             return True
         hits = sum(1 for w in meaningful if w in spoken)
         return hits / len(meaningful) >= ECHO_RATIO
-
-    # POST /stt/vocabulary/detect
-    async def detect_stt_vocabulary(self) -> list[str]:
-        """Special words the active configuration suggests. The client merges
-        them into the list; nothing is saved here."""
-        config = self.config_service.current_config
-        if not config:
-            return []
-        return detect_from_config(config)
 
     # GET /stt/vocabulary/presets
     async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:

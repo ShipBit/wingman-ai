@@ -15,8 +15,9 @@ stt:
   # Special words no speech model knows; every transcript is corrected
   # against them. The Settings page can fill this from your configuration.
   vocabulary: []
-  # Bundled name lists switched on in Settings, e.g. star_citizen.
-  presets: []
+  # Bundled name lists switched on in Settings.
+  presets:
+    - star_citizen
   parakeet:
     run_locally: true
     model_variant: v3

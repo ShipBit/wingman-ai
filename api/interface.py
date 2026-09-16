@@ -633,7 +633,7 @@ class SttSettings(BaseModel):
     provider; FasterWhisper is also nudged towards them while decoding. The
     names of the active wingmen count without being listed."""
 
-    presets: list[str] = []
+    presets: list[str] = ["star_citizen"]
     """Bundled word lists that apply on top of the user's own, by id
     ("star_citizen"). Switched on in Settings; the words stay in the bundled
     file and never enter the user's list."""

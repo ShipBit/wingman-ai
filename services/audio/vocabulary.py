@@ -216,60 +216,7 @@ def load_preset(app_root_path: str, preset_id: str) -> list[str]:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 
-# --- finding candidates in a configuration ---
-
-# Where a capital letter says nothing about the word: sentence starts, line
-# starts (with or without a bullet, number, markdown emphasis or quote), and
-# the word in front of a colon, which is a heading.
-_SENTENCE_START = re.compile(
-    r"(?:^|[.!?\n]|:\s)[\s\-*#>\d.)\"“'(_]*([A-ZÄÖÜ][\w'-]*)|([A-ZÄÖÜ][\w'-]*)[\s*_]*:",
-    re.MULTILINE,
-)
-# A heading like "**Your Role Context:**" or "## Personality": every word in
-# it is capitalised for looks, none of them is a name.
-_HEADING = re.compile(r"^[\s\-*#>_]*([A-ZÄÖÜ][^\n:]*?)[\s*_]*:?[\s*_]*$", re.MULTILINE)
-_CAPITALISED = re.compile(r"\b([A-ZÄÖÜ][a-zäöüß'-]{2,}(?:\s+[A-ZÄÖÜ][a-zäöüß'-]{2,}){0,2})\b")
-
-# Words that start sentences in prompts all the time and are not names.
-_COMMON = {
-    "the", "you", "your", "and", "always", "never", "when", "this", "that", "use", "only",
-    "for", "with", "user", "wingman", "wingmen", "assistant", "example", "examples", "note",
-    "important", "respond", "answer", "keep", "avoid", "der", "die", "das", "und", "du",
-    "dein", "deine", "wenn", "immer", "nie", "nur", "mit", "für", "bitte",
-}
-
-
-def detect_from_text(text: str, titles: bool = False) -> list[str]:
-    """Capitalised words that do not start a sentence: proper nouns, mostly.
-    With `titles` the sentence-start rule is off: a spoken trigger like
-    "Flight Ready" is a name as a whole."""
-    if not text:
-        return []
-    starts = set() if titles else {m.group(1) or m.group(2) for m in _SENTENCE_START.finditer(text)}
-    headings: set[str] = set()
-    if not titles:
-        for m in _HEADING.finditer(text):
-            line = m.group(1).strip("*_ ")
-            words = line.split()
-            # a short line of capitalised words ending in a colon, or a markdown heading
-            if 1 <= len(words) <= 5 and all(w[:1].isupper() for w in words):
-                headings.update(words)
-    found: list[str] = []
-    for m in _CAPITALISED.finditer(text):
-        phrase = " ".join(m.group(1).split())
-        words = phrase.split()
-        if all(w in headings for w in words):
-            continue
-        # A phrase that starts a sentence loses its first word; what is left
-        # may still be a name ("Reference Star Citizen" -> "Star Citizen").
-        while words and words[0] in starts:
-            words = words[1:]
-        if not words:
-            continue
-        if len(words) == 1 and words[0].lower() in _COMMON:
-            continue
-        found.append(" ".join(words))
-    return found
+# --- names from the configuration ---
 
 
 def spoken_names(config) -> list[str]:
@@ -283,23 +230,3 @@ def spoken_names(config) -> list[str]:
         for command in wingman.commands or []:
             words.extend(command.instant_activation or [])
     return words
-
-
-def detect_from_config(config) -> list[str]:
-    """Special words a configuration suggests for the list: proper nouns from
-    backstories and prompts. Names and spoken triggers are not offered, they
-    count at runtime anyway (`spoken_names`)."""
-    words: list[str] = []
-    for wingman in (config.wingmen or {}).values():
-        if wingman.disabled:
-            continue
-        prompts = wingman.prompts
-        if prompts:
-            words.extend(detect_from_text(prompts.backstory or ""))
-            words.extend(detect_from_text(prompts.system_prompt or ""))
-    unique: dict[str, str] = {}
-    for w in words:
-        w = " ".join(str(w).split())
-        if len(w) >= MIN_WORD_LENGTH and w.lower() not in unique:
-            unique[w.lower()] = w
-    return list(unique.values())
