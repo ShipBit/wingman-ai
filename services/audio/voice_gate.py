@@ -29,6 +29,13 @@ FRAME_MS = FRAME_SAMPLES * 1000 / SAMPLE_RATE  # 32
 # Keep this much silence after the last speech frame. Enough for a trailing
 # consonant, not enough to feed a model a second of nothing.
 TAIL_MS = 250
+# Hysteresis, as in Silero's own iterator: once speaking, a frame has to fall
+# this far below the threshold to count as silence. A breath between two words
+# dips the score; it must not end the sentence.
+NEG_MARGIN = 0.15
+# When an utterance hits max_utterance_s, prefer cutting at the last pause of at
+# least this length instead of mid-word.
+SPLIT_PAUSE_MS = 100
 # Utterances quieter than this are amplified up to this factor; louder ones are
 # scaled down. A whisper into a distant mic still has to reach the model.
 TARGET_PEAK = 0.9
@@ -145,6 +152,7 @@ class VoiceGate:
         self._candidate: list[np.ndarray] = []
         self._first_speech: Optional[int] = None
         self._last_speech: Optional[int] = None
+        self._split_at: Optional[int] = None
 
     # --- frames ---
 
@@ -153,7 +161,10 @@ class VoiceGate:
             self._pre_roll.append(frame)
             return None
         score = self._vad(frame)
-        is_speech = score >= self.params.threshold
+        threshold = self.params.threshold
+        if self._speaking or (self.mode == "held" and self._first_speech is not None):
+            threshold -= NEG_MARGIN
+        is_speech = score >= threshold
         self.last_best_score = max(self.last_best_score, score)
         self.last_peak = max(self.last_peak, float(np.max(np.abs(frame))))
         if self.mode == "held":
@@ -185,15 +196,15 @@ class VoiceGate:
             self._last_speech = len(self._frames) - 1
         else:
             self._silence_run += 1
+            if self._silence_run * FRAME_MS >= SPLIT_PAUSE_MS:
+                self._split_at = len(self._frames)
 
         if self._silence_run * FRAME_MS >= self.params.end_pause_ms:
             utterance = self._finish(truncated=False)
             self._after_emit()
             return utterance
         if len(self._frames) * FRAME_MS >= self.params.max_utterance_s * 1000:
-            utterance = self._finish(truncated=True)
-            self._after_emit()
-            return utterance
+            return self._split_long()
         return None
 
     def _feed_held(self, frame: np.ndarray, is_speech: bool) -> Optional[Utterance]:
@@ -202,11 +213,40 @@ class VoiceGate:
             if self._first_speech is None:
                 self._first_speech = len(self._frames) - 1
             self._last_speech = len(self._frames) - 1
+            self._silence_run = 0
+        elif self._first_speech is not None:
+            self._silence_run += 1
+            if self._silence_run * FRAME_MS >= SPLIT_PAUSE_MS:
+                self._split_at = len(self._frames)
         if len(self._frames) * FRAME_MS >= self.params.max_utterance_s * 1000:
-            utterance = self._finish(truncated=True)
-            self._after_emit()
-            return utterance
+            return self._split_long()
         return None
+
+    def _split_long(self) -> Optional[Utterance]:
+        """The utterance reached max length. Cut at the last pause of at least
+        SPLIT_PAUSE_MS if there was one in the second half, so no word is cut in
+        two; the frames after the cut open the next utterance."""
+        split = self._split_at
+        if split is not None and split > len(self._frames) // 2:
+            carry = self._frames[split:]
+            self._frames = self._frames[:split]
+            if self._last_speech is not None and self._last_speech >= split:
+                self._last_speech = split - 1
+        else:
+            carry = []
+        utterance = self._finish(truncated=True)
+        self._after_emit()
+        if carry:
+            # Continue with what came after the pause, as if it had just arrived.
+            self._frames = carry
+            self._first_speech = None
+            self._last_speech = None
+            if self.mode == "armed":
+                # Still inside speech: keep the speaking state so the pause
+                # logic carries on instead of waiting for a new onset.
+                self._speaking = True
+                self._first_speech = 0
+        return utterance
 
     def _after_emit(self) -> None:
         """Start the next utterance in the same mode, keeping the ring."""
