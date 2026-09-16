@@ -117,6 +117,9 @@ from hud_server.validation import validate_hud_settings, get_invalid_summary
 # Share of a transcript's words that must occur in what the wingman is saying
 # for the transcript to count as the wingman's own voice.
 ECHO_RATIO = 0.6
+# "Stop" said while the wingman is still thinking: the answer that starts
+# within this many seconds is cut off right away instead of being played.
+STOP_AHEAD_SECONDS = 6.0
 
 
 def _words(text: str) -> list[str]:
@@ -712,6 +715,8 @@ class WingmanCore(WebSocketUser):
         self.tower_errors: list[WingmanInitializationError] = []
 
         self.key_events = {}
+        # When "stop" was last said with nothing playing; see _on_transcript.
+        self._stop_requested_at = 0.0
 
         # Joystick thread management
         self._joystick_thread: Optional[threading.Thread] = None
@@ -838,6 +843,7 @@ class WingmanCore(WebSocketUser):
             gate=self.voice_gate,
             on_utterance=self._on_utterance,
             on_state_changed=self._on_listen_state_changed,
+            on_dropped=self._on_ptt_dropped,
         )
         self.listen_controller.set_listen_while_speaking(
             self.settings_service.settings.voice_activation.listen_while_speaking
@@ -1572,24 +1578,26 @@ class WingmanCore(WebSocketUser):
     def _ptt_up(self, source: str) -> None:
         wingman = self.listen_controller.held_wingman
         name = wingman.name if wingman else ""
-        result = self.listen_controller.ptt_up(source)
-        if result is None:
+        if not self.listen_controller.ptt_up(source):
             return
         self.printr.print(
             f"Recording stopped ({name})",
             source_name=name,
             command_tag=CommandTag.RECORDING_STOPPED,
         )
-        if result is False:
-            gate = self.voice_gate
-            self.printr.print(
-                f"Skipped recording ({name}) - no speech detected "
-                f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
-                f"threshold {gate.params.threshold:.2f})",
-                color=LogType.WARNING,
-                source_name=name,
-                command_tag=CommandTag.IGNORED_RECORDING,
-            )
+
+    def _on_ptt_dropped(self, wingman: Wingman | None) -> None:
+        """The clip behind a push-to-talk key held no speech."""
+        name = wingman.name if wingman else ""
+        gate = self.voice_gate
+        self.printr.print(
+            f"Skipped recording ({name}) - no speech detected "
+            f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
+            f"threshold {gate.params.threshold:.2f})",
+            color=LogType.WARNING,
+            source_name=name,
+            command_tag=CommandTag.IGNORED_RECORDING,
+        )
 
     def on_key(self, key):
         if key.event_type == "down":
@@ -1682,6 +1690,15 @@ class WingmanCore(WebSocketUser):
                     f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
                 )
                 self._run_on_main_loop(self.stop_playback())
+            else:
+                # Said in the gap between the question and the answer: the
+                # answer is on its way. on_playback_started cuts it off.
+                self._stop_requested_at = time.time()
+                self.printr.print(
+                    f"Heard '{text}' while nothing plays - the next answer will be cut off.",
+                    server_only=True,
+                    color=LogType.INFO,
+                )
             return
         if during_playback and self._is_echo(words):
             self.printr.print(
@@ -1798,6 +1815,15 @@ class WingmanCore(WebSocketUser):
 
         self.listen_controller.playback_started()
         self._emit_voice_state()
+
+        if time.time() - self._stop_requested_at <= STOP_AHEAD_SECONDS:
+            self._stop_requested_at = 0.0
+            self.printr.print(
+                "Stop was requested a moment ago - cutting this answer off.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            await self.stop_playback()
 
     async def on_playback_finished(self, wingman_name: str):
         await self.printr.print_async(

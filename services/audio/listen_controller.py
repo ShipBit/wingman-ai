@@ -27,10 +27,16 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 
-from services.audio.voice_gate import GateParams, Utterance, VoiceGate
+from services.audio.voice_gate import FRAME_MS, GateParams, Utterance, VoiceGate
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
+
+# After a push-to-talk key goes up the gate stays open this long. People let
+# go while the last syllable is still in the air, and the detector answers a
+# frame or two late; "stop" is short enough to lose its "p" otherwise.
+RELEASE_GRACE_MS = 300
+
 
 class ListenState(str, Enum):
     OFF = "off"
@@ -46,12 +52,18 @@ class ListenController:
         gate: VoiceGate,
         on_utterance: Callable[[Utterance, Optional["Wingman"], bool], None],
         on_state_changed: Callable[["ListenState"], None],
+        on_dropped: Optional[Callable[[Optional["Wingman"]], None]] = None,
     ):
         self._gate = gate
         # (utterance, held wingman or None, whether a wingman was speaking)
         self._on_utterance = on_utterance
         self._on_state_changed = on_state_changed
+        # A push-to-talk clip that held no speech; for the log line.
+        self._on_dropped = on_dropped or (lambda _wingman: None)
         self._lock = threading.RLock()
+        # Frames still to take after a push-to-talk key went up; None when
+        # no release is pending.
+        self._release_in: Optional[int] = None
 
         self.voice_activation_enabled = False
         self.listen_while_speaking = True
@@ -104,29 +116,41 @@ class ListenController:
     def ptt_down(self, source: str, wingman: "Wingman") -> bool:
         """Returns False when another source already holds the gate."""
         with self._lock:
+            if self.held_source == source and self._release_in is not None:
+                # Pressed again inside the grace period: keep holding.
+                self._release_in = None
+                return True
             if self.held_source is not None:
                 return False
             self.held_source = source
             self.held_wingman = wingman
+            self._release_in = None
             self._apply()
             return True
 
-    def ptt_up(self, source: str) -> Optional[bool]:
-        """None when `source` was not the holder, True when an utterance went
-        out, False when the clip held no speech and was dropped."""
+    def ptt_up(self, source: str) -> bool:
+        """Returns False when `source` was not the holder. The gate stays open
+        for RELEASE_GRACE_MS more; the clip goes out from `feed` after that,
+        or is reported through `on_dropped` when it held no speech."""
         with self._lock:
             if self.held_source != source:
-                return None
-            wingman = self.held_wingman
-            playing = self.playing
-            utterance = self._gate.release()
-            self.held_source = None
-            self.held_wingman = None
-            self._apply()
+                return False
+            self._release_in = max(1, int(round(RELEASE_GRACE_MS / FRAME_MS)))
+            return True
+
+    def _finish_release(self) -> None:
+        """Called from feed() under the lock once the grace frames are in."""
+        wingman = self.held_wingman
+        playing = self.playing
+        utterance = self._gate.release()
+        self.held_source = None
+        self.held_wingman = None
+        self._release_in = None
+        self._apply()
         if utterance is not None and wingman is not None:
             self._on_utterance(utterance, wingman, playing)
-            return True
-        return False
+        else:
+            self._on_dropped(wingman)
 
     def capture_start(self, source: str) -> bool:
         """Hold the gate for a caller that wants the clip back instead of having
@@ -160,6 +184,11 @@ class ListenController:
             utterance = self._gate.feed(frame)
             wingman = self.held_wingman
             playing = self.playing
+            if self._release_in is not None and utterance is None:
+                self._release_in -= 1
+                if self._release_in <= 0:
+                    self._finish_release()
+                    return
         if utterance is None:
             return
         if state == ListenState.HELD:
