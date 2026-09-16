@@ -22,6 +22,8 @@ from typing import Iterable
 
 from rapidfuzz.distance import Levenshtein
 
+from services.audio.protected_words import PROTECTED_WORDS
+
 # Entries shorter than this are not corrected: too many ordinary words are
 # one letter away from "Ava".
 MIN_WORD_LENGTH = 3
@@ -91,6 +93,10 @@ class Vocabulary:
         if mapped is not None:
             return mapped
         n = len(key.split())
+        if n == 1 and key in PROTECTED_WORDS:
+            # An ordinary word of one of our languages. Only a pair may
+            # turn it into a name; the fuzzy rule stays away.
+            return None
         best: tuple[int, str | None] = (10**6, None)
         for normalised, entry in self._by_words.get(n, ()):
             if key == normalised:

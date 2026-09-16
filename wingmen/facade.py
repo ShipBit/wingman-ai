@@ -962,8 +962,12 @@ class SkillStt:
         if service is None:
             return False
         from services.audio.vocabulary import format_entry
+        from services.audio.vocabulary_tools import fix_memories
 
-        return bool(service.add_vocabulary([format_entry(correct, heard)]))
+        added = bool(service.add_vocabulary([format_entry(correct, heard)]))
+        if heard:
+            fix_memories(getattr(self._wingman, "persistent_memory_service", None), correct, heard)
+        return added
 
     def forget_spelling(self, word: str) -> int:
         service = getattr(self._wingman, "settings_service", None)

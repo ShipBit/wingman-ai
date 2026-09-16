@@ -278,7 +278,9 @@ class ToolExecutor:
         if function_name in ("vocabulary_remember", "vocabulary_forget") and settings_service:
             from services.audio.vocabulary_tools import run_vocabulary_tool
 
-            function_response = run_vocabulary_tool(function_name, function_args, settings_service)
+            function_response = run_vocabulary_tool(
+                function_name, function_args, settings_service, persistent_memory_service
+            )
             await printr.print_async(
                 function_response, color=LogType.INFO, source_name=self._wingman_name
             )
