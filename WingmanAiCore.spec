@@ -250,6 +250,14 @@ binaries += tiktoken_ext_binaries
 hiddenimports += tiktoken_ext_hidden
 hiddenimports += ['tiktoken_ext.openai_public']
 
+# rapidfuzz picks its compiled module (plain, AVX2) at import time inside a
+# try/except. The static analysis usually sees through that, but the wingman
+# name match in services/tower.py must not depend on "usually".
+rf_datas, rf_binaries, rf_hidden = collect_all('rapidfuzz')
+datas += rf_datas
+binaries += rf_binaries
+hiddenimports += rf_hidden
+
 # Collect all onnx-asr (Parakeet STT)
 onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
 datas += onnx_asr_datas
