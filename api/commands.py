@@ -99,6 +99,15 @@ class VoiceActivationMutedCommand(WebSocketCommandModel):
     muted: bool
 
 
+class SttVocabularyChangedCommand(WebSocketCommandModel):
+    """Sent when the vocabulary changes outside the settings page: a wingman
+    tool taught a spelling, or the names were seeded after a login. The page
+    holds the block it loaded and would write the old list back without this."""
+
+    command: Literal["stt_vocabulary_changed"] = "stt_vocabulary_changed"
+    vocabulary: list[str]
+
+
 class McpStateChangedCommand(WebSocketCommandModel):
     """Sent when MCP server connection state changes (connected/disconnected)."""
 

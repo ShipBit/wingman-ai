@@ -20,6 +20,7 @@ from api.commands import (
     AudioLibraryPlaybackFinishedCommand,
     CoreStateChangedCommand,
     LogCommand,
+    SttVocabularyChangedCommand,
     VoiceActivationMutedCommand,
 )
 from api.enums import (
@@ -738,6 +739,7 @@ class WingmanCore(WebSocketUser):
         # READY when the switch finishes.
         self.settings_service.stt_status_callback = self._broadcast_loading_status
         self.settings_service.stt_done_callback = self._broadcast_ready
+        self.settings_service.vocabulary_changed_callback = self._broadcast_vocabulary
         self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
         )
@@ -1754,13 +1756,27 @@ class WingmanCore(WebSocketUser):
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With
         speakers instead of a headset the microphone hears the wingman; the
-        transcript then repeats its sentence, word for word or nearly."""
-        spoken = set(_words(self.audio_player.speaking_text))
+        transcript then repeats its sentence, word for word or nearly.
+
+        The words have to come back in the order they were said. Counting
+        them as a set drops sentences that only share vocabulary with the
+        answer: "is the gear on the target" against an answer about the gear
+        and the target. A user who repeats the wingman's own sentence word
+        for word is still taken for an echo - nothing in the text tells those
+        two apart.
+        """
+        spoken = _words(self.audio_player.speaking_text)
         meaningful = [w for w in words if len(w) >= 3]
         if not meaningful:
             # "hm", "ah": nothing to act on either way
             return True
-        hits = sum(1 for w in meaningful if w in spoken)
+        hits = 0
+        at = 0
+        for word in meaningful:
+            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
+            if found is not None:
+                hits += 1
+                at = found + 1
         return hits / len(meaningful) >= ECHO_RATIO
 
     # GET /stt/vocabulary/presets
@@ -1834,6 +1850,16 @@ class WingmanCore(WebSocketUser):
             level=gate.last_peak,
             best_score=gate.last_best_score,
             threshold=gate.params.threshold,
+        )
+
+    def _broadcast_vocabulary(self, vocabulary: list[str]) -> None:
+        """A wingman tool taught a spelling, or the names were seeded. An open
+        settings page has to hear it: it posts the whole stt block on the next
+        change and would write the list it loaded back over this one."""
+        self._run_on_main_loop(
+            self._connection_manager.broadcast(
+                SttVocabularyChangedCommand(vocabulary=vocabulary)
+            )
         )
 
     def _on_listen_state_changed(self, state: ListenState) -> None:

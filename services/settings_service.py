@@ -50,6 +50,10 @@ class SettingsService:
             Callable[[str, Optional[float]], Awaitable[None]]
         ] = None
         self.stt_done_callback: Optional[Callable[[], Awaitable[None]]] = None
+        # Injected by WingmanCore. The settings page holds the stt block it
+        # loaded and posts all of it back on the next change, so a word added
+        # by a wingman tool has to reach an open page or it is written away.
+        self.vocabulary_changed_callback: Optional[Callable[[list[str]], None]] = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -112,6 +116,7 @@ class SettingsService:
             self.printr.print(
                 f"Speech vocabulary: added {', '.join(added)}", server_only=True, color=LogType.INFO
             )
+            self._announce_vocabulary()
         return added
 
     def seed_vocabulary(self) -> list[str]:
@@ -154,7 +159,13 @@ class SettingsService:
             self.printr.print(
                 f"Speech vocabulary: removed {removed} entries", server_only=True, color=LogType.INFO
             )
+            self._announce_vocabulary()
         return removed
+
+    def _announce_vocabulary(self) -> None:
+        """Tell an open settings page what the list looks like now."""
+        if self.vocabulary_changed_callback:
+            self.vocabulary_changed_callback(list(self.settings.stt.vocabulary or []))
 
     @property
     def settings(self):
