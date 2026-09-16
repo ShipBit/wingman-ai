@@ -15,6 +15,8 @@ Fuzzy matching corrects spellings, not hearing: a word the model dropped or
 replaced with something unrelated stays wrong. For those there is the second
 kind of entry, `heard=correct`: an exact replacement, "Jump down=Jumptown".
 That is what a wingman writes when the user says "from now on spell it X".
+A third form, `=Crusader`, is exact-only: the name is also an ordinary word,
+so it fixes the casing when heard as such and never pulls "crusade" in.
 """
 
 import os
@@ -37,8 +39,12 @@ _MAPPING = re.compile(r"^\s*(.+?)\s*(?:=|->|→)\s*(.+?)\s*$")
 
 
 def parse_entry(entry: str) -> tuple[str, str | None]:
-    """(correct spelling, what was heard or None) for one list entry."""
+    """(correct spelling, what was heard or None) for one list entry. An
+    exact-only entry `=Word` comes back as ("Word", "Word")."""
     entry = " ".join(str(entry).split())
+    if entry.startswith("="):
+        word = entry[1:].strip()
+        return word, word
     m = _MAPPING.match(entry)
     if m:
         return m.group(2), m.group(1)
@@ -73,7 +79,8 @@ class Vocabulary:
         self._mappings: dict[str, str] = {}
         for raw in entries:
             correct, heard = parse_entry(raw)
-            if len(correct) >= MIN_WORD_LENGTH and _normalise(correct) not in seen:
+            exact_only = heard is not None and _normalise(heard) == _normalise(correct)
+            if not exact_only and len(correct) >= MIN_WORD_LENGTH and _normalise(correct) not in seen:
                 seen[_normalise(correct)] = correct
             if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
                 self._mappings[_normalise(heard)] = correct
