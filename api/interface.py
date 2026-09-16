@@ -604,6 +604,14 @@ class VocabularyPreset(BaseModel):
     count: int
 
 
+class PresetOverride(BaseModel):
+    """The user's edits to a bundled list, kept apart from it so an update of
+    the bundled file still reaches them."""
+
+    added: list[str] = []
+    removed: list[str] = []
+
+
 class SttTestResult(BaseModel):
     """What the microphone test in Settings heard."""
 
@@ -637,6 +645,9 @@ class SttSettings(BaseModel):
     """Bundled word lists that apply on top of the user's own, by id
     ("star_citizen"). Switched on in Settings; the words stay in the bundled
     file and never enter the user's list."""
+
+    preset_overrides: dict[str, PresetOverride] = {}
+    """Per preset id: what the user added to and removed from the bundled list."""
 
     whispercpp: WhispercppSettings
     fasterwhisper: FasterWhisperSettings

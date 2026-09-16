@@ -53,6 +53,7 @@ from api.interface import (
     PocketTTSConfig,
     PocketTTSPreloadResult,
     SoundConfig,
+    PresetOverride,
     SttTestResult,
     SubscriptionRoutes,
     VocabularyPreset,
@@ -106,7 +107,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
-from services.audio.vocabulary import list_presets, spoken_names
+from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -176,12 +177,27 @@ class WingmanCore(WebSocketUser):
             response_model=MicStatusResponse,
             tags=tags,
         )
-        # Bundled word lists per game, added to the vocabulary with one click.
+        # Bundled word lists per game, switched on with a toggle and editable:
+        # the user's edits are stored as a diff so an updated bundle still lands.
         self.router.add_api_route(
             methods=["GET"],
             path="/stt/vocabulary/presets",
             endpoint=self.get_stt_vocabulary_presets,
             response_model=list[VocabularyPreset],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/stt/vocabulary/presets/{preset_id}",
+            endpoint=self.get_stt_vocabulary_preset,
+            response_model=list[str],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["PUT"],
+            path="/stt/vocabulary/presets/{preset_id}",
+            endpoint=self.put_stt_vocabulary_preset,
+            response_model=list[str],
             tags=tags,
         )
         # The microphone test in Settings: hold, speak, release, read the text.
@@ -1760,10 +1776,40 @@ class WingmanCore(WebSocketUser):
 
     # GET /stt/vocabulary/presets
     async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
+        overrides = self.settings_service.settings.stt.preset_overrides or {}
         return [
-            VocabularyPreset(id=pid, name=name, count=count)
-            for pid, name, count in list_presets(self.app_root_path)
+            VocabularyPreset(
+                id=pid,
+                name=name,
+                count=len(apply_override(load_preset(self.app_root_path, pid), overrides.get(pid))),
+            )
+            for pid, name, _count in list_presets(self.app_root_path)
         ]
+
+    # GET /stt/vocabulary/presets/{preset_id}
+    async def get_stt_vocabulary_preset(self, preset_id: str) -> list[str]:
+        """The list as the user sees it: bundled words with their edits applied."""
+        override = (self.settings_service.settings.stt.preset_overrides or {}).get(preset_id)
+        return apply_override(load_preset(self.app_root_path, preset_id), override)
+
+    # PUT /stt/vocabulary/presets/{preset_id}
+    async def put_stt_vocabulary_preset(self, preset_id: str, words: list[str] = Body(...)) -> list[str]:
+        """Store the user's version of a bundled list as a diff against the
+        bundle. An empty diff removes the override. Returns the effective list."""
+        bundled = load_preset(self.app_root_path, preset_id)
+        if not bundled and not list_presets(self.app_root_path):
+            return []
+        added, removed = diff_override(bundled, [w for w in (w.strip() for w in words) if w])
+        stt = self.settings_service.settings.stt
+        overrides = dict(stt.preset_overrides or {})
+        if added or removed:
+            overrides[preset_id] = PresetOverride(added=added, removed=removed)
+        else:
+            overrides.pop(preset_id, None)
+        stt.preset_overrides = overrides
+        self.config_manager.save_settings_config()
+        self.stt_service._preset_cache.pop(preset_id, None)
+        return apply_override(bundled, overrides.get(preset_id))
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

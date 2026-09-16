@@ -15,7 +15,7 @@ import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
-from services.audio.vocabulary import Vocabulary, load_preset
+from services.audio.vocabulary import Vocabulary, apply_override, load_preset
 from services.printr import Printr
 
 if TYPE_CHECKING:
@@ -98,7 +98,9 @@ class SttService:
         for preset_id in stt.presets or []:
             if preset_id not in self._preset_cache:
                 self._preset_cache[preset_id] = load_preset(self.app_root_path, preset_id)
-            words += self._preset_cache[preset_id]
+            words += apply_override(
+                self._preset_cache[preset_id], (stt.preset_overrides or {}).get(preset_id)
+            )
         return Vocabulary(words)
 
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:

@@ -18,6 +18,7 @@ stt:
   # Bundled name lists switched on in Settings.
   presets:
     - star_citizen
+  preset_overrides: {}
   parakeet:
     run_locally: true
     model_variant: v3

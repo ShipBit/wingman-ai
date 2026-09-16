@@ -206,6 +206,30 @@ def list_presets(app_root_path: str) -> list[tuple[str, str, int]]:
     return presets
 
 
+def apply_override(words: list[str], override) -> list[str]:
+    """The bundled list with the user's edits: their removals taken out,
+    their additions appended. `override` has `added` and `removed`."""
+    if override is None:
+        return list(words)
+    removed = {w.lower() for w in (override.removed or [])}
+    kept = [w for w in words if w.lower() not in removed]
+    known = {w.lower() for w in kept}
+    for w in override.added or []:
+        if w.lower() not in known:
+            kept.append(w)
+            known.add(w.lower())
+    return kept
+
+
+def diff_override(bundled: list[str], wanted: list[str]) -> tuple[list[str], list[str]]:
+    """(added, removed) that turn the bundled list into the wanted one."""
+    have = {w.lower(): w for w in bundled}
+    want = {w.lower(): w for w in wanted}
+    added = [w for k, w in want.items() if k not in have]
+    removed = [w for k, w in have.items() if k not in want]
+    return added, removed
+
+
 def load_preset(app_root_path: str, preset_id: str) -> list[str]:
     if not re.fullmatch(r"[a-z0-9_]+", preset_id):
         return []
