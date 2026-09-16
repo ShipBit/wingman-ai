@@ -1797,10 +1797,12 @@ class WingmanCore(WebSocketUser):
                 threshold=gate.params.threshold,
             )
         wav_path = self.transcription_worker.write(utterance)
+        started = time.perf_counter()
         text = await asyncio.to_thread(self.stt_service.transcribe, wav_path)
         return SttTestResult(
             text=text or "",
             duration_s=utterance.duration_s,
+            transcribe_ms=int((time.perf_counter() - started) * 1000),
             level=gate.last_peak,
             best_score=gate.last_best_score,
             threshold=gate.params.threshold,

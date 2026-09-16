@@ -580,6 +580,9 @@ class SttTestResult(BaseModel):
 
     text: str
     duration_s: float
+    """Length of the recorded clip."""
+    transcribe_ms: int = 0
+    """How long the provider took to turn the clip into text."""
     level: float
     """Peak level of the clip, 0..1."""
     best_score: float
