@@ -55,6 +55,7 @@ from api.interface import (
     SoundConfig,
     SttTestResult,
     SubscriptionRoutes,
+    VocabularyPreset,
     TestConnectionResult,
     VoiceActivationSettings,
     WingmanInitializationError,
@@ -105,7 +106,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
-from services.audio.vocabulary import detect_from_config, spoken_names
+from services.audio.vocabulary import detect_from_config, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -181,6 +182,21 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/stt/vocabulary/detect",
             endpoint=self.detect_stt_vocabulary,
+            response_model=list[str],
+            tags=tags,
+        )
+        # Bundled word lists per game, added to the vocabulary with one click.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/stt/vocabulary/presets",
+            endpoint=self.get_stt_vocabulary_presets,
+            response_model=list[VocabularyPreset],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/stt/vocabulary/presets/{preset_id}",
+            endpoint=self.get_stt_vocabulary_preset,
             response_model=list[str],
             tags=tags,
         )
@@ -1761,6 +1777,18 @@ class WingmanCore(WebSocketUser):
         if not config:
             return []
         return detect_from_config(config)
+
+    # GET /stt/vocabulary/presets
+    async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
+        return [
+            VocabularyPreset(id=pid, name=name, count=count)
+            for pid, name, count in list_presets(self.app_root_path)
+        ]
+
+    # GET /stt/vocabulary/presets/{preset_id}
+    async def get_stt_vocabulary_preset(self, preset_id: str) -> list[str]:
+        """The words of one preset. The client merges them into the list."""
+        return load_preset(self.app_root_path, preset_id)
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

@@ -45,6 +45,8 @@ datas = [
     ('wingmen', 'wingmen'),
     ('skills', 'skills'),
     ('templates/configs', 'templates/configs'),
+    # Vocabulary presets for the speech correction, one text file per game.
+    ('templates/vocabulary', 'templates/vocabulary'),
     ('audio_samples', 'audio_samples'),
     # Silero VAD, runs on the onnxruntime that Parakeet already needs.
     ('audio_models', 'audio_models'),

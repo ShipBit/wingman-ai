@@ -17,7 +17,9 @@ kind of entry, `heard=correct`: an exact replacement, "Jump down=Jumptown".
 That is what a wingman writes when the user says "from now on spell it X".
 """
 
+import os
 import re
+from os import path
 from typing import Iterable
 
 from rapidfuzz.distance import Levenshtein
@@ -147,6 +149,36 @@ class Vocabulary:
             if not replaced:
                 i += 1
         return "".join(out)
+
+
+# --- bundled presets ---
+
+PRESET_DIR = path.join("templates", "vocabulary")
+
+
+def list_presets(app_root_path: str) -> list[tuple[str, str, int]]:
+    """(id, display name, entries) for every bundled word list."""
+    folder = path.join(app_root_path, PRESET_DIR)
+    if not path.isdir(folder):
+        return []
+    presets = []
+    for file in sorted(os.listdir(folder)):
+        if not file.endswith(".txt"):
+            continue
+        preset_id = file[:-4]
+        words = load_preset(app_root_path, preset_id)
+        presets.append((preset_id, preset_id.replace("_", " ").title(), len(words)))
+    return presets
+
+
+def load_preset(app_root_path: str, preset_id: str) -> list[str]:
+    if not re.fullmatch(r"[a-z0-9_]+", preset_id):
+        return []
+    file = path.join(app_root_path, PRESET_DIR, f"{preset_id}.txt")
+    if not path.isfile(file):
+        return []
+    with open(file, encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 
 # --- finding candidates in a configuration ---

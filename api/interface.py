@@ -596,6 +596,14 @@ class VoiceActivationSettings(BaseModel):
     "okay stop please" works with "okay stop" and "stop please" listed."""
 
 
+class VocabularyPreset(BaseModel):
+    """A bundled word list for the speech correction, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
 class SttTestResult(BaseModel):
     """What the microphone test in Settings heard."""
 
