@@ -26,6 +26,33 @@ space speak speed spot star stay step stop store story sure talk team tell term 
 text than thing three through today told tool top total touch town track trade true
 trust under until upon very view wait walk want watch water week where while white
 whole wide wife will wind wish with word world write wrong yes yet young
+area areas station stations system systems status ship ships cargo fuel power
+engine engines shield shields weapon weapons target targets scan scanner map
+route course speed thrust land landing take off gear door doors light lights
+mode modes quantum jump drive travel trip mission missions contract contracts
+money credits price prices buy sell trade market terminal location locations
+planet planets moon moons orbit station city cities base bases outpost outpots
+hangar dock docking pad pads gate gates zone zones sector sectors distance
+report reports message messages channel signal contact contacts enemy enemies
+friend friends crew pilot pilots captain commander officer group team member
+number numbers name names list lists item items thing things kind type types
+level levels order orders check checks state states data info information
+question answer problem problems reason reasons idea ideas case cases
+morning evening night minute minutes hour hours second seconds moment
+hand hands head eye eyes face body arm arms leg legs foot feet heart
+house home road street car train plane boat sea land sky sun earth fire
+water air wind rain snow ice stone rock metal glass paper book
+mother father son daughter brother sister child children man men woman women
+boy girl baby family friend people person life live love money job school
+company business office market service services program computer machine
+food drink bread meat fish fruit milk coffee tea wine beer sugar salt
+red blue green yellow black white grey brown orange pink dark bright
+hot cold warm cool dry wet hard soft heavy light fast slow loud quiet
+early late near far inside outside above below front behind left right
+east west north south always often sometimes rarely never again already
+almost also always another anything before between both each either enough
+every everything few little many much neither nothing several such through
+together toward without within
 """
 
 _GERMAN = """

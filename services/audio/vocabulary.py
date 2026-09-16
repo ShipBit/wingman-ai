@@ -49,10 +49,9 @@ def format_entry(correct: str, heard: str | None = None) -> str:
     return f"{heard}={correct}" if heard and heard.lower() != correct.lower() else correct
 
 
-def edit_allowance(entry: str) -> int:
+def edit_allowance(length: int) -> int:
     """How many letters a heard word may differ by and still count: one for
-    short entries, two for the usual length, three for long ones."""
-    length = len(entry)
+    short words, two for the usual length, three for long ones."""
     if length <= 5:
         return 1
     if length <= 9:
@@ -77,35 +76,41 @@ class Vocabulary:
             if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
                 self._mappings[_normalise(heard)] = correct
         self.entries = sorted(seen.values(), key=lambda e: -len(e.split()))
-        self._by_words: dict[int, list[tuple[str, str]]] = {}
-        for entry in self.entries:
-            n = len(entry.split())
-            if n <= MAX_PHRASE_WORDS:
-                self._by_words.setdefault(n, []).append((_normalise(entry), entry))
+        # (entry without spaces, entry) for the space-insensitive comparison
+        self._joined: list[tuple[str, str]] = [
+            (_normalise(e).replace(" ", ""), e) for e in self.entries if len(e.split()) <= MAX_PHRASE_WORDS
+        ]
 
     def __bool__(self) -> bool:
         return bool(self.entries) or bool(self._mappings)
 
     def match(self, phrase: str) -> str | None:
-        """The entry this phrase is a misspelling of, or None."""
+        """The entry this phrase is a misspelling of, or None.
+
+        Compared without spaces: speech models split "Microtech" into "micro
+        tech" and glue "Port Olisar" into "portolisar", so the word count of
+        the transcript says nothing. The allowance follows the shorter side,
+        so a four-letter word cannot reach a six-letter entry on two edits.
+        """
         key = _normalise(phrase)
         mapped = self._mappings.get(key)
         if mapped is not None:
             return mapped
-        n = len(key.split())
-        if n == 1 and key in PROTECTED_WORDS:
-            # An ordinary word of one of our languages. Only a pair may
-            # turn it into a name; the fuzzy rule stays away.
+        words = key.split()
+        if all(w in PROTECTED_WORDS for w in words):
+            # Ordinary words of one of our languages. Only a pair may turn
+            # them into a name; the fuzzy rule stays away.
             return None
+        joined = key.replace(" ", "")
         best: tuple[int, str | None] = (10**6, None)
-        for normalised, entry in self._by_words.get(n, ()):
-            if key == normalised:
+        for normalised, entry in self._joined:
+            if joined == normalised:
                 return entry
-            allowance = edit_allowance(normalised)
-            distance = Levenshtein.distance(key, normalised, score_cutoff=allowance)
+            allowance = edit_allowance(min(len(joined), len(normalised)))
+            distance = Levenshtein.distance(joined, normalised, score_cutoff=allowance)
             if distance > allowance:
                 continue
-            if distance > 1 and key[0] != normalised[0]:
+            if distance > 1 and joined[0] != normalised[0]:
                 continue
             if distance < best[0]:
                 best = (distance, entry)
@@ -122,8 +127,6 @@ class Vocabulary:
         while i < len(word_positions):
             replaced = False
             for n in range(min(MAX_PHRASE_WORDS, len(word_positions) - i), 0, -1):
-                if n not in self._by_words and not self._mappings:
-                    continue
                 first, last = word_positions[i], word_positions[i + n - 1]
                 phrase = "".join(tokens[first : last + 1])
                 if n > 1 and not re.fullmatch(r"[\w'-]+(?: [\w'-]+)+", phrase):
