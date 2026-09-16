@@ -142,6 +142,16 @@ class WingmanCore(WebSocketUser):
             endpoint=self.start_voice_recognition,
             tags=tags,
         )
+        # The client's mute toggle starts from this instead of guessing: with
+        # voice activation on, Core listens from the start, and a fresh client
+        # used to show "muted" until the first click.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voice-activation/status",
+            endpoint=self.get_mic_status,
+            response_model=MicStatusResponse,
+            tags=tags,
+        )
         self.router.add_api_route(
             methods=["GET"],
             path="/startup-errors",
@@ -1619,10 +1629,13 @@ class WingmanCore(WebSocketUser):
                 self._apply_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     async def set_voice_activation(self, is_enabled: bool):
-        if not is_enabled:
-            self._apply_voice_recognition(mute=True)
+        """Switching voice activation on means listening, not "on but muted".
 
-
+        Off a thread: starting or stopping the recognizer takes up to a second
+        (the background listener finishes its current phrase first), and this
+        runs inside the settings save and at startup.
+        """
+        await asyncio.to_thread(self._apply_voice_recognition, mute=not is_enabled)
 
     async def on_playback_started(self, wingman_name: str):
         await self.printr.print_async(
@@ -1726,17 +1739,21 @@ class WingmanCore(WebSocketUser):
         consistent and can't be clobbered by the on_playback_started race.
         """
         with self._va_state_lock:
+            # Tell the clients what is about to happen before it happens: the
+            # recognizer takes up to a second to stop, and a toggle that only
+            # flips after that feels broken. _apply_voice_recognition sends the
+            # real state again once it is there, so a failed start corrects it.
+            self._run_on_main_loop(
+                self._connection_manager.broadcast(
+                    VoiceActivationMutedCommand(muted=mute)
+                )
+            )
             if (
                 self.audio_player
                 and self.audio_player.is_playing
                 and self.settings_service.settings.voice_activation.enabled
             ):
                 self.mic_intent = not mute
-                self._run_on_main_loop(
-                    self._connection_manager.broadcast(
-                        VoiceActivationMutedCommand(muted=mute)
-                    )
-                )
                 self._emit_voice_state()
                 return
 
