@@ -61,7 +61,10 @@ def run_vocabulary_tool(
     from services.audio.vocabulary import format_entry
 
     if name == "vocabulary_remember":
-        correct = str(args.get("correct") or "").strip()
+        from services.audio.vocabulary import join_spelled
+
+        # "A T C" spelled out by the user, and passed on as such by the model
+        correct = join_spelled(str(args.get("correct") or "").strip())
         heard = str(args.get("heard") or "").strip() or None
         if not correct:
             return "No spelling given."

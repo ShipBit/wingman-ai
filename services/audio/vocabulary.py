@@ -36,6 +36,17 @@ MAX_PHRASE_WORDS = 3
 _TOKEN = re.compile(r"[\w'-]+|[^\w'-]+", re.UNICODE)
 _WORD = re.compile(r"^[\w'-]+$", re.UNICODE)
 _MAPPING = re.compile(r"^\s*(.+?)\s*(?:=|->|→)\s*(.+?)\s*$")
+# "h u r s t o n", "H-U-R-S-T-O-N", "a. t. c.": a word spelled letter by letter.
+_SPELLED = re.compile(r"(?<![\w'-])(?:[A-Za-zÄÖÜäöü][ .\-]+){1,}[A-Za-zÄÖÜäöü]\.?(?![\w'-])")
+
+
+def join_spelled(text: str) -> str:
+    """Collapse letters spelled one by one into the word they make. Two
+    single letters in a row already count, since "a t c" is how acronyms
+    come out of a speech model."""
+    def _join(m: re.Match) -> str:
+        return "".join(re.findall(r"[A-Za-zÄÖÜäöü]", m.group(0)))
+    return _SPELLED.sub(_join, text)
 
 
 def parse_entry(entry: str) -> tuple[str, str | None]:
@@ -133,10 +144,19 @@ class Vocabulary:
                 best = (distance, entry)
         return best[1]
 
+    def _join_spelled_names(self, text: str) -> str:
+        """Letters spelled one by one become a word only when that word is
+        in the list; "a b" in "plan a b" stays as it is."""
+        def _maybe(m: re.Match) -> str:
+            joined = "".join(re.findall(r"[A-Za-zÄÖÜäöü]", m.group(0)))
+            return self.match(joined) or m.group(0)
+        return _SPELLED.sub(_maybe, text)
+
     def correct(self, text: str) -> str:
         """The text with every recognisable misspelling replaced."""
         if not self or not text:
             return text
+        text = self._join_spelled_names(text)
         tokens = _TOKEN.findall(text)
         word_positions = [i for i, t in enumerate(tokens) if _WORD.match(t)]
         out = list(tokens)
