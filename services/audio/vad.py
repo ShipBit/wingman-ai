@@ -17,6 +17,10 @@ import onnxruntime as ort
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512  # 32 ms; the size the model was trained on for 16 kHz
+# The v5 model wants the tail of the previous frame in front of the current
+# one: 64 samples of context, 576 samples of input. Without them it rates
+# clear speech at 0.006; with them at 1.0. The official wrapper does the same.
+CONTEXT_SAMPLES = 64
 MODEL_FILE = path.join("audio_models", "silero_vad.onnx")
 
 
@@ -34,6 +38,7 @@ class SileroVad:
         )
         self._sr = np.array(SAMPLE_RATE, dtype=np.int64)
         self._state = self._fresh_state()
+        self._context = np.zeros(CONTEXT_SAMPLES, dtype=np.float32)
 
     @staticmethod
     def _fresh_state() -> np.ndarray:
@@ -43,17 +48,16 @@ class SileroVad:
         """Forget the previous frames. Call it when the gate opens, so what was
         said a minute ago does not colour the first frame of a new utterance."""
         self._state = self._fresh_state()
+        self._context = np.zeros(CONTEXT_SAMPLES, dtype=np.float32)
 
     def __call__(self, frame: np.ndarray) -> float:
         """Speech probability for one frame of FRAME_SAMPLES float32 samples."""
         if frame.shape[0] != FRAME_SAMPLES:
             raise ValueError(f"Silero VAD expects {FRAME_SAMPLES} samples, got {frame.shape[0]}")
+        frame = frame.astype(np.float32, copy=False)
+        window = np.concatenate([self._context, frame]).reshape(1, CONTEXT_SAMPLES + FRAME_SAMPLES)
         output, self._state = self._session.run(
-            None,
-            {
-                "input": frame.reshape(1, FRAME_SAMPLES).astype(np.float32, copy=False),
-                "state": self._state,
-                "sr": self._sr,
-            },
+            None, {"input": window, "state": self._state, "sr": self._sr}
         )
+        self._context = frame[-CONTEXT_SAMPLES:]
         return float(output[0][0])

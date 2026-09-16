@@ -81,6 +81,7 @@ class VoiceGate:
         self._pre_roll: deque[np.ndarray] = deque()
         self._set_pre_roll_length()
         self._reset_capture()
+        self._reset_diagnostics()
 
     # --- configuration ---
 
@@ -119,24 +120,24 @@ class VoiceGate:
         if self.mode != "held":
             return None
         utterance = self._finish(truncated=False)
-        peak, score = self.last_peak, self.last_best_score
         self.mode = "closed"
         self._reset_capture()
-        # Keep the numbers of the clip just closed for the caller's log line.
-        self.last_peak, self.last_best_score = peak, score
         return utterance
 
     def _begin(self, mode: str) -> None:
         self.mode = mode
         self._reset_capture()
+        self._reset_diagnostics()
         if self._on_reset:
             self._on_reset()
 
-    def _reset_capture(self) -> None:
-        # Diagnostics for the log line when a clip is dropped: how loud was
-        # it, and how sure was the detector at best.
+    def _reset_diagnostics(self) -> None:
+        """How loud the clip was and how sure the detector was at best. Kept
+        past close() so the log line for a dropped clip can read them."""
         self.last_peak = 0.0
         self.last_best_score = 0.0
+
+    def _reset_capture(self) -> None:
         self._frames: list[np.ndarray] = []
         self._speaking = False
         self._speech_run = 0
@@ -211,6 +212,7 @@ class VoiceGate:
         """Start the next utterance in the same mode, keeping the ring."""
         mode = self.mode
         self._reset_capture()
+        self._reset_diagnostics()
         self.mode = mode
 
     def _finish(self, truncated: bool) -> Optional[Utterance]:
