@@ -114,13 +114,6 @@ from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
 from hud_server.validation import validate_hud_settings, get_invalid_summary
 
-# What counts as "stop talking". An utterance made only of these words stops
-# the playback and is not answered. In the languages the app speaks.
-STOP_WORDS = frozenset(
-    {"stop", "stopp", "halt", "silence", "quiet", "enough", "still", "ruhe", "schluss",
-     "basta", "silencio", "para", "arrête", "arrete", "assez", "ok", "okay", "please",
-     "bitte", "por", "favor", "s'il", "te", "plaît", "plait", "shut", "up"}
-)
 # Share of a transcript's words that must occur in what the wingman is saying
 # for the transcript to count as the wingman's own voice.
 ECHO_RATIO = 0.6
@@ -1682,7 +1675,7 @@ class WingmanCore(WebSocketUser):
             return
         words = _words(text)
         playing = self.audio_player.is_playing
-        if words and all(w in STOP_WORDS for w in words):
+        if words and all(w in self._stop_words() for w in words):
             if playing:
                 self.printr.print(
                     f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
@@ -1714,6 +1707,12 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
+
+    def _stop_words(self) -> frozenset[str]:
+        """Every word of every configured stop phrase, read fresh from the
+        settings so a change in the client applies to the next utterance."""
+        phrases = self.settings_service.settings.voice_activation.stop_words
+        return frozenset(w for phrase in phrases for w in _words(phrase))
 
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With

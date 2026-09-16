@@ -590,6 +590,11 @@ class VoiceActivationSettings(BaseModel):
     hears itself; what it hears is compared to what it is saying and dropped
     when it matches. Off means the old behaviour: deaf while speaking."""
 
+    stop_words: list[str] = ['stop', 'stopp', 'stop it', 'stop please', 'shut up', 'be quiet', 'silence', 'enough', 'halt', 'sei still', 'ruhe', 'schluss', 'bitte stopp', 'okay stop', 'basta', 'silencio', 'para', 'cállate', 'callate', 'arrête', 'arrete', 'tais-toi', 'assez', "stop s'il te plaît"]
+    """Phrases that stop a wingman mid-sentence and are not answered. An
+    utterance counts when every word in it comes from these phrases, so
+    "okay stop please" works with "okay stop" and "stop please" listed."""
+
 
 class SttTestResult(BaseModel):
     """What the microphone test in Settings heard."""

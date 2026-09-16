@@ -236,7 +236,7 @@ class SettingsService:
             getattr(new_va, field) != getattr(old_va, field)
             for field in (
                 "sensitivity", "end_pause_ms", "max_utterance_s", "min_speech_ms",
-                "pre_roll_ms", "listen_while_speaking",
+                "pre_roll_ms", "listen_while_speaking", "stop_words",
             )
         ):
             await self.settings_events.publish(

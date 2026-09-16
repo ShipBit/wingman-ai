@@ -53,6 +53,32 @@ voice_activation:
   # Keep listening while a wingman speaks: "stop" stops it, talking on skips
   # the answer. With speakers the wingman's own voice is filtered by text.
   listen_while_speaking: true
+  # Said alone, these stop a wingman mid-sentence and are not answered.
+  stop_words:
+    - "stop"
+    - "stopp"
+    - "stop it"
+    - "stop please"
+    - "shut up"
+    - "be quiet"
+    - "silence"
+    - "enough"
+    - "halt"
+    - "sei still"
+    - "ruhe"
+    - "schluss"
+    - "bitte stopp"
+    - "okay stop"
+    - "basta"
+    - "silencio"
+    - "para"
+    - "cállate"
+    - "callate"
+    - "arrête"
+    - "arrete"
+    - "tais-toi"
+    - "assez"
+    - "stop s'il te plaît"
 wingman_pro:
   base_url: https://api.wingman-ai.com
 xvasynth:
