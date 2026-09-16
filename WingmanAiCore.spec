@@ -46,6 +46,8 @@ datas = [
     ('skills', 'skills'),
     ('templates/configs', 'templates/configs'),
     ('audio_samples', 'audio_samples'),
+    # Silero VAD, runs on the onnxruntime that Parakeet already needs.
+    ('audio_models', 'audio_models'),
     ('prompts', 'prompts'),
     ('LICENSE', '.'),
 ]

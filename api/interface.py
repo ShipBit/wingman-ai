@@ -110,6 +110,9 @@ class MicStatusResponse(BaseModel):
     """Current microphone / voice-activation state, published as the payload of the
     AudioPlayer.voice_events "changed" event (skill facade: audio.mic_status)."""
 
+    state: str
+    """off | muted | armed | held | paused. The one field that says it all; the
+    booleans below are derived from it."""
     listening: bool
     """True when voice activation is on and the mic is not muted (nor paused for playback)."""
     voice_activation_enabled: bool
@@ -564,8 +567,22 @@ class VoiceActivationSettings(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
-    energy_threshold: float
-    """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
+    sensitivity: float = 0.5
+    """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+    whisper. Applies to push-to-talk too, where it trims silence off the clip."""
+
+    end_pause_ms: int = 700
+    """Silence that ends an utterance."""
+
+    max_utterance_s: float = 12.0
+    """Cut here even mid-sentence and send what was said; the rest becomes the
+    next utterance. Keeps commands quick for people who never stop talking."""
+
+    min_speech_ms: int = 200
+    """Shorter bursts of speech are noise."""
+
+    pre_roll_ms: int = 300
+    """Audio kept from before the detector noticed speech."""
 
 
 class SttSettings(BaseModel):

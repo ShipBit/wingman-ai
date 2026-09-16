@@ -35,6 +35,7 @@ from api.enums import (
 from api.interface import (
     AudioDevice,
     AudioFile,
+    BenchmarkResult,
     ChangelogEntry,
     CommandJoystickConfig,
     Config,
@@ -92,8 +93,17 @@ from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
 from services.image_processing import process_image, validate_image_mime
 from services.model_metadata import ModelMetadataService
-from services.audio_recorder import RECORDING_PATH, AudioRecorder
-from services.threading_utils import threaded_execution
+from services.audio import (
+    AudioInput,
+    GateParams,
+    ListenController,
+    ListenState,
+    SileroVad,
+    TranscriptionWorker,
+    Utterance,
+    VoiceGate,
+)
+from services.audio.transcription_worker import RECORDING_PATH
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -102,6 +112,13 @@ from services.tower import Tower
 from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
 from hud_server.validation import validate_hud_settings, get_invalid_summary
+
+# What counts as "stop talking" when heard during playback. Short, in the
+# languages the app speaks; a longer sentence is never an interruption.
+STOP_WORDS = frozenset(
+    {"stop", "stopp", "halt", "silence", "quiet", "enough", "still", "ruhe", "schluss",
+     "basta", "silencio", "para", "arrête", "arrete", "silence", "assez"}
+)
 
 
 class WingmanCore(WebSocketUser):
@@ -669,8 +686,6 @@ class WingmanCore(WebSocketUser):
         # HUD Server
         self._hud_server: Optional[HudServer] = None
 
-        self.active_recording = {"key": "", "wingman": None}
-
         self.is_started = False
         self.core_state: CoreState = CoreState.STARTING
         self._last_logged_state: Optional[CoreState] = None
@@ -678,15 +693,6 @@ class WingmanCore(WebSocketUser):
         self.core_state_progress: float | None = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
-
-        self.is_listening = False
-        # User's mute intent, independent of transient playback pauses. is_listening is
-        # the actual recognizer state; mic_intent is what the user wants after playback.
-        self.mic_intent = False
-        # Serializes mute/unmute transitions across their entry points (hotkey thread,
-        # API threadpool, main-loop playback callbacks). RLock: start_voice_recognition ->
-        # _apply_voice_recognition nests.
-        self._va_state_lock = threading.RLock()
 
         self.key_events = {}
 
@@ -798,17 +804,33 @@ class WingmanCore(WebSocketUser):
 
         self.model_metadata_service = ModelMetadataService()
 
-        # restore settings
-        self.audio_recorder = AudioRecorder(
-            on_speech_recorded=self.on_audio_recorder_speech_recorded
+        # Microphone: one stream, one voice gate, one state machine. Push-to-talk
+        # and voice activation only differ in who opens the gate.
+        self.transcription_worker = TranscriptionWorker(self.stt_service)
+        try:
+            self.vad = SileroVad(app_root_path)
+            vad, on_reset = self.vad, self.vad.reset
+        except Exception as e:
+            # Without the detector every frame counts as speech: push-to-talk
+            # still works, voice activation would never close and stays off.
+            self.printr.toast_error(f"Voice detector could not be loaded: {e}")
+            self.vad = None
+            vad, on_reset = (lambda _frame: 1.0), None
+        self.voice_gate = VoiceGate(vad, self._gate_params(), on_reset=on_reset)
+        self.listen_controller = ListenController(
+            gate=self.voice_gate,
+            on_utterance=self._on_utterance,
+            on_barge_in=self._on_barge_in,
+            on_state_changed=self._on_listen_state_changed,
         )
+        self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
 
         if self.settings_service.settings.audio:
             sd.default.device = [
                 self.settings_service.settings.audio.input,
                 self.settings_service.settings.audio.output,
             ]
-            self.audio_recorder.update_input_stream()
+        self.audio_input.start()
 
     async def startup(self):
         # Capture the main loop so background workers can schedule coroutines.
@@ -1031,7 +1053,8 @@ class WingmanCore(WebSocketUser):
 
     def get_mic_status(self) -> MicStatusResponse:
         """Snapshot of the current mic / voice-activation state (voice_events payload)."""
-        rec_wingman = self.active_recording.get("wingman")
+        state = self.listen_controller.state
+        rec_wingman = self.listen_controller.held_wingman
         rec_name = getattr(rec_wingman, "name", None) if rec_wingman else None
         rec_avatar = None
         if rec_wingman is not None:
@@ -1042,12 +1065,13 @@ class WingmanCore(WebSocketUser):
                 except Exception:
                     rec_avatar = None
         return MicStatusResponse(
-            listening=bool(self.is_listening),
+            state=state.value,
+            listening=state == ListenState.ARMED,
             voice_activation_enabled=bool(
                 self.settings_service.settings.voice_activation.enabled
             ),
             playing=bool(self.audio_player.is_playing),
-            recording=self.active_recording.get("key", "") != "",
+            recording=state == ListenState.HELD,
             recording_wingman=rec_name,
             recording_wingman_avatar=rec_avatar,
         )
@@ -1447,7 +1471,7 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.enabled
             and is_mute_hotkey_pressed
         ):
-            self.toggle_voice_recognition()
+            self.listen_controller.toggle_muted()
 
         is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
             self.settings_service.settings.cancel_tts_key_codes
@@ -1469,7 +1493,7 @@ class WingmanCore(WebSocketUser):
         ):
             self.ensure_async(self.stop_playback())
 
-        if self.tower and self.active_recording["key"] == "":
+        if self.tower and self.listen_controller.held_source is None:
             wingman = None
             for potential_wingman in self.tower.wingmen:
                 if key:
@@ -1492,58 +1516,57 @@ class WingmanCore(WebSocketUser):
 
             if wingman:
                 if key:
-                    self.active_recording = dict(key=key.name, wingman=wingman)
+                    source = key.name
                 elif mouse_button:
-                    self.active_recording = dict(key=mouse_button, wingman=wingman)
-                elif joystick_config:
-                    self.active_recording = dict(
-                        key=f"{joystick_config.guid}{joystick_config.button}",
-                        wingman=wingman,
-                    )
-
-                if (
-                    self.settings_service.settings.voice_activation.enabled
-                    and self.is_listening
-                ):
-                    # transient like playback pauses: a PTT hold isn't a mute-intent change
-                    self._apply_voice_recognition(mute=True, is_transient=True)
-
-                self.audio_recorder.start_recording(wingman_name=wingman.name)
-                self._emit_voice_state()
+                    source = mouse_button
+                else:
+                    source = f"{joystick_config.guid}{joystick_config.button}"
+                self._ptt_down(source, wingman)
 
     def on_release(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
     ):
-        if self.tower and (
-            key is not None
-            and self.active_recording["key"] == key.name
-            or self.active_recording["key"] == mouse_button
-            or (
-                joystick_config
-                and self.active_recording["key"]
-                == f"{joystick_config.guid}{joystick_config.button}"
+        if not self.tower:
+            return
+        if key is not None:
+            source = key.name
+        elif mouse_button is not None:
+            source = mouse_button
+        elif joystick_config is not None:
+            source = f"{joystick_config.guid}{joystick_config.button}"
+        else:
+            return
+        self._ptt_up(source)
+
+    # ───────────────── Push-to-talk (key, mouse, joystick, GUI) ───────────────── #
+
+    def _ptt_down(self, source: str, wingman: Wingman) -> None:
+        if not self.listen_controller.ptt_down(source, wingman):
+            return
+        self.printr.print(
+            f"Recording started ({wingman.name})",
+            source_name=wingman.name,
+            command_tag=CommandTag.RECORDING_STARTED,
+        )
+
+    def _ptt_up(self, source: str) -> None:
+        wingman = self.listen_controller.held_wingman
+        name = wingman.name if wingman else ""
+        result = self.listen_controller.ptt_up(source)
+        if result is None:
+            return
+        self.printr.print(
+            f"Recording stopped ({name})",
+            source_name=name,
+            command_tag=CommandTag.RECORDING_STOPPED,
+        )
+        if result is False:
+            self.printr.print(
+                f"Skipped recording ({name}) - no speech detected",
+                color=LogType.WARNING,
+                source_name=name,
+                command_tag=CommandTag.IGNORED_RECORDING,
             )
-        ):
-            wingman = self.active_recording["wingman"]
-            recorded_audio_wav = self.audio_recorder.stop_recording(
-                wingman_name=wingman.name
-            )
-            self.active_recording = {"key": "", "wingman": None}
-
-            # restore from intent so a mute set during the hold survives the release;
-            # if playback is still running, on_playback_finished resumes instead
-            if (
-                self.settings_service.settings.voice_activation.enabled
-                and self.mic_intent
-                and not self.is_listening
-                and not self.audio_player.is_playing
-            ):
-                self._apply_voice_recognition(mute=False, is_transient=True)
-
-            self._emit_voice_state()
-
-            if recorded_audio_wav and isinstance(wingman, Wingman):
-                self._transcribe_and_process(str(recorded_audio_wav), wingman)
 
     def on_key(self, key):
         if key.event_type == "down":
@@ -1577,39 +1600,85 @@ class WingmanCore(WebSocketUser):
             words.extend(wingman.stt_hotwords)
         return words
 
-    def _transcribe_and_process(self, recording_file: str, wingman: Wingman | None):
-        """Turn a recording into text on a worker thread and hand it to a wingman.
+    def _gate_params(self) -> GateParams:
+        va = self.settings_service.settings.voice_activation
+        return GateParams(
+            sensitivity=va.sensitivity,
+            end_pause_ms=va.end_pause_ms,
+            min_speech_ms=va.min_speech_ms,
+            max_utterance_s=va.max_utterance_s,
+            pre_roll_ms=va.pre_roll_ms,
+        )
 
-        ``wingman`` is the one whose record key was held. For voice activation it
-        is None and the text decides: the wingman whose name is in it, or the
-        default one.
-        """
+    # ───────────────── Utterances → text → wingman ───────────────── #
+
+    def _on_utterance(self, utterance: Utterance, wingman: Wingman | None) -> None:
+        """From the listen controller, on the audio consumer thread. `wingman` is
+        the one whose key was held; None means voice activation, the text picks."""
+        self.transcription_worker.submit_utterance(
+            utterance, on_text=lambda text, benchmark: self._on_transcript(text, benchmark, wingman)
+        )
+
+    def process_recording_file(self, wav_path: str) -> None:
+        """A recording that arrived as a file, e.g. from an ESP32 device."""
+        if not self.tower:
+            return
+        self.transcription_worker.submit_file(
+            wav_path, on_text=lambda text, benchmark: self._on_transcript(text, benchmark, None)
+        )
+
+    def _on_transcript(self, text: str, benchmark: BenchmarkResult, wingman: Wingman | None) -> None:
+        """On the transcription thread. Hands the text to a wingman on a thread
+        of its own: processing blocks on the LLM and on speech synthesis, and
+        the next utterance must not wait for that."""
+        if not self.tower:
+            return
+        target = wingman or self.tower.get_wingman_from_text(text)
+        if not target:
+            return
 
         def run():
-            benchmark = Benchmark(label="Voice transcription")
-            text = self.stt_service.transcribe(recording_file)
-            if not text:
-                return
-            target = wingman or self.tower.get_wingman_from_text(text)
-            if not target:
-                return
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(
-                    target.process(
-                        transcript=text, transcription_benchmark=benchmark.finish()
-                    )
+                    target.process(transcript=text, transcription_benchmark=benchmark)
                 )
             finally:
                 loop.close()
 
-        threading.Thread(target=run).start()
+        threading.Thread(target=run, name="wingman-process").start()
 
-    def on_audio_recorder_speech_recorded(self, recording_file: str):
-        if not self.tower:
+    # ───────────────── Barge-in: "stop" while a wingman speaks ───────────────── #
+
+    def _on_barge_in(self, utterance: Utterance) -> None:
+        """A short utterance while a wingman is speaking. Transcribed, and if it
+        is a stop word that the wingman is not saying itself, playback stops."""
+        self.transcription_worker.submit_utterance(utterance, on_text=self._on_barge_in_text)
+
+    def _on_barge_in_text(self, text: str, _benchmark: BenchmarkResult) -> None:
+        if not self.audio_player.is_playing:
             return
-        self._transcribe_and_process(recording_file, wingman=None)
+        words = re.findall(r"[a-zäöüß]+", text.lower())
+        if not words or len(words) > 3 or not any(w in STOP_WORDS for w in words):
+            return
+        # The wingman may be the one saying "stop". Its current sentence is known.
+        spoken = self.audio_player.speaking_text.lower()
+        if any(w in spoken for w in words if w in STOP_WORDS):
+            return
+        self.printr.print(
+            f"Heard '{text}' during playback - stopping.", server_only=True, color=LogType.INFO
+        )
+        self._run_on_main_loop(self.stop_playback())
+
+    def _on_listen_state_changed(self, state: ListenState) -> None:
+        """From the controller, on whichever thread caused the change."""
+        self._run_on_main_loop(
+            self._connection_manager.broadcast(
+                VoiceActivationMutedCommand(muted=state != ListenState.ARMED)
+            )
+        )
+        self._emit_voice_state()
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
         # devices: [input_device, output_device]
@@ -1620,22 +1689,13 @@ class WingmanCore(WebSocketUser):
         # set new devices
         sd.default.device = devices
 
-        # update input stream if the input device has changed
+        # the stream is bound to the device it was opened on
         if current_mic != devices[0]:
-            self.audio_recorder.valid_mic = True  # this allows a new error message
-            self.audio_recorder.update_input_stream()
-            if self.is_listening:
-                self._apply_voice_recognition(mute=True)
-                self._apply_voice_recognition(mute=False, adjust_for_ambient_noise=True)
+            self.audio_input.restart()
 
     async def set_voice_activation(self, is_enabled: bool):
-        """Switching voice activation on means listening, not "on but muted".
-
-        Off a thread: starting or stopping the recognizer takes up to a second
-        (the background listener finishes its current phrase first), and this
-        runs inside the settings save and at startup.
-        """
-        await asyncio.to_thread(self._apply_voice_recognition, mute=not is_enabled)
+        """Switching voice activation on means listening, not "on but muted"."""
+        self.listen_controller.set_voice_activation(is_enabled)
 
     async def on_playback_started(self, wingman_name: str):
         await self.printr.print_async(
@@ -1644,14 +1704,7 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STARTED,
         )
 
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and self.is_listening
-        ):
-            await asyncio.to_thread(
-                self._apply_voice_recognition, mute=True, is_transient=True
-            )
-
+        self.listen_controller.playback_started()
         self._emit_voice_state()
 
     async def on_playback_finished(self, wingman_name: str):
@@ -1661,18 +1714,7 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STOPPED,
         )
 
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and self.mic_intent
-            and not self.is_listening
-            and not self.audio_player.is_playing
-            # don't resume into an active PTT/GUI recording; its stop path resumes
-            and self.active_recording.get("key", "") == ""
-        ):
-            await asyncio.to_thread(
-                self._apply_voice_recognition, mute=False, is_transient=True
-            )
-
+        self.listen_controller.playback_finished()
         self._emit_voice_state()
 
     async def process_events(self):
@@ -1681,91 +1723,23 @@ class WingmanCore(WebSocketUser):
             await callback(wingman_name)
 
     def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
-        # restart VA with new settings
-        if self.is_listening:
-            self._apply_voice_recognition(mute=True)
-            self._apply_voice_recognition(mute=False, adjust_for_ambient_noise=True)
-
-    def _apply_voice_recognition(
-        self,
-        mute: Optional[bool] = False,
-        adjust_for_ambient_noise: Optional[bool] = False,
-        is_transient: bool = False,
-    ):
-        # Transient calls (playback pause/resume) change only the recognizer, not the
-        # user's mute intent (mic_intent). The resulting recognizer state is still
-        # broadcast and emitted below, same as for a non-transient call.
-        with self._va_state_lock:
-            target_listening = not mute
-            if not is_transient:
-                # Record the intent BEFORE the (slow) recognizer transition so a
-                # toggle fired meanwhile reads the fresh value, not a stale one.
-                self.mic_intent = target_listening
-            # Skip the recognizer transition when already in the requested state: a
-            # duplicate unmute must never start a second recognizer session (the
-            # recorder blocks on that), a duplicate mute must not double-stop.
-            changed = self.is_listening != target_listening
-            self.is_listening = target_listening
-            if changed:
-                if target_listening:
-                    if adjust_for_ambient_noise:
-                        self.audio_recorder.adjust_for_ambient_noise()
-                    if not self.audio_recorder.start_continuous_listening(
-                        va_settings=self.settings_service.settings.voice_activation
-                    ):
-                        self.is_listening = False
-                else:
-                    self.audio_recorder.stop_continuous_listening()
-
-            command = VoiceActivationMutedCommand(muted=not self.is_listening)
-            self._run_on_main_loop(self._connection_manager.broadcast(command))
-            self._emit_voice_state()
+        self.listen_controller.update_params(self._gate_params())
 
     def start_voice_recognition(
         self,
         mute: Optional[bool] = False,
         adjust_for_ambient_noise: Optional[bool] = False,
     ):
-        """Set the user's mute intent. Bound to POST /voice-activation/mute.
+        """Mute or unmute voice activation. Bound to POST /voice-activation/mute.
 
-        (Kept as the endpoint's public name/signature so the client's generated API
-        stays stable; the recognizer transition itself lives in _apply_voice_recognition.)
-
-        During playback the recognizer is already paused so the wingman doesn't hear
-        itself; toggling then must only record the post-playback intent (applied by
-        on_playback_finished) and reflect it to clients - starting the recognizer
-        mid-playback, or letting on_playback_finished override the user, would be wrong.
-        All mute entry points (hotkey + this endpoint) go through here, so the intent is
-        consistent and can't be clobbered by the on_playback_started race.
+        Kept as the endpoint's public name and signature so the client's generated
+        API stays stable; `adjust_for_ambient_noise` is history, the detector needs
+        no calibration.
         """
-        with self._va_state_lock:
-            # Tell the clients what is about to happen before it happens: the
-            # recognizer takes up to a second to stop, and a toggle that only
-            # flips after that feels broken. _apply_voice_recognition sends the
-            # real state again once it is there, so a failed start corrects it.
-            self._run_on_main_loop(
-                self._connection_manager.broadcast(
-                    VoiceActivationMutedCommand(muted=mute)
-                )
-            )
-            if (
-                self.audio_player
-                and self.audio_player.is_playing
-                and self.settings_service.settings.voice_activation.enabled
-            ):
-                self.mic_intent = not mute
-                self._emit_voice_state()
-                return
-
-            self._apply_voice_recognition(
-                mute=mute, adjust_for_ambient_noise=adjust_for_ambient_noise
-            )
+        self.listen_controller.set_muted(bool(mute))
 
     def toggle_voice_recognition(self):
-        # Flip the user's mute intent, not the possibly-transient recognizer state.
-        # Read the intent under the lock so rapid toggles strictly alternate.
-        with self._va_state_lock:
-            self.start_voice_recognition(mute=self.mic_intent)
+        self.listen_controller.toggle_muted()
 
     # GET /audio-devices
     def get_audio_devices(self):
@@ -1783,52 +1757,19 @@ class WingmanCore(WebSocketUser):
     # POST /start-recording-for-wingman
     async def start_recording_for_wingman(self, wingman_name: str):
         """Start audio recording for a wingman (GUI mic toggle)."""
-        if not self.tower or self.active_recording["key"] != "":
+        if not self.tower:
             return
-
         wingman = self.tower.get_wingman_by_name(wingman_name)
         if not wingman:
             return
-
-        self.active_recording = dict(key="__gui__", wingman=wingman)
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and self.is_listening
-        ):
-            # transient like playback pauses; see on_press
-            self._apply_voice_recognition(mute=True, is_transient=True)
-
-        self.audio_recorder.start_recording(wingman_name=wingman.name)
-        self._emit_voice_state()
+        self._ptt_down("__gui__", wingman)
 
     # POST /stop-recording-for-wingman
     async def stop_recording_for_wingman(self, wingman_name: str):
         """Stop audio recording and process the result (GUI mic toggle)."""
-        if (
-            not self.tower
-            or self.active_recording["key"] != "__gui__"
-        ):
+        if not self.tower:
             return
-
-        wingman = self.active_recording["wingman"]
-        recorded_audio_wav = self.audio_recorder.stop_recording(
-            wingman_name=wingman.name
-        )
-        self.active_recording = {"key": "", "wingman": None}
-
-        # restore from intent; see on_release
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and self.mic_intent
-            and not self.is_listening
-            and not self.audio_player.is_playing
-        ):
-            self._apply_voice_recognition(mute=False, is_transient=True)
-
-        self._emit_voice_state()
-
-        if recorded_audio_wav and isinstance(wingman, Wingman):
-            threaded_execution(wingman.process, str(recorded_audio_wav))
+        self._ptt_up("__gui__")
 
     # POST /ask-wingman-conversation-provider
     async def ask_wingman_conversation_provider(

@@ -1,5 +1,6 @@
 import asyncio
 import re
+from rapidfuzz.distance import Levenshtein
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     Config,
@@ -19,6 +20,25 @@ from wingmen.wingman import Wingman
 
 
 printr = Printr()
+
+
+# How much of a sentence may carry the wingman's name.
+NAME_WINDOW_WORDS = 8
+
+
+def name_edit_allowance(name: str) -> int:
+    """How many letters a heard name may differ by and still count.
+
+    One for short names ("Ava" heard as "Eva"), two for the usual length
+    ("Computer" heard as "Computa"), three for long ones. "Complete" is three
+    edits from "Computer" and is rejected at that length.
+    """
+    length = len(name)
+    if length <= 5:
+        return 1
+    if length <= 9:
+        return 2
+    return 3
 
 
 class Tower:
@@ -177,13 +197,28 @@ class Tower:
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:
+        """The wingman addressed in the text, else the default one.
+
+        A name is matched by sound, not by spelling: the speech model writes
+        "Eva" for Ava and "Computa" for Computer, and an exact word match then
+        sends the sentence to the wrong wingman or nowhere. Only the opening of
+        the sentence is searched, that is where people put a name.
+        """
+        words = re.findall(r"[\w'-]+", text.lower())[:NAME_WINDOW_WORDS]
+        best: tuple[int, Wingman | None] = (10**6, None)
         for wingman in self.wingmen:
-            # Check if a wingman name appears as a whole word in the text
-            if re.search(
-                r"\b" + re.escape(wingman.config.name.lower()) + r"\b",
-                text.lower(),
-            ):
-                return wingman
+            name = " ".join(wingman.config.name.lower().split())
+            name_words = name.split()
+            if not name_words or len(name_words) > len(words):
+                continue
+            allowance = name_edit_allowance(name)
+            for i in range(len(words) - len(name_words) + 1):
+                candidate = " ".join(words[i : i + len(name_words)])
+                distance = Levenshtein.distance(candidate, name, score_cutoff=allowance)
+                if distance <= allowance and distance < best[0]:
+                    best = (distance, wingman)
+        if best[1] is not None:
+            return best[1]
 
         # Check if there is a default wingman defined in the config
         for wingman in self.wingmen:

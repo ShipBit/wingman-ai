@@ -873,6 +873,9 @@ class Wingman:
             sound_config = self.config.sound
 
         text, contains_links, contains_code_blocks = cleanup_text(text)
+        # The listen controller compares short interruptions against this so
+        # the wingman saying "stop" does not stop itself.
+        self.audio_player.speaking_text = text
 
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:

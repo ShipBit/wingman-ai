@@ -41,6 +41,8 @@ class AudioPlayer:
         # Mic / voice-activation state bus. Core is the sole writer.
         self.voice_events = PubSub()
         self.voice_state = None
+        # What is being spoken right now; set by Wingman.play_to_user.
+        self.speaking_text = ""
         self.on_playback_started = on_playback_started
         self.on_playback_finished = on_playback_finished
         self.sample_dir = path.join(

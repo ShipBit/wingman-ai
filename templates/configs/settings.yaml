@@ -40,7 +40,16 @@ stt:
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
-  energy_threshold: 0.01
+  # How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+  # whisper. Applies to push-to-talk too, where it trims silence off the clip.
+  sensitivity: 0.5
+  # Silence that ends an utterance.
+  end_pause_ms: 700
+  # Cut here even mid-sentence and send what was said; the rest becomes the
+  # next utterance. Keeps commands quick for people who never stop talking.
+  max_utterance_s: 12
+  min_speech_ms: 200
+  pre_roll_ms: 300
 wingman_pro:
   base_url: https://api.wingman-ai.com
 xvasynth:

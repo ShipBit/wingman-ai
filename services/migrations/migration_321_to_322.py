@@ -155,12 +155,11 @@ class Migration321To322(BaseMigration):
     DROPPED_STT_SECTIONS = ("parakeet", "fasterwhisper", "whispercpp")
     DROPPED_WINGMAN_PRO_KEYS = ("stt_provider", "languages")
 
-    # The three fields that are about listening, not about transcribing.
+    # The fields that are about listening, not about transcribing.
     VOICE_ACTIVATION_KEYS = (
         "enabled",
         "mute_toggle_key",
         "mute_toggle_key_codes",
-        "energy_threshold",
     )
     STT_SECTIONS = (
         "languages",
@@ -257,9 +256,23 @@ class Migration321To322(BaseMigration):
             whispercpp.pop("enable")
 
         new["stt"] = stt
-        new["voice_activation"] = {
-            key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va
-        }
+        listening = {key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va}
+        # The energy threshold was a loudness number that depended on the
+        # microphone. A voice detector replaces it; what survives is how far
+        # the user had pushed the old number, mapped onto the new sensitivity.
+        threshold = va.get("energy_threshold")
+        if isinstance(threshold, (int, float)):
+            if threshold <= 0.001:
+                listening["sensitivity"] = 0.8
+            elif threshold >= 0.02:
+                listening["sensitivity"] = 0.3
+            else:
+                listening["sensitivity"] = 0.5
+            self.log(
+                f"settings: voice detection sensitivity {listening['sensitivity']} "
+                f"(was energy threshold {threshold})"
+            )
+        new["voice_activation"] = listening
         self.log("settings: moved the speech-to-text settings out of voice_activation into stt")
         return new
 

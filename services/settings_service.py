@@ -231,9 +231,10 @@ class SettingsService:
                 server_only=True,
             )
 
-        if (
-            settings.voice_activation.energy_threshold
-            != old.voice_activation.energy_threshold
+        new_va, old_va = settings.voice_activation, old.voice_activation
+        if any(
+            getattr(new_va, field) != getattr(old_va, field)
+            for field in ("sensitivity", "end_pause_ms", "max_utterance_s", "min_speech_ms", "pre_roll_ms")
         ):
             await self.settings_events.publish(
                 "va_settings_changed", settings.voice_activation
