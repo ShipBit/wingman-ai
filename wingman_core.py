@@ -52,7 +52,7 @@ from api.interface import (
     PocketTTSConfig,
     PocketTTSPreloadResult,
     SoundConfig,
-    SubscriptionSttModel,
+    SubscriptionRoutes,
     TestConnectionResult,
     VoiceActivationSettings,
     WingmanInitializationError,
@@ -309,13 +309,13 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
 
-        # The transcription model behind "Wingman subscription", named on the
-        # provider card. A fixed role, so one object rather than a list.
+        # The models behind the plan's fixed roles (transcription, speech,
+        # images, the over-allowance chat model), named on the provider cards.
         self.router.add_api_route(
             methods=["GET"],
-            path="/models/wingman-pro/stt",
-            response_model=Optional[SubscriptionSttModel],
-            endpoint=self.get_wingman_stt_model,
+            path="/models/wingman-pro/routes",
+            response_model=SubscriptionRoutes,
+            endpoint=self.get_wingman_routes,
             tags=tags,
         )
 
@@ -2662,19 +2662,19 @@ class WingmanCore(WebSocketUser):
         except Exception:
             return []
 
-    # GET /models/wingman-pro/stt
-    async def get_wingman_stt_model(self) -> SubscriptionSttModel | None:
-        """Which model transcribes on this plan. None when not signed in, when
-        the plan has no cloud transcription, or when the backend is unreachable:
-        the card then says "cloud" without naming anything, which is right."""
+    # GET /models/wingman-pro/routes
+    async def get_wingman_routes(self) -> SubscriptionRoutes:
+        """Which models serve the plan's fixed roles. Every field is None when
+        not signed in or when the backend is unreachable: a card then says
+        "cloud" without naming anything, which is right."""
         try:
             body = await self._fetch_subscription_models()
-            stt = body.get("stt")
-            if isinstance(stt, dict) and stt.get("id"):
-                return SubscriptionSttModel(id=stt["id"], name=stt.get("name") or stt["id"])
+            routes = body.get("routes")
+            if isinstance(routes, dict):
+                return SubscriptionRoutes(**routes)
         except Exception:
             pass
-        return None
+        return SubscriptionRoutes()
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:

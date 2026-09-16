@@ -1394,12 +1394,23 @@ class SettingsConfig(BaseModel):
     spoken_language: str = "multilingual"
 
 
-class SubscriptionSttModel(BaseModel):
-    """The model the backend transcribes with on this plan. Decided in /admin,
-    so the client asks rather than assumes."""
-
+class SubscriptionModel(BaseModel):
     id: str
     name: str
+
+
+class SubscriptionRoutes(BaseModel):
+    """The models behind the plan's fixed roles, decided in /admin, so the
+    client asks rather than assumes. None means the plan has no such access."""
+
+    stt: Optional[SubscriptionModel] = None
+    """Transcription."""
+    tts: Optional[SubscriptionModel] = None
+    """Speech."""
+    image: Optional[SubscriptionModel] = None
+    """Image generation."""
+    downgraded: Optional[SubscriptionModel] = None
+    """What chat falls back to once the allowance is used up."""
 
 
 class BenchmarkResult(BaseModel):
