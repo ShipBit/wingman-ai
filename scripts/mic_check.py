@@ -55,14 +55,41 @@ def main() -> None:
     mono = np.concatenate(frames) if frames else np.zeros(0, dtype=np.float32)
     print(f"16 kHz mono: {len(frames)} blocks, peak {float(np.max(np.abs(mono))) if mono.size else 0.0:.4f}")
 
+    if mono.size:
+        rms = float(np.sqrt(np.mean(mono ** 2)))
+        dc = float(np.mean(mono))
+        crossings = int(np.sum(np.abs(np.diff(np.sign(mono - dc))) > 0))
+        print(f"  rms {rms:.4f}, dc offset {dc:.4f}, zero crossings/s {crossings / 3:.0f} "
+              f"(speech: a few hundred to a few thousand; a constant or a hum: far fewer)")
+        clipped = int(np.sum(np.abs(mono) >= 0.999))
+        print(f"  samples at full scale: {clipped} of {mono.size}")
+        import soundfile
+        out = path.join(path.dirname(path.abspath(__file__)), "mic_check.wav")
+        soundfile.write(out, mono, 16000, subtype="PCM_16")
+        print(f"  saved to {out}")
+
+    root = path.dirname(path.dirname(path.abspath(__file__)))
     try:
         from services.audio.vad import SileroVad
 
-        vad = SileroVad(path.dirname(path.dirname(path.abspath(__file__))))
+        vad = SileroVad(root)
         scores = [vad(f) for f in frames if f.shape[0] == 512]
         print(f"Silero: best speech score {max(scores) if scores else 0.0:.2f} over {len(scores)} frames")
     except Exception as e:
         print("Silero could not run:", e)
+
+    print("Once more, three seconds, through Core's own AudioInput class...")
+    try:
+        from services.audio.input import AudioInput
+
+        peaks: list[float] = []
+        audio_input = AudioInput(lambda f: peaks.append(float(np.max(np.abs(f)))))
+        print("  start:", audio_input.start())
+        time.sleep(3.0)
+        audio_input.stop()
+        print(f"  AudioInput: {len(peaks)} frames, peak {max(peaks) if peaks else 0.0:.4f}")
+    except Exception as e:
+        print("AudioInput could not run:", e)
 
 
 if __name__ == "__main__":

@@ -191,3 +191,4 @@ evals/
 .claude/settings.json
 
 .vscode/launch.json
+scripts/mic_check.wav
