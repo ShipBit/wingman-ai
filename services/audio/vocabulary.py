@@ -222,9 +222,12 @@ def load_preset(app_root_path: str, preset_id: str) -> list[str]:
 # starts (with or without a bullet, number, markdown emphasis or quote), and
 # the word in front of a colon, which is a heading.
 _SENTENCE_START = re.compile(
-    r"(?:^|[.!?\n]|:\s)[\s\-*#>\d.)\"“'(_]*([A-ZÄÖÜ][\w'-]*)|([A-ZÄÖÜ][\w'-]*)\s*:",
+    r"(?:^|[.!?\n]|:\s)[\s\-*#>\d.)\"“'(_]*([A-ZÄÖÜ][\w'-]*)|([A-ZÄÖÜ][\w'-]*)[\s*_]*:",
     re.MULTILINE,
 )
+# A heading like "**Your Role Context:**" or "## Personality": every word in
+# it is capitalised for looks, none of them is a name.
+_HEADING = re.compile(r"^[\s\-*#>_]*([A-ZÄÖÜ][^\n:]*?)[\s*_]*:?[\s*_]*$", re.MULTILINE)
 _CAPITALISED = re.compile(r"\b([A-ZÄÖÜ][a-zäöüß'-]{2,}(?:\s+[A-ZÄÖÜ][a-zäöüß'-]{2,}){0,2})\b")
 
 # Words that start sentences in prompts all the time and are not names.
@@ -243,10 +246,20 @@ def detect_from_text(text: str, titles: bool = False) -> list[str]:
     if not text:
         return []
     starts = set() if titles else {m.group(1) or m.group(2) for m in _SENTENCE_START.finditer(text)}
+    headings: set[str] = set()
+    if not titles:
+        for m in _HEADING.finditer(text):
+            line = m.group(1).strip("*_ ")
+            words = line.split()
+            # a short line of capitalised words ending in a colon, or a markdown heading
+            if 1 <= len(words) <= 5 and all(w[:1].isupper() for w in words):
+                headings.update(words)
     found: list[str] = []
     for m in _CAPITALISED.finditer(text):
         phrase = " ".join(m.group(1).split())
         words = phrase.split()
+        if all(w in headings for w in words):
+            continue
         # A phrase that starts a sentence loses its first word; what is left
         # may still be a name ("Reference Star Citizen" -> "Star Citizen").
         while words and words[0] in starts:
