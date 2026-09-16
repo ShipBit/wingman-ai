@@ -106,7 +106,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
-from services.audio.vocabulary import detect_from_config, list_presets, load_preset, spoken_names
+from services.audio.vocabulary import detect_from_config, list_presets, spoken_names
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -191,13 +191,6 @@ class WingmanCore(WebSocketUser):
             path="/stt/vocabulary/presets",
             endpoint=self.get_stt_vocabulary_presets,
             response_model=list[VocabularyPreset],
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/stt/vocabulary/presets/{preset_id}",
-            endpoint=self.get_stt_vocabulary_preset,
-            response_model=list[str],
             tags=tags,
         )
         # The microphone test in Settings: hold, speak, release, read the text.
@@ -792,6 +785,7 @@ class WingmanCore(WebSocketUser):
             fasterwhisper=self.fasterwhisper,
             parakeet=self.parakeet,
             get_hotwords=self._stt_hotwords,
+            app_root_path=app_root_path,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(
@@ -1784,11 +1778,6 @@ class WingmanCore(WebSocketUser):
             VocabularyPreset(id=pid, name=name, count=count)
             for pid, name, count in list_presets(self.app_root_path)
         ]
-
-    # GET /stt/vocabulary/presets/{preset_id}
-    async def get_stt_vocabulary_preset(self, preset_id: str) -> list[str]:
-        """The words of one preset. The client merges them into the list."""
-        return load_preset(self.app_root_path, preset_id)
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

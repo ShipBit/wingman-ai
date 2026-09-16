@@ -15,7 +15,7 @@ import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
-from services.audio.vocabulary import Vocabulary
+from services.audio.vocabulary import Vocabulary, load_preset
 from services.printr import Printr
 
 if TYPE_CHECKING:
@@ -39,8 +39,10 @@ class SttService:
         fasterwhisper: "FasterWhisper",
         parakeet: "Parakeet",
         get_hotwords: Optional[Callable[[], list[str]]] = None,
+        app_root_path: str = ".",
     ):
         self.settings_service = settings_service
+        self.app_root_path = app_root_path
         self.secret_keeper = secret_keeper
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
@@ -50,6 +52,7 @@ class SttService:
         # restart. WingmanCore hands in the names of the active wingmen.
         self.get_hotwords = get_hotwords or (lambda: [])
         self.printr = Printr()
+        self._preset_cache: dict[str, list[str]] = {}
 
     @property
     def provider(self) -> SttProvider:
@@ -91,7 +94,12 @@ class SttService:
         their skills added. Built per call; the lists are short and may
         change between two utterances."""
         stt = self.settings_service.settings.stt
-        return Vocabulary(list(stt.vocabulary or []) + self.get_hotwords())
+        words = list(stt.vocabulary or []) + self.get_hotwords()
+        for preset_id in stt.presets or []:
+            if preset_id not in self._preset_cache:
+                self._preset_cache[preset_id] = load_preset(self.app_root_path, preset_id)
+            words += self._preset_cache[preset_id]
+        return Vocabulary(words)
 
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt
