@@ -26,8 +26,11 @@ class Resampler:
         self.frame = frame
         self.identity = self.source_rate == self.target_rate
         if not self.identity:
-            # Cut just under the new Nyquist. 7 kHz keeps everything speech has.
-            self._taps = firwin(numtaps=63, cutoff=min(7000.0, self.target_rate * 0.45), fs=self.source_rate)
+            # Cut just under the lower of the two Nyquists. 7 kHz keeps
+            # everything speech has; an 8 kHz headset is below that and would
+            # make firwin raise, so the source rate caps the cutoff too.
+            cutoff = min(7000.0, self.target_rate * 0.45, self.source_rate * 0.45)
+            self._taps = firwin(numtaps=63, cutoff=cutoff, fs=self.source_rate)
             self._zi = lfilter_zi(self._taps, 1.0) * 0.0
             self._step = self.source_rate / self.target_rate
             self._pos = 0.0  # fractional read position into the carried input

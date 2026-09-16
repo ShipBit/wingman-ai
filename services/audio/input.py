@@ -47,12 +47,19 @@ class AudioInput:
         self._reported = False
         self._resampler: Optional[Resampler] = None
         self.device_rate = SAMPLE_RATE
+        # Set by stop(): the watchdog then stops retrying.
+        self._stopped = False
 
     # --- lifecycle ---
 
     def start(self) -> bool:
         with self._lock:
             self._close_stream()
+            self._stopped = False
+            # Before the attempt, not after: a failed start must leave the
+            # watchdog running, otherwise one bad start (device busy at boot)
+            # kills the microphone for the rest of the session.
+            self._ensure_consumer()
             try:
                 device = sounddevice.default.device[0]
                 info = sounddevice.query_devices(device, kind="input")
@@ -80,11 +87,6 @@ class AudioInput:
                 return False
             self.available = True
             self._reported = False
-            if self._consumer is None:
-                self._consumer = threading.Thread(
-                    target=self._consume, name="audio-input", daemon=True
-                )
-                self._consumer.start()
             self.printr.print(
                 f"Microphone stream opened ({info['name']}, {self.device_rate} Hz).",
                 color=LogType.INFO,
@@ -96,10 +98,17 @@ class AudioInput:
         """After a device change: the stream is bound to the device it was opened on."""
         return self.start()
 
+    def _ensure_consumer(self) -> None:
+        """Called under the lock. The thread runs for the whole session."""
+        if self._consumer is None:
+            self._consumer = threading.Thread(target=self._consume, name="audio-input", daemon=True)
+            self._consumer.start()
+
     def stop(self) -> None:
         with self._lock:
             self._close_stream()
             self.available = False
+            self._stopped = True
 
     def _close_stream(self) -> None:
         if self._stream is not None:
@@ -130,12 +139,18 @@ class AudioInput:
             try:
                 block = self._queue.get(timeout=STALL_SECONDS)
             except queue.Empty:
+                if self._stopped:
+                    continue
                 if self.available:
                     self.printr.print(
                         "Microphone stopped delivering audio; reopening the stream.",
                         color=LogType.WARNING,
                         server_only=True,
                     )
+                    self.restart()
+                else:
+                    # The device was busy or missing when we last tried. Try
+                    # again quietly; the toast was shown on the first failure.
                     self.restart()
                 continue
             if block is None:

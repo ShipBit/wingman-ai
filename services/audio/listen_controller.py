@@ -37,6 +37,10 @@ if TYPE_CHECKING:
 # frame or two late; "stop" is short enough to lose its "p" otherwise.
 RELEASE_GRACE_MS = 300
 
+# How long a release may wait for the grace frames before it goes through
+# without them. Only reached when the microphone stream stopped delivering.
+RELEASE_WATCHDOG_S = 1.0
+
 
 class ListenState(str, Enum):
     OFF = "off"
@@ -64,6 +68,13 @@ class ListenController:
         # Frames still to take after a push-to-talk key went up; None when
         # no release is pending.
         self._release_in: Optional[int] = None
+        # The grace frames arrive from the microphone. When the stream is dead
+        # they never do, and without this timer the controller would stay HELD
+        # for good: voice activation could not arm and no later key would hold.
+        self._release_timer: Optional[threading.Timer] = None
+        # Clips the gate cut off a long capture (the microphone test), kept so
+        # the caller gets everything it recorded and not just the tail.
+        self._capture_parts: list[Utterance] = []
 
         self.voice_activation_enabled = False
         self.listen_while_speaking = True
@@ -118,13 +129,18 @@ class ListenController:
         with self._lock:
             if self.held_source == source and self._release_in is not None:
                 # Pressed again inside the grace period: keep holding.
-                self._release_in = None
+                self._cancel_release()
                 return True
             if self.held_source is not None:
-                return False
+                if self._release_in is None:
+                    return False
+                # Another source is still inside its release grace. Let its
+                # clip go out now, otherwise this press would be swallowed
+                # and nothing at all would be recorded for it.
+                self._finish_release()
             self.held_source = source
             self.held_wingman = wingman
-            self._release_in = None
+            self._cancel_release()
             self._apply()
             return True
 
@@ -136,16 +152,33 @@ class ListenController:
             if self.held_source != source:
                 return False
             self._release_in = max(1, int(round(RELEASE_GRACE_MS / FRAME_MS)))
+            self._release_timer = threading.Timer(RELEASE_WATCHDOG_S, self._release_watchdog)
+            self._release_timer.daemon = True
+            self._release_timer.start()
             return True
 
+    def _release_watchdog(self) -> None:
+        """No frames came in during the grace period: the microphone stream is
+        gone. Release anyway, so the key is not stuck down forever."""
+        with self._lock:
+            if self._release_in is not None:
+                self._finish_release()
+
+    def _cancel_release(self) -> None:
+        """Called under the lock. Drops a pending release and its watchdog."""
+        self._release_in = None
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
+
     def _finish_release(self) -> None:
-        """Called from feed() under the lock once the grace frames are in."""
+        """Called under the lock from feed(), the watchdog, or a new key."""
         wingman = self.held_wingman
         playing = self.playing
         utterance = self._gate.release()
         self.held_source = None
         self.held_wingman = None
-        self._release_in = None
+        self._cancel_release()
         self._apply()
         if utterance is not None and wingman is not None:
             self._on_utterance(utterance, wingman, playing)
@@ -160,6 +193,7 @@ class ListenController:
                 return False
             self.held_source = source
             self.held_wingman = None
+            self._capture_parts = []
             self._apply()
             return True
 
@@ -168,8 +202,19 @@ class ListenController:
             if self.held_source != source:
                 return None
             utterance = self._gate.release()
+            parts = self._capture_parts
+            self._capture_parts = []
             self.held_source = None
             self._apply()
+            if parts:
+                # The gate cut the capture at max_utterance_s one or more
+                # times. The caller asked for one clip, so it gets all of it.
+                if utterance is not None:
+                    parts = parts + [utterance]
+                return Utterance(
+                    samples=np.concatenate([p.samples for p in parts]),
+                    truncated=False,
+                )
             return utterance
 
     def update_params(self, params: GateParams) -> None:
@@ -189,11 +234,15 @@ class ListenController:
                 if self._release_in <= 0:
                     self._finish_release()
                     return
+            if utterance is not None and state == ListenState.HELD and wingman is None:
+                # A capture (the mic test): the caller collects the clip from
+                # capture_stop, so a piece cut off here is kept, not dispatched.
+                self._capture_parts.append(utterance)
+                return
         if utterance is None:
             return
         if state == ListenState.HELD:
-            if wingman is not None:  # a capture for the mic test keeps its clips
-                self._on_utterance(utterance, wingman, playing)
+            self._on_utterance(utterance, wingman, playing)
         elif state == ListenState.ARMED:
             self._on_utterance(utterance, None, playing)
 

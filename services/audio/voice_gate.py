@@ -227,10 +227,15 @@ class VoiceGate:
         SPLIT_PAUSE_MS if there was one in the second half, so no word is cut in
         two; the frames after the cut open the next utterance."""
         split = self._split_at
+        # Where the speech the carry starts with sits in the carry's own frame
+        # numbering. Without it a speaker who stops right after the cut loses
+        # those frames: _finish needs a last speech frame to emit anything.
+        carry_last: Optional[int] = None
         if split is not None and split > len(self._frames) // 2:
             carry = self._frames[split:]
             self._frames = self._frames[:split]
             if self._last_speech is not None and self._last_speech >= split:
+                carry_last = self._last_speech - split
                 self._last_speech = split - 1
         else:
             carry = []
@@ -239,8 +244,8 @@ class VoiceGate:
         if carry:
             # Continue with what came after the pause, as if it had just arrived.
             self._frames = carry
-            self._first_speech = None
-            self._last_speech = None
+            self._first_speech = 0 if carry_last is not None else None
+            self._last_speech = carry_last
             if self.mode == "armed":
                 # Still inside speech: keep the speaking state so the pause
                 # logic carries on instead of waiting for a new onset.
