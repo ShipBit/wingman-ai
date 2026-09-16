@@ -15,9 +15,10 @@ the facts are unchanged, the state is what it was.
 Every transition is a flag change. The stream never stops, so muting takes no
 time and nothing waits on a thread.
 
-In PAUSED the gate stays armed but its utterances are not transcribed as
-commands: the wingman's own voice reaches the microphone. Short ones are
-offered to a barge-in handler instead, which may stop the playback on "stop".
+PAUSED only exists when `listen_while_speaking` is off. With it on (the
+default) the gate stays ARMED while a wingman speaks and every utterance is
+handed on with `during_playback=True`; the core then decides by its text
+whether it was "stop", the wingman's own voice, or the user talking on.
 """
 
 import threading
@@ -31,11 +32,6 @@ from services.audio.voice_gate import GateParams, Utterance, VoiceGate
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
-# The longest thing that can be an interruption. "Stop" is half a second; a
-# sentence the wingman speaks is not.
-BARGE_IN_MAX_S = 2.0
-
-
 class ListenState(str, Enum):
     OFF = "off"
     MUTED = "muted"
@@ -48,17 +44,17 @@ class ListenController:
     def __init__(
         self,
         gate: VoiceGate,
-        on_utterance: Callable[[Utterance, Optional["Wingman"]], None],
-        on_barge_in: Callable[[Utterance], None],
+        on_utterance: Callable[[Utterance, Optional["Wingman"], bool], None],
         on_state_changed: Callable[["ListenState"], None],
     ):
         self._gate = gate
+        # (utterance, held wingman or None, whether a wingman was speaking)
         self._on_utterance = on_utterance
-        self._on_barge_in = on_barge_in
         self._on_state_changed = on_state_changed
         self._lock = threading.RLock()
 
         self.voice_activation_enabled = False
+        self.listen_while_speaking = True
         self.user_muted = False
         self.playing = False
         self.held_source: Optional[str] = None
@@ -79,6 +75,11 @@ class ListenController:
             if enabled:
                 # Switching it on means listening, not "on but muted".
                 self.user_muted = False
+            self._apply()
+
+    def set_listen_while_speaking(self, enabled: bool) -> None:
+        with self._lock:
+            self.listen_while_speaking = enabled
             self._apply()
 
     def set_muted(self, muted: bool) -> None:
@@ -117,14 +118,35 @@ class ListenController:
             if self.held_source != source:
                 return None
             wingman = self.held_wingman
+            playing = self.playing
             utterance = self._gate.release()
             self.held_source = None
             self.held_wingman = None
             self._apply()
         if utterance is not None and wingman is not None:
-            self._on_utterance(utterance, wingman)
+            self._on_utterance(utterance, wingman, playing)
             return True
         return False
+
+    def capture_start(self, source: str) -> bool:
+        """Hold the gate for a caller that wants the clip back instead of having
+        it dispatched: the microphone test in Settings."""
+        with self._lock:
+            if self.held_source is not None:
+                return False
+            self.held_source = source
+            self.held_wingman = None
+            self._apply()
+            return True
+
+    def capture_stop(self, source: str) -> Optional[Utterance]:
+        with self._lock:
+            if self.held_source != source:
+                return None
+            utterance = self._gate.release()
+            self.held_source = None
+            self._apply()
+            return utterance
 
     def update_params(self, params: GateParams) -> None:
         with self._lock:
@@ -137,15 +159,14 @@ class ListenController:
             state = self._state
             utterance = self._gate.feed(frame)
             wingman = self.held_wingman
+            playing = self.playing
         if utterance is None:
             return
         if state == ListenState.HELD:
-            self._on_utterance(utterance, wingman)
+            if wingman is not None:  # a capture for the mic test keeps its clips
+                self._on_utterance(utterance, wingman, playing)
         elif state == ListenState.ARMED:
-            self._on_utterance(utterance, None)
-        elif state == ListenState.PAUSED and utterance.duration_s <= BARGE_IN_MAX_S:
-            self._on_barge_in(utterance)
-        # PAUSED and long: the wingman talking to itself. Dropped.
+            self._on_utterance(utterance, None, playing)
 
     # --- derive ---
 
@@ -156,7 +177,7 @@ class ListenController:
             return ListenState.OFF
         if self.user_muted:
             return ListenState.MUTED
-        if self.playing:
+        if self.playing and not self.listen_while_speaking:
             return ListenState.PAUSED
         return ListenState.ARMED
 
@@ -167,7 +188,7 @@ class ListenController:
         self._state = new
         if new == ListenState.HELD:
             self._gate.hold()
-        elif new in (ListenState.ARMED, ListenState.PAUSED):
+        elif new == ListenState.ARMED:
             self._gate.arm()
         else:
             self._gate.close()

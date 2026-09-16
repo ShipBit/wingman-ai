@@ -53,6 +53,7 @@ from api.interface import (
     PocketTTSConfig,
     PocketTTSPreloadResult,
     SoundConfig,
+    SttTestResult,
     SubscriptionRoutes,
     TestConnectionResult,
     VoiceActivationSettings,
@@ -113,12 +114,20 @@ from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
 from hud_server.validation import validate_hud_settings, get_invalid_summary
 
-# What counts as "stop talking" when heard during playback. Short, in the
-# languages the app speaks; a longer sentence is never an interruption.
+# What counts as "stop talking". An utterance made only of these words stops
+# the playback and is not answered. In the languages the app speaks.
 STOP_WORDS = frozenset(
     {"stop", "stopp", "halt", "silence", "quiet", "enough", "still", "ruhe", "schluss",
-     "basta", "silencio", "para", "arrête", "arrete", "silence", "assez"}
+     "basta", "silencio", "para", "arrête", "arrete", "assez", "ok", "okay", "please",
+     "bitte", "por", "favor", "s'il", "te", "plaît", "plait", "shut", "up"}
 )
+# Share of a transcript's words that must occur in what the wingman is saying
+# for the transcript to count as the wingman's own voice.
+ECHO_RATIO = 0.6
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
 
 
 class WingmanCore(WebSocketUser):
@@ -167,6 +176,21 @@ class WingmanCore(WebSocketUser):
             path="/voice-activation/status",
             endpoint=self.get_mic_status,
             response_model=MicStatusResponse,
+            tags=tags,
+        )
+        # The microphone test in Settings: hold, speak, release, read the text.
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stt/test/start",
+            endpoint=self.start_stt_test,
+            response_model=bool,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stt/test/stop",
+            endpoint=self.stop_stt_test,
+            response_model=Optional[SttTestResult],
             tags=tags,
         )
         self.router.add_api_route(
@@ -820,8 +844,10 @@ class WingmanCore(WebSocketUser):
         self.listen_controller = ListenController(
             gate=self.voice_gate,
             on_utterance=self._on_utterance,
-            on_barge_in=self._on_barge_in,
             on_state_changed=self._on_listen_state_changed,
+        )
+        self.listen_controller.set_listen_while_speaking(
+            self.settings_service.settings.voice_activation.listen_while_speaking
         )
         self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
 
@@ -1615,11 +1641,17 @@ class WingmanCore(WebSocketUser):
 
     # ───────────────── Utterances → text → wingman ───────────────── #
 
-    def _on_utterance(self, utterance: Utterance, wingman: Wingman | None) -> None:
+    def _on_utterance(
+        self, utterance: Utterance, wingman: Wingman | None, during_playback: bool
+    ) -> None:
         """From the listen controller, on the audio consumer thread. `wingman` is
-        the one whose key was held; None means voice activation, the text picks."""
+        the one whose key was held; None means voice activation, the text picks.
+        `during_playback` says a wingman was speaking when this was said."""
         self.transcription_worker.submit_utterance(
-            utterance, on_text=lambda text, benchmark: self._on_transcript(text, benchmark, wingman)
+            utterance,
+            on_text=lambda text, benchmark: self._on_transcript(
+                text, benchmark, wingman, during_playback
+            ),
         )
 
     def process_recording_file(self, wav_path: str) -> None:
@@ -1627,18 +1659,49 @@ class WingmanCore(WebSocketUser):
         if not self.tower:
             return
         self.transcription_worker.submit_file(
-            wav_path, on_text=lambda text, benchmark: self._on_transcript(text, benchmark, None)
+            wav_path,
+            on_text=lambda text, benchmark: self._on_transcript(text, benchmark, None, False),
         )
 
-    def _on_transcript(self, text: str, benchmark: BenchmarkResult, wingman: Wingman | None) -> None:
-        """On the transcription thread. Hands the text to a wingman on a thread
-        of its own: processing blocks on the LLM and on speech synthesis, and
-        the next utterance must not wait for that."""
+    def _on_transcript(
+        self,
+        text: str,
+        benchmark: BenchmarkResult,
+        wingman: Wingman | None,
+        during_playback: bool,
+    ) -> None:
+        """On the transcription thread. Three outcomes:
+
+        - a stop word: the playback stops, nothing is answered;
+        - the wingman's own voice picked up by the microphone: dropped;
+        - the user talking: any playback stops, and the text goes to a wingman
+          on a thread of its own (processing blocks on the LLM and on speech
+          synthesis, and the next utterance must not wait for that).
+        """
         if not self.tower:
+            return
+        words = _words(text)
+        playing = self.audio_player.is_playing
+        if words and all(w in STOP_WORDS for w in words):
+            if playing:
+                self.printr.print(
+                    f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
+                )
+                self._run_on_main_loop(self.stop_playback())
+            return
+        if during_playback and self._is_echo(words):
+            self.printr.print(
+                f"Dropped '{text}': that is the wingman's own voice.",
+                server_only=True,
+                color=LogType.INFO,
+            )
             return
         target = wingman or self.tower.get_wingman_from_text(text)
         if not target:
             return
+        if playing:
+            # Talking on means: skip the rest of the answer.
+            self._run_on_main_loop(self.stop_playback())
 
         def run():
             loop = asyncio.new_event_loop()
@@ -1652,27 +1715,47 @@ class WingmanCore(WebSocketUser):
 
         threading.Thread(target=run, name="wingman-process").start()
 
-    # ───────────────── Barge-in: "stop" while a wingman speaks ───────────────── #
+    def _is_echo(self, words: list[str]) -> bool:
+        """Whether these words are what the wingman is saying right now. With
+        speakers instead of a headset the microphone hears the wingman; the
+        transcript then repeats its sentence, word for word or nearly."""
+        spoken = set(_words(self.audio_player.speaking_text))
+        meaningful = [w for w in words if len(w) >= 3]
+        if not meaningful:
+            # "hm", "ah": nothing to act on either way
+            return True
+        hits = sum(1 for w in meaningful if w in spoken)
+        return hits / len(meaningful) >= ECHO_RATIO
 
-    def _on_barge_in(self, utterance: Utterance) -> None:
-        """A short utterance while a wingman is speaking. Transcribed, and if it
-        is a stop word that the wingman is not saying itself, playback stops."""
-        self.transcription_worker.submit_utterance(utterance, on_text=self._on_barge_in_text)
+    # ───────────────── Microphone test (Settings) ───────────────── #
 
-    def _on_barge_in_text(self, text: str, _benchmark: BenchmarkResult) -> None:
-        if not self.audio_player.is_playing:
-            return
-        words = re.findall(r"[a-zäöüß]+", text.lower())
-        if not words or len(words) > 3 or not any(w in STOP_WORDS for w in words):
-            return
-        # The wingman may be the one saying "stop". Its current sentence is known.
-        spoken = self.audio_player.speaking_text.lower()
-        if any(w in spoken for w in words if w in STOP_WORDS):
-            return
-        self.printr.print(
-            f"Heard '{text}' during playback - stopping.", server_only=True, color=LogType.INFO
+    # POST /stt/test/start
+    async def start_stt_test(self) -> bool:
+        return self.listen_controller.capture_start("__test__")
+
+    # POST /stt/test/stop
+    async def stop_stt_test(self) -> SttTestResult | None:
+        """Release the test capture and transcribe it right here, so the
+        settings page gets the text back in the same request."""
+        utterance = self.listen_controller.capture_stop("__test__")
+        gate = self.voice_gate
+        if utterance is None:
+            return SttTestResult(
+                text="",
+                duration_s=0.0,
+                level=gate.last_peak,
+                best_score=gate.last_best_score,
+                threshold=gate.params.threshold,
+            )
+        wav_path = self.transcription_worker.write(utterance)
+        text = await asyncio.to_thread(self.stt_service.transcribe, wav_path)
+        return SttTestResult(
+            text=text or "",
+            duration_s=utterance.duration_s,
+            level=gate.last_peak,
+            best_score=gate.last_best_score,
+            threshold=gate.params.threshold,
         )
-        self._run_on_main_loop(self.stop_playback())
 
     def _on_listen_state_changed(self, state: ListenState) -> None:
         """From the controller, on whichever thread caused the change."""
@@ -1725,8 +1808,9 @@ class WingmanCore(WebSocketUser):
             callback, wingman_name = await self.event_queue.get()
             await callback(wingman_name)
 
-    def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
+    def on_va_settings_changed(self, va_settings: VoiceActivationSettings):
         self.listen_controller.update_params(self._gate_params())
+        self.listen_controller.set_listen_while_speaking(va_settings.listen_while_speaking)
 
     def start_voice_recognition(
         self,

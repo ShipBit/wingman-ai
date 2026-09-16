@@ -234,7 +234,10 @@ class SettingsService:
         new_va, old_va = settings.voice_activation, old.voice_activation
         if any(
             getattr(new_va, field) != getattr(old_va, field)
-            for field in ("sensitivity", "end_pause_ms", "max_utterance_s", "min_speech_ms", "pre_roll_ms")
+            for field in (
+                "sensitivity", "end_pause_ms", "max_utterance_s", "min_speech_ms",
+                "pre_roll_ms", "listen_while_speaking",
+            )
         ):
             await self.settings_events.publish(
                 "va_settings_changed", settings.voice_activation

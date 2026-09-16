@@ -50,6 +50,9 @@ voice_activation:
   max_utterance_s: 12
   min_speech_ms: 200
   pre_roll_ms: 300
+  # Keep listening while a wingman speaks: "stop" stops it, talking on skips
+  # the answer. With speakers the wingman's own voice is filtered by text.
+  listen_while_speaking: true
 wingman_pro:
   base_url: https://api.wingman-ai.com
 xvasynth:

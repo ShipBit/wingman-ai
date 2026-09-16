@@ -42,7 +42,7 @@ class TranscriptionWorker:
         utterance: "Utterance",
         on_text: Callable[[str, "BenchmarkResult"], None],
     ) -> None:
-        wav_path = self._write(utterance)
+        wav_path = self.write(utterance)
         self.submit_file(wav_path, on_text)
 
     def submit_file(
@@ -53,7 +53,8 @@ class TranscriptionWorker:
         """A recording that arrived as a file, e.g. from an ESP32 device."""
         self._executor.submit(self._run, wav_path, on_text)
 
-    def _write(self, utterance: "Utterance") -> str:
+    def write(self, utterance: "Utterance") -> str:
+        """Write the utterance to the next slot and return the path."""
         with self._slot_lock:
             slot = self._slot
             self._slot = (self._slot + 1) % FILE_SLOTS

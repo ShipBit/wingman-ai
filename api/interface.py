@@ -584,6 +584,24 @@ class VoiceActivationSettings(BaseModel):
     pre_roll_ms: int = 300
     """Audio kept from before the detector noticed speech."""
 
+    listen_while_speaking: bool = True
+    """Keep the microphone open while a wingman speaks, so "stop" stops it and
+    talking on skips the answer. With speakers instead of a headset the wingman
+    hears itself; what it hears is compared to what it is saying and dropped
+    when it matches. Off means the old behaviour: deaf while speaking."""
+
+
+class SttTestResult(BaseModel):
+    """What the microphone test in Settings heard."""
+
+    text: str
+    duration_s: float
+    level: float
+    """Peak level of the clip, 0..1."""
+    best_score: float
+    """Best speech probability the detector saw, 0..1."""
+    threshold: float
+
 
 class SttSettings(BaseModel):
     """Speech-to-text, configured once for every wingman and for both ways of
