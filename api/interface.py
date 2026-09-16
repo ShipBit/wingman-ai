@@ -1394,6 +1394,14 @@ class SettingsConfig(BaseModel):
     spoken_language: str = "multilingual"
 
 
+class SubscriptionSttModel(BaseModel):
+    """The model the backend transcribes with on this plan. Decided in /admin,
+    so the client asks rather than assumes."""
+
+    id: str
+    name: str
+
+
 class BenchmarkResult(BaseModel):
     label: str
     execution_time_ms: float

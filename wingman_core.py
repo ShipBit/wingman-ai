@@ -52,6 +52,7 @@ from api.interface import (
     PocketTTSConfig,
     PocketTTSPreloadResult,
     SoundConfig,
+    SubscriptionSttModel,
     TestConnectionResult,
     VoiceActivationSettings,
     WingmanInitializationError,
@@ -305,6 +306,16 @@ class WingmanCore(WebSocketUser):
             path="/models/wingman-pro/support",
             response_model=list,
             endpoint=self.get_wingman_support_models,
+            tags=tags,
+        )
+
+        # The transcription model behind "Wingman subscription", named on the
+        # provider card. A fixed role, so one object rather than a list.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/stt",
+            response_model=Optional[SubscriptionSttModel],
+            endpoint=self.get_wingman_stt_model,
             tags=tags,
         )
 
@@ -2650,6 +2661,20 @@ class WingmanCore(WebSocketUser):
             return (body.get("support") or {}).get("models", [])
         except Exception:
             return []
+
+    # GET /models/wingman-pro/stt
+    async def get_wingman_stt_model(self) -> SubscriptionSttModel | None:
+        """Which model transcribes on this plan. None when not signed in, when
+        the plan has no cloud transcription, or when the backend is unreachable:
+        the card then says "cloud" without naming anything, which is right."""
+        try:
+            body = await self._fetch_subscription_models()
+            stt = body.get("stt")
+            if isinstance(stt, dict) and stt.get("id"):
+                return SubscriptionSttModel(id=stt["id"], name=stt.get("name") or stt["id"])
+        except Exception:
+            pass
+        return None
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
