@@ -38,7 +38,7 @@ class SettingsService:
         self.config_manager = config_manager
         self.config_service = config_service
         self.converted_audio_settings = False
-        self.settings = self.get_settings()
+        self.get_settings()
         self.settings_events = PubSub()
         self.whispercpp: Whispercpp = None
         self.fasterwhisper: FasterWhisper = None
@@ -163,6 +163,13 @@ class SettingsService:
                 f"Speech vocabulary: removed {removed} entries", server_only=True, color=LogType.INFO
             )
         return removed
+
+    @property
+    def settings(self):
+        """Always the object the config manager holds. Migration at start
+        replaces that object; a reference taken before it would write into
+        a settings copy that is never saved."""
+        return self.config_manager.settings_config
 
     # GET /settings
     def get_settings(self):
