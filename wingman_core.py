@@ -1088,7 +1088,10 @@ class WingmanCore(WebSocketUser):
         return MicStatusResponse(
             state=state.value,
             listening=state == ListenState.ARMED,
-            muted=state == ListenState.MUTED,
+            # The user's own mute, the same thing the broadcast sends. Holding
+            # a push-to-talk key is a state of its own and must not read as
+            # "unmuted" to the switch in the client.
+            muted=self.listen_controller.user_muted,
             voice_activation_enabled=bool(
                 self.settings_service.settings.voice_activation.enabled
             ),
@@ -1651,13 +1654,14 @@ class WingmanCore(WebSocketUser):
             ),
         )
 
-    def process_recording_file(self, wav_path: str) -> None:
-        """A recording that arrived as a file, e.g. from an ESP32 device."""
+    def process_recording_file(self, wav_path: str, wingman: Wingman | None = None) -> None:
+        """A recording that arrived as a file, e.g. from an ESP32 device or the
+        client. `wingman` is the one it is meant for; None lets the text pick."""
         if not self.tower:
             return
         self.transcription_worker.submit_file(
             wav_path,
-            on_text=lambda text, benchmark: self._on_transcript(text, benchmark, None, False),
+            on_text=lambda text, benchmark: self._on_transcript(text, benchmark, wingman, False),
         )
 
     def _on_transcript(
@@ -1679,7 +1683,7 @@ class WingmanCore(WebSocketUser):
             return
         words = _words(text)
         playing = self.audio_player.is_playing
-        if words and all(w in self._stop_words() for w in words):
+        if self._is_stop(words):
             if playing:
                 self.printr.print(
                     f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
@@ -1721,11 +1725,31 @@ class WingmanCore(WebSocketUser):
 
         threading.Thread(target=run, name="wingman-process").start()
 
-    def _stop_words(self) -> frozenset[str]:
-        """Every word of every configured stop phrase, read fresh from the
-        settings so a change in the client applies to the next utterance."""
-        phrases = self.settings_service.settings.voice_activation.stop_words
-        return frozenset(w for phrase in phrases for w in _words(phrase))
+    def _is_stop(self, words: list[str]) -> bool:
+        """Whether the whole utterance is a stop command. The phrases are read
+        fresh from the settings so a change in the client applies to the next
+        utterance.
+
+        A phrase counts as a whole. Flattening them into one word set would
+        make "Okay", "Please", "Up" and "It" stop commands of their own, since
+        each is part of some phrase, and none of them would ever be answered.
+        What may stand around a stop word is the other phrases' words, so
+        "Halt, bitte" still stops while "Okay" is answered.
+        """
+        if not words:
+            return False
+        phrases = [
+            tuple(_words(phrase))
+            for phrase in self.settings_service.settings.voice_activation.stop_words
+        ]
+        phrases = [phrase for phrase in phrases if phrase]
+        if tuple(words) in set(phrases):
+            return True
+        on_its_own = {phrase[0] for phrase in phrases if len(phrase) == 1}
+        if not any(word in on_its_own for word in words):
+            return False
+        every_word = {word for phrase in phrases for word in phrase}
+        return all(word in every_word for word in words)
 
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With
@@ -1760,11 +1784,15 @@ class WingmanCore(WebSocketUser):
     # PUT /stt/vocabulary/presets/{preset_id}
     async def put_stt_vocabulary_preset(self, preset_id: str, words: list[str] = Body(...)) -> list[str]:
         """Store the user's version of a bundled list as a diff against the
-        bundle. An empty diff removes the override. Returns the effective list."""
-        bundled = load_preset(self.app_root_path, preset_id)
-        if not bundled and not list_presets(self.app_root_path):
+        bundle. An empty body resets the list to the bundle; a preset is
+        switched off with its toggle, not by emptying it. Returns the
+        effective list."""
+        if preset_id not in {pid for pid, _name, _count in list_presets(self.app_root_path)}:
+            # An unknown id would be stored as an override nothing ever reads.
             return []
-        added, removed = diff_override(bundled, [w for w in (w.strip() for w in words) if w])
+        bundled = load_preset(self.app_root_path, preset_id)
+        wanted = [w for w in (w.strip() for w in words) if w]
+        added, removed = diff_override(bundled, wanted) if wanted else ([], [])
         stt = self.settings_service.settings.stt
         overrides = dict(stt.preset_overrides or {})
         if added or removed:
@@ -1813,12 +1841,13 @@ class WingmanCore(WebSocketUser):
 
         The client's mute switch means one thing: the user does not want to
         be heard right now, say while talking to friends on Discord. It is
-        the user's own setting, so only MUTED counts; a held push-to-talk key
-        or a wingman speaking must not flip it.
+        the user's own setting, so the controller's own flag is what goes out;
+        a held push-to-talk key or a wingman speaking must not flip it, and
+        those are states of their own, so the state alone cannot say it.
         """
         self._run_on_main_loop(
             self._connection_manager.broadcast(
-                VoiceActivationMutedCommand(muted=state == ListenState.MUTED)
+                VoiceActivationMutedCommand(muted=self.listen_controller.user_muted)
             )
         )
         self._emit_voice_state()
@@ -2044,20 +2073,9 @@ class WingmanCore(WebSocketUser):
         with open(filename, "wb") as f:
             f.write(contents)
 
-        def run_async_process():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                if isinstance(wingman, Wingman):
-                    loop.run_until_complete(
-                        wingman.process(audio_input_wav=str(filename))
-                    )
-            finally:
-                loop.close()
-
-        if filename:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
+        # The wav is transcribed by the core's STT service and then answered,
+        # the same path a recording from the microphone takes.
+        self.process_recording_file(str(filename), wingman)
 
     # POST /reset-conversation-history
     async def reset_conversation_history(self, wingman_name: Optional[str] = None):

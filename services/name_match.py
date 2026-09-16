@@ -10,6 +10,8 @@ from typing import Optional
 
 from rapidfuzz.distance import Levenshtein
 
+from services.audio.protected_words import PROTECTED_WORDS
+
 # How much of a sentence may carry the wingman's name.
 NAME_WINDOW_WORDS = 8
 
@@ -47,7 +49,14 @@ def find_name(words: list[str], name: str) -> Optional[tuple[int, int, int]]:
     for i in range(len(window) - len(name_words) + 1):
         candidate = " ".join(window[i : i + len(name_words)])
         distance = Levenshtein.distance(candidate, name, score_cutoff=allowance)
-        if distance <= allowance and (best is None or distance < best[2]):
+        if distance > allowance:
+            continue
+        if distance and candidate in PROTECTED_WORDS:
+            # A word people say all the time is not a misheard name: "at" is
+            # one edit from the "ATC" wingman, and "Take a look at the map"
+            # must not be routed to it. Only an exact hit counts here.
+            continue
+        if best is None or distance < best[2]:
             best = (i, i + len(name_words), distance)
     return best
 

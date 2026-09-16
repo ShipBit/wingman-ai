@@ -179,6 +179,10 @@ class SettingsService:
         # Speech-to-text. One block for every wingman and both ways of talking.
         old_stt = old.stt
         new_stt = settings.stt
+        # The edits to a bundled hotword list are written by their own
+        # endpoint. The settings page holds the block it loaded, so taking its
+        # copy here would throw away every edit made since - keep ours.
+        new_stt.preset_overrides = old_stt.preset_overrides
         # The shared providers hold a reference to their settings object;
         # hand them the new one before anything reads it.
         self.parakeet.settings = new_stt.parakeet
