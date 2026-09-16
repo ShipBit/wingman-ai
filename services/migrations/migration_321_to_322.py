@@ -251,11 +251,8 @@ class Migration321To322(BaseMigration):
         fasterwhisper_config = stt.get("fasterwhisper_config")
         if isinstance(fasterwhisper_config, dict):
             fasterwhisper_config.pop("additional_hotwords", None)
-            # FasterWhisper's hotwords become the provider-independent vocabulary.
-            hotwords = fasterwhisper_config.pop("hotwords", None)
-            if hotwords:
-                stt["vocabulary"] = list(dict.fromkeys(list(stt.get("vocabulary") or []) + list(hotwords)))
-                self.log(f"settings: {len(hotwords)} FasterWhisper hotwords are now the speech vocabulary")
+            # Not carried over into the new vocabulary: that list starts clean.
+            fasterwhisper_config.pop("hotwords", None)
         whispercpp = stt.get("whispercpp")
         if isinstance(whispercpp, dict) and "enable" in whispercpp:
             whispercpp.pop("enable")

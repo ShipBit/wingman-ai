@@ -952,6 +952,23 @@ class SkillStt:
         current[:] = [word for word in current if word not in drop]
         return before - len(current)
 
+    def remember_spelling(self, correct: str, heard: str | None = None) -> bool:
+        """Teach the transcription a spelling for good: it goes into the user's
+        vocabulary in Settings and applies to every provider. `heard` is what
+        the transcript wrote instead; with it, that exact form is replaced,
+        without it, anything close to `correct` is. Returns False when the
+        entry was already there or no settings service is available."""
+        service = getattr(self._wingman, "settings_service", None)
+        if service is None:
+            return False
+        from services.audio.vocabulary import format_entry
+
+        return bool(service.add_vocabulary([format_entry(correct, heard)]))
+
+    def forget_spelling(self, word: str) -> int:
+        service = getattr(self._wingman, "settings_service", None)
+        return service.remove_vocabulary([word]) if service else 0
+
 
 class SkillConversation:
     """Read + append to the live conversation, and summarize it (free, local)."""

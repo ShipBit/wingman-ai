@@ -111,6 +111,7 @@ class ToolExecutor:
         execute_command_fn: Callable[["CommandConfig", bool], Awaitable[tuple]],
         play_to_user_fn: Callable[[str], Awaitable[None]],
         local_ai_service,
+        settings_service=None,
         update_tool_response_fn: Callable[[str, str], Awaitable[bool]],
         add_tool_response_fn: Callable,
         pending_tool_calls: list,
@@ -170,6 +171,7 @@ class ToolExecutor:
                     mcp_registry=mcp_registry,
                     capability_registry=capability_registry,
                     persistent_memory_service=persistent_memory_service,
+                    settings_service=settings_service,
                     get_command_fn=get_command_fn,
                     execute_command_fn=execute_command_fn,
                     play_to_user_fn=play_to_user_fn,
@@ -238,6 +240,7 @@ class ToolExecutor:
         get_command_fn: Callable[[str], "CommandConfig | None"],
         execute_command_fn: Callable[["CommandConfig", bool], Awaitable[tuple]],
         play_to_user_fn: Callable[[str], Awaitable[None]],
+        settings_service=None,
     ) -> tuple[str, str | None, "Skill | None", str | None]:
         """Dispatches a single function call to the appropriate handler.
 
@@ -270,6 +273,16 @@ class ToolExecutor:
         instant_response = ""
         used_skill = None
         tool_label = None
+
+        # ── 0. Speech vocabulary tools ──────────────────────────────
+        if function_name in ("vocabulary_remember", "vocabulary_forget") and settings_service:
+            from services.audio.vocabulary_tools import run_vocabulary_tool
+
+            function_response = run_vocabulary_tool(function_name, function_args, settings_service)
+            await printr.print_async(
+                function_response, color=LogType.INFO, source_name=self._wingman_name
+            )
+            return function_response, None, None, f"🔤 {function_name}"
 
         # ── 1. Persistent memory tools ──────────────────────────────
         if (

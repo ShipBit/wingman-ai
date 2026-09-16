@@ -37,6 +37,7 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from providers.interfaces import LlmInterface, TtsInterface
+from services.audio.vocabulary_tools import VOCABULARY_TOOLS
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -710,6 +711,7 @@ class Wingman:
             mcp_registry=self.mcp_registry,
             capability_registry=self.capability_registry,
             persistent_memory_service=self.persistent_memory_service,
+            settings_service=self.settings_service,
             get_command_fn=self.command_executor.get_command,
             execute_command_fn=self.command_executor.execute_command,
             play_to_user_fn=self.play_to_user,
@@ -731,6 +733,7 @@ class Wingman:
             mcp_registry=self.mcp_registry,
             capability_registry=self.capability_registry,
             persistent_memory_service=self.persistent_memory_service,
+            settings_service=self.settings_service,
             get_command_fn=self.command_executor.get_command,
             execute_command_fn=self.command_executor.execute_command,
             play_to_user_fn=self.play_to_user,
@@ -973,6 +976,9 @@ class Wingman:
 
         if self.persistent_memory_service:
             tools.extend(self.persistent_memory_service.get_tool_definitions())
+
+        if self.settings_service:
+            tools.extend(VOCABULARY_TOOLS)
 
         return tools
 

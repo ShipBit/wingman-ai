@@ -105,7 +105,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
-from services.audio.vocabulary import detect_from_config
+from services.audio.vocabulary import detect_from_config, spoken_names
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -1635,9 +1635,8 @@ class WingmanCore(WebSocketUser):
         in the active config plus whatever their skills added at runtime."""
         if not self.tower:
             return []
-        words: list[str] = []
+        words: list[str] = spoken_names(self.tower.config)
         for wingman in self.tower.wingmen:
-            words.append(wingman.name)
             words.extend(wingman.stt_hotwords)
         return words
 

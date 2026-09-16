@@ -12,7 +12,9 @@ match unless the word is one edit away. That keeps "complete" from turning
 into "Computer" while "Computa" still does.
 
 Fuzzy matching corrects spellings, not hearing: a word the model dropped or
-replaced with something unrelated stays wrong.
+replaced with something unrelated stays wrong. For those there is the second
+kind of entry, `heard=correct`: an exact replacement, "Jump down=Jumptown".
+That is what a wingman writes when the user says "from now on spell it X".
 """
 
 import re
@@ -27,6 +29,22 @@ MAX_PHRASE_WORDS = 3
 
 _TOKEN = re.compile(r"[\w'-]+|[^\w'-]+", re.UNICODE)
 _WORD = re.compile(r"^[\w'-]+$", re.UNICODE)
+_MAPPING = re.compile(r"^\s*(.+?)\s*(?:=|->|→)\s*(.+?)\s*$")
+
+
+def parse_entry(entry: str) -> tuple[str, str | None]:
+    """(correct spelling, what was heard or None) for one list entry."""
+    entry = " ".join(str(entry).split())
+    m = _MAPPING.match(entry)
+    if m:
+        return m.group(2), m.group(1)
+    return entry, None
+
+
+def format_entry(correct: str, heard: str | None = None) -> str:
+    correct = " ".join(str(correct).split())
+    heard = " ".join(str(heard).split()) if heard else ""
+    return f"{heard}={correct}" if heard and heard.lower() != correct.lower() else correct
 
 
 def edit_allowance(entry: str) -> int:
@@ -48,10 +66,14 @@ class Vocabulary:
     def __init__(self, entries: Iterable[str]):
         # Longer phrases first so "Port Olisar" wins over "Port".
         seen: dict[str, str] = {}
-        for entry in entries:
-            entry = " ".join(str(entry).split())
-            if len(entry) >= MIN_WORD_LENGTH and _normalise(entry) not in seen:
-                seen[_normalise(entry)] = entry
+        # heard (normalised) -> correct, for the exact replacements
+        self._mappings: dict[str, str] = {}
+        for raw in entries:
+            correct, heard = parse_entry(raw)
+            if len(correct) >= MIN_WORD_LENGTH and _normalise(correct) not in seen:
+                seen[_normalise(correct)] = correct
+            if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
+                self._mappings[_normalise(heard)] = correct
         self.entries = sorted(seen.values(), key=lambda e: -len(e.split()))
         self._by_words: dict[int, list[tuple[str, str]]] = {}
         for entry in self.entries:
@@ -60,11 +82,14 @@ class Vocabulary:
                 self._by_words.setdefault(n, []).append((_normalise(entry), entry))
 
     def __bool__(self) -> bool:
-        return bool(self.entries)
+        return bool(self.entries) or bool(self._mappings)
 
     def match(self, phrase: str) -> str | None:
         """The entry this phrase is a misspelling of, or None."""
         key = _normalise(phrase)
+        mapped = self._mappings.get(key)
+        if mapped is not None:
+            return mapped
         n = len(key.split())
         best: tuple[int, str | None] = (10**6, None)
         for normalised, entry in self._by_words.get(n, ()):
@@ -82,7 +107,7 @@ class Vocabulary:
 
     def correct(self, text: str) -> str:
         """The text with every recognisable misspelling replaced."""
-        if not self.entries or not text:
+        if not self or not text:
             return text
         tokens = _TOKEN.findall(text)
         word_positions = [i for i, t in enumerate(tokens) if _WORD.match(t)]
@@ -91,7 +116,7 @@ class Vocabulary:
         while i < len(word_positions):
             replaced = False
             for n in range(min(MAX_PHRASE_WORDS, len(word_positions) - i), 0, -1):
-                if n not in self._by_words:
+                if n not in self._by_words and not self._mappings:
                     continue
                 first, last = word_positions[i], word_positions[i + n - 1]
                 phrase = "".join(tokens[first : last + 1])
@@ -117,7 +142,6 @@ class Vocabulary:
 
 # --- finding candidates in a configuration ---
 
-_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|[_\-]+")
 # Where a capital letter says nothing about the word: sentence starts, line
 # starts (with or without a bullet, number, markdown emphasis or quote), and
 # the word in front of a colon, which is a heading.
@@ -159,18 +183,27 @@ def detect_from_text(text: str, titles: bool = False) -> list[str]:
     return found
 
 
-def detect_from_config(config) -> list[str]:
-    """Special words from a loaded Config: wingman names, command names and
-    their spoken triggers, and proper nouns from prompts and backstories."""
+def spoken_names(config) -> list[str]:
+    """What the active configuration says people will say: every wingman's
+    name and every spoken command trigger. Applied at runtime, not stored."""
     words: list[str] = []
     for wingman in (config.wingmen or {}).values():
         if wingman.disabled:
             continue
         words.append(wingman.name)
         for command in wingman.commands or []:
-            words.extend(p for p in _CAMEL.split(command.name) if len(p) >= MIN_WORD_LENGTH)
-            for phrase in command.instant_activation or []:
-                words.extend(detect_from_text(phrase, titles=True))
+            words.extend(command.instant_activation or [])
+    return words
+
+
+def detect_from_config(config) -> list[str]:
+    """Special words a configuration suggests for the list: proper nouns from
+    backstories and prompts. Names and spoken triggers are not offered, they
+    count at runtime anyway (`spoken_names`)."""
+    words: list[str] = []
+    for wingman in (config.wingmen or {}).values():
+        if wingman.disabled:
+            continue
         prompts = wingman.prompts
         if prompts:
             words.extend(detect_from_text(prompts.backstory or ""))

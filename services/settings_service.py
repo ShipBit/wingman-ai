@@ -95,6 +95,53 @@ class SettingsService:
         self.local_ai_service = local_ai_service
         self.stt_provider_manager = stt_provider_manager
 
+    # --- speech vocabulary ---
+
+    def add_vocabulary(self, entries: list[str]) -> list[str]:
+        """Add entries ("Hurston" or "Houston=Hurston"), persist, return what
+        was new. Used by the wingman tools and the skill facade."""
+        from services.audio.vocabulary import format_entry, parse_entry
+
+        current = list(self.settings.stt.vocabulary or [])
+        known = {e.lower() for e in current}
+        added: list[str] = []
+        for raw in entries:
+            correct, heard = parse_entry(raw)
+            entry = format_entry(correct, heard)
+            if len(correct) < 3 or entry.lower() in known:
+                continue
+            current.append(entry)
+            known.add(entry.lower())
+            added.append(entry)
+        if added:
+            self.settings.stt.vocabulary = current
+            self.config_manager.save_settings_config()
+            self.printr.print(
+                f"Speech vocabulary: added {', '.join(added)}", server_only=True, color=LogType.INFO
+            )
+        return added
+
+    def remove_vocabulary(self, words: list[str]) -> int:
+        """Drop every entry whose correct spelling or heard form matches."""
+        from services.audio.vocabulary import parse_entry
+
+        drop = {" ".join(w.split()).lower() for w in words if w}
+        current = list(self.settings.stt.vocabulary or [])
+        kept = [
+            e for e in current
+            if parse_entry(e)[0].lower() not in drop
+            and (parse_entry(e)[1] or "").lower() not in drop
+            and e.lower() not in drop
+        ]
+        removed = len(current) - len(kept)
+        if removed:
+            self.settings.stt.vocabulary = kept
+            self.config_manager.save_settings_config()
+            self.printr.print(
+                f"Speech vocabulary: removed {removed} entries", server_only=True, color=LogType.INFO
+            )
+        return removed
+
     # GET /settings
     def get_settings(self):
         config = self.config_manager.settings_config
