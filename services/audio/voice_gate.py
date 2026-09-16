@@ -119,8 +119,11 @@ class VoiceGate:
         if self.mode != "held":
             return None
         utterance = self._finish(truncated=False)
+        peak, score = self.last_peak, self.last_best_score
         self.mode = "closed"
         self._reset_capture()
+        # Keep the numbers of the clip just closed for the caller's log line.
+        self.last_peak, self.last_best_score = peak, score
         return utterance
 
     def _begin(self, mode: str) -> None:
@@ -130,6 +133,10 @@ class VoiceGate:
             self._on_reset()
 
     def _reset_capture(self) -> None:
+        # Diagnostics for the log line when a clip is dropped: how loud was
+        # it, and how sure was the detector at best.
+        self.last_peak = 0.0
+        self.last_best_score = 0.0
         self._frames: list[np.ndarray] = []
         self._speaking = False
         self._speech_run = 0
@@ -144,7 +151,10 @@ class VoiceGate:
         if self.mode == "closed":
             self._pre_roll.append(frame)
             return None
-        is_speech = self._vad(frame) >= self.params.threshold
+        score = self._vad(frame)
+        is_speech = score >= self.params.threshold
+        self.last_best_score = max(self.last_best_score, score)
+        self.last_peak = max(self.last_peak, float(np.max(np.abs(frame))))
         if self.mode == "held":
             return self._feed_held(frame, is_speech)
         return self._feed_armed(frame, is_speech)

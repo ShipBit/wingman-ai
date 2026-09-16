@@ -1561,8 +1561,11 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.RECORDING_STOPPED,
         )
         if result is False:
+            gate = self.voice_gate
             self.printr.print(
-                f"Skipped recording ({name}) - no speech detected",
+                f"Skipped recording ({name}) - no speech detected "
+                f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
+                f"threshold {gate.params.threshold:.2f})",
                 color=LogType.WARNING,
                 source_name=name,
                 command_tag=CommandTag.IGNORED_RECORDING,
