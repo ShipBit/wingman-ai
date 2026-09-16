@@ -1,452 +1,244 @@
-# Star Citizen: places, moons, stations, outposts and commodities as people say them.
-# Distilled 2026-09-16 from the UEX location labels and the commodity list; plain
-# English words were left out, the speech models know those already. A name that
-# is also an English word is listed in quotes, `"Name"`: exact hits get the casing, nothing
-# nearby is pulled in.
+# Star Citizen: the names a speech model gets wrong. Planets, moons, stations,
+# outposts, companies, minerals, ships and commodities, one entry per name.
+# Distilled 2026-09-16 from the UEX location and commodity lists and cleaned by
+# hand: plain English words are left out, the models know those, and a place
+# that only repeats a name listed here ("Baijini Clinic", "Farro Data IV") is
+# left out too, the corrector fixes the name inside the longer phrase.
+# A name that is also an English word is listed in quotes, `"Name"`: exact hits
+# get the casing, nothing nearby is pulled in.
 Aberdeen
-AcryliPlex Composite
-Adair Retreat
+AcryliPlex
+Adair
 Adir
-Adira Falls Apartments
+Adira
 Agricium
-Agricultural Supplies
+Allinide
 Altruciatoxin
-Amiant Pod
-Amioshi Plague
+Amiant
+Amioshi
+Anvik
 Aphorite
 Apoxygenite
-Arccorp
 ArcCorp
-ArcCorp Daymar
-ArcCorp Yela
 Area 18
 "Arial"
 Ashland
 Aslarite
 Atlasium
-Attritus Alignment II
-Attritus Alignment III
-Attritus OLP
-August Dunlow
+Attritus
 Awala
 Baijini
-Baijini above ArcCorp
-Baijini Clinic
-Baijini Point
-Balto Blind
+Balto
 "Barrens"
-Barton Flats
-Baud Compound-A
-Baud Compound-B
-Baud Compound-C
-Baud Compound-D
 Beradom
-Bevic Convention
+Bevic
 Bexalite
-Biological Samples
+Bilva
 Birbari
-Blackrock Exchange
+Blackrock
 "Bloom"
-Blue Bilva
 Borase
-Brentworth Care
-Brio Breaker Yard
+Brentworth
+Brio
 "Buckets"
-Bud Growery
-Bueno Ravine
-Cadmium Allinide
-Cafe Musain
 "Calliope"
-Caplan Circuit
+Cantwell
+Caplan
 Carinite
-Cave Kopion Horn
 Cellin
-Cellin farming
-Cellin Rayari
-Cellin Terra Mills
-Chawla Beach
+Chawla
 "Checkmate"
-Checkmate Habs
 Chilad
-CK13-GID Seed Blend
 "Clio"
-Cloudrest Retreat
-Combat Supplies
+Cloudrest
 Compboard
-Connor
-Construction Materials
-Construction Pieces
-Covalex Gundo
-Covalex Shipping Gundo
-Coven
+Covalex
 Criska
 "Crusader"
 Cry-Astro
-Cry-Astro Service
 CryoPod
-CryoPod (Vanduul)
+Dasi
 Dawu
 Daymar
-Daymar Shubin
-DCSR2
-Deakins Research
-Decari Pod
-Degnous Root
+Deakins
+Decari
+Degnous
 Delamar
+Deltana
 Detatrine
-Dezaki Compound-A
-Dezaki Compound-B
-Dezaki Compound-C
-Dezaki Compound-D
+Dezaki
 Diluthermex
-Dinger
 Dipur
-Distilled Spirits
 Dolivine
 Dopple
-Downlow
-Drifters
-Dudley & Daughters
 Dunboro
-Dupree Industrial Manufacturing
+Dunlow
+Dupree
 Dymantium
 DynaFlex
 Elespo
 "Endgame"
-Endgame Clinic
-Endgame Habs
 Erden
 Eriesium
 Euterpe
 Everus Harbor
-Everus Harbor Clinic
 Fairo
-Farro Data I
-Farro Data II
-Farro Data III
-Farro Data IV
-Farro Data IX
-Farro Data V
-Farro Data VI
-Farro Data VII
-Farro Data VIII
-Farro Data X
-Feo Canyon
+Farro
 Feynmaline
-Fillmore Compound-A
-Fillmore Compound-B
-Fillmore Compound-C
-Fillmore Compound-D
-Fireworks
-Flareweed Stalk
-Fotia Seedpod
-Freelancer
-Frontier Fighters Hideout
-Fuego
-G-HEX
-Gaffney Compound-A
-Gaffney Compound-B
-Gaffney Compound-C
-Gaffney Compound-D
-Gallete Family Farms
-Gallete Farms
+Fillmore
+Flareweed
+Fotia
+Gaffney
+Gallete
 Gandan
 "Gaslight"
-Gaslight Habs
-Gasping Weevil Eggs
-Genmod Seeds
-Glaciem Ring
+Genmod
+Glaciem
 Glacosite
-Golden Medmon
-Golden Riviera
-Gonzo
-Gray Gardens
 Grim HEX
+Growery
+Gundo
 Hadanite
-Hard Knocks
 Hartmoore
-Hasbin Hall
+Hasbin
 Hasik
-Heart of the Woods
-Hela Regret
 Hephaestanite
-HexaPolyMesh Coating
-Hickes Research
-HLX99 Hyperprocessors
-Hollows
-Human Food Bars
-Humboldt Mines
+HexaPolyMesh
+Hickes
+Humboldt
 Hurston
 Ignis
-Inc.
-Inert Materials
-INS Jericho
-Irradiated Kopion Horn
-Irradiated Valakkar Egg
-Irradiated Valakkar Fang (Adult)
-Irradiated Valakkar Fang (Apex)
-Irradiated Valakkar Fang (Juvenile)
-Irradiated Valakkar Hide
-Irradiated Valakkar Pearl
-Irradiated Valakkar Pearl (Grade A)
-Irradiated Valakkar Pearl (Grade AA)
-Irradiated Valakkar Pearl (Grade AAA)
-Irradiated Valakkar Pearl (Grade B)
-Irradiated Valakkar Pearl (Grade C)
 "Ita"
 Iteke
 Jaclium
 Jahlium
 Janalite
-Jumping Limes
+Jericho
 Jumptown
 Kabir
-Kant Peak
+Kaltag
 Kareah
-Kareah around Cellin
-Keeger Belt
-Kel-To Rx Clinic
-Kelo Bottom
-Kinder Plots
+Keeger
+Kel-To
+Kinga
 Klescher
-Klescher Rehabilitation
-Klescher Rehabilitation Facilities
 Klipra
-Kopion Horn
-Kudre Ore
-Kudre Ore Mine
-Lamina Alignment II
-Lamina Alignment III
-Lamina OLP
+Kopion
+Kudre
+Lamina
 Laranite
-Last Landings
 Lastaprene
-Lazarus Phoenix-I
-Lazarus Phoenix-II
-Lazarus Phoenix-III
-Lazarus Tithonus-I
-Lazarus Tithonus-II
-Lazarus Tithonus-III
-Lazarus Transport Phoenix-I
-Lazarus Transport Phoenix-II
-Lazarus Transport Phoenix-III
-Lazarus Transport Tithonus-I
-Lazarus Transport Tithonus-II
-Lazarus Transport Tithonus-III
+Lazarus
 Lespin
 Levski
-LifeCure Medsticks
+LifeCure
 Lindinium
+Livengood
 Lorville
-Lorville Outskirts
-Loveridge Mineral Reserve
-Lowdown
-Luminalia Gift
+Loveridge
+Luminalia
 Lycara
 Lyria
-M&V Bar
-Magda
-Mainline
+McGrath
 MedGel
-Medical Supplies
+Medmon
 MedPens
-Megumi Clinic
-Megumi Refueling
-Megumi Refueling Clinic
-Megumi Refueling Habs
-Melodic Fields
+Medsticks
+Megumi
 Menian
+MetroLoop
 MicroTech
-Minlo Spire
-mobyGlass Personal Computers
-Mogote Aid Shelter
+Minlo
+mobyGlass
+Mogote
 Moka
-Molina Mold Samples
-Molina Mold Treatment
-Molina Ventilation Filters
+Molina
 Moluto
 Monox
-Moreland Hills
-MT MetroLoop
-MT Planetary Services
-Narena Rest
-NB Int.
-NBIS Parking
+Moreland
+Musain
+Narena
 Neograph
 Nereus
-Nevermind
 New Babbage
-New Babbage Plaza
-Nuen Waste Management
-Nuiqsut Emergency Shelter
+Nuen
+Nuiqsut
 Nyx
-Nyx I
-Nyx II
-Nyx III
 Olisar
 Omnapoxy
-Operations
-Operations Office
-Operations office
 Orbituary
-Orbituary Clinic
-Orbituary Habs
-Organics
-Organs
 "Orison"
-Orphanage
-Osoian Hides
-Ostler Claim
+Osoian
+Ostler
 Ouratite
 OxyPens
-Oza
 Pakote
 Partillium
-Party Favors
-Patch City Habs
 Peska
-Pingala Seeds
+Pingala
 Pitambu
 Port Olisar
-Port Olisar Transfer
 Port Tressler
-Port Tressler Clinic
 Prashad
-Pressurized Ice
-Processed Food
 Prota
 "Pyro"
-Pyro II
-Pyro III
-Pyro IV
-Pyro VI
 Quantainium
-QV Breaker
-Ranta Dung
-Rat Nest Habs
-Rat's Nest
+Ranta
 Rayari
-Rayari Anvik Research
-Rayari Cantwell Research
-Rayari Deltana Research
-Rayari Kaltag Research
-Rayari Livengood Research
-Rayari McGrath Research
 Reawick
-Reclamation & Disposal
-Recycled Material Composite
-Redfield Compound-A
-Redfield Compound-B
-Redfield Compound-C
-Redfield Compound-D
-Redfin Energy Modulators
-Regiment Downs
-Reyes Compound-A
-Reyes Compound-B
-Reyes Compound-C
-Reyes Compound-D
+Redfield
+Redfin
+Reyes
 Riccite
-Rico Remains
-Riker Memorial
-Rod's Fuel & Supplies
-Rolo Crater
-RS1 Odysey Spacesuits
-Ruin Habs
+Riker
 Ruin Station
-Ruptura Alignment I
-Ruptura Alignment II
-Ruptura Alignment III
-Ruptura OLP
+Ruptura
 Rustville
-Ruto Associate
-Ruto Satellite
-Sacren Plot
+Sacren
 Sadaryx
 Saktigar
 Saldynium
 Sarilus
-Savannah Kopion Horn
 Savrilium
-Scarper Turn
-SCR
-Seraphim Station
-Shades
+Scarper
+Selo
+Seraphim
 Shadowfall
-Shady Glen Farms
-Shallow Fields
-Shanks
 Sharga
-Shepherd's Rest
-Ship Decoy Countermeasures
-Ship Noise Countermeasures
 Shubin
-Shubin Daymar
-Shubin ore
 Silnex
-Sloane Compound-A
-Sloane Compound-B
-Sloane Compound-C
-Sloane Compound-D
+Sloane
 Slowburn
 Solanki
-Souvenirs
 Stanton
-Stanton Gateway
-Stanton System
 Starfarer
-Starlight Service Habs
-Starlight Service Station
 Stileron
-Stims
 Stonetree
-Sulfer Moss
-Sunset Berries
 Taranite
 Tavan
 Teasa
 Technotics
 Terra Mills
-Terra Mills HydroFarm
 Thaquray
 ThermalFoam
+Tithonus
 Torite
-TPF
-Tram & Myers
 Tremonte
 Trilo
-Tundra Kopion Horn
 Ulaga
-Valakkar Fang
-Valakkar Fang (Adult)
-Valakkar Fang (Apex)
-Valakkar Fang (Juvenile)
-Vasko Compound-A
-Vasko Compound-B
-Vasko Compound-C
-Vasko Compound-D
+Valakkar
+Vanduul
+Vasko
 Vatra
-Virus Cultures
-Vivere Alignment I
-Vivere Alignment II
-Vivere Alignment III
-Vivere OLP
+Vivere
 Vuur
-Wailing Rock
 Wala
-Wallace
 Walvis
-Wikelo Emporium Dasi
-Wikelo Emporium Kinga
-Wikelo Emporium Selo
-Wiley Flats
-Wuotan Seed
+Wikelo
+Wuotan
 Xa'Pyen
-Yadar Valley
+Yadar
 Yafa
 Yela
-Yela asteroid
-Yela asteroid belt
-Yela Rayari
-Yormandi Eye
-Yormandi Tongue
+Yormandi
 Zeta-Prolanide
