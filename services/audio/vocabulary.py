@@ -78,9 +78,11 @@ class Vocabulary:
             if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
                 self._mappings[_normalise(heard)] = correct
         self.entries = sorted(seen.values(), key=lambda e: -len(e.split()))
-        # (entry without spaces, entry) for the space-insensitive comparison
-        self._joined: list[tuple[str, str]] = [
-            (_normalise(e).replace(" ", ""), e) for e in self.entries if len(e.split()) <= MAX_PHRASE_WORDS
+        # (entry without spaces, word count, entry) for the space-insensitive comparison
+        self._joined: list[tuple[str, int, str]] = [
+            (_normalise(e).replace(" ", ""), len(e.split()), e)
+            for e in self.entries
+            if len(e.split()) <= MAX_PHRASE_WORDS
         ]
 
     def __bool__(self) -> bool:
@@ -105,10 +107,16 @@ class Vocabulary:
             return None
         joined = key.replace(" ", "")
         best: tuple[int, str | None] = (10**6, None)
-        for normalised, entry in self._joined:
+        for normalised, entry_words, entry in self._joined:
             if joined == normalised:
                 return entry
+            # A different word count is a split or a merge ("micro tech"):
+            # allowed only when the letters themselves are all but the same,
+            # otherwise a three-word window swallows a small word next to a
+            # name ("new babbage on" -> "New Babbage").
             allowance = edit_allowance(min(len(joined), len(normalised)))
+            if len(words) != entry_words:
+                allowance = 1
             distance = Levenshtein.distance(joined, normalised, score_cutoff=allowance)
             if distance > allowance:
                 continue
