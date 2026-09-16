@@ -87,7 +87,7 @@ def main() -> None:
         print("  start:", audio_input.start())
         time.sleep(3.0)
         audio_input.stop()
-        print(f"  AudioInput: {len(peaks)} frames, peak {max(peaks) if peaks else 0.0:.4f}")
+        print(f"  AudioInput at {audio_input.device_rate} Hz: {len(peaks)} frames, peak {max(peaks) if peaks else 0.0:.4f}")
     except Exception as e:
         print("AudioInput could not run:", e)
 

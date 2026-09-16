@@ -1,12 +1,18 @@
 """The microphone stream.
 
-Opened once and kept open. The audio callback copies each frame into a queue
-and returns; a consumer thread takes the frames out and hands them to whoever
-listens. Nothing else happens here: no gain, no detection, no recording.
-Muting the microphone is not this class's business, the gate downstream simply
-ignores the frames.
+Opened once and kept open, at the device's own sample rate: asking for 16 kHz
+would make PortAudio change the device's rate, and on a duplex interface the
+speakers then fail to open ("cannot do in current context") and the input
+goes silent. The blocks are resampled to 16 kHz here.
 
-The stream is restarted only when the input device changes.
+The audio callback copies each block into a queue and returns; a consumer
+thread resamples, cuts 512-sample frames and hands them to whoever listens.
+Nothing else happens here: no gain, no detection, no recording. Muting the
+microphone is not this class's business, the gate downstream simply ignores
+the frames.
+
+The stream is restarted when the input device changes, and by a watchdog when
+it stops delivering while it claims to be open.
 """
 
 import queue
@@ -17,10 +23,14 @@ import numpy as np
 import sounddevice
 
 from api.enums import LogType
+from services.audio.resample import Resampler
 from services.printr import Printr
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512  # 32 ms, the Silero VAD frame
+FRAME_SECONDS = FRAME_SAMPLES / SAMPLE_RATE
+# No block for this long while the stream is open means the stream is dead.
+STALL_SECONDS = 3.0
 
 
 class AudioInput:
@@ -35,6 +45,8 @@ class AudioInput:
         # shown once per failure, not once per retry.
         self.available = False
         self._reported = False
+        self._resampler: Optional[Resampler] = None
+        self.device_rate = SAMPLE_RATE
 
     # --- lifecycle ---
 
@@ -42,12 +54,16 @@ class AudioInput:
         with self._lock:
             self._close_stream()
             try:
+                device = sounddevice.default.device[0]
+                info = sounddevice.query_devices(device, kind="input")
+                self.device_rate = int(round(float(info["default_samplerate"]))) or SAMPLE_RATE
+                self._resampler = Resampler(self.device_rate)
                 self._stream = sounddevice.InputStream(
-                    samplerate=SAMPLE_RATE,
+                    samplerate=self.device_rate,
                     channels=1,
                     dtype="float32",
-                    blocksize=FRAME_SAMPLES,
-                    device=sounddevice.default.device[0],
+                    blocksize=int(round(self.device_rate * FRAME_SECONDS)),
+                    device=device,
                     callback=self._callback,
                 )
                 self._stream.start()
@@ -69,7 +85,11 @@ class AudioInput:
                     target=self._consume, name="audio-input", daemon=True
                 )
                 self._consumer.start()
-            self.printr.print("Microphone stream opened.", color=LogType.INFO, server_only=True)
+            self.printr.print(
+                f"Microphone stream opened ({info['name']}, {self.device_rate} Hz).",
+                color=LogType.INFO,
+                server_only=True,
+            )
             return True
 
     def restart(self) -> bool:
@@ -96,11 +116,8 @@ class AudioInput:
         if status and status.input_overflow:
             # Frames were lost in the driver. Nothing to do but know about it.
             self.printr.print("Microphone: input overflow.", server_only=True, color=LogType.WARNING)
-        frame = indata[:, 0].copy()
-        if frame.shape[0] != FRAME_SAMPLES:
-            return
         try:
-            self._queue.put_nowait(frame)
+            self._queue.put_nowait(indata[:, 0].copy())
         except queue.Full:
             # The consumer is stuck; dropping a frame is better than blocking the
             # audio thread, which would stall every stream in the process.
@@ -110,11 +127,25 @@ class AudioInput:
 
     def _consume(self) -> None:
         while True:
-            frame = self._queue.get()
-            if frame is None:
-                return
             try:
-                self.on_frame(frame)
+                block = self._queue.get(timeout=STALL_SECONDS)
+            except queue.Empty:
+                if self.available:
+                    self.printr.print(
+                        "Microphone stopped delivering audio; reopening the stream.",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    self.restart()
+                continue
+            if block is None:
+                return
+            resampler = self._resampler
+            if resampler is None:
+                continue
+            try:
+                for frame in resampler.push(block):
+                    self.on_frame(frame)
             except Exception as e:
                 self.printr.print(
                     f"Audio input: frame handler failed: {e}",
