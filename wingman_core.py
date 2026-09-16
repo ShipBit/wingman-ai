@@ -105,6 +105,7 @@ from services.audio import (
     VoiceGate,
 )
 from services.audio.transcription_worker import RECORDING_PATH
+from services.audio.vocabulary import detect_from_config
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -172,6 +173,15 @@ class WingmanCore(WebSocketUser):
             path="/voice-activation/status",
             endpoint=self.get_mic_status,
             response_model=MicStatusResponse,
+            tags=tags,
+        )
+        # Special words for the transcript correction, read from the active
+        # configuration: wingman names, commands, proper nouns in prompts.
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stt/vocabulary/detect",
+            endpoint=self.detect_stt_vocabulary,
+            response_model=list[str],
             tags=tags,
         )
         # The microphone test in Settings: hold, speak, release, read the text.
@@ -1743,6 +1753,15 @@ class WingmanCore(WebSocketUser):
             return True
         hits = sum(1 for w in meaningful if w in spoken)
         return hits / len(meaningful) >= ECHO_RATIO
+
+    # POST /stt/vocabulary/detect
+    async def detect_stt_vocabulary(self) -> list[str]:
+        """Special words the active configuration suggests. The client merges
+        them into the list; nothing is saved here."""
+        config = self.config_service.current_config
+        if not config:
+            return []
+        return detect_from_config(config)
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

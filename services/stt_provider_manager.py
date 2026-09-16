@@ -287,7 +287,7 @@ class SttProviderManager:
         config = FasterWhisperSttConfig(
             beam_size=1, best_of=1, temperature=0.0,
             no_speech_threshold=0.7, language_detection_threshold=0.5,
-            multilingual=False, language=None, hotwords=[],
+            multilingual=False, language=None,
         )
         try:
             result = self.fasterwhisper.transcribe(

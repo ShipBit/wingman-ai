@@ -213,9 +213,6 @@ class WhispercppSttConfig(BaseModel):
 class FasterWhisperSttConfig(BaseModel):
     beam_size: int
     language: Optional[str] = None
-    hotwords: list[str]
-    """Words the decoder is nudged towards. The names of the active config's
-    wingmen are added at transcription time, so they need not be listed here."""
     best_of: int
     temperature: float
     no_speech_threshold: float
@@ -621,6 +618,12 @@ class SttSettings(BaseModel):
     """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
     en-US. Used by the Wingman backend; the local providers have their own
     language settings."""
+
+    vocabulary: list[str] = []
+    """Special words no speech model knows: place names, ship names, people.
+    Every transcript is corrected against them afterwards, whatever the
+    provider; FasterWhisper is also nudged towards them while decoding. The
+    names of the active wingmen count without being listed."""
 
     whispercpp: WhispercppSettings
     fasterwhisper: FasterWhisperSettings

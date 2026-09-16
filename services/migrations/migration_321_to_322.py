@@ -249,8 +249,13 @@ class Migration321To322(BaseMigration):
         if isinstance(parakeet_config, dict) and "language" in parakeet_config:
             parakeet_config.pop("language")
         fasterwhisper_config = stt.get("fasterwhisper_config")
-        if isinstance(fasterwhisper_config, dict) and "additional_hotwords" in fasterwhisper_config:
-            fasterwhisper_config.pop("additional_hotwords")
+        if isinstance(fasterwhisper_config, dict):
+            fasterwhisper_config.pop("additional_hotwords", None)
+            # FasterWhisper's hotwords become the provider-independent vocabulary.
+            hotwords = fasterwhisper_config.pop("hotwords", None)
+            if hotwords:
+                stt["vocabulary"] = list(dict.fromkeys(list(stt.get("vocabulary") or []) + list(hotwords)))
+                self.log(f"settings: {len(hotwords)} FasterWhisper hotwords are now the speech vocabulary")
         whispercpp = stt.get("whispercpp")
         if isinstance(whispercpp, dict) and "enable" in whispercpp:
             whispercpp.pop("enable")

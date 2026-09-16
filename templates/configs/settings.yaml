@@ -12,6 +12,9 @@ stt:
   languages:
     - en-US
     - de-DE
+  # Special words no speech model knows; every transcript is corrected
+  # against them. The Settings page can fill this from your configuration.
+  vocabulary: []
   parakeet:
     run_locally: true
     model_variant: v3
@@ -31,7 +34,6 @@ stt:
     no_speech_threshold: 0.7
     language_detection_threshold: 0.5
     multilingual: false
-    hotwords: []
   whispercpp:
     host: http://127.0.0.1
     port: 8080

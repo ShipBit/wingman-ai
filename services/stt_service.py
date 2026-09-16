@@ -15,6 +15,7 @@ import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
+from services.audio.vocabulary import Vocabulary
 from services.printr import Printr
 
 if TYPE_CHECKING:
@@ -78,7 +79,19 @@ class SttService:
                 server_only=True,
             )
             return None
-        return text
+        corrected = self.vocabulary().correct(text)
+        if corrected != text:
+            self.printr.print(
+                f"Vocabulary: '{text}' -> '{corrected}'", server_only=True, color=LogType.INFO
+            )
+        return corrected
+
+    def vocabulary(self) -> Vocabulary:
+        """The user's list plus the names of the active wingmen and whatever
+        their skills added. Built per call; the lists are short and may
+        change between two utterances."""
+        stt = self.settings_service.settings.stt
+        return Vocabulary(list(stt.vocabulary or []) + self.get_hotwords())
 
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt
@@ -90,12 +103,10 @@ class SttService:
             return result.text if result else None
 
         if provider == SttProvider.FASTER_WHISPER:
-            hotwords = list(stt.fasterwhisper_config.hotwords or [])
-            hotwords.extend(self.get_hotwords())
             result = self.fasterwhisper.transcribe(
                 config=stt.fasterwhisper_config,
                 filename=filename,
-                hotwords=list(set(hotwords)),
+                hotwords=self.vocabulary().entries,
             )
             return result.text if result else None
 
