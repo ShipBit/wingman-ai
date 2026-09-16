@@ -920,10 +920,9 @@ class SkillStt:
     """Sanctioned speech-to-text capabilities for skills.
 
     Which provider transcribes is a global setting and stays out of reach. What
-    a skill may do is teach the local decoder words: hotwords are names the
-    engine is nudged towards (FasterWhisper reads them, the other providers do
-    not). They live for the wingman's runtime only and are never written to
-    a config file.
+    a skill may do is add hotwords: names the transcript is corrected
+    against, whichever provider transcribed it. They live for the wingman's
+    runtime only and are never written to a config file.
     """
 
     def __init__(self, wingman: "Wingman") -> None:

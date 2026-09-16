@@ -127,7 +127,7 @@ class Helper:
             return
 
         self.__handler_debug.write(
-            f"{'Unloading' if unload else 'Syncing'} UEX unique names with FasterWhisper hotword list..."
+            f"{'Unloading' if unload else 'Syncing'} UEX unique names with the hotword list..."
         )
         from skills.uexcorp.uexcorp.data_access.city_data_access import (
             CityDataAccess,
@@ -195,15 +195,15 @@ class Helper:
             hotword_change = stt.add_hotwords(uex_hotwords)
         if hotword_change < 0:
             self.__handler_debug.write(
-                f"Removed {abs(hotword_change)} hotwords from FasterWhisper."
+                f"Removed {abs(hotword_change)} UEX hotwords."
             )
         elif hotword_change > 0:
             self.__handler_debug.write(
-                f"Synced {hotword_change} new hotwords with FasterWhisper."
+                f"Synced {hotword_change} new UEX hotwords."
             )
         else:
             self.__handler_debug.write(
-                "No new hotwords synced with FasterWhisper."
+                "No new UEX hotwords to sync."
             )
 
     def wait(self, seconds: int):

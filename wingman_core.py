@@ -62,13 +62,11 @@ from api.interface import (
     WingmanInitializationError,
 )
 from providers.elevenlabs import ElevenLabs
-from providers.faster_whisper import FasterWhisper
 from providers.parakeet import Parakeet
 from providers.google import GoogleGenAI
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
 from providers.wingman_support import WingmanSupport
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -291,27 +289,6 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
-            methods=["GET"],
-            path="/fasterwhisper/modelsizes",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_modelsizes,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/fasterwhisper/computetypes",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_computetypes,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/fasterwhisper/devices",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_devices,
-            tags=tags,
-        )
-        self.router.add_api_route(
             methods=["POST"],
             path="/xvasynth/start",
             endpoint=self.start_xvasynth,
@@ -417,7 +394,6 @@ class WingmanCore(WebSocketUser):
         # existed but were never registered, so every one of those buttons hit
         # a method the generated client did not have.
         for test_path, test_endpoint in (
-            ("/settings/test/whispercpp", self.test_whispercpp),
             ("/settings/test/parakeet", self.test_parakeet),
             ("/settings/test/xvasynth", self.test_xvasynth),
             ("/settings/test/pocket-tts", self.test_pocket_tts),
@@ -775,12 +751,6 @@ class WingmanCore(WebSocketUser):
             "hud_server_settings_changed", self._on_hud_server_settings_changed
         )
 
-        self.whispercpp = Whispercpp(
-            settings=self.settings_service.settings.stt.whispercpp,
-        )
-        self.fasterwhisper = FasterWhisper(
-            settings=self.settings_service.settings.stt.fasterwhisper,
-        )
         self.parakeet = Parakeet(
             settings=self.settings_service.settings.stt.parakeet,
         )
@@ -788,8 +758,6 @@ class WingmanCore(WebSocketUser):
         self.stt_service = SttService(
             settings_service=self.settings_service,
             secret_keeper=self.secret_keeper,
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
             parakeet=self.parakeet,
             get_hotwords=self._stt_hotwords,
             app_root_path=app_root_path,
@@ -811,7 +779,6 @@ class WingmanCore(WebSocketUser):
             system_manager=self.system_manager,
             model_downloader=self.model_downloader,
             parakeet=self.parakeet,
-            fasterwhisper=self.fasterwhisper,
             app_root_path=app_root_path,
         )
 
@@ -835,8 +802,6 @@ class WingmanCore(WebSocketUser):
         )
 
         self.settings_service.initialize(
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
             parakeet=self.parakeet,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
@@ -2140,54 +2105,6 @@ class WingmanCore(WebSocketUser):
             return []
         return wingman.get_conversation_messages(strip_nulls=strip_nulls)
 
-    # GET /fasterwhisper/modelsizes
-    def get_fasterwhisper_modelsizes(self):
-        model_sizes = [
-            "tiny",
-            "tiny.en",
-            "base",
-            "base.en",
-            "small",
-            "small.en",
-            "distil-small.en",
-            "medium",
-            "medium.en",
-            "distil-medium.en",
-            "large-v1",
-            "large-v2",
-            "large-v3",
-            "large",
-            "distil-large-v2",
-            "distil-large-v3",
-            "large-v3-turbo",
-            "turbo",
-        ]
-        return model_sizes
-
-    # GET /fasterwhisper/computetypes
-    def get_fasterwhisper_computetypes(self):
-        compute_types = [
-            "default",
-            "auto",
-            "int8",
-            "int16",
-            "int8_float16",
-            "int8_float32",
-            "float16",
-            "float32",
-        ]
-        return compute_types
-
-    # GET /fasterwhisper/devices
-    def get_fasterwhisper_devices(self):
-        devices = [
-            "auto",
-            "cpu",
-        ]
-        if self.system_manager.is_cuda_available():
-            devices.append("cuda")
-        return devices
-
     def _collect_pocket_tts_voice_ids(self) -> list[str]:
         """Collect the PocketTTS voice IDs used by wingmen in the current tower."""
         if not self.tower:
@@ -2550,7 +2467,7 @@ class WingmanCore(WebSocketUser):
         except Exception:
             # this can fail:
             # - on MacOS (always)
-            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
+            # - in Dev mode if the dev hasn't copied the models dir to the repository
             # in these cases, we return an empty list and the client will lock the controls and show a warning.
             pass
         return voices
@@ -3423,33 +3340,6 @@ class WingmanCore(WebSocketUser):
             "snapshots": [s.model_dump() for s in snapshots],
             "runs": results,
         }
-
-    # POST /settings/test/whispercpp
-    async def test_whispercpp(self) -> TestConnectionResult:
-        """Test the whisper.cpp server by sending a short audio file for transcription."""
-        settings = self.settings_service.settings.stt.whispercpp
-        try:
-            response = requests.get(
-                url=f"{settings.host}:{settings.port}",
-                timeout=5,
-            )
-            if response.ok:
-                return TestConnectionResult(success=True, provider="whispercpp")
-            return TestConnectionResult(
-                success=False,
-                provider="whispercpp",
-                error=f"Server returned status {response.status_code}",
-            )
-        except requests.ConnectionError:
-            return TestConnectionResult(
-                success=False,
-                provider="whispercpp",
-                error=f"Could not connect to {settings.host}:{settings.port}. Is the server running?",
-            )
-        except Exception as e:
-            return TestConnectionResult(
-                success=False, provider="whispercpp", error=str(e)
-            )
 
     # POST /settings/test/parakeet
     async def test_parakeet(self) -> TestConnectionResult:

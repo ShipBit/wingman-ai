@@ -9,9 +9,7 @@ from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
 )
-from providers.faster_whisper import FasterWhisper
 from providers.parakeet import Parakeet
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
@@ -40,8 +38,6 @@ class SettingsService:
         self.converted_audio_settings = False
         self.get_settings()
         self.settings_events = PubSub()
-        self.whispercpp: Whispercpp = None
-        self.fasterwhisper: FasterWhisper = None
         self.parakeet: Parakeet = None
         self.xvasynth: XVASynth = None
         self.pocket_tts: PocketTTS = None
@@ -80,16 +76,12 @@ class SettingsService:
 
     def initialize(
         self,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
         parakeet: Parakeet,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         local_ai_service: LocalAiService = None,
         stt_provider_manager=None,
     ):
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.parakeet = parakeet
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
@@ -190,7 +182,6 @@ class SettingsService:
         # The shared providers hold a reference to their settings object;
         # hand them the new one before anything reads it.
         self.parakeet.settings = new_stt.parakeet
-        self.fasterwhisper.settings = new_stt.fasterwhisper
         self.config_manager.settings_config.stt = new_stt
 
         reload_needed = new_stt.provider != old_stt.provider
@@ -200,13 +191,6 @@ class SettingsService:
                 old_pk.model_variant != new_pk.model_variant
                 or old_pk.execution_provider != new_pk.execution_provider
                 or old_pk.run_locally != new_pk.run_locally
-            )
-        elif new_stt.provider == SttProvider.FASTER_WHISPER:
-            old_fw, new_fw = old_stt.fasterwhisper, new_stt.fasterwhisper
-            reload_needed = reload_needed or (
-                old_fw.model_size != new_fw.model_size
-                or old_fw.device != new_fw.device
-                or old_fw.compute_type != new_fw.compute_type
             )
         if reload_needed and self.stt_provider_manager:
             # Let the manager unload the old model and download/load the new one.
@@ -236,14 +220,6 @@ class SettingsService:
             )
         ):
             await self.set_audio_devices(settings.audio.input, settings.audio.output)
-
-        # whispercpp
-        if not self.whispercpp:
-            self.printr.toast_error(
-                "Whispercpp is not initialized. Please run SettingsService.initialize()",
-            )
-            return
-        self.whispercpp.update_settings(settings=settings.stt.whispercpp)
 
         # XVASynth
         if not self.xvasynth:
@@ -276,9 +252,8 @@ class SettingsService:
                 self.config_manager.settings_config.pocket_tts.model = pocket_lang
                 self.pocket_tts.update_settings(settings=settings.pocket_tts)
 
-            # Cascade to STT language (FasterWhisper + Parakeet)
+            # Cascade to the STT language
             stt_lang = None if new_spoken == "multilingual" else new_spoken
-            settings.stt.fasterwhisper_config.language = stt_lang
             settings.stt.parakeet.language = stt_lang
 
             self.printr.print(

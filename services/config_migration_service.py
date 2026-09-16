@@ -287,37 +287,18 @@ class ConfigMigrationService:
         return version_parts < min_parts
 
     def _apply_fresh_install_cuda_settings(self):
-        """Auto-detect CUDA availability and update FasterWhisper settings for fresh installs.
-
-        This ensures that fresh installations automatically use CUDA if available,
-        rather than defaulting to CPU.
-        """
+        """A fresh install runs Parakeet on the GPU when there is one."""
         cuda_available = self.system_manager.is_cuda_available()
         gpu_name = self.system_manager.get_gpu_name()
+        execution_provider = "cuda" if cuda_available else "cpu"
 
-        device = "cuda" if cuda_available else "cpu"
-        compute_type = "auto"
-
-        self.log(
-            "Fresh install detected - configuring FasterWhisper for optimal performance"
-        )
+        self.log("Fresh install detected - configuring speech-to-text")
         self.log(f"- detected GPU: {gpu_name or 'None'}")
-        self.log(
-            f"- setting stt.fasterwhisper.device to '{device}' (CUDA {'available' if cuda_available else 'not available'})"
-        )
-        self.log(
-            f"- setting stt.fasterwhisper.compute_type to '{compute_type}'"
-        )
+        self.log(f"- setting stt.parakeet.execution_provider to '{execution_provider}'")
 
-        # Update the settings config
         settings = self.config_manager.settings_config
-        if (
-            settings
-            and settings.stt
-            and settings.stt.fasterwhisper
-        ):
-            settings.stt.fasterwhisper.device = device
-            settings.stt.fasterwhisper.compute_type = compute_type
+        if settings and settings.stt and settings.stt.parakeet:
+            settings.stt.parakeet.execution_provider = execution_provider
             self.config_manager.save_settings_config()
             self.log("- settings saved successfully")
 

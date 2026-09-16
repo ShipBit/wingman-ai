@@ -10,7 +10,6 @@ synchronous: every provider blocks on a model or an HTTP request, and both
 callers already run on a worker thread.
 """
 
-import re
 import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -19,15 +18,9 @@ from services.audio.vocabulary import Vocabulary, apply_override, load_preset
 from services.printr import Printr
 
 if TYPE_CHECKING:
-    from providers.faster_whisper import FasterWhisper
     from providers.parakeet import Parakeet
-    from providers.whispercpp import Whispercpp
     from services.secret_keeper import SecretKeeper
     from services.settings_service import SettingsService
-
-# whisper.cpp likes to describe the room: "(wind blowing)", "[music]", "*sighs*".
-_NOISE_PATTERN = re.compile(r"(\(.*?\))|(\[.*?\])|(\*.*?\*)")
-_WHITESPACE_PATTERN = re.compile(r"[\s,]+")
 
 
 class SttService:
@@ -35,8 +28,6 @@ class SttService:
         self,
         settings_service: "SettingsService",
         secret_keeper: "SecretKeeper",
-        whispercpp: "Whispercpp",
-        fasterwhisper: "FasterWhisper",
         parakeet: "Parakeet",
         get_hotwords: Optional[Callable[[], list[str]]] = None,
         app_root_path: str = ".",
@@ -44,8 +35,6 @@ class SttService:
         self.settings_service = settings_service
         self.app_root_path = app_root_path
         self.secret_keeper = secret_keeper
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.parakeet = parakeet
         # Names the decoder should recognise, read fresh on every call so a
         # config switch (other wingmen, other names) is picked up without a
@@ -112,31 +101,6 @@ class SttService:
             )
             return result.text if result else None
 
-        if provider == SttProvider.FASTER_WHISPER:
-            result = self.fasterwhisper.transcribe(
-                config=stt.fasterwhisper_config,
-                filename=filename,
-                hotwords=self.vocabulary().entries,
-            )
-            return result.text if result else None
-
-        if provider == SttProvider.WHISPERCPP:
-            result = self.whispercpp.transcribe(
-                filename=filename, config=stt.whispercpp_config
-            )
-            if not result:
-                return None
-            cleaned = _WHITESPACE_PATTERN.sub(
-                " ", _NOISE_PATTERN.sub("", result.text)
-            ).strip()
-            if cleaned != result.text:
-                self.printr.print(
-                    f"Cleaned original transcription: {result.text}",
-                    server_only=True,
-                    color=LogType.SYSTEM,
-                )
-            return cleaned
-
         if provider == SttProvider.WINGMAN_PRO:
             from providers.wingman_subscription import WingmanSubscription
 
@@ -147,33 +111,6 @@ class SttService:
             result = subscription.transcribe(
                 filename=filename, languages=stt.languages
             )
-            return result.text if result else None
-
-        if provider == SttProvider.OPENAI:
-            from providers.open_ai import OpenAi
-
-            # Secrets are loaded at startup and refreshed on save; the sync
-            # retrieve path is not available on this thread.
-            api_key = self.secret_keeper.secrets.get("openai")
-            if not api_key:
-                self.printr.toast_error(
-                    "OpenAI is the speech-to-text provider but no OpenAI API key is set."
-                )
-                return None
-            result = OpenAi(api_key=api_key).transcribe(filename=filename)
-            return result.text if result else None
-
-        if provider == SttProvider.GROQ:
-            from providers.open_ai import OpenAi
-
-            api_key = self.secret_keeper.secrets.get("groq")
-            if not api_key:
-                self.printr.toast_error(
-                    "Groq is the speech-to-text provider but no Groq API key is set."
-                )
-                return None
-            groq = OpenAi(api_key=api_key, base_url="https://api.groq.com/openai/v1/")
-            result = groq.transcribe(filename=filename, model="whisper-large-v3-turbo")
             return result.text if result else None
 
         self.printr.toast_error(f"Unknown speech-to-text provider '{provider}'.")

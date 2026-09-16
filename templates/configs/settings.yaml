@@ -4,11 +4,12 @@ streamer_mode: false
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
 stt:
-  # Which provider transcribes what you say. One choice for every wingman and
-  # for both ways of talking (record key and voice activation).
+  # Which provider transcribes what you say: parakeet (on this machine, or
+  # on a server of yours) or wingman_pro (the subscription's cloud service).
+  # One choice for every wingman and for both ways of talking.
   provider: parakeet
-  # Languages the cloud provider may auto-detect. The local providers have
-  # their own language field.
+  # Languages the cloud provider may auto-detect. Parakeet has its own
+  # language field.
   languages:
     - en-US
     - de-DE
@@ -23,25 +24,11 @@ stt:
     run_locally: true
     model_variant: v3
     execution_provider: cpu
-    host: http://127.0.0.1
+    # Only read when run_locally is off: the Parakeet server of yours.
+    # Empty until you fill it in.
+    host: ""
     port: 9876
   parakeet_config:
-    temperature: 0.0
-  fasterwhisper:
-    model_size: base
-    device: cpu
-    compute_type: auto
-  fasterwhisper_config:
-    beam_size: 1
-    best_of: 2
-    temperature: 0
-    no_speech_threshold: 0.7
-    language_detection_threshold: 0.5
-    multilingual: false
-  whispercpp:
-    host: http://127.0.0.1
-    port: 8080
-  whispercpp_config:
     temperature: 0.0
 voice_activation:
   enabled: false

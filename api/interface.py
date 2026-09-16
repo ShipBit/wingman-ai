@@ -166,21 +166,6 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppSettings(BaseModel):
-    host: str
-    port: int
-
-
-class FasterWhisperSettings(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-    """tiny, tiny.en, base, base.en, small, small.en, distil-small.en, medium, medium.en, distil-medium.en, large-v1, large-v2, large-v3, large, distil-large-v2, distil-large-v3, large-v3-turbo, or turbo"""
-    model_size: str
-    """default (model original), auto (fastest available on device), int8, int8_float16 etc. - see https://opennmt.net/CTranslate2/quantization.html#quantize-on-model-conversion"""
-    compute_type: str
-    """cpu, cuda, auto"""
-    device: str
-
-
 class XVASynthSettings(BaseModel):
     enable: bool
     host: str
@@ -206,30 +191,6 @@ class PocketTTSPreloadResult(BaseModel):
     reason: Optional[str] = None
 
 
-class WhispercppSttConfig(BaseModel):
-    temperature: float
-
-
-class FasterWhisperSttConfig(BaseModel):
-    beam_size: int
-    language: Optional[str] = None
-    best_of: int
-    temperature: float
-    no_speech_threshold: float
-    multilingual: bool
-    language_detection_threshold: float
-
-
-class WhispercppTranscript(BaseModel):
-    text: str
-
-
-class FasterWhisperTranscript(BaseModel):
-    text: str
-    language: str
-    language_probability: float
-
-
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
     model_variant: str
@@ -238,8 +199,10 @@ class ParakeetSettings(BaseModel):
     """cpu, directml, coreml, or cuda"""
     language: Optional[str] = None
     """Transcription language. Empty means auto-detect."""
-    host: str
-    port: int
+    host: str = ""
+    """Where a Parakeet server runs when `run_locally` is off. Empty until
+    the user fills it in; nothing is contacted before that."""
+    port: int = 9876
 
 
 class ParakeetSttConfig(BaseModel):
@@ -638,8 +601,7 @@ class SttSettings(BaseModel):
     vocabulary: list[str] = []
     """Special words no speech model knows: place names, ship names, people.
     Every transcript is corrected against them afterwards, whatever the
-    provider; FasterWhisper is also nudged towards them while decoding. The
-    names of the active wingmen count without being listed."""
+    provider. The names of the active wingmen count without being listed."""
 
     presets: list[str] = ["star_citizen"]
     """Bundled word lists that apply on top of the user's own, by id
@@ -649,11 +611,7 @@ class SttSettings(BaseModel):
     preset_overrides: dict[str, PresetOverride] = {}
     """Per preset id: what the user added to and removed from the bundled list."""
 
-    whispercpp: WhispercppSettings
-    fasterwhisper: FasterWhisperSettings
     parakeet: ParakeetSettings
-    whispercpp_config: WhispercppSttConfig
-    fasterwhisper_config: FasterWhisperSttConfig
     parakeet_config: ParakeetSttConfig
 
 

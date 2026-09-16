@@ -165,6 +165,10 @@ class Migration321To322(BaseMigration):
         "languages",
         "parakeet",
         "parakeet_config",
+    )
+    # Providers 3.2.2 no longer ships: FasterWhisper, whisper.cpp, and the
+    # OpenAI and Groq transcription. Their settings are dropped, not carried.
+    REMOVED_STT_SECTIONS = (
         "fasterwhisper",
         "fasterwhisper_config",
         "whispercpp",
@@ -238,8 +242,8 @@ class Migration321To322(BaseMigration):
             stt["parakeet"] = parakeet
         if was and was != "parakeet":
             self.log_warning(
-                f"settings: speech-to-text '{was}' -> 'parakeet'. Parakeet is the "
-                "provider we recommend; the old one can be picked again in Settings."
+                f"settings: speech-to-text '{was}' -> 'parakeet'. Parakeet runs on "
+                "this machine; the subscription's cloud transcription can be picked in Settings."
             )
         elif not was:
             self.log("settings: speech-to-text set to 'parakeet'")
@@ -248,14 +252,12 @@ class Migration321To322(BaseMigration):
         parakeet_config = stt.get("parakeet_config")
         if isinstance(parakeet_config, dict) and "language" in parakeet_config:
             parakeet_config.pop("language")
-        fasterwhisper_config = stt.get("fasterwhisper_config")
-        if isinstance(fasterwhisper_config, dict):
-            fasterwhisper_config.pop("additional_hotwords", None)
-            # Not carried over into the new vocabulary: that list starts clean.
-            fasterwhisper_config.pop("hotwords", None)
-        whispercpp = stt.get("whispercpp")
-        if isinstance(whispercpp, dict) and "enable" in whispercpp:
-            whispercpp.pop("enable")
+        # The FasterWhisper hotword list is not carried over into the new
+        # vocabulary: that list starts clean.
+        for key in self.REMOVED_STT_SECTIONS:
+            if key in stt:
+                stt.pop(key)
+                self.log(f"settings: removed stt.{key} (provider no longer shipped)")
 
         new["stt"] = stt
         listening = {key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va}

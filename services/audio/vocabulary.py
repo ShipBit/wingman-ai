@@ -2,8 +2,8 @@
 
 Star Citizen players say "Hurston", "Crusader", "Port Olisar" all day, and
 the model writes "Houston", "Crusade", "Port Olive". No provider we ship lets
-us teach it those words at decoding time (FasterWhisper does, a little), so
-the transcript is corrected afterwards: every word, and every group of two or
+us teach it those words at decoding time, so the transcript is corrected
+afterwards: every word, and every group of two or
 three words, that lies within a few letters of a vocabulary entry becomes that
 entry.
 
