@@ -56,6 +56,13 @@ class ListenState(str, Enum):
 # event comes through a queue, and the microphone hears the reverb.
 PLAYBACK_TAIL_S = 1.5
 
+# Through speakers the microphone hears the wingman without a pause, so an
+# utterance said over it only ends when the wingman stops. To act on "stop"
+# before that, the last PROBE_WINDOW_MS of it are handed out every
+# PROBE_EVERY_MS while a wingman speaks.
+PROBE_EVERY_MS = 1000
+PROBE_WINDOW_MS = 2000
+
 
 class ListenController:
     def __init__(
@@ -64,8 +71,12 @@ class ListenController:
         on_utterance: Callable[[Utterance, Optional["Wingman"], bool], None],
         on_state_changed: Callable[["ListenState"], None],
         on_dropped: Optional[Callable[[Optional["Wingman"]], None]] = None,
+        on_probe: Optional[Callable[[np.ndarray], None]] = None,
     ):
         self._gate = gate
+        # A look at the utterance under way while a wingman speaks.
+        self._on_probe = on_probe
+        self._probe_frames = 0
         # (utterance, held wingman or None, whether a wingman was speaking)
         self._on_utterance = on_utterance
         self._on_state_changed = on_state_changed
@@ -140,6 +151,13 @@ class ListenController:
 
     def _playback_overlaps(self) -> bool:
         return self.playing or time.monotonic() - self._playback_ended_at < PLAYBACK_TAIL_S
+
+    def discard_current(self) -> None:
+        """Drop the utterance under way: a look at it was enough."""
+        with self._lock:
+            self._gate.discard()
+            self._heard_while_playing = False
+            self._probe_frames = 0
 
     def _take_heard_while_playing(self) -> bool:
         """Whether a wingman spoke during the utterance that just ended, and
@@ -258,6 +276,7 @@ class ListenController:
                 self._heard_while_playing = True
             wingman = self.held_wingman
             playing = self._take_heard_while_playing() if utterance is not None else False
+            probe = self._probe_if_due(utterance, state)
             if self._release_in is not None and utterance is None:
                 self._release_in -= 1
                 if self._release_in <= 0:
@@ -268,12 +287,31 @@ class ListenController:
                 # capture_stop, so a piece cut off here is kept, not dispatched.
                 self._capture_parts.append(utterance)
                 return
+        if probe is not None and self._on_probe is not None:
+            self._on_probe(probe)
         if utterance is None:
             return
         if state == ListenState.HELD:
             self._on_utterance(utterance, wingman, playing)
         elif state == ListenState.ARMED:
             self._on_utterance(utterance, None, playing)
+
+    def _probe_if_due(self, utterance: Optional[Utterance], state: ListenState) -> Optional[np.ndarray]:
+        """Under the lock. The last window of the utterance under way, once
+        every PROBE_EVERY_MS while a wingman speaks; else None."""
+        if (
+            utterance is not None
+            or state != ListenState.ARMED
+            or not self.playing
+            or not self._gate.is_capturing
+        ):
+            self._probe_frames = 0
+            return None
+        self._probe_frames += 1
+        if self._probe_frames * FRAME_MS < PROBE_EVERY_MS:
+            return None
+        self._probe_frames = 0
+        return self._gate.recent(PROBE_WINDOW_MS)
 
     # --- derive ---
 

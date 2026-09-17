@@ -8,6 +8,7 @@ import threading
 import time
 from typing import Optional
 from xml.etree import ElementTree
+import numpy as np
 import pygame
 from google.genai import types
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
@@ -843,6 +844,7 @@ class WingmanCore(WebSocketUser):
             on_utterance=self._on_utterance,
             on_state_changed=self._on_listen_state_changed,
             on_dropped=self._on_ptt_dropped,
+            on_probe=self._on_probe,
         )
         self.listen_controller.set_listen_while_speaking(
             self.settings_service.settings.voice_activation.listen_while_speaking
@@ -1670,6 +1672,43 @@ class WingmanCore(WebSocketUser):
             wav_path,
             on_text=lambda text, benchmark: self._on_transcript(text, benchmark, wingman, False),
         )
+
+    def _on_probe(self, samples: np.ndarray) -> None:
+        """From the listen controller while a wingman speaks: the last seconds
+        of what the microphone hears. Through speakers that is the wingman
+        itself, and the utterance only ends when it stops; a "stop" said over
+        it has to be found before that. Only with transcription on the user's
+        own hardware: on the subscription every look would cost."""
+        if not self.tower or self.settings_service.settings.stt.provider != SttProvider.PARAKEET:
+            return
+        self.transcription_worker.submit_utterance(
+            Utterance(samples=samples, truncated=True),
+            on_text=lambda text, _benchmark: self._on_probe_text(text),
+        )
+
+    def _on_probe_text(self, text: str) -> None:
+        """On the transcription thread. A stop word over the wingman stops
+        it and the utterance is dropped; the user talking over it stops it
+        and the utterance carries on to be answered when it ends."""
+        if not self.audio_player.is_playing:
+            return
+        words = _words(text)
+        own = self._without_echo(words)
+        if self._is_stop(own) or self._has_stop_word(own):
+            self.printr.print(
+                f"Heard '{text}' over the wingman - stopping playback.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            self.listen_controller.discard_current()
+            self._run_on_main_loop(self.stop_playback())
+        elif not self._is_echo(words):
+            self.printr.print(
+                f"Heard '{text}' over the wingman - stopping playback, listening on.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            self._run_on_main_loop(self.stop_playback())
 
     def _on_transcript(
         self,

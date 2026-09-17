@@ -160,6 +160,20 @@ class VoiceGate:
         way, or the first frames of one that may still turn out to be noise."""
         return self._speaking or self._first_speech is not None or bool(self._candidate)
 
+    def recent(self, window_ms: int) -> Optional[np.ndarray]:
+        """The last window of the utterance under way, for a look at it before
+        it ends. None while nothing is captured."""
+        if not self._speaking or not self._frames:
+            return None
+        count = max(1, int(round(window_ms / FRAME_MS)))
+        samples = np.concatenate(self._frames[-count:]).astype(np.float32, copy=False)
+        return _normalise(samples)
+
+    def discard(self) -> None:
+        """Drop the utterance under way and wait for the next onset, in the
+        same mode. Used once a look at it has been acted on."""
+        self._after_emit()
+
     # --- frames ---
 
     def feed(self, frame: np.ndarray) -> Optional[Utterance]:
