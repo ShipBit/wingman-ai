@@ -124,8 +124,6 @@ ECHO_RATIO = 0.6
 # Fewer words of the user's own than this, next to a mostly echoed sentence,
 # are misheard echo, not the user.
 MIN_OWN_WORDS = 3
-# A stop word said over the wingman counts within this many words.
-STOP_WITHIN_WORDS = 4
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -1715,6 +1713,9 @@ class WingmanCore(WebSocketUser):
         # Those are taken out first; the decisions below are about the rest.
         own = self._without_echo(words) if during_playback else words
         if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
+            # Over the wingman, a stop word anywhere in what the user said
+            # is a stop; the rest of it was talking over an answer they did
+            # not want, not a request.
             if playing:
                 self.printr.print(
                     f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
@@ -1795,10 +1796,10 @@ class WingmanCore(WebSocketUser):
         return all(word in every_word for word in words)
 
     def _has_stop_word(self, words: list[str]) -> bool:
-        """Whether a stop word stands in a short utterance. Used for what the
-        user said over the wingman: a "stop" between a few misheard echo
-        words still means stop, but not inside a whole sentence."""
-        if not words or len(words) > STOP_WITHIN_WORDS:
+        """Whether a stop word stands anywhere in the words. Used for what the
+        user said over the wingman: "stop" between misheard echo words and
+        their own protest still means stop."""
+        if not words:
             return False
         phrases = [
             tuple(_words(phrase))
