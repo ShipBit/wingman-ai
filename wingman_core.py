@@ -127,6 +127,14 @@ MIN_OWN_WORDS = 3
 STOP_AHEAD_SECONDS = 6.0
 
 
+def _key_source(key) -> str:
+    """What identifies a key while it is held. The scan code, not the name:
+    the hook may name the same key differently on the way down and up
+    ("shift" against "left shift"), and a release under another name would
+    leave the key held for good."""
+    return f"key:{key.scan_code}"
+
+
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
 
@@ -841,6 +849,7 @@ class WingmanCore(WebSocketUser):
             on_utterance=self._on_utterance,
             on_state_changed=self._on_listen_state_changed,
             on_dropped=self._on_ptt_dropped,
+            on_hold_expired=self._on_hold_expired,
         )
         self.listen_controller.set_listen_while_speaking(
             self.settings_service.settings.voice_activation.listen_while_speaking
@@ -1546,7 +1555,7 @@ class WingmanCore(WebSocketUser):
 
             if wingman:
                 if key:
-                    source = key.name
+                    source = _key_source(key)
                 elif mouse_button:
                     source = mouse_button
                 else:
@@ -1559,7 +1568,7 @@ class WingmanCore(WebSocketUser):
         if not self.tower:
             return
         if key is not None:
-            source = key.name
+            source = _key_source(key)
         elif mouse_button is not None:
             source = mouse_button
         elif joystick_config is not None:
@@ -1572,6 +1581,12 @@ class WingmanCore(WebSocketUser):
 
     def _ptt_down(self, source: str, wingman: Wingman) -> None:
         if not self.listen_controller.ptt_down(source, wingman):
+            self.printr.print(
+                f"Push-to-talk for {wingman.name} ignored: "
+                f"'{self.listen_controller.held_source}' still holds the microphone.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             return
         self.printr.print(
             f"Recording started ({wingman.name})",
@@ -1588,6 +1603,13 @@ class WingmanCore(WebSocketUser):
             f"Recording stopped ({name})",
             source_name=name,
             command_tag=CommandTag.RECORDING_STOPPED,
+        )
+
+    def _on_hold_expired(self, source: str) -> None:
+        self.printr.print(
+            f"'{source}' held the microphone for too long without a release - let go of it.",
+            color=LogType.WARNING,
+            server_only=True,
         )
 
     def _on_ptt_dropped(self, wingman: Wingman | None) -> None:

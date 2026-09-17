@@ -42,6 +42,12 @@ RELEASE_GRACE_MS = 300
 # without them. Only reached when the microphone stream stopped delivering.
 RELEASE_WATCHDOG_S = 1.0
 
+# No key is held down for this long, and no microphone test runs that long.
+# A hold that lasts longer lost its release: a key-up the hook never saw, a
+# client that went away with its mic button down. Without this the holder
+# stays, every later key is refused, and only a restart of Core helps.
+MAX_HOLD_S = 120.0
+
 
 class ListenState(str, Enum):
     OFF = "off"
@@ -64,8 +70,11 @@ class ListenController:
         on_utterance: Callable[[Utterance, Optional["Wingman"], bool], None],
         on_state_changed: Callable[["ListenState"], None],
         on_dropped: Optional[Callable[[Optional["Wingman"]], None]] = None,
+        on_hold_expired: Optional[Callable[[str], None]] = None,
     ):
         self._gate = gate
+        # A hold that lasted MAX_HOLD_S and was ended here; for the log.
+        self._on_hold_expired = on_hold_expired or (lambda _source: None)
         # (utterance, held wingman or None, whether a wingman was speaking)
         self._on_utterance = on_utterance
         self._on_state_changed = on_state_changed
@@ -79,6 +88,8 @@ class ListenController:
         # they never do, and without this timer the controller would stay HELD
         # for good: voice activation could not arm and no later key would hold.
         self._release_timer: Optional[threading.Timer] = None
+        # Fires when a hold has lasted MAX_HOLD_S; see the constant.
+        self._hold_timer: Optional[threading.Timer] = None
         # Clips the gate cut off a long capture (the microphone test), kept so
         # the caller gets everything it recorded and not just the tail.
         self._capture_parts: list[Utterance] = []
@@ -165,6 +176,7 @@ class ListenController:
             self.held_source = source
             self.held_wingman = wingman
             self._cancel_release()
+            self._watch_hold(source)
             self._apply()
             return True
 
@@ -188,6 +200,35 @@ class ListenController:
             if self._release_in is not None:
                 self._finish_release()
 
+    def _watch_hold(self, source: str) -> None:
+        """Called under the lock. Arms the timer that ends a hold nobody
+        released."""
+        self._cancel_hold_watch()
+        self._hold_timer = threading.Timer(MAX_HOLD_S, self._hold_watchdog, args=(source,))
+        self._hold_timer.daemon = True
+        self._hold_timer.start()
+
+    def _cancel_hold_watch(self) -> None:
+        if self._hold_timer is not None:
+            self._hold_timer.cancel()
+            self._hold_timer = None
+
+    def _hold_watchdog(self, source: str) -> None:
+        with self._lock:
+            if self.held_source != source:
+                return
+            self._hold_timer = None
+            if self.held_wingman is not None:
+                # A push-to-talk key: let the clip go the normal way.
+                self._finish_release()
+            else:
+                # A microphone test nobody stopped: drop it.
+                self._gate.release()
+                self._capture_parts = []
+                self.held_source = None
+                self._apply()
+            self._on_hold_expired(source)
+
     def _cancel_release(self) -> None:
         """Called under the lock. Drops a pending release and its watchdog."""
         self._release_in = None
@@ -203,6 +244,7 @@ class ListenController:
         self.held_source = None
         self.held_wingman = None
         self._cancel_release()
+        self._cancel_hold_watch()
         self._apply()
         if utterance is not None and wingman is not None:
             self._on_utterance(utterance, wingman, playing)
@@ -218,6 +260,7 @@ class ListenController:
             self.held_source = source
             self.held_wingman = None
             self._capture_parts = []
+            self._watch_hold(source)
             self._apply()
             return True
 
@@ -229,6 +272,7 @@ class ListenController:
             parts = self._capture_parts
             self._capture_parts = []
             self.held_source = None
+            self._cancel_hold_watch()
             self._apply()
             if parts:
                 # The gate cut the capture at max_utterance_s one or more
