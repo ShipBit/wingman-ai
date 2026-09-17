@@ -221,8 +221,10 @@ class Migration321To322(BaseMigration):
         return self._drop_stt(config, label)
 
     def migrate_settings(self, old: dict) -> dict:
-        """Split `voice_activation` into listening (stays) and transcribing (new `stt`)."""
+        """Split `voice_activation` into listening (stays) and transcribing (new `stt`),
+        and move the local support model from the 2B to the 4B."""
         new = dict(old)
+        self._upgrade_local_support_model(new)
         va = old.get("voice_activation")
         if not isinstance(va, dict):
             return new
@@ -284,6 +286,20 @@ class Migration321To322(BaseMigration):
         new["voice_activation"] = listening
         self.log("settings: moved the speech-to-text settings out of voice_activation into stt")
         return new
+
+    def _upgrade_local_support_model(self, settings: dict) -> None:
+        """Memory is written by one rewrite prompt from 3.2.2 on, and the 2B
+        cannot follow it: on the bench it returned nothing usable in 17 of 19
+        sessions. The 4B scores level with the cloud models. Only the old
+        default is moved; a model the user picked stays."""
+        llama = settings.get("llama_cpp")
+        if not isinstance(llama, dict):
+            return
+        if llama.get("support_model") == "Qwen3.5-2B-Q4_K_M.gguf":
+            llama = dict(llama)
+            llama["support_model"] = "Qwen3.5-4B-Q4_K_M.gguf"
+            settings["llama_cpp"] = llama
+            self.log("settings: local support model Qwen3.5-2B -> Qwen3.5-4B (the 2B cannot write memory any more)")
 
     def migrate_defaults(self, old: dict) -> dict:
         return self._migrate_wingman_config(old, "defaults")
