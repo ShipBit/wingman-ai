@@ -1,10 +1,16 @@
-"""From the device's rate down to 16 kHz, block by block.
+"""Between the devices' rates and ours, block by block.
 
 The microphone is opened at its own rate. Asking PortAudio for 16 kHz makes it
 set the device to 16 kHz, and on a duplex interface (one box for mic and
 speakers, a headset, an EVO4) the speakers then cannot open at their rate:
 CoreAudio answers "cannot do in current context" and the input goes silent.
 At the native rate nothing is changed on the device.
+
+The same holds the other way round: the speakers are opened at their own
+rate too, and what a voice provider sends at 16 or 24 kHz is converted on
+the way out (RateConverter). On a duplex device the output opening at the
+provider's rate would switch the device and cut the microphone off, right
+when the wingman starts to speak.
 
 The conversion is a stateful low-pass followed by linear interpolation. That
 is enough for speech at 16 kHz and needs nothing beyond numpy and scipy, which
@@ -73,3 +79,25 @@ class Resampler:
         self._carry = buffer[keep_from:]
         self._pos = next_pos - keep_from
         return out.astype(np.float32, copy=False)
+
+
+class RateConverter:
+    """Any rate to any rate, block by block, for one channel of output. The
+    same interpolation as the Resampler, with the low-pass only when going
+    down; going up there is nothing to alias. Every converted sample comes
+    back, no framing."""
+
+    def __init__(self, source_rate: int, target_rate: int):
+        self._inner = Resampler(source_rate, target_rate, frame=1)
+        if not self._inner.identity and target_rate > source_rate:
+            self._inner._taps = None
+
+    def convert(self, block: np.ndarray) -> np.ndarray:
+        block = np.asarray(block, dtype=np.float32).reshape(-1)
+        inner = self._inner
+        if inner.identity:
+            return block
+        if inner._taps is not None:
+            block, inner._zi = lfilter(inner._taps, 1.0, block, zi=inner._zi)
+            block = block.astype(np.float32, copy=False)
+        return inner._interpolate(block)

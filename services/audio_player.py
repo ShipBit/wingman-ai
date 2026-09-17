@@ -10,6 +10,7 @@ import sounddevice as sd
 from scipy.signal import resample
 from api.enums import LogType, SoundEffect
 from api.interface import SoundConfig
+from services.audio.resample import RateConverter
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.pub_sub import PubSub
@@ -52,6 +53,18 @@ class AudioPlayer:
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
 
+    @staticmethod
+    def output_rate(sample_rate: int) -> int:
+        """The rate the speakers are opened at: their own. Opening them at the
+        audio's rate switches the device, and on a duplex device (an EVO4, a
+        headset) that cuts the microphone off the moment a wingman starts to
+        speak. The audio is converted instead."""
+        try:
+            info = sd.query_devices(sd.default.device[1], kind="output")
+            return int(round(float(info["default_samplerate"]))) or int(sample_rate)
+        except Exception:
+            return int(sample_rate)
+
     def start_playback(
         self,
         audio,
@@ -60,6 +73,11 @@ class AudioPlayer:
         finished_callback,
         volume: list[float] | float,
     ):
+        device_rate = self.output_rate(sample_rate)
+        if device_rate != sample_rate:
+            audio = self._resample_audio(audio, sample_rate, device_rate)
+            sample_rate = device_rate
+
         def callback(outdata, frames, time, status):
             # this is a super hacky way to update volume while the playback is running
             local_volume = volume[0] if isinstance(volume, list) else volume
@@ -490,8 +508,20 @@ class AudioPlayer:
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]
 
+        device_rate = self.output_rate(sample_rate)
+        converters = [RateConverter(sample_rate, device_rate) for _ in range(channels)]
+
+        def to_device_rate(chunk: np.ndarray) -> np.ndarray:
+            if device_rate == sample_rate:
+                return chunk
+            if channels == 1:
+                return converters[0].convert(chunk)
+            planes = chunk.reshape(-1, channels)
+            converted = [converters[c].convert(planes[:, c]) for c in range(channels)]
+            return np.stack(converted, axis=1).reshape(-1)
+
         with sd.RawOutputStream(
-            samplerate=sample_rate,
+            samplerate=device_rate,
             channels=channels,
             dtype=dtype,
             callback=callback,
@@ -547,8 +577,10 @@ class AudioPlayer:
                     preview_chunks.append(data_in_numpy)
 
                 data_in_numpy = data_in_numpy * config.volume
+                # Listeners on the event (the client, an ESP32) get the audio
+                # as the provider made it; the speakers get it at their rate.
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
-                buffer.extend(processed_buffer)
+                buffer.extend(to_device_rate(data_in_numpy).astype(dtype).tobytes())
                 await self.stream_event.publish("audio", processed_buffer)
                 filled_size = buffer_callback(audio_buffer)
 
