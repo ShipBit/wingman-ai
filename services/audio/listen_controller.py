@@ -52,9 +52,9 @@ class ListenState(str, Enum):
 
 
 # For how long after a playback ended a new utterance still counts as said
-# during it. The wingman's last words are still in the room, the finished
-# event comes through a queue, and the microphone hears the reverb.
-PLAYBACK_TAIL_S = 1.5
+# during it: the finished event comes through a queue and the last words
+# are still on their way out of the headset.
+PLAYBACK_TAIL_S = 0.5
 
 
 class ListenController:

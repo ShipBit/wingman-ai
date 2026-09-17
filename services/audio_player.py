@@ -474,9 +474,13 @@ class AudioPlayer:
 
         def callback(outdata, frames, time, status):
             nonlocal buffer, stream_finished, data_received, mixed_pos
+            # Silence first, always. The stream starts before the voice
+            # provider has delivered its first chunk, and PortAudio hands
+            # the callback a buffer that still holds the previous playback:
+            # left as it is, that plays as a burst of noise.
+            outdata[:] = bytes(len(outdata))
             if data_received and len(buffer) == 0:
                 stream_finished = True
-                outdata[:] = bytes(len(outdata))  # Fill the buffer with zeros
                 return
 
             if len(buffer) > 0:
