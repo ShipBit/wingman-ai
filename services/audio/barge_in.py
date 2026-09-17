@@ -27,12 +27,16 @@ from services.audio.voice_gate import FRAME_MS
 MAX_DELAY_MS = 1000
 # Loudness history on both sides; the delay is found in it.
 HISTORY_MS = 3000
-# How much of it has to be there before the delay is looked for, and how
-# often it is looked for again.
+# How much of it has to be there before the delay is looked for the first
+# time, and how often it is looked for again once the history is full.
 DELAY_AFTER_MS = 1500
 DELAY_EVERY_MS = 500
-# The two curves have to agree this well for the delay to be believed.
+# The two curves have to agree this well for the delay to be believed, and
+# a new estimate replaces a known one only when it agrees at least about
+# as well as that one did. A short answer gives too little curve to trust
+# over what a long one showed.
 DELAY_MIN_CORRELATION = 0.5
+DELAY_WORSE_BY = 0.1
 # Over how many recent frames the gain is estimated: the median of the
 # ratio microphone to delayed output, so the user's voice in part of the
 # window does not move it.
@@ -72,6 +76,7 @@ class BargeInDetector:
         # not change between two answers, so the next one can be judged
         # from its first word.
         self._delay: Optional[int] = None
+        self._delay_score = 0.0
         self._gain = 0.0
         self._out: deque[float] = deque(maxlen=_frames(HISTORY_MS))
         self._mic: deque[float] = deque(maxlen=_frames(HISTORY_MS))
@@ -86,8 +91,9 @@ class BargeInDetector:
 
     def playback_started(self) -> None:
         self._playing = True
-        self._out.clear()
-        self._mic.clear()
+        # The loudness curves stay: the gap between two answers is quiet
+        # on both sides and the answers together give the delay a longer
+        # curve to be found in.
         self._ratios.clear()
         self._heard = 0
         self._since_delay = 0
@@ -118,11 +124,12 @@ class BargeInDetector:
         self._mic.append(mic)
         self._heard += 1
         self._since_delay += 1
-        if self._heard >= _frames(DELAY_AFTER_MS) and self._since_delay >= _frames(DELAY_EVERY_MS):
+        enough = self._heard >= _frames(DELAY_AFTER_MS) if self._delay is None else len(self._out) == self._out.maxlen
+        if enough and self._since_delay >= _frames(DELAY_EVERY_MS):
             self._since_delay = 0
-            delay = self._find_delay()
-            if delay is not None:
-                self._delay = delay
+            found = self._find_delay()
+            if found is not None and found[1] >= self._delay_score - DELAY_WORSE_BY:
+                self._delay, self._delay_score = found
         if self._delay is None:
             return False
         lagged = self._lagged_output()
@@ -154,10 +161,10 @@ class BargeInDetector:
         window = list(self._out)[max(0, index - 1) : index + 2]
         return max(window) if window else 0.0
 
-    def _find_delay(self) -> Optional[int]:
+    def _find_delay(self) -> Optional[tuple[int, float]]:
         """The lag at which the microphone curve follows the output curve
-        best. None when they do not clearly follow each other, e.g. with a
-        headset, where nothing echoes at all."""
+        best, with how well it does. None when they do not clearly follow
+        each other, e.g. with a headset, where nothing echoes at all."""
         out = np.array(self._out, dtype=np.float32)
         mic = np.array(self._mic, dtype=np.float32)
         if out.std() <= 0.0 or mic.std() <= 0.0:
@@ -171,4 +178,4 @@ class BargeInDetector:
             score = float(np.dot(a, b) / len(a))
             if score > best:
                 best_lag, best = lag, score
-        return best_lag
+        return None if best_lag is None else (best_lag, best)
