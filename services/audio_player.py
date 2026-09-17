@@ -15,9 +15,8 @@ from api.interface import SoundConfig
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.pub_sub import PubSub
-# How far back output_level() looks. The echo of the output reaches the
-# microphone late, a few hundred milliseconds on Bluetooth.
-OUTPUT_LEVEL_WINDOW_S = 0.4
+# How far back output_level() looks by default.
+OUTPUT_LEVEL_WINDOW_S = 0.1
 
 
 def _full_scale(dtype) -> float:
@@ -159,7 +158,7 @@ class AudioPlayer:
             self._output_levels.append((time.monotonic(), rms))
 
     def output_level(self, window_s: float = OUTPUT_LEVEL_WINDOW_S) -> float:
-        """The loudest the output has been in the last moments, 0..1."""
+        """The loudest the output has been in the last window, 0..1."""
         since = time.monotonic() - window_s
         return max((rms for at, rms in list(self._output_levels) if at >= since), default=0.0)
 
