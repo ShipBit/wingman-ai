@@ -10,6 +10,7 @@ import sounddevice as sd
 from scipy.signal import resample
 from api.enums import LogType, SoundEffect
 from api.interface import SoundConfig
+from services.audio.input import device_blocksize
 from services.audio.resample import RateConverter
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -148,6 +149,7 @@ class AudioPlayer:
         self.stream = sd.OutputStream(
             samplerate=sample_rate,
             channels=channels,
+            blocksize=device_blocksize(sample_rate),
             callback=callback,
             finished_callback=finished_callback,
         )
@@ -524,6 +526,7 @@ class AudioPlayer:
             samplerate=device_rate,
             channels=channels,
             dtype=dtype,
+            blocksize=device_blocksize(device_rate),
             callback=callback,
         ) as stream:
             if self.is_playing:

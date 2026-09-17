@@ -29,6 +29,14 @@ from services.printr import Printr
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512  # 32 ms, the Silero VAD frame
 FRAME_SECONDS = FRAME_SAMPLES / SAMPLE_RATE
+
+
+def device_blocksize(rate: int) -> int:
+    """Frames per block at this rate, one VAD frame's worth. The speakers use
+    the same: on a duplex device, two streams with different block sizes make
+    CoreAudio reconfigure the device under the other one, which then fails
+    with "cannot do in current context" or glitches."""
+    return int(round(rate * FRAME_SECONDS))
 # No block for this long while the stream is open means the stream is dead.
 STALL_SECONDS = 3.0
 
@@ -69,7 +77,7 @@ class AudioInput:
                     samplerate=self.device_rate,
                     channels=1,
                     dtype="float32",
-                    blocksize=int(round(self.device_rate * FRAME_SECONDS)),
+                    blocksize=device_blocksize(self.device_rate),
                     device=device,
                     callback=self._callback,
                 )
