@@ -4,43 +4,74 @@ streamer_mode: false
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
 stt:
-  # Which provider transcribes what you say. One choice for every wingman and
-  # for both ways of talking (record key and voice activation).
+  # Which provider transcribes what you say: parakeet (on this machine, or
+  # on a server of yours) or wingman_pro (the subscription's cloud service).
+  # One choice for every wingman and for both ways of talking.
   provider: parakeet
-  # Languages the cloud provider may auto-detect. The local providers have
-  # their own language field.
+  # Languages the cloud provider may auto-detect. Parakeet has its own
+  # language field.
   languages:
     - en-US
     - de-DE
+  # Special words no speech model knows; every transcript is corrected
+  # against them. The Settings page can fill this from your configuration.
+  vocabulary: []
+  # Bundled name lists switched on in Settings.
+  presets:
+    - star_citizen
+  preset_overrides: {}
   parakeet:
     run_locally: true
     model_variant: v3
     execution_provider: cpu
-    host: http://127.0.0.1
+    # Only read when run_locally is off: the Parakeet server of yours.
+    # Empty until you fill it in.
+    host: ""
     port: 9876
   parakeet_config:
-    temperature: 0.0
-  fasterwhisper:
-    model_size: base
-    device: cpu
-    compute_type: auto
-  fasterwhisper_config:
-    beam_size: 1
-    best_of: 2
-    temperature: 0
-    no_speech_threshold: 0.7
-    language_detection_threshold: 0.5
-    multilingual: false
-    hotwords: []
-  whispercpp:
-    host: http://127.0.0.1
-    port: 8080
-  whispercpp_config:
     temperature: 0.0
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
-  energy_threshold: 0.01
+  # How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+  # whisper. Applies to push-to-talk too, where it trims silence off the clip.
+  sensitivity: 0.5
+  # Silence that ends an utterance.
+  end_pause_ms: 700
+  # Cut here even mid-sentence and send what was said; the rest becomes the
+  # next utterance. Keeps commands quick for people who never stop talking.
+  max_utterance_s: 12
+  min_speech_ms: 200
+  pre_roll_ms: 300
+  # Keep listening while a wingman speaks: "stop" stops it, talking on skips
+  # the answer. With speakers the wingman's own voice is filtered by text.
+  listen_while_speaking: false
+  # Said alone, these stop a wingman mid-sentence and are not answered.
+  stop_words:
+    - "stop"
+    - "stopp"
+    - "stop it"
+    - "stop please"
+    - "shut up"
+    - "be quiet"
+    - "silence"
+    - "enough"
+    - "halt"
+    - "sei still"
+    - "ruhe"
+    - "schluss"
+    - "bitte stopp"
+    - "okay stop"
+    - "basta"
+    - "silencio"
+    - "para"
+    - "cállate"
+    - "callate"
+    - "arrête"
+    - "arrete"
+    - "tais-toi"
+    - "assez"
+    - "stop s'il te plaît"
 wingman_pro:
   base_url: https://api.wingman-ai.com
 xvasynth:

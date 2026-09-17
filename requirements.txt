@@ -1,10 +1,8 @@
 aiofiles==24.1.0
-av==16.0.1 # transitive dep of faster_whisper — pinned so builds don't float to new PyAV releases. av >= 17 ships a `_core` extension linking all FFmpeg DLLs incl. avdevice, which needs AVICAP32.dll — missing on GitHub Windows Server runners. `import av` then fails at build time and PyInstaller ships an incomplete av bundle (the spec hard-fails on this now)
 backports-tarfile>=1.0.0
 edge-tts==7.2.8
 elevenlabslib==0.32.1
 fastapi==0.128.6
-faster_whisper==1.2.1
 google-genai==1.62.0
 httptools==0.7.1
 hume==0.13.13
@@ -16,7 +14,6 @@ openai==2.40.0
 packaging==24.2
 pedalboard==0.9.23
 platformdirs==4.10.0
-pyaudio==0.2.14
 pydantic==2.12.5
 pydirectinput-rgx==2.1.3
 pyinstaller==6.20.0
@@ -30,7 +27,6 @@ setuptools==75.8.0
 show-in-file-manager==1.1.6
 sounddevice==0.5.5
 soundfile==0.13.1
-SpeechRecognition==3.16.1
 typing_extensions==4.15.0
 uvicorn==0.40.0
 
@@ -38,9 +34,9 @@ uvicorn==0.40.0
 jaraco-context>=6.0.0
 jaraco-functools>=4.0.0
 
-# NVIDIA CUDA libraries for GPU-accelerated FasterWhisper (ctranslate2)
+# NVIDIA CUDA libraries for GPU-accelerated Parakeet (onnxruntime-gpu)
 # These are bundled with PyInstaller to provide zero-config GPU support
-# IMPORTANT: Must stay on CUDA 12.x (12.4-12.8 tested). CUDA 13.x is NOT compatible with ctranslate2.
+# IMPORTANT: Must stay on CUDA 12.x (12.4-12.8 tested); onnxruntime-gpu 1.19+ links against CUDA 12.
 # Not available on macOS — CUDA is Windows/Linux only.
 nvidia-cublas-cu12>=12.4.2,<13.0; sys_platform != 'darwin'
 nvidia-cuda-runtime-cu12>=12.4.99,<13.0; sys_platform != 'darwin'

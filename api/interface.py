@@ -110,8 +110,14 @@ class MicStatusResponse(BaseModel):
     """Current microphone / voice-activation state, published as the payload of the
     AudioPlayer.voice_events "changed" event (skill facade: audio.mic_status)."""
 
+    state: str
+    """off | muted | armed | held | paused. The one field that says it all; the
+    booleans below are derived from it."""
     listening: bool
     """True when voice activation is on and the mic is not muted (nor paused for playback)."""
+    muted: bool = False
+    """True only when the user muted the mic (switch or hotkey). A held
+    push-to-talk key or a speaking wingman does not count."""
     voice_activation_enabled: bool
     """Whether voice activation (vs push-to-talk) is configured."""
     playing: bool
@@ -160,21 +166,6 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppSettings(BaseModel):
-    host: str
-    port: int
-
-
-class FasterWhisperSettings(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-    """tiny, tiny.en, base, base.en, small, small.en, distil-small.en, medium, medium.en, distil-medium.en, large-v1, large-v2, large-v3, large, distil-large-v2, distil-large-v3, large-v3-turbo, or turbo"""
-    model_size: str
-    """default (model original), auto (fastest available on device), int8, int8_float16 etc. - see https://opennmt.net/CTranslate2/quantization.html#quantize-on-model-conversion"""
-    compute_type: str
-    """cpu, cuda, auto"""
-    device: str
-
-
 class XVASynthSettings(BaseModel):
     enable: bool
     host: str
@@ -200,33 +191,6 @@ class PocketTTSPreloadResult(BaseModel):
     reason: Optional[str] = None
 
 
-class WhispercppSttConfig(BaseModel):
-    temperature: float
-
-
-class FasterWhisperSttConfig(BaseModel):
-    beam_size: int
-    language: Optional[str] = None
-    hotwords: list[str]
-    """Words the decoder is nudged towards. The names of the active config's
-    wingmen are added at transcription time, so they need not be listed here."""
-    best_of: int
-    temperature: float
-    no_speech_threshold: float
-    multilingual: bool
-    language_detection_threshold: float
-
-
-class WhispercppTranscript(BaseModel):
-    text: str
-
-
-class FasterWhisperTranscript(BaseModel):
-    text: str
-    language: str
-    language_probability: float
-
-
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
     model_variant: str
@@ -235,8 +199,10 @@ class ParakeetSettings(BaseModel):
     """cpu, directml, coreml, or cuda"""
     language: Optional[str] = None
     """Transcription language. Empty means auto-detect."""
-    host: str
-    port: int
+    host: str = ""
+    """Where a Parakeet server runs when `run_locally` is off. Empty until
+    the user fills it in; nothing is contacted before that."""
+    port: int = 9876
 
 
 class ParakeetSttConfig(BaseModel):
@@ -564,8 +530,64 @@ class VoiceActivationSettings(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
-    energy_threshold: float
-    """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
+    sensitivity: float = 0.5
+    """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+    whisper. Applies to push-to-talk too, where it trims silence off the clip."""
+
+    end_pause_ms: int = 700
+    """Silence that ends an utterance."""
+
+    max_utterance_s: float = 12.0
+    """Cut here even mid-sentence and send what was said; the rest becomes the
+    next utterance. Keeps commands quick for people who never stop talking."""
+
+    min_speech_ms: int = 200
+    """Shorter bursts of speech are noise."""
+
+    pre_roll_ms: int = 300
+    """Audio kept from before the detector noticed speech."""
+
+    listen_while_speaking: bool = False
+    """Whether the microphone stays open while a wingman speaks, so "stop"
+    cuts it off and talking on skips the answer. For headsets: through
+    speakers the microphone hears the wingman itself, and the wingman then
+    answers its own words or stops itself. Off means deaf while speaking."""
+
+    stop_words: list[str] = ['stop', 'stopp', 'stop it', 'stop please', 'shut up', 'be quiet', 'silence', 'enough', 'halt', 'sei still', 'ruhe', 'schluss', 'bitte stopp', 'okay stop', 'basta', 'silencio', 'para', 'cállate', 'callate', 'arrête', 'arrete', 'tais-toi', 'assez', "stop s'il te plaît"]
+    """Phrases that stop a wingman mid-sentence and are not answered. An
+    utterance counts when every word in it comes from these phrases, so
+    "okay stop please" works with "okay stop" and "stop please" listed."""
+
+
+class VocabularyPreset(BaseModel):
+    """A bundled word list for the speech correction, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
+class PresetOverride(BaseModel):
+    """The user's edits to a bundled list, kept apart from it so an update of
+    the bundled file still reaches them."""
+
+    added: list[str] = []
+    removed: list[str] = []
+
+
+class SttTestResult(BaseModel):
+    """What the microphone test in Settings heard."""
+
+    text: str
+    duration_s: float
+    """Length of the recorded clip."""
+    transcribe_ms: int = 0
+    """How long the provider took to turn the clip into text."""
+    level: float
+    """Peak level of the clip, 0..1."""
+    best_score: float
+    """Best speech probability the detector saw, 0..1."""
+    threshold: float
 
 
 class SttSettings(BaseModel):
@@ -579,11 +601,20 @@ class SttSettings(BaseModel):
     en-US. Used by the Wingman backend; the local providers have their own
     language settings."""
 
-    whispercpp: WhispercppSettings
-    fasterwhisper: FasterWhisperSettings
+    vocabulary: list[str] = []
+    """Special words no speech model knows: place names, ship names, people.
+    Every transcript is corrected against them afterwards, whatever the
+    provider. The names of the active wingmen count without being listed."""
+
+    presets: list[str] = ["star_citizen"]
+    """Bundled word lists that apply on top of the user's own, by id
+    ("star_citizen"). Switched on in Settings; the words stay in the bundled
+    file and never enter the user's list."""
+
+    preset_overrides: dict[str, PresetOverride] = {}
+    """Per preset id: what the user added to and removed from the bundled list."""
+
     parakeet: ParakeetSettings
-    whispercpp_config: WhispercppSttConfig
-    fasterwhisper_config: FasterWhisperSttConfig
     parakeet_config: ParakeetSttConfig
 
 
@@ -1392,6 +1423,25 @@ class SettingsConfig(BaseModel):
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
     spoken_language: str = "multilingual"
+
+
+class SubscriptionModel(BaseModel):
+    id: str
+    name: str
+
+
+class SubscriptionRoutes(BaseModel):
+    """The models behind the plan's fixed roles, decided in /admin, so the
+    client asks rather than assumes. None means the plan has no such access."""
+
+    stt: Optional[SubscriptionModel] = None
+    """Transcription."""
+    tts: Optional[SubscriptionModel] = None
+    """Speech."""
+    image: Optional[SubscriptionModel] = None
+    """Image generation."""
+    downgraded: Optional[SubscriptionModel] = None
+    """What chat falls back to once the allowance is used up."""
 
 
 class BenchmarkResult(BaseModel):

@@ -131,12 +131,11 @@ class TtsProvider(Enum):
 
 
 class SttProvider(Enum):
-    OPENAI = "openai"
-    WHISPERCPP = "whispercpp"
-    FASTER_WHISPER = "fasterwhisper"
+    """Parakeet on this machine or on a server of the user's; the
+    subscription's cloud transcription otherwise."""
+
     PARAKEET = "parakeet"
     WINGMAN_PRO = "wingman_pro"
-    GROQ = "groq"
 
 
 class LocalAiMode(Enum):

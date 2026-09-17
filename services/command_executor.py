@@ -4,7 +4,6 @@ Handles instant-activation matching, command dispatch, and the
 keyboard/mouse/joystick/audio action dispatcher extracted from Wingman.
 """
 
-import difflib
 import random
 import time
 import traceback
@@ -15,6 +14,7 @@ import mouse.mouse as mouse
 from api.enums import LogType
 from api.interface import CommandConfig, WingmanConfig
 from services.audio_library import AudioLibrary
+from services.name_match import without_name, words_of
 from services.printr import Printr
 
 printr = Printr()
@@ -108,28 +108,30 @@ class CommandExecutor:
         if not self.config.commands:
             return None
         try:
-            commands_by_instant_activation = {}
+            commands_by_phrase: dict[tuple[str, ...], list[CommandConfig]] = {}
             for command in self.config.commands:
-                if command.instant_activation:
-                    for phrase in command.instant_activation:
-                        if phrase.lower() in commands_by_instant_activation:
-                            commands_by_instant_activation[phrase.lower()].append(
-                                command
-                            )
-                        else:
-                            commands_by_instant_activation[phrase.lower()] = [command]
+                for phrase in command.instant_activation or []:
+                    key = tuple(words_of(phrase))
+                    if key:
+                        commands_by_phrase.setdefault(key, []).append(command)
 
-            phrase = difflib.get_close_matches(
-                transcript.lower(),
-                commands_by_instant_activation.keys(),
-                n=1,
-                cutoff=1,
+            # Compared word by word: the speech model adds punctuation and
+            # capitals, and with voice activation the sentence opens with the
+            # wingman's name. Neither is part of the phrase.
+            words = words_of(transcript)
+            phrase = next(
+                (
+                    candidate
+                    for candidate in (tuple(words), tuple(without_name(words, self.wingman_name)))
+                    if candidate in commands_by_phrase
+                ),
+                None,
             )
 
             if not phrase:
                 return None
 
-            commands = commands_by_instant_activation[phrase[0]]
+            commands = commands_by_phrase[phrase]
             instant_responses = []
             for command in commands:
                 instant_resp, _func_resp = await self.execute_command(command, True)

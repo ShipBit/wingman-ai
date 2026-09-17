@@ -176,7 +176,12 @@ class Parakeet:
 
     def _transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
         """POST audio file to remote Parakeet server for transcription."""
-        host = (self.settings.host or "localhost").strip().rstrip("/")
+        host = (self.settings.host or "").strip().rstrip("/")
+        if not host:
+            self.printr.toast_error(
+                "Parakeet runs on a server of yours, but no host is set. Enter it in Settings > Speech-to-text."
+            )
+            return None
         if not host.startswith(("http://", "https://")):
             host = f"http://{host}"
         url = f"{host}:{self.settings.port}/v1/audio/transcriptions"

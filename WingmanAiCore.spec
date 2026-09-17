@@ -4,7 +4,7 @@ PyInstaller spec file for WingmanAI Core
 
 This spec file bundles:
 - The WingmanAI Core Python application
-- NVIDIA CUDA libraries for GPU-accelerated speech recognition (FasterWhisper/ctranslate2)
+- NVIDIA CUDA libraries for GPU-accelerated speech recognition (Parakeet via onnxruntime-gpu)
 - All required data files and dependencies
 
 NVIDIA CUDA Libraries:
@@ -45,7 +45,11 @@ datas = [
     ('wingmen', 'wingmen'),
     ('skills', 'skills'),
     ('templates/configs', 'templates/configs'),
+    # Vocabulary presets for the speech correction, one text file per game.
+    ('templates/vocabulary', 'templates/vocabulary'),
     ('audio_samples', 'audio_samples'),
+    # Silero VAD, runs on the onnxruntime that Parakeet already needs.
+    ('audio_models', 'audio_models'),
     ('prompts', 'prompts'),
     ('LICENSE', '.'),
 ]
@@ -87,13 +91,6 @@ if sys.platform != 'darwin':
             print(f"Collected DLLs from {pkg}")
         except Exception as e:
             print(f"Warning: Could not collect {pkg} DLLs: {e}")
-
-# Collect ctranslate2 binaries
-try:
-    binaries += collect_dynamic_libs('ctranslate2')
-    print("Collected DLLs from ctranslate2")
-except Exception as e:
-    print(f"Warning: Could not collect ctranslate2 DLLs: {e}")
 
 # ============================================================================
 # HIDDEN IMPORTS
@@ -174,7 +171,7 @@ hiddenimports = [
     'truck_telemetry',
     'pyproj',
 
-    # FasterWhisper / STT dependencies
+    # STT dependencies
     'numba',
     'llvmlite',
     'tokenizers',
@@ -187,9 +184,6 @@ hiddenimports = [
     'nvidia.cuda_runtime',
     'nvidia.cudnn',
     'nvidia.cuda_nvrtc',
-
-    # ctranslate2 for FasterWhisper
-    'ctranslate2',
 
 	# for pocket-tts
 	'engineio.async_drivers.threading',
@@ -248,48 +242,19 @@ binaries += tiktoken_ext_binaries
 hiddenimports += tiktoken_ext_hidden
 hiddenimports += ['tiktoken_ext.openai_public']
 
+# rapidfuzz picks its compiled module (plain, AVX2) at import time inside a
+# try/except. The static analysis usually sees through that, but the wingman
+# name match in services/tower.py must not depend on "usually".
+rf_datas, rf_binaries, rf_hidden = collect_all('rapidfuzz')
+datas += rf_datas
+binaries += rf_binaries
+hiddenimports += rf_hidden
+
 # Collect all onnx-asr (Parakeet STT)
 onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
 datas += onnx_asr_datas
 binaries += onnx_asr_binaries
 hiddenimports += onnx_asr_hidden
-
-# av (PyAV, pulled in transitively by faster_whisper): its modules import each
-# other at the C level, invisible to static analysis, so an incomplete bundle
-# only crashes at runtime ("No module named 'av.frame'"). The stock hook (and
-# collect_submodules) must IMPORT av to enumerate it — impossible on GitHub
-# Windows runners, where av's bundled FFmpeg avdevice DLL needs AVICAP32.dll
-# that current Server images don't ship. Enumerate the package from the
-# filesystem instead (no import needed); the DLLs resolve fine on end-user
-# desktop Windows, as every av-16-based release has proven.
-av_hidden = set()
-av_pkg_dir = os.path.join(SITE_PACKAGES, 'av')
-for av_root, _dirs, av_files in os.walk(av_pkg_dir):
-    rel_pkg = os.path.relpath(av_root, os.path.dirname(av_pkg_dir))
-    for av_file in av_files:
-        if not av_file.endswith(('.py', '.pyd', '.so')):
-            continue
-        mod = av_file.split('.', 1)[0]
-        parts = rel_pkg.split(os.sep)
-        if mod != '__init__':
-            parts.append(mod)
-        av_hidden.add('.'.join(parts))
-if len(av_hidden) < 40 or 'av.frame' not in av_hidden:
-    raise SystemExit(
-        f"PyAV filesystem enumeration looks incomplete ({len(av_hidden)} modules, "
-        f"av.frame {'found' if 'av.frame' in av_hidden else 'MISSING'}) — "
-        "refusing to ship a bundle that would crash at runtime."
-    )
-hiddenimports += sorted(av_hidden)
-
-# Collect all faster_whisper files (specifically assets like silero_vad_v6.onnx)
-try:
-    fw_datas, fw_binaries, fw_hidden = collect_all('faster_whisper')
-    datas += fw_datas
-    binaries += fw_binaries
-    hiddenimports += fw_hidden
-except Exception as e:
-    print(f"Warning: Could not collect faster_whisper: {e}")
 
 # Config migration modules (services/migrations/migration_*.py) are discovered
 # from the filesystem and imported via importlib at runtime, so static analysis

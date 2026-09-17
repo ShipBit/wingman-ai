@@ -29,6 +29,23 @@ MEMORY_MAX_TOKENS = 1024
 # token-capped SET of facts, so a slightly looser gate lands the right fact in
 # the batch without meaningful precision cost.
 MEMORY_MIN_SIMILARITY = 0.4
+
+# The absolute threshold is not enough on its own. Some facts sit close to
+# everything said in a language: "Prefers to communicate in German" scores
+# 0.51-0.54 against any German sentence, the weather, the landing gear, a
+# story. So every fact also has a baseline, its similarity to a handful of
+# everyday sentences nobody's memory is about, and a fact is recalled only
+# when the message beats that baseline by this much. Measured with nomic:
+# real hits lie 0.18-0.32 above their baseline, noise at most 0.04, a weak
+# hit in another language around 0.07.
+RECALL_MIN_LIFT = 0.06
+GENERIC_QUERIES = [
+    "How is the weather?", "Tell me a story.", "What time is it?", "Open the map.",
+    "Thanks, that's all.",
+    "Wie ist das Wetter?", "Erzähl mir etwas.", "Wie spät ist es?", "Öffne die Karte.",
+    "Danke, das war's.",
+    "¿Qué hora es?", "Cuéntame algo.", "Quelle heure est-il ?", "Raconte-moi quelque chose.",
+]
 DEDUP_THRESHOLD = 0.9
 MIN_MESSAGES_FOR_EXTRACTION = 4
 FORGET_SIMILARITY_THRESHOLD = 0.7
@@ -140,6 +157,8 @@ class PersistentMemoryService:
         # serializing turns on the slow paths.
         self._lock = threading.RLock()
         self._new_facts_since_consolidation = 0
+        # Embeddings of GENERIC_QUERIES, computed on the first recall.
+        self._generic_embeddings: list[list[float]] | None = None
 
     def initialize(self) -> None:
         """Create the database and tables if they don't exist."""
@@ -224,13 +243,28 @@ class PersistentMemoryService:
             return
         self._update_entry(entry_id, new_content, embeddings[0])
 
+    def _baseline(self, embedding: list[float]) -> float:
+        """How similar a fact is to everyday sentences that are about nothing
+        in particular: the mean of its three closest. What a message has to
+        beat for the fact to count as recalled."""
+        if self._generic_embeddings is None:
+            vectors = self.local_ai_service.embed(GENERIC_QUERIES)
+            self._generic_embeddings = [v for v in (vectors or []) if v]
+        if not self._generic_embeddings:
+            return 0.0
+        scores = sorted((_cosine_similarity(embedding, g) for g in self._generic_embeddings), reverse=True)
+        return sum(scores[:3]) / len(scores[:3])
+
     def _search_impl(
         self,
         query_text: str,
         limit: int = 10,
         entry_type: str | None = None,
         min_similarity: float = 0.0,
+        min_lift: float = 0.0,
     ) -> list[MemoryEntry]:
+        """`min_lift` > 0 asks for more than closeness: the fact has to be
+        closer to the query than to everyday talk by that much."""
         embeddings = self.local_ai_service.embed([query_text])
         if not embeddings or not embeddings[0]:
             return []
@@ -259,8 +293,11 @@ class PersistentMemoryService:
         for r in rows:
             stored_embedding = _deserialize_embedding(r[4])
             similarity = _cosine_similarity(query_embedding, stored_embedding)
-            if similarity >= min_similarity:
-                scored.append((similarity, r))
+            if similarity < min_similarity:
+                continue
+            if min_lift > 0 and similarity - self._baseline(stored_embedding) < min_lift:
+                continue
+            scored.append((similarity, r))
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
@@ -637,7 +674,7 @@ class PersistentMemoryService:
     ) -> str:
         facts = self._search_impl(
             query_text, limit=RECALL_MAX_FACTS, entry_type="fact",
-            min_similarity=MEMORY_MIN_SIMILARITY,
+            min_similarity=MEMORY_MIN_SIMILARITY, min_lift=RECALL_MIN_LIFT,
         )
         # The latest session, by time — not the most similar one. "Where were we"
         # is a question about last night, not about whichever evening happened
@@ -874,7 +911,7 @@ class PersistentMemoryService:
                 "type": "function",
                 "function": {
                     "name": "memory_remember",
-                    "description": "Store an important fact or detail for future reference. Use when the user explicitly asks you to remember something.",
+                    "description": "Store something about the user that is meant to last: how they want to be addressed, a standing instruction, a preference, a fact about them or their life. Use it right away when the user tells you such a thing or asks you to remember something; do not wait to be asked twice.",
                     "parameters": {
                         "type": "object",
                         "properties": {

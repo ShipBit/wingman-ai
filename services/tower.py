@@ -1,5 +1,4 @@
 import asyncio
-import re
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     Config,
@@ -13,6 +12,7 @@ from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
+from services.name_match import find_name, words_of
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -177,13 +177,21 @@ class Tower:
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:
+        """The wingman addressed in the text, else the default one.
+
+        A name is matched by sound, not by spelling: the speech model writes
+        "Eva" for Ava and "Computa" for Computer, and an exact word match then
+        sends the sentence to the wrong wingman or nowhere. Only the opening of
+        the sentence is searched, that is where people put a name.
+        """
+        words = words_of(text)
+        best: tuple[int, Wingman | None] = (10**6, None)
         for wingman in self.wingmen:
-            # Check if a wingman name appears as a whole word in the text
-            if re.search(
-                r"\b" + re.escape(wingman.config.name.lower()) + r"\b",
-                text.lower(),
-            ):
-                return wingman
+            found = find_name(words, wingman.config.name)
+            if found is not None and found[2] < best[0]:
+                best = (found[2], wingman)
+        if best[1] is not None:
+            return best[1]
 
         # Check if there is a default wingman defined in the config
         for wingman in self.wingmen:

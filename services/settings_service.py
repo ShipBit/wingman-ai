@@ -1,4 +1,5 @@
 from copy import deepcopy
+from os import path
 from typing import Awaitable, Callable, Optional
 from fastapi import APIRouter
 import sounddevice as sd
@@ -8,9 +9,7 @@ from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
 )
-from providers.faster_whisper import FasterWhisper
 from providers.parakeet import Parakeet
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
@@ -37,10 +36,8 @@ class SettingsService:
         self.config_manager = config_manager
         self.config_service = config_service
         self.converted_audio_settings = False
-        self.settings = self.get_settings()
+        self.get_settings()
         self.settings_events = PubSub()
-        self.whispercpp: Whispercpp = None
-        self.fasterwhisper: FasterWhisper = None
         self.parakeet: Parakeet = None
         self.xvasynth: XVASynth = None
         self.pocket_tts: PocketTTS = None
@@ -53,6 +50,10 @@ class SettingsService:
             Callable[[str, Optional[float]], Awaitable[None]]
         ] = None
         self.stt_done_callback: Optional[Callable[[], Awaitable[None]]] = None
+        # Injected by WingmanCore. The settings page holds the stt block it
+        # loaded and posts all of it back on the next change, so a word added
+        # by a wingman tool has to reach an open page or it is written away.
+        self.vocabulary_changed_callback: Optional[Callable[[list[str]], None]] = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -79,21 +80,99 @@ class SettingsService:
 
     def initialize(
         self,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
         parakeet: Parakeet,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         local_ai_service: LocalAiService = None,
         stt_provider_manager=None,
     ):
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.parakeet = parakeet
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
         self.local_ai_service = local_ai_service
         self.stt_provider_manager = stt_provider_manager
+
+    # --- speech vocabulary ---
+
+    def add_vocabulary(self, entries: list[str]) -> list[str]:
+        """Add entries ("Hurston" or "Houston=Hurston"), persist, return what
+        was new. Used by the wingman tools and the skill facade."""
+        from services.audio.vocabulary import format_entry, parse_entry
+
+        current = list(self.settings.stt.vocabulary or [])
+        known = {e.lower() for e in current}
+        added: list[str] = []
+        for raw in entries:
+            correct, heard = parse_entry(raw)
+            entry = format_entry(correct, heard)
+            if len(correct) < 3 or entry.lower() in known:
+                continue
+            current.append(entry)
+            known.add(entry.lower())
+            added.append(entry)
+        if added:
+            self.settings.stt.vocabulary = current
+            self.config_manager.save_settings_config()
+            self.printr.print(
+                f"Speech vocabulary: added {', '.join(added)}", server_only=True, color=LogType.INFO
+            )
+            self._announce_vocabulary()
+        return added
+
+    def seed_vocabulary(self) -> list[str]:
+        """Put the names people say every day into the list, once: every
+        wingman of every configuration, and the signed-in user. Runs at start
+        and after login; the list dedupes, so a second run adds nothing."""
+        names: list[str] = []
+        for config_dir in self.config_manager.get_config_dirs():
+            if getattr(config_dir, "is_deleted", False):
+                continue
+            for wingman_file in self.config_manager.get_wingmen_configs(config_dir):
+                if getattr(wingman_file, "is_deleted", False):
+                    continue
+                raw = self.config_manager.read_config(
+                    path.join(self.config_manager.config_dir, config_dir.directory, wingman_file.file)
+                )
+                name = (raw or {}).get("name") or wingman_file.name
+                if name:
+                    names.append(str(name))
+        if self.settings.user_name:
+            names.append(self.settings.user_name)
+        return self.add_vocabulary(names)
+
+    def remove_vocabulary(self, words: list[str]) -> int:
+        """Drop every entry whose correct spelling or heard form matches."""
+        from services.audio.vocabulary import parse_entry
+
+        drop = {" ".join(w.split()).lower() for w in words if w}
+        current = list(self.settings.stt.vocabulary or [])
+        kept = [
+            e for e in current
+            if parse_entry(e)[0].lower() not in drop
+            and (parse_entry(e)[1] or "").lower() not in drop
+            and e.lower() not in drop
+        ]
+        removed = len(current) - len(kept)
+        if removed:
+            self.settings.stt.vocabulary = kept
+            self.config_manager.save_settings_config()
+            self.printr.print(
+                f"Speech vocabulary: removed {removed} entries", server_only=True, color=LogType.INFO
+            )
+            self._announce_vocabulary()
+        return removed
+
+    def _announce_vocabulary(self) -> None:
+        """Tell an open settings page what the list looks like now."""
+        if self.vocabulary_changed_callback:
+            self.vocabulary_changed_callback(list(self.settings.stt.vocabulary or []))
+
+    @property
+    def settings(self):
+        """Always the object the config manager holds. Migration at start
+        replaces that object; a reference taken before it would write into
+        a settings copy that is never saved."""
+        return self.config_manager.settings_config
 
     # GET /settings
     def get_settings(self):
@@ -111,10 +190,13 @@ class SettingsService:
         # Speech-to-text. One block for every wingman and both ways of talking.
         old_stt = old.stt
         new_stt = settings.stt
+        # The edits to a bundled hotword list are written by their own
+        # endpoint. The settings page holds the block it loaded, so taking its
+        # copy here would throw away every edit made since - keep ours.
+        new_stt.preset_overrides = old_stt.preset_overrides
         # The shared providers hold a reference to their settings object;
         # hand them the new one before anything reads it.
         self.parakeet.settings = new_stt.parakeet
-        self.fasterwhisper.settings = new_stt.fasterwhisper
         self.config_manager.settings_config.stt = new_stt
 
         reload_needed = new_stt.provider != old_stt.provider
@@ -124,13 +206,6 @@ class SettingsService:
                 old_pk.model_variant != new_pk.model_variant
                 or old_pk.execution_provider != new_pk.execution_provider
                 or old_pk.run_locally != new_pk.run_locally
-            )
-        elif new_stt.provider == SttProvider.FASTER_WHISPER:
-            old_fw, new_fw = old_stt.fasterwhisper, new_stt.fasterwhisper
-            reload_needed = reload_needed or (
-                old_fw.model_size != new_fw.model_size
-                or old_fw.device != new_fw.device
-                or old_fw.compute_type != new_fw.compute_type
             )
         if reload_needed and self.stt_provider_manager:
             # Let the manager unload the old model and download/load the new one.
@@ -160,14 +235,6 @@ class SettingsService:
             )
         ):
             await self.set_audio_devices(settings.audio.input, settings.audio.output)
-
-        # whispercpp
-        if not self.whispercpp:
-            self.printr.toast_error(
-                "Whispercpp is not initialized. Please run SettingsService.initialize()",
-            )
-            return
-        self.whispercpp.update_settings(settings=settings.stt.whispercpp)
 
         # XVASynth
         if not self.xvasynth:
@@ -200,9 +267,8 @@ class SettingsService:
                 self.config_manager.settings_config.pocket_tts.model = pocket_lang
                 self.pocket_tts.update_settings(settings=settings.pocket_tts)
 
-            # Cascade to STT language (FasterWhisper + Parakeet)
+            # Cascade to the STT language
             stt_lang = None if new_spoken == "multilingual" else new_spoken
-            settings.stt.fasterwhisper_config.language = stt_lang
             settings.stt.parakeet.language = stt_lang
 
             self.printr.print(
@@ -231,9 +297,13 @@ class SettingsService:
                 server_only=True,
             )
 
-        if (
-            settings.voice_activation.energy_threshold
-            != old.voice_activation.energy_threshold
+        new_va, old_va = settings.voice_activation, old.voice_activation
+        if any(
+            getattr(new_va, field) != getattr(old_va, field)
+            for field in (
+                "sensitivity", "end_pause_ms", "max_utterance_s", "min_speech_ms",
+                "pre_roll_ms", "listen_while_speaking", "stop_words",
+            )
         ):
             await self.settings_events.publish(
                 "va_settings_changed", settings.voice_activation

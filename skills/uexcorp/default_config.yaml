@@ -135,8 +135,8 @@ custom_properties:
 
   ### FasterWhisper Start ###
   - id: add_fasterwhisper_hotwords
-    name: Add FasterWhisper hotwords (Experimental)
-    hint: Add common names fetched from UEXCorp as FasterWhisper hotwords. Voice detection might be improved but bias towards Star Citizen content in the detection is possible.
+    name: Add UEX names as hotwords (Experimental)
+    hint: Add common names fetched from UEXCorp as hotwords, so misheard Star Citizen names in what you say are corrected. The bundled Star Citizen list in Settings > Speech-to-text covers most of them already.
     value: false
     required: true
     property_type: boolean

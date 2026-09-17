@@ -29,8 +29,8 @@ faulthandler.enable()
 # NVIDIA CUDA DLL PATH SETUP (must be done before any CUDA-dependent imports)
 # =============================================================================
 # When running as a PyInstaller bundle, the NVIDIA CUDA DLLs are in subdirectories
-# of _internal/nvidia/. We need to add these to PATH so ctranslate2 can find them.
-# This must happen before any import that might load ctranslate2 or CUDA libraries.
+# of _internal/nvidia/. We need to add these to PATH so onnxruntime can find them.
+# This must happen before any import that might load CUDA libraries.
 if getattr(sys, "frozen", False):
     # Running as bundled exe
     _internal_dir = sys._MEIPASS

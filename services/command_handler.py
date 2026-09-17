@@ -307,6 +307,8 @@ class CommandHandler:
 
         # Store username in settings for wingman access
         self.core.config_manager.settings_config.user_name = command.account_name
+        # ...and into the speech vocabulary, so the wingmen spell it right
+        self.core.settings_service.seed_vocabulary()
 
         self.printr.print(
             f"User {command.account_name} logged in ({command.plan})",

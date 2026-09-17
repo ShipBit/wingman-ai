@@ -155,17 +155,20 @@ class Migration321To322(BaseMigration):
     DROPPED_STT_SECTIONS = ("parakeet", "fasterwhisper", "whispercpp")
     DROPPED_WINGMAN_PRO_KEYS = ("stt_provider", "languages")
 
-    # The three fields that are about listening, not about transcribing.
+    # The fields that are about listening, not about transcribing.
     VOICE_ACTIVATION_KEYS = (
         "enabled",
         "mute_toggle_key",
         "mute_toggle_key_codes",
-        "energy_threshold",
     )
     STT_SECTIONS = (
         "languages",
         "parakeet",
         "parakeet_config",
+    )
+    # Providers 3.2.2 no longer ships: FasterWhisper, whisper.cpp, and the
+    # OpenAI and Groq transcription. Their settings are dropped, not carried.
+    REMOVED_STT_SECTIONS = (
         "fasterwhisper",
         "fasterwhisper_config",
         "whispercpp",
@@ -235,12 +238,17 @@ class Migration321To322(BaseMigration):
         if parakeet.get("run_locally") is False:
             parakeet["run_locally"] = True
             self.log("settings: Parakeet now runs on this machine (was remote)")
+        # The old template put this machine as the server address. Picking
+        # "Remote" then failed at once, there is no server here. Empty means
+        # "not set" now; a real address of the user's stays.
+        if str(parakeet.get("host") or "").rstrip("/") in ("http://127.0.0.1", "http://localhost", "127.0.0.1", "localhost"):
+            parakeet["host"] = ""
         if parakeet:
             stt["parakeet"] = parakeet
         if was and was != "parakeet":
             self.log_warning(
-                f"settings: speech-to-text '{was}' -> 'parakeet'. Parakeet is the "
-                "provider we recommend; the old one can be picked again in Settings."
+                f"settings: speech-to-text '{was}' -> 'parakeet'. Parakeet runs on "
+                "this machine; the subscription's cloud transcription can be picked in Settings."
             )
         elif not was:
             self.log("settings: speech-to-text set to 'parakeet'")
@@ -249,17 +257,31 @@ class Migration321To322(BaseMigration):
         parakeet_config = stt.get("parakeet_config")
         if isinstance(parakeet_config, dict) and "language" in parakeet_config:
             parakeet_config.pop("language")
-        fasterwhisper_config = stt.get("fasterwhisper_config")
-        if isinstance(fasterwhisper_config, dict) and "additional_hotwords" in fasterwhisper_config:
-            fasterwhisper_config.pop("additional_hotwords")
-        whispercpp = stt.get("whispercpp")
-        if isinstance(whispercpp, dict) and "enable" in whispercpp:
-            whispercpp.pop("enable")
+        # The FasterWhisper hotword list is not carried over into the new
+        # vocabulary: that list starts clean.
+        for key in self.REMOVED_STT_SECTIONS:
+            if key in stt:
+                stt.pop(key)
+                self.log(f"settings: removed stt.{key} (provider no longer shipped)")
 
         new["stt"] = stt
-        new["voice_activation"] = {
-            key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va
-        }
+        listening = {key: va[key] for key in self.VOICE_ACTIVATION_KEYS if key in va}
+        # The energy threshold was a loudness number that depended on the
+        # microphone. A voice detector replaces it; what survives is how far
+        # the user had pushed the old number, mapped onto the new sensitivity.
+        threshold = va.get("energy_threshold")
+        if isinstance(threshold, (int, float)):
+            if threshold <= 0.001:
+                listening["sensitivity"] = 0.8
+            elif threshold >= 0.02:
+                listening["sensitivity"] = 0.3
+            else:
+                listening["sensitivity"] = 0.5
+            self.log(
+                f"settings: voice detection sensitivity {listening['sensitivity']} "
+                f"(was energy threshold {threshold})"
+            )
+        new["voice_activation"] = listening
         self.log("settings: moved the speech-to-text settings out of voice_activation into stt")
         return new
 

@@ -920,10 +920,9 @@ class SkillStt:
     """Sanctioned speech-to-text capabilities for skills.
 
     Which provider transcribes is a global setting and stays out of reach. What
-    a skill may do is teach the local decoder words: hotwords are names the
-    engine is nudged towards (FasterWhisper reads them, the other providers do
-    not). They live for the wingman's runtime only and are never written to
-    a config file.
+    a skill may do is add hotwords: names the transcript is corrected
+    against, whichever provider transcribed it. They live for the wingman's
+    runtime only and are never written to a config file.
     """
 
     def __init__(self, wingman: "Wingman") -> None:
@@ -951,6 +950,27 @@ class SkillStt:
         before = len(current)
         current[:] = [word for word in current if word not in drop]
         return before - len(current)
+
+    def remember_spelling(self, correct: str, heard: str | None = None) -> bool:
+        """Teach the transcription a spelling for good: it goes into the user's
+        vocabulary in Settings and applies to every provider. `heard` is what
+        the transcript wrote instead; with it, that exact form is replaced,
+        without it, anything close to `correct` is. Returns False when the
+        entry was already there or no settings service is available."""
+        service = getattr(self._wingman, "settings_service", None)
+        if service is None:
+            return False
+        from services.audio.vocabulary import format_entry
+        from services.audio.vocabulary_tools import fix_memories
+
+        added = bool(service.add_vocabulary([format_entry(correct, heard)]))
+        if heard:
+            fix_memories(getattr(self._wingman, "persistent_memory_service", None), correct, heard)
+        return added
+
+    def forget_spelling(self, word: str) -> int:
+        service = getattr(self._wingman, "settings_service", None)
+        return service.remove_vocabulary([word]) if service else 0
 
 
 class SkillConversation:

@@ -10,23 +10,17 @@ synchronous: every provider blocks on a model or an HTTP request, and both
 callers already run on a worker thread.
 """
 
-import re
 import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
+from services.audio.vocabulary import Vocabulary, apply_override, load_preset
 from services.printr import Printr
 
 if TYPE_CHECKING:
-    from providers.faster_whisper import FasterWhisper
     from providers.parakeet import Parakeet
-    from providers.whispercpp import Whispercpp
     from services.secret_keeper import SecretKeeper
     from services.settings_service import SettingsService
-
-# whisper.cpp likes to describe the room: "(wind blowing)", "[music]", "*sighs*".
-_NOISE_PATTERN = re.compile(r"(\(.*?\))|(\[.*?\])|(\*.*?\*)")
-_WHITESPACE_PATTERN = re.compile(r"[\s,]+")
 
 
 class SttService:
@@ -34,21 +28,20 @@ class SttService:
         self,
         settings_service: "SettingsService",
         secret_keeper: "SecretKeeper",
-        whispercpp: "Whispercpp",
-        fasterwhisper: "FasterWhisper",
         parakeet: "Parakeet",
         get_hotwords: Optional[Callable[[], list[str]]] = None,
+        app_root_path: str = ".",
     ):
         self.settings_service = settings_service
+        self.app_root_path = app_root_path
         self.secret_keeper = secret_keeper
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.parakeet = parakeet
         # Names the decoder should recognise, read fresh on every call so a
         # config switch (other wingmen, other names) is picked up without a
         # restart. WingmanCore hands in the names of the active wingmen.
         self.get_hotwords = get_hotwords or (lambda: [])
         self.printr = Printr()
+        self._preset_cache: dict[str, list[str]] = {}
 
     @property
     def provider(self) -> SttProvider:
@@ -78,7 +71,26 @@ class SttService:
                 server_only=True,
             )
             return None
-        return text
+        corrected = self.vocabulary().correct(text)
+        if corrected != text:
+            self.printr.print(
+                f"Vocabulary: '{text}' -> '{corrected}'", server_only=True, color=LogType.INFO
+            )
+        return corrected
+
+    def vocabulary(self) -> Vocabulary:
+        """The user's list plus the names of the active wingmen and whatever
+        their skills added. Built per call; the lists are short and may
+        change between two utterances."""
+        stt = self.settings_service.settings.stt
+        words = list(stt.vocabulary or []) + self.get_hotwords()
+        for preset_id in stt.presets or []:
+            if preset_id not in self._preset_cache:
+                self._preset_cache[preset_id] = load_preset(self.app_root_path, preset_id)
+            words += apply_override(
+                self._preset_cache[preset_id], (stt.preset_overrides or {}).get(preset_id)
+            )
+        return Vocabulary(words)
 
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt
@@ -88,33 +100,6 @@ class SttService:
                 config=stt.parakeet_config, filename=filename
             )
             return result.text if result else None
-
-        if provider == SttProvider.FASTER_WHISPER:
-            hotwords = list(stt.fasterwhisper_config.hotwords or [])
-            hotwords.extend(self.get_hotwords())
-            result = self.fasterwhisper.transcribe(
-                config=stt.fasterwhisper_config,
-                filename=filename,
-                hotwords=list(set(hotwords)),
-            )
-            return result.text if result else None
-
-        if provider == SttProvider.WHISPERCPP:
-            result = self.whispercpp.transcribe(
-                filename=filename, config=stt.whispercpp_config
-            )
-            if not result:
-                return None
-            cleaned = _WHITESPACE_PATTERN.sub(
-                " ", _NOISE_PATTERN.sub("", result.text)
-            ).strip()
-            if cleaned != result.text:
-                self.printr.print(
-                    f"Cleaned original transcription: {result.text}",
-                    server_only=True,
-                    color=LogType.SYSTEM,
-                )
-            return cleaned
 
         if provider == SttProvider.WINGMAN_PRO:
             from providers.wingman_subscription import WingmanSubscription
@@ -126,33 +111,6 @@ class SttService:
             result = subscription.transcribe(
                 filename=filename, languages=stt.languages
             )
-            return result.text if result else None
-
-        if provider == SttProvider.OPENAI:
-            from providers.open_ai import OpenAi
-
-            # Secrets are loaded at startup and refreshed on save; the sync
-            # retrieve path is not available on this thread.
-            api_key = self.secret_keeper.secrets.get("openai")
-            if not api_key:
-                self.printr.toast_error(
-                    "OpenAI is the speech-to-text provider but no OpenAI API key is set."
-                )
-                return None
-            result = OpenAi(api_key=api_key).transcribe(filename=filename)
-            return result.text if result else None
-
-        if provider == SttProvider.GROQ:
-            from providers.open_ai import OpenAi
-
-            api_key = self.secret_keeper.secrets.get("groq")
-            if not api_key:
-                self.printr.toast_error(
-                    "Groq is the speech-to-text provider but no Groq API key is set."
-                )
-                return None
-            groq = OpenAi(api_key=api_key, base_url="https://api.groq.com/openai/v1/")
-            result = groq.transcribe(filename=filename, model="whisper-large-v3-turbo")
             return result.text if result else None
 
         self.printr.toast_error(f"Unknown speech-to-text provider '{provider}'.")
