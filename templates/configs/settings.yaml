@@ -46,6 +46,7 @@ voice_activation:
   # Keep listening while a wingman speaks: "stop" stops it, talking on skips
   # the answer. With speakers the wingman's own voice is filtered by text.
   listen_while_speaking: true
+  interrupt_on_speech: true
   # Said alone, these stop a wingman mid-sentence and are not answered.
   stop_words:
     - "stop"

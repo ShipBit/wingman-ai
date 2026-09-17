@@ -553,6 +553,11 @@ class VoiceActivationSettings(BaseModel):
     hears itself; what it hears is compared to what it is saying and dropped
     when it matches. Off means the old behaviour: deaf while speaking."""
 
+    interrupt_on_speech: bool = True
+    """Whether a voice over the wingman, heard through speakers, stops the
+    playback at once. Off with a television in the room: the wingman finishes
+    and what was said meanwhile is answered afterwards."""
+
     stop_words: list[str] = ['stop', 'stopp', 'stop it', 'stop please', 'shut up', 'be quiet', 'silence', 'enough', 'halt', 'sei still', 'ruhe', 'schluss', 'bitte stopp', 'okay stop', 'basta', 'silencio', 'para', 'cállate', 'callate', 'arrête', 'arrete', 'tais-toi', 'assez', "stop s'il te plaît"]
     """Phrases that stop a wingman mid-sentence and are not answered. An
     utterance counts when every word in it comes from these phrases, so
