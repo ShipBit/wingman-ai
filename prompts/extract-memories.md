@@ -14,6 +14,7 @@ NEVER extract these — they are moments, not facts:
 - The current time or date, ship status readouts, system checks
 - Anything the ASSISTANT said, recommended, looked up, or read out
 - Prices, credits, cargo amounts, trade routes, ship stats, or game lore
+- A mood of the moment: not wanting to continue, not being interested right now, telling the assistant to stop or be quiet. Those are said and gone; a preference is what holds next month too.
 
 Rules:
 - Scan EVERY user message from the first to the last. Facts are spread across the whole conversation — a ship named in the third message and a goal in the tenth BOTH count. Capture ALL of them; a typical session has three to eight.

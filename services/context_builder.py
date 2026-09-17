@@ -224,9 +224,11 @@ class ContextBuilder:
                 "You have persistent memory. Important facts and past conversation summaries "
                 "are provided in the [Memory] sections attached to the user's latest message "
                 "(if any). "
-                "You can use the `memory_remember`, `memory_recall`, and `memory_forget` tools when the user "
-                "explicitly asks you to remember, recall, or forget something. "
-                "You don't need to use `memory_remember` for routine information — that is handled automatically."
+                "Call `memory_remember` right away when the user tells you something meant to last: "
+                "how to address them, a standing instruction, a preference, a fact about themselves. "
+                "Use `memory_recall` when they ask what you know, and `memory_forget` when they ask you "
+                "to forget something. Everything else said in a session is picked up automatically "
+                "when it ends, so do not store the small talk."
             )
 
         self._last_compiled_context = context
