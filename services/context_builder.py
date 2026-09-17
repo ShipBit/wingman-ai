@@ -33,11 +33,8 @@ class ContextBuilder:
         self._settings = settings
         self._wingman_name = wingman_name
         self._last_compiled_context: str = ""
-        self._memory_recall_notified: bool = False
-        # What ``build`` last found in memory. ``attach_memory`` picks it up
-        # from here; kept separate because it does not belong in the system
-        # prompt (see there).
-        self._pending_memory_context: str = ""
+        # The "Memory: N facts loaded" line goes out once per session.
+        self._memory_loaded_notified: bool = False
 
     async def build(
         self,
@@ -135,50 +132,30 @@ class ContextBuilder:
                 + conversation_summary
             )
 
-        # Persistent memory injection
-        persistent_memory_context = ""
-        if persistent_memory_service and messages:
-            # Use the most recent user message as the query
-            last_user_msg = ""
-            for msg in reversed(messages):
-                role = (
-                    msg.get("role")
-                    if isinstance(msg, dict)
-                    else getattr(msg, "role", None)
-                )
-                raw_content = (
-                    msg.get("content", "")
-                    if isinstance(msg, dict)
-                    else getattr(msg, "content", "")
-                )
-                # Extract plain text from multimodal content (images etc.)
-                content = self._extract_text_content(raw_content) if raw_content else ""
-                if role == "user" and content:
-                    last_user_msg = content
-                    break
-            if last_user_msg:
-                try:
-                    persistent_memory_context = (
-                        await persistent_memory_service.build_memory_context(
-                            last_user_msg
-                        )
+        # Persistent memory: one block with every fact and the recent
+        # episodes. It sits in the system prompt because it only changes at a
+        # checkpoint, every twenty minutes at most, so the provider's prompt
+        # cache keeps covering it. A per-message lookup used to sit behind the
+        # history instead, and changed on every turn.
+        memory_block = ""
+        if persistent_memory_service:
+            try:
+                memory_block = persistent_memory_service.memory_block()
+                if memory_block and not self._memory_loaded_notified:
+                    self._memory_loaded_notified = True
+                    facts, episodes = persistent_memory_service.block_stats()
+                    parts = []
+                    if facts:
+                        parts.append(f"{facts} {'fact' if facts == 1 else 'facts'}")
+                    if episodes:
+                        parts.append(f"{episodes} {'session' if episodes == 1 else 'sessions'}")
+                    await printr.print_async(
+                        f"Memory: {' and '.join(parts)} loaded",
+                        color=LogType.MEMORY,
+                        source_name=self._wingman_name,
                     )
-                    if persistent_memory_context and not self._memory_recall_notified:
-                        self._memory_recall_notified = True
-                        # Count restored fact lines (lines starting with "- ")
-                        fact_count = sum(
-                            1
-                            for line in persistent_memory_context.splitlines()
-                            if line.startswith("- ")
-                        )
-                        if fact_count > 0:
-                            await printr.print_async(
-                                f"Memory: {fact_count} {'memory' if fact_count == 1 else 'memories'} recalled",
-                                color=LogType.MEMORY,
-                                source_name=self._wingman_name,
-                            )
-                except Exception:
-                    pass  # Don't let memory failures break conversation
+            except Exception:
+                pass  # Don't let memory failures break conversation
 
         spoken = getattr(self._settings, "spoken_language", "multilingual")
         if spoken == "multilingual":
@@ -207,91 +184,31 @@ class ContextBuilder:
         ):
             context += "\n\n" + conversation_summary_section
 
-        # The block no longer goes here but onto the last user message — see
-        # attach_memory(). It is the only part of the system prompt that changes
-        # on every turn, and at the front of the prompt it makes the provider's
-        # prompt caching worthless: only a prefix is ever cached, and everything
-        # from the first difference onwards is billed in full. Measured
-        # 2026-09-14 through the gateway, same content, same token count: memory
-        # in front, 0 hits out of 10 and $0.00107 per turn; memory behind the
-        # history, 8 to 10 hits out of 10 and $0.00015 to $0.00034.
-        self._pending_memory_context = persistent_memory_context
+        if memory_block:
+            context += "\n\n" + memory_block
 
         # Persistent memory tool instructions
         if persistent_memory_service:
             context += (
                 "\n\n# PERSISTENT MEMORY\n"
-                "You have persistent memory. Important facts and past conversation summaries "
-                "are provided in the [Memory] sections attached to the user's latest message "
-                "(if any). "
-                "Call `memory_remember` right away when the user tells you something meant to last: "
-                "how to address them, a standing instruction, a preference, a fact about themselves. "
-                "Use `memory_recall` when they ask what you know, and `memory_forget` when they ask you "
-                "to forget something. Everything else said in a session is picked up automatically "
-                "when it ends, so do not store the small talk."
+                "You have persistent memory. What you know about the user from earlier "
+                "sessions is listed in the MEMORY section above (if any). "
+                "Call `memory_remember` right away when the user tells you something that should "
+                "still hold next month: how to address them, which language to answer in, a "
+                "standing instruction, what they own, who they play with, what they like or "
+                "dislike, a goal. Do not store where they are, what they are doing right now, a "
+                "status, or a mood. Use `memory_recall` only when the user asks what you know "
+                "about them, and `memory_forget` when they ask you to forget something. Never "
+                "call a memory tool for a question about the world or the game. Everything else "
+                "said in a session is picked up automatically."
             )
 
         self._last_compiled_context = context
         return context
 
-    def attach_memory(self, messages: list) -> str:
-        """Attach the recalled facts to the last user message and return them.
-
-        To the last *user* message, not to the end of the list: after a tool
-        round trip the list ends with a ``tool`` reply, and the second call has
-        to carry the same prefix as the first. The facts are identical — the
-        lookup runs against the same user message — so the prefix stays stable
-        across the whole loop.
-
-        Replaces the list entry, it does not write into the message.
-
-        ``_llm_call`` hands us ``self.conversation.messages.copy()``. That copies
-        the list, not the dictionaries inside it, so assigning to ``msg["content"]``
-        would edit the stored conversation. It did: the block was prepended once
-        per LLM call, so a turn with a tool round trip left two of them in the
-        history, and they piled up from there — into the summary, back out as
-        newly extracted memories, and into the client's history view.
-
-        Putting a new dictionary into the list leaves the stored one untouched.
-        """
-        memory = self._pending_memory_context
-        if not memory:
-            return ""
-
-        for i in range(len(messages) - 1, -1, -1):
-            msg = messages[i]
-            if not isinstance(msg, dict):
-                # Only the messages we build ourselves are dictionaries, and the
-                # user turn always is. Anything else cannot be copied safely.
-                continue
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content")
-            if isinstance(content, list):
-                # Multimodal: the text goes in front as its own part, so an
-                # attached image is left untouched.
-                new_content = [{"type": "text", "text": memory}] + content
-            else:
-                new_content = f"{memory}\n\n{content or ''}".strip()
-            messages[i] = {**msg, "content": new_content}
-            return memory
-
-        return ""
-
     def get_last_context(self) -> str:
-        """Return the last compiled system context (cached from the most recent LLM call).
-
-        The recalled facts are appended, with a note saying where they really
-        sit. Leaving them out would be the worse display: "view context" is meant
-        to show what the model saw.
-        """
-        if not self._pending_memory_context:
-            return self._last_compiled_context
-        return (
-            self._last_compiled_context
-            + "\n\n---\n# (attached to the last user message)\n\n"
-            + self._pending_memory_context
-        )
+        """The last compiled system context, as the model saw it."""
+        return self._last_compiled_context
 
     def build_user_context(
         self,
@@ -352,8 +269,8 @@ class ContextBuilder:
         messages.insert(0, {"role": "system", "content": context})
 
     def reset_memory_notification(self) -> None:
-        """Reset the memory recall notification flag (e.g., on conversation reset)."""
-        self._memory_recall_notified = False
+        """The next build says again what was loaded (new session, reset)."""
+        self._memory_loaded_notified = False
 
     @staticmethod
     def _extract_text_content(content) -> str:

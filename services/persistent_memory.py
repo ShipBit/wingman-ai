@@ -1,4 +1,28 @@
-"""Persistent memory service using SQLite with Python-side vector similarity."""
+"""Persistent memory: what a wingman knows about the user across sessions.
+
+Two kinds of memory, kept apart because they age differently:
+
+``fact``     timeless statements about the user ("Owns a Cutlass Black"). A
+             newer statement replaces an older one that contradicts it; the
+             list is rewritten as a whole at every checkpoint.
+``episode``  one entry per session: what happened, what was memorable, what
+             is still open. Never rewritten after the session ends, only
+             aged out. The three most recent go into the system prompt with
+             their age, so the model knows which one is current.
+
+Writes happen at checkpoints: every CHECKPOINT_TURNS user turns or
+CHECKPOINT_SECONDS, at the end of a session (unload, reset, IDLE_SECONDS
+without a user turn), and through the ``memory_remember`` tool. One support
+call per checkpoint gets the stored facts, the episode so far and the new
+messages, and returns the list as it should be from now on.
+
+Reads do not search. Every fact (capped) and the recent episodes go into the
+system prompt as one block that only changes at checkpoints, so the
+provider's prompt cache covers it. Embeddings remain for deduplication, the
+``memory_recall`` and ``memory_forget`` tools, and the memory tab's search.
+
+Older databases hold ``session_summary`` rows; they are read as episodes.
+"""
 
 import asyncio
 import json
@@ -20,77 +44,57 @@ from services.token_utils import count_tokens, truncate_to_tokens
 
 printr = Printr()
 
-# Named constants
-MEMORY_MAX_TOKENS = 1024
-# Recall threshold for injecting stored facts into the prompt. Lowered from 0.5
-# to 0.4 after the internal eval suite showed the embed model (nomic) frequently
-# scores a relevant fact 0.40-0.49 against a natural follow-up question ("who do
-# I play with?" vs "Friend is named Mara"). build_memory_context returns a
-# token-capped SET of facts, so a slightly looser gate lands the right fact in
-# the batch without meaningful precision cost.
-MEMORY_MIN_SIMILARITY = 0.4
-
-# The absolute threshold is not enough on its own. Some facts sit close to
-# everything said in a language: "Prefers to communicate in German" scores
-# 0.51-0.54 against any German sentence, the weather, the landing gear, a
-# story. So every fact also has a baseline, its similarity to a handful of
-# everyday sentences nobody's memory is about, and a fact is recalled only
-# when the message beats that baseline by this much. Measured with nomic:
-# real hits lie 0.18-0.32 above their baseline, noise at most 0.04, a weak
-# hit in another language around 0.07.
-RECALL_MIN_LIFT = 0.06
-GENERIC_QUERIES = [
-    "How is the weather?", "Tell me a story.", "What time is it?", "Open the map.",
-    "Thanks, that's all.",
-    "Wie ist das Wetter?", "Erzähl mir etwas.", "Wie spät ist es?", "Öffne die Karte.",
-    "Danke, das war's.",
-    "¿Qué hora es?", "Cuéntame algo.", "Quelle heure est-il ?", "Raconte-moi quelque chose.",
-]
 DEDUP_THRESHOLD = 0.9
-MIN_MESSAGES_FOR_EXTRACTION = 4
 FORGET_SIMILARITY_THRESHOLD = 0.7
 EMBEDDING_DIMENSIONS = 768  # Nomic Embed v1.5
 
-# Session summaries are a "state of play", and only the latest one is ever
-# recalled. Five is history enough to see what the last evenings were about in
-# the memory tab; twenty were an activity log nobody read.
-MAX_SESSION_SUMMARIES = 5
+# A checkpoint runs after this many user turns or this many seconds since the
+# last one, whichever comes first. Both are counted by the wingman.
+CHECKPOINT_TURNS = 25
+CHECKPOINT_SECONDS = 20 * 60
 
-# Facts a wingman keeps at most. Enforced after each consolidation: the ones
-# that have gone longest without being confirmed or updated go first.
+# No user turn for this long ends the session: the episode is closed and the
+# next message starts a new one.
+IDLE_SECONDS = 30 * 60
+
+# A session with fewer user turns than this at its end is not worth a
+# support call: a mic test, a greeting, two commands. Nothing durable is said
+# in it, and the moods that were once stored as facts came from exactly
+# these sessions.
+MIN_USER_TURNS = 4
+
+# Facts a wingman keeps at most. The ones that have gone longest without
+# being confirmed or updated go first.
 MAX_FACTS = 150
+# Facts in the system prompt, most recently updated first. About 400 tokens.
+FACTS_IN_PROMPT = 40
 
-# Facts attached to one user message. Eight clean facts say more than twenty
-# with the noise in — and everything attached here gets repeated by the model,
-# summarised into the history and extracted again.
-RECALL_MAX_FACTS = 8
+MAX_EPISODES = 5
+EPISODES_IN_PROMPT = 3
+EPISODE_MAX_AGE_DAYS = 30
 
-# Consolidation runs when this many facts were *inserted* (not merged into an
-# existing one) since the last pass. Merges do not count; they are already tidy.
-CONSOLIDATE_AFTER_NEW_FACTS = 10
-
-# Assistant messages go into extraction cut to this many tokens. The model
+# Assistant messages go into a checkpoint cut to this many tokens. The model
 # needs them for context ("yes, that one" answers a question), not for the
-# status report or price table the wingman read out — which is exactly the
-# text that used to come back as "facts".
+# status report or price table the wingman read out.
 ASSISTANT_EXCERPT_TOKENS = 150
 
-# What a fact may be about. The extraction prompt asks for one of these per
-# fact and anything else is dropped here, in code — the prompt alone did not
-# stop "Destination is Area18" or "Set a timer for three minutes".
+# What a fact may be about. The prompt asks for one of these per fact and
+# anything else is dropped here, in code.
 ALLOWED_FACT_KINDS = frozenset(
     {"identity", "possession", "relationship", "affiliation", "goal", "preference"}
 )
 
-# Belt and braces for the same problem: wording that marks a moment, not a
-# durable fact. Kept narrow on purpose; a false positive here loses a fact,
-# a false negative only costs one line until the next consolidation.
+# Wording that marks a moment, not a durable fact. Kept narrow on purpose; a
+# false positive here loses a fact, a false negative costs one line until the
+# next checkpoint rewrites the list.
 _TRANSIENT_FACT_RE = re.compile(
     r"\b(current (time|date|location)|right now|at the moment|a timer|"
     r"destination is|heading to|is parked|is docked|status of|"
     r"\w+ percent|\d+ ?%)\b",
     re.IGNORECASE,
 )
+
+EPISODE_TYPES = ("episode", "session_summary")
 
 
 @dataclass
@@ -108,18 +112,15 @@ class MemoryEntry:
 
 
 def _serialize_embedding(embedding: list[float]) -> bytes:
-    """Serialize a float list into bytes for storage."""
     return struct.pack(f"{len(embedding)}f", *embedding)
 
 
 def _deserialize_embedding(blob: bytes) -> list[float]:
-    """Deserialize bytes back into a float list."""
     count = len(blob) // 4  # 4 bytes per float32
     return list(struct.unpack(f"{count}f", blob))
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
     dot_product = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -128,16 +129,26 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot_product / (norm_a * norm_b)
 
 
+def age_label(created_at: float, now: float | None = None) -> str:
+    """How long ago, in words the model can weigh: "earlier today",
+    "yesterday", "5 days ago", "3 weeks ago"."""
+    now = now or time.time()
+    days = int((now - created_at) // 86400)
+    if days <= 0:
+        return "earlier today"
+    if days == 1:
+        return "yesterday"
+    if days < 14:
+        return f"{days} days ago"
+    return f"{days // 7} weeks ago"
+
+
 class PersistentMemoryService:
     """Per-Wingman persistent memory backed by SQLite.
 
-    Handles storage, retrieval, extraction, and deduplication of memory entries.
-    Embeddings are stored as BLOBs and similarity is computed in Python.
     All instances share the same memory.db file, scoped by collection name.
-
-    Public methods come in async/sync pairs. The async versions (add_memory,
-    search, etc.) run embedding in a thread pool. The sync versions (*_sync)
-    call the embedding model directly on the current thread.
+    Public methods come in async/sync pairs. The async versions run the
+    support and embedding calls in a thread pool.
     """
 
     def __init__(self, wingman_name: str, local_ai_service):
@@ -147,26 +158,20 @@ class PersistentMemoryService:
         self.session_id = str(uuid.uuid4())
         self._db: sqlite3.Connection | None = None
         # A single sqlite3.Connection is opened with check_same_thread=False and
-        # is hit from the default thread pool (every async method dispatches via
-        # asyncio.to_thread). Concurrent execute()/commit() on one connection
-        # corrupts SQLite's heap and crashes the process with a native SIGSEGV,
-        # so ALL connection access must be serialized through this lock. It is
-        # reentrant so composite operations (e.g. dedup-check then insert) can
-        # hold it across several helper calls and stay atomic. Held only around
-        # DB statements -- never around embedding/LLM calls -- to avoid
-        # serializing turns on the slow paths.
+        # is hit from the default thread pool. Concurrent execute()/commit() on
+        # one connection corrupts SQLite's heap and crashes the process, so ALL
+        # connection access is serialized through this lock. Reentrant so
+        # composite operations (dedup-check then insert) stay atomic. Held only
+        # around DB statements, never around embedding or support calls.
         self._lock = threading.RLock()
-        self._new_facts_since_consolidation = 0
-        # Embeddings of GENERIC_QUERIES, computed on the first recall.
-        self._generic_embeddings: list[list[float]] | None = None
+        # The system prompt block, rebuilt after every write.
+        self._block: str | None = None
 
     def initialize(self) -> None:
-        """Create the database and tables if they don't exist."""
         db_dir = get_persistent_memory_dir()
         db_path = path.join(db_dir, "memory.db")
         with self._lock:
             self._db = sqlite3.connect(db_path, check_same_thread=False)
-
             self._db.executescript("""
             CREATE TABLE IF NOT EXISTS memory_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -194,21 +199,23 @@ class PersistentMemoryService:
             """)
             self._db.commit()
 
-    # --- Core sync implementations ---
+    # ── sessions ───────────────────────────────────────────────────
+
+    def new_session(self) -> None:
+        """The next checkpoint writes a new episode."""
+        self.session_id = str(uuid.uuid4())
+        self._block = None
+
+    # ── writes ─────────────────────────────────────────────────────
 
     def _add_memory_impl(
-        self,
-        entry_type: str,
-        content: str,
-        session_id: str | None = None,
+        self, entry_type: str, content: str, session_id: str | None = None
     ) -> int | None:
         embeddings = self.local_ai_service.embed([content])
         if not embeddings or not embeddings[0]:
             return None
         embedding = embeddings[0]
 
-        # Hold the lock across dedup-check + insert so the pair is atomic and
-        # never races another thread on the shared connection.
         with self._lock:
             if entry_type == "fact":
                 existing = self._find_duplicate(embedding)
@@ -229,12 +236,9 @@ class PersistentMemoryService:
                 ),
             )
             self._db.commit()
-
-            if entry_type == "session_summary":
-                self._enforce_summary_cap()
-            elif entry_type == "fact":
-                self._new_facts_since_consolidation += 1
-
+            if entry_type in EPISODE_TYPES:
+                self._enforce_episode_cap()
+            self._block = None
             return cursor.lastrowid
 
     def _update_memory_impl(self, entry_id: int, new_content: str) -> None:
@@ -243,17 +247,7 @@ class PersistentMemoryService:
             return
         self._update_entry(entry_id, new_content, embeddings[0])
 
-    def _baseline(self, embedding: list[float]) -> float:
-        """How similar a fact is to everyday sentences that are about nothing
-        in particular: the mean of its three closest. What a message has to
-        beat for the fact to count as recalled."""
-        if self._generic_embeddings is None:
-            vectors = self.local_ai_service.embed(GENERIC_QUERIES)
-            self._generic_embeddings = [v for v in (vectors or []) if v]
-        if not self._generic_embeddings:
-            return 0.0
-        scores = sorted((_cosine_similarity(embedding, g) for g in self._generic_embeddings), reverse=True)
-        return sum(scores[:3]) / len(scores[:3])
+    # ── search (tools, forget, memory tab) ─────────────────────────
 
     def _search_impl(
         self,
@@ -261,10 +255,7 @@ class PersistentMemoryService:
         limit: int = 10,
         entry_type: str | None = None,
         min_similarity: float = 0.0,
-        min_lift: float = 0.0,
     ) -> list[MemoryEntry]:
-        """`min_lift` > 0 asks for more than closeness: the fact has to be
-        closer to the query than to everyday talk by that much."""
         embeddings = self.local_ai_service.embed([query_text])
         if not embeddings or not embeddings[0]:
             return []
@@ -291,24 +282,20 @@ class PersistentMemoryService:
 
         scored = []
         for r in rows:
-            stored_embedding = _deserialize_embedding(r[4])
-            similarity = _cosine_similarity(query_embedding, stored_embedding)
+            similarity = _cosine_similarity(query_embedding, _deserialize_embedding(r[4]))
             if similarity < min_similarity:
                 continue
-            if min_lift > 0 and similarity - self._baseline(stored_embedding) < min_lift:
-                continue
             scored.append((similarity, r))
-
         scored.sort(key=lambda x: x[0], reverse=True)
-
         return [
             MemoryEntry(
                 id=r[0], collection=r[1], entry_type=r[2], content=r[3],
-                source_wingman=r[5], session_id=r[6],
-                created_at=r[7], updated_at=r[8],
+                source_wingman=r[5], session_id=r[6], created_at=r[7], updated_at=r[8],
             )
             for _, r in scored[:limit]
         ]
+
+    # ── parsing helpers ────────────────────────────────────────────
 
     def _parse_json_response(self, text: str) -> dict | None:
         """Parse JSON from model output, repairing common small-model issues."""
@@ -316,7 +303,6 @@ class PersistentMemoryService:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
-        # Try extracting JSON object from surrounding text
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
             return None
@@ -325,7 +311,6 @@ class PersistentMemoryService:
             return json.loads(raw)
         except json.JSONDecodeError:
             pass
-        # Repair missing commas between quoted strings: "foo"\n"bar" → "foo", "bar"
         repaired = re.sub(r'"\s*\n\s*"', '", "', raw)
         try:
             return json.loads(repaired)
@@ -334,7 +319,7 @@ class PersistentMemoryService:
 
     @staticmethod
     def _extract_text_content(content) -> str:
-        """Extract plain text from message content (string or multimodal list)."""
+        """Plain text from message content (string or multimodal list)."""
         if isinstance(content, str):
             return content
         if isinstance(content, list):
@@ -347,170 +332,39 @@ class PersistentMemoryService:
             return " ".join(parts)
         return ""
 
-    def _extract_memories_impl(
-        self, messages: list, generate_summary: bool = False
-    ) -> None:
-        if len(messages) < MIN_MESSAGES_FOR_EXTRACTION:
-            return
+    @classmethod
+    def conversation_text(cls, messages: list) -> tuple[str, int]:
+        """The transcript a checkpoint sees, and how many user turns it holds.
 
-        text_parts = []
+        Assistant lines are cut short: the model needs them for context, not
+        for the status report or price table the wingman read out, which is
+        exactly the text that used to come back as facts.
+        """
+        parts = []
+        user_turns = 0
         for msg in messages:
-            role = (
-                msg.get("role", "unknown")
-                if isinstance(msg, dict)
-                else getattr(msg, "role", "unknown")
-            )
-            raw_content = (
-                msg.get("content", "")
-                if isinstance(msg, dict)
-                else getattr(msg, "content", "")
-            )
-            content = self._extract_text_content(raw_content)
+            role = msg.get("role", "") if isinstance(msg, dict) else getattr(msg, "role", "")
+            raw = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+            content = cls._extract_text_content(raw)
             if not content or role not in ("user", "assistant"):
                 continue
             if role == "assistant" and count_tokens(content) > ASSISTANT_EXCERPT_TOKENS:
                 content = truncate_to_tokens(content, ASSISTANT_EXCERPT_TOKENS) + " […]"
-            text_parts.append(f"{role}: {content}")
-
-        if not text_parts:
-            return
-
-        conversation_text = "\n".join(text_parts)
-
-        from services.file import get_prompt
-        from services.skill_local_ai import SamplingPreset
-
-        system_prompt = get_prompt("extract-memories")
-        # Reasoning is intentionally OFF here: on the bundled 2B model it rambles
-        # 3000+ <think> tokens and truncates before emitting the JSON (0 facts) —
-        # proven in the internal eval suite. The rewritten prompt already yields
-        # clean facts without it. Skill authors / capable remote models can still
-        # opt into reasoning via the per-call param.
-        budget = self.local_ai_service.get_token_budget(system_prompt)
-        text_tokens = count_tokens(conversation_text)
-
-        if text_tokens <= budget.max_input_tokens:
-            # Fits in one pass.
-            result = self.local_ai_service.support(
-                text=conversation_text,
-                system_prompt=system_prompt,
-                preset=SamplingPreset.PRECISE,
-            )
-            log_memory_event(
-                "extraction",
-                self.wingman_name,
-                mode="single",
-                reasoning=False,
-                generate_summary=generate_summary,
-                input_tokens=text_tokens,
-                conversation=conversation_text,
-                raw_output=result.text if result else None,
-                truncated=result.truncated if result else None,
-            )
-            self._process_extraction_result(result, generate_summary)
-        else:
-            # Chunk: split into segments that fit the context window
-            chunk_max_tokens = budget.max_input_tokens
-            approx_chunk_chars = chunk_max_tokens * 4
-            chunks = []
-            remaining = conversation_text
-            while remaining:
-                if count_tokens(remaining) <= chunk_max_tokens:
-                    chunks.append(remaining)
-                    break
-                split_at = remaining.rfind("\n", 0, approx_chunk_chars)
-                if split_at <= 0:
-                    split_at = approx_chunk_chars
-                chunks.append(remaining[:split_at])
-                remaining = remaining[split_at:].lstrip()
-
-            printr.print(
-                f"Memory extraction: chunking {text_tokens} tokens into {len(chunks)} parts.",
-                color=LogType.MEMORY,
-                server_only=True,
-            )
-
-            all_facts = []
-            last_summary = ""
-            for i, chunk in enumerate(chunks):
-                # Safety: truncate if chunk still exceeds budget
-                if count_tokens(chunk) > chunk_max_tokens:
-                    chunk = truncate_to_tokens(chunk, chunk_max_tokens)
-                result = self.local_ai_service.support(
-                    text=chunk,
-                    system_prompt=system_prompt,
-                    preset=SamplingPreset.PRECISE,
-                )
-                log_memory_event(
-                    "extraction",
-                    self.wingman_name,
-                    mode="chunk",
-                    reasoning=False,
-                    chunk_index=i,
-                    chunk_count=len(chunks),
-                    conversation=chunk,
-                    raw_output=result.text if result else None,
-                    truncated=result.truncated if result else None,
-                )
-                if result and result.text:
-                    data = self._parse_json_response(result.text)
-                    if data:
-                        all_facts.extend(data.get("facts", []))
-                        s = data.get("summary", "")
-                        if s:
-                            last_summary = s
-
-            # Store collected facts
-            for fact in self._clean_facts(all_facts):
-                self._add_memory_impl(
-                    entry_type="fact",
-                    content=fact,
-                    session_id=self.session_id,
-                )
-
-            if generate_summary and last_summary and len(last_summary.strip()) > 10:
-                self._add_memory_impl(
-                    entry_type="session_summary",
-                    content=last_summary.strip(),
-                    session_id=self.session_id,
-                )
-
-    def _process_extraction_result(
-        self, result, generate_summary: bool
-    ) -> None:
-        """Process a support model result from memory extraction."""
-        if not result or not result.text:
-            return
-
-        data = self._parse_json_response(result.text)
-        if data is None:
-            return
-
-        for fact in self._clean_facts(data.get("facts", [])):
-            self._add_memory_impl(
-                entry_type="fact",
-                content=fact,
-                session_id=self.session_id,
-            )
-
-        if generate_summary:
-            summary = data.get("summary", "")
-            if summary and isinstance(summary, str) and len(summary.strip()) > 10:
-                self._add_memory_impl(
-                    entry_type="session_summary",
-                    content=summary.strip(),
-                    session_id=self.session_id,
-                )
+            if role == "user":
+                user_turns += 1
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts), user_turns
 
     def _clean_facts(self, raw_facts) -> list[str]:
-        """Turn the model's fact list into the strings worth storing.
+        """The model's fact list, reduced to the strings worth storing.
 
-        Accepts both shapes: ``{"kind": ..., "text": ...}`` as the prompt asks
-        for, and plain strings from older prompts or a small model that ignored
-        the format. A typed fact with a kind outside ``ALLOWED_FACT_KINDS`` is
-        dropped; every fact is checked against ``_TRANSIENT_FACT_RE``.
+        Accepts ``{"kind": ..., "text": ...}`` as the prompt asks for, and
+        plain strings from a model that ignored the format. A typed fact
+        outside ``ALLOWED_FACT_KINDS`` is dropped; every fact is checked
+        against ``_TRANSIENT_FACT_RE``. Duplicates within the list are folded.
         """
         kept: list[str] = []
+        seen: set[str] = set()
         dropped: list[dict] = []
         if not isinstance(raw_facts, list):
             return kept
@@ -532,88 +386,204 @@ class PersistentMemoryService:
             if _TRANSIENT_FACT_RE.search(text):
                 dropped.append({"text": text, "reason": "transient"})
                 continue
+            key = text.lower().rstrip(".")
+            if key in seen:
+                continue
+            seen.add(key)
             kept.append(text)
         if dropped:
             log_memory_event("dropped_facts", self.wingman_name, dropped=dropped)
         return kept
 
-    # --- Consolidation ---
+    @staticmethod
+    def _worth_keeping(episode) -> bool:
+        """An episode earns its place with something to bring up again or
+        something still open. A plain string (older prompt) is kept."""
+        if isinstance(episode, str):
+            return bool(episode.strip())
+        if not isinstance(episode, dict):
+            return False
+        return bool(str(episode.get("memorable") or "").strip() or str(episode.get("open") or "").strip())
 
-    def _consolidate_impl(self) -> dict:
-        """One pass of the support model over the whole fact list.
+    @staticmethod
+    def episode_text(episode) -> str:
+        """The stored form of an episode: one paragraph, open threads last."""
+        if isinstance(episode, str):
+            return episode.strip()
+        if not isinstance(episode, dict):
+            return ""
+        happened = str(episode.get("happened") or "").strip()
+        memorable = str(episode.get("memorable") or "").strip()
+        open_thread = str(episode.get("open") or "").strip()
+        parts = [p for p in (happened, memorable) if p]
+        text = " ".join(parts)
+        if open_thread:
+            text = f"{text} Open: {open_thread}".strip()
+        return text
 
-        Merges duplicates, drops what should never have been stored, and keeps
-        the newer of two contradicting facts. Replaces the list atomically; the
-        old one is saved to ``memory_backups`` first. Returns
-        ``{"before": n, "after": m, "changed": bool}``.
+    # ── checkpoint ─────────────────────────────────────────────────
 
-        Refuses the result when the model hands back less than a third of the
-        input on a list of five or more — that is a model that lost the plot,
-        not a list that was two-thirds noise.
+    def _current_episode(self) -> MemoryEntry | None:
+        with self._lock:
+            row = self._db.execute(
+                """SELECT id, collection, entry_type, content, source_wingman,
+                          session_id, created_at, updated_at
+                   FROM memory_entries
+                   WHERE collection = ? AND entry_type = 'episode' AND session_id = ?""",
+                (self.collection, self.session_id),
+            ).fetchone()
+        if not row:
+            return None
+        return MemoryEntry(
+            id=row[0], collection=row[1], entry_type=row[2], content=row[3],
+            source_wingman=row[4], session_id=row[5], created_at=row[6], updated_at=row[7],
+        )
+
+    def _checkpoint_input(self, facts: list[MemoryEntry], episode: str,
+                          earlier: str, transcript: str) -> str:
+        listing = "\n".join(f"{i + 1}. {e.content}" for i, e in enumerate(facts)) or "(none)"
+        parts = [f"STORED FACTS:\n{listing}", f"EPISODE SO FAR:\n{episode or '(none)'}"]
+        if earlier:
+            parts.append(f"EARLIER IN THIS SESSION, CONDENSED:\n{earlier}")
+        parts.append(f"NEW MESSAGES:\n{transcript or '(none)'}")
+        return "\n\n".join(parts)
+
+    def _checkpoint_impl(
+        self,
+        messages: list,
+        conversation_summary: str = "",
+        final: bool = False,
+        tidy_only: bool = False,
+    ) -> dict:
+        """One support call: stored facts + episode so far + new messages in,
+        the whole fact list and the episode out.
+
+        ``final`` closes the session afterwards. ``tidy_only`` is the memory
+        tab's button: rewrite the facts with no new messages, leave the
+        episode alone. Returns ``{"before", "after", "changed", "episode",
+        "skipped"}``.
         """
         from services.file import get_prompt
         from services.skill_local_ai import SamplingPreset
 
+        transcript, user_turns = self.conversation_text(messages)
+        outcome = {"before": 0, "after": 0, "changed": False, "episode": "", "skipped": ""}
+
+        if not tidy_only and user_turns == 0 and not conversation_summary:
+            outcome["skipped"] = "nothing new"
+            return outcome
+        if not tidy_only and final and user_turns < MIN_USER_TURNS and not self._current_episode():
+            outcome["skipped"] = f"{user_turns} user turns"
+            return outcome
+
         facts = self.get_all(entry_type="fact")
+        facts.sort(key=lambda e: e.updated_at)  # oldest first: "newer wins" reads top down
+        current = self._current_episode()
+        episode_so_far = current.content if current else ""
         before = len(facts)
-        outcome = {"before": before, "after": before, "changed": False}
-        if before < 2:
-            self._new_facts_since_consolidation = 0
-            return outcome
+        outcome.update(before=before, after=before)
 
-        # Oldest first, so "keep the newer one" reads top to bottom.
-        facts.sort(key=lambda e: e.updated_at)
-        listing = "\n".join(f"{i + 1}. {e.content}" for i, e in enumerate(facts))
-        system_prompt = get_prompt("consolidate-memories")
+        system_prompt = get_prompt("extract-memories")
         budget = self.local_ai_service.get_token_budget(system_prompt)
-        if count_tokens(listing) > budget.max_input_tokens:
-            # A local model with a small window: consolidate what fits, keep
-            # the rest as it is. Facts are sorted oldest first, so the ones
-            # left untouched are the newest and the least likely to be stale.
-            listing = truncate_to_tokens(listing, budget.max_input_tokens)
-            fitted = listing.count("\n") + 1
-            facts, untouched = facts[:fitted], facts[fitted:]
-            listing = "\n".join(f"{i + 1}. {e.content}" for i, e in enumerate(facts))
-        else:
-            untouched = []
+        fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "")
+        room = budget.max_input_tokens - count_tokens(fixed)
+        if room < 200:
+            # A local model with a window too small for its own fact list:
+            # the newest facts stay as they are, the rest is what fits.
+            listing_budget = max(0, budget.max_input_tokens - 600)
+            while facts and count_tokens(self._checkpoint_input(facts, episode_so_far, "", "")) > listing_budget:
+                facts = facts[:-1]
+            fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "")
+            room = max(200, budget.max_input_tokens - count_tokens(fixed))
+        chunks = self._split(transcript, room) if transcript else [""]
 
-        result = self.local_ai_service.support(
-            text=f"FACTS:\n{listing}",
-            system_prompt=system_prompt,
-            preset=SamplingPreset.PRECISE,
-        )
-        data = self._parse_json_response(result.text) if result and result.text else None
-        cleaned = self._clean_facts(data.get("facts", [])) if data else []
-        log_memory_event(
-            "consolidation",
-            self.wingman_name,
-            input_facts=[e.content for e in facts],
-            raw_output=result.text if result else None,
-            kept=cleaned,
-        )
-        if not cleaned or (len(facts) >= 5 and len(cleaned) < len(facts) / 3):
-            printr.print(
-                f"Memory consolidation for {self.wingman_name} rejected: model returned "
-                f"{len(cleaned)} of {len(facts)} facts.",
-                color=LogType.WARNING,
-                server_only=True,
+        data = None
+        last_episode = None
+        for i, chunk in enumerate(chunks):
+            text = self._checkpoint_input(facts, episode_so_far, conversation_summary if i == 0 else "", chunk)
+            result = self.local_ai_service.support(
+                text=text, system_prompt=system_prompt, preset=SamplingPreset.PRECISE,
             )
-            return outcome
+            data = self._parse_json_response(result.text) if result and result.text else None
+            log_memory_event(
+                "checkpoint", self.wingman_name, final=final, tidy_only=tidy_only,
+                chunk_index=i, chunk_count=len(chunks), input_text=text,
+                raw_output=result.text if result else None,
+                truncated=result.truncated if result else None,
+            )
+            if not data:
+                outcome["skipped"] = "no usable answer"
+                return outcome
+            cleaned = self._clean_facts(data.get("facts", []))
+            if not cleaned and facts or (len(facts) >= 5 and len(cleaned) < len(facts) / 3):
+                # A model that lost the plot, not a list that was two-thirds noise.
+                printr.print(
+                    f"Memory checkpoint for {self.wingman_name} rejected: model returned "
+                    f"{len(cleaned)} of {len(facts)} facts.",
+                    color=LogType.WARNING, server_only=True,
+                )
+                outcome["skipped"] = "too many facts lost"
+                return outcome
+            if not tidy_only:
+                last_episode = data.get("episode") or data.get("summary") or ""
+                episode_so_far = self.episode_text(last_episode) or episode_so_far
+            if [e.content for e in facts] != cleaned:
+                self._replace_facts(facts, cleaned)
+                outcome["changed"] = True
+            facts = self.get_all(entry_type="fact")
+            facts.sort(key=lambda e: e.updated_at)
 
-        # Same set, nothing to write. Rewriting would only reset timestamps.
-        if [e.content for e in facts] == cleaned:
-            self._new_facts_since_consolidation = 0
-            return outcome
+        if not tidy_only and episode_so_far and len(episode_so_far) > 10:
+            if final and not self._worth_keeping(last_episode):
+                # A session with nothing memorable and nothing open is a
+                # log of what was done, and the models write one for every
+                # flight. Mid-session it stays so the next checkpoint can
+                # continue it; at the end it goes.
+                current = self._current_episode()
+                if current:
+                    self.delete_memory(current.id)
+            else:
+                self._upsert_episode(episode_so_far)
+                outcome["episode"] = episode_so_far
+        outcome["after"] = len(self.get_all(entry_type="fact"))
+        self._block = None
+        if final:
+            self.new_session()
+        return outcome
 
-        embeddings = self.local_ai_service.embed(cleaned)
-        if not embeddings or len(embeddings) != len(cleaned):
-            return outcome
+    @staticmethod
+    def _split(text: str, max_tokens: int) -> list[str]:
+        chunks = []
+        remaining = text
+        approx_chars = max_tokens * 4
+        while remaining:
+            if count_tokens(remaining) <= max_tokens:
+                chunks.append(remaining)
+                break
+            split_at = remaining.rfind("\n", 0, approx_chars)
+            if split_at <= 0:
+                split_at = approx_chars
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:].lstrip()
+        return chunks or [""]
 
+    def _replace_facts(self, old: list[MemoryEntry], new: list[str]) -> None:
+        """Swap the fact list atomically, the old one saved to memory_backups.
+
+        A fact whose text is unchanged keeps its row and timestamps, so the
+        "longest unconfirmed" order behind MAX_FACTS still means something.
+        """
+        old_by_text = {e.content: e for e in old}
+        added = [f for f in new if f not in old_by_text]
+        removed = [e for e in old if e.content not in set(new)]
+        embeddings = self.local_ai_service.embed(added) if added else []
+        if added and (not embeddings or len(embeddings) != len(added)):
+            return
         now = time.time()
         with self._lock:
             self._db.execute(
                 "INSERT INTO memory_backups (collection, created_at, payload) VALUES (?, ?, ?)",
-                (self.collection, now, json.dumps([e.content for e in facts])),
+                (self.collection, now, json.dumps([e.content for e in old])),
             )
             self._db.execute(
                 """DELETE FROM memory_backups WHERE collection = ? AND id NOT IN (
@@ -621,12 +591,12 @@ class PersistentMemoryService:
                        ORDER BY created_at DESC LIMIT 3)""",
                 (self.collection, self.collection),
             )
-            ids = [e.id for e in facts]
-            placeholders = ",".join("?" * len(ids))
-            self._db.execute(
-                f"DELETE FROM memory_entries WHERE id IN ({placeholders})", ids
-            )
-            for content, embedding in zip(cleaned, embeddings):
+            if removed:
+                ids = [e.id for e in removed]
+                self._db.execute(
+                    f"DELETE FROM memory_entries WHERE id IN ({','.join('?' * len(ids))})", ids
+                )
+            for content, embedding in zip(added, embeddings):
                 self._db.execute(
                     """INSERT INTO memory_entries
                        (collection, entry_type, content, embedding,
@@ -639,20 +609,17 @@ class PersistentMemoryService:
                 )
             self._db.commit()
             self._enforce_fact_cap()
-            after = len(self.get_all(entry_type="fact"))
+        self._block = None
 
-        self._new_facts_since_consolidation = 0
-        outcome.update(after=after, changed=True)
-        printr.print(
-            f"Memory consolidated for {self.wingman_name}: {before} facts → {after}"
-            + (f" ({len(untouched)} newest left as they were)" if untouched else "")
-            + ".",
-            color=LogType.MEMORY,
-        )
-        return outcome
+    def _upsert_episode(self, text: str) -> None:
+        current = self._current_episode()
+        if current:
+            self._update_memory_impl(current.id, text)
+        else:
+            self._add_memory_impl("episode", text, session_id=self.session_id)
+        self._block = None
 
     def _enforce_fact_cap(self) -> None:
-        """Drop the facts that went longest without an update beyond MAX_FACTS."""
         with self._lock:
             rows = self._db.execute(
                 """SELECT id FROM memory_entries
@@ -662,211 +629,148 @@ class PersistentMemoryService:
             ).fetchall()
             if len(rows) > MAX_FACTS:
                 to_delete = [r[0] for r in rows[MAX_FACTS:]]
-                placeholders = ",".join("?" * len(to_delete))
                 self._db.execute(
-                    f"DELETE FROM memory_entries WHERE id IN ({placeholders})",
+                    f"DELETE FROM memory_entries WHERE id IN ({','.join('?' * len(to_delete))})",
                     to_delete,
                 )
                 self._db.commit()
 
-    def _build_memory_context_impl(
-        self, query_text: str, max_tokens: int = MEMORY_MAX_TOKENS
-    ) -> str:
-        facts = self._search_impl(
-            query_text, limit=RECALL_MAX_FACTS, entry_type="fact",
-            min_similarity=MEMORY_MIN_SIMILARITY, min_lift=RECALL_MIN_LIFT,
-        )
-        # The latest session, by time — not the most similar one. "Where were we"
-        # is a question about last night, not about whichever evening happened
-        # to use the same words.
-        summaries = self.get_all(entry_type="session_summary")[:1]
-
-        if not facts and not summaries:
-            return ""
-
-        parts = []
-        token_count = 0
-
-        if facts:
-            fact_lines = []
-            for fact in facts:
-                line = f"- {fact.content}"
-                line_tokens = count_tokens(line)
-                if token_count + line_tokens > max_tokens:
-                    break
-                fact_lines.append(line)
-                token_count += line_tokens
-
-            if fact_lines:
-                parts.append(
-                    "[Memory - Relevant facts]\n" + "\n".join(fact_lines)
-                )
-
-        if summaries:
-            summary = summaries[0]
-            summary_tokens = count_tokens(summary.content)
-            if token_count + summary_tokens <= max_tokens:
-                parts.append(
-                    f"[Memory - Recent session]\n{summary.content}"
-                )
-
-        return "\n\n".join(parts)
-
-    def _forget_by_query_impl(self, query_text: str) -> bool:
-        embeddings = self.local_ai_service.embed([query_text])
-        if not embeddings or not embeddings[0]:
-            return False
-        query_embedding = embeddings[0]
-
+    def _enforce_episode_cap(self) -> None:
         with self._lock:
             rows = self._db.execute(
-                """SELECT id, content, embedding
-                   FROM memory_entries
-                   WHERE collection = ? AND embedding IS NOT NULL""",
+                """SELECT id FROM memory_entries
+                   WHERE collection = ? AND entry_type IN ('episode', 'session_summary')
+                   ORDER BY created_at DESC""",
                 (self.collection,),
             ).fetchall()
+            if len(rows) > MAX_EPISODES:
+                to_delete = [r[0] for r in rows[MAX_EPISODES:]]
+                self._db.execute(
+                    f"DELETE FROM memory_entries WHERE id IN ({','.join('?' * len(to_delete))})",
+                    to_delete,
+                )
+                self._db.commit()
 
-        if not rows:
+    # ── the system prompt block ────────────────────────────────────
+
+    def episodes(self, now: float | None = None) -> list[MemoryEntry]:
+        """Closed episodes young enough for the prompt, oldest first."""
+        now = now or time.time()
+        cutoff = now - EPISODE_MAX_AGE_DAYS * 86400
+        rows = [
+            e for e in self.get_all()
+            if e.entry_type in EPISODE_TYPES and e.session_id != self.session_id
+            and e.created_at >= cutoff
+        ]
+        rows.sort(key=lambda e: e.created_at)
+        return rows[-EPISODES_IN_PROMPT:]
+
+    def prompt_facts(self) -> list[MemoryEntry]:
+        facts = self.get_all(entry_type="fact")
+        facts.sort(key=lambda e: e.updated_at, reverse=True)
+        return facts[:FACTS_IN_PROMPT]
+
+    def memory_block(self) -> str:
+        """The MEMORY section of the system prompt; empty when there is nothing.
+        Cached until the next write."""
+        if self._block is not None:
+            return self._block
+        facts = self.prompt_facts()
+        episodes = self.episodes()
+        if not facts and not episodes:
+            self._block = ""
+            return ""
+        parts = ["# MEMORY", "What you know about the user from earlier sessions."]
+        if facts:
+            parts.append("\nFacts:\n" + "\n".join(f"- {e.content}" for e in facts))
+        if episodes:
+            now = time.time()
+            parts.append(
+                "\nRecent sessions, oldest first. Only the last one is current; the "
+                "earlier ones are past events the user may want to talk about.\n"
+                + "\n".join(f"- {age_label(e.created_at, now)}: {e.content}" for e in episodes)
+            )
+        self._block = "\n".join(parts)
+        return self._block
+
+    def block_stats(self) -> tuple[int, int]:
+        """(facts, episodes) the block holds; for the one line in the log."""
+        return len(self.prompt_facts()), len(self.episodes())
+
+    # ── forget ─────────────────────────────────────────────────────
+
+    def _forget_by_query_impl(self, query_text: str) -> bool:
+        hits = self._search_impl(query_text, limit=1)
+        if not hits:
             return False
+        embeddings = self.local_ai_service.embed([query_text])
+        # _search_impl already ranked; re-check the threshold on the best hit.
+        best = hits[0]
+        with self._lock:
+            row = self._db.execute(
+                "SELECT embedding FROM memory_entries WHERE id = ?", (best.id,)
+            ).fetchone()
+        if not row or not embeddings or not embeddings[0]:
+            return False
+        if _cosine_similarity(embeddings[0], _deserialize_embedding(row[0])) < FORGET_SIMILARITY_THRESHOLD:
+            return False
+        self.delete_memory(best.id)
+        return True
 
-        best_id = None
-        best_similarity = -1.0
-        for entry_id, _content, emb_blob in rows:
-            stored_embedding = _deserialize_embedding(emb_blob)
-            similarity = _cosine_similarity(query_embedding, stored_embedding)
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_id = entry_id
+    # ── async public API ───────────────────────────────────────────
 
-        if best_id is not None and best_similarity >= FORGET_SIMILARITY_THRESHOLD:
-            self.delete_memory(best_id)
-            return True
-        return False
-
-    # --- Async public API (preferred) ---
-
-    async def add_memory(
-        self,
-        entry_type: str,
-        content: str,
-        session_id: str | None = None,
-    ) -> int | None:
-        """Add a memory entry with embedding. Deduplicates facts automatically.
-
-        Returns the entry ID (new or updated), or None on failure.
-        """
-        return await asyncio.to_thread(
-            self._add_memory_impl, entry_type, content, session_id
-        )
+    async def add_memory(self, entry_type: str, content: str, session_id: str | None = None) -> int | None:
+        return await asyncio.to_thread(self._add_memory_impl, entry_type, content, session_id)
 
     async def update_memory(self, entry_id: int, new_content: str) -> None:
-        """Update a memory entry's content and re-embed."""
         await asyncio.to_thread(self._update_memory_impl, entry_id, new_content)
 
-    async def search(
-        self,
-        query_text: str,
-        limit: int = 10,
-        entry_type: str | None = None,
-    ) -> list[MemoryEntry]:
-        """Search memories by semantic similarity to query_text."""
-        return await asyncio.to_thread(
-            self._search_impl, query_text, limit, entry_type
-        )
+    async def search(self, query_text: str, limit: int = 10, entry_type: str | None = None) -> list[MemoryEntry]:
+        return await asyncio.to_thread(self._search_impl, query_text, limit, entry_type)
 
-    async def extract_memories(
-        self, messages: list, generate_summary: bool = False
-    ) -> None:
-        """Extract facts (and optionally a session summary) from messages."""
-        await asyncio.to_thread(
-            self._extract_memories_impl, messages, generate_summary
-        )
-
-    async def build_memory_context(
-        self, query_text: str, max_tokens: int = MEMORY_MAX_TOKENS
-    ) -> str:
-        """Build formatted memory context for system prompt injection."""
-        return await asyncio.to_thread(
-            self._build_memory_context_impl, query_text, max_tokens
-        )
+    async def checkpoint(self, messages: list, conversation_summary: str = "", final: bool = False) -> dict:
+        """Write what the new messages add to memory. See ``_checkpoint_impl``."""
+        return await asyncio.to_thread(self._checkpoint_impl, messages, conversation_summary, final)
 
     async def consolidate(self) -> dict:
-        """Tidy the fact list with one support-model pass. See ``_consolidate_impl``."""
-        return await asyncio.to_thread(self._consolidate_impl)
-
-    async def maybe_consolidate(self) -> dict | None:
-        """Consolidate when enough new facts arrived since the last pass."""
-        if self._new_facts_since_consolidation < CONSOLIDATE_AFTER_NEW_FACTS:
-            return None
-        return await self.consolidate()
+        """Rewrite the fact list with no new messages: the memory tab's button."""
+        return await asyncio.to_thread(self._checkpoint_impl, [], "", False, True)
 
     async def forget_by_query(self, query_text: str) -> bool:
-        """Find and delete the closest matching memory to the query.
+        return await asyncio.to_thread(self._forget_by_query_impl, query_text)
 
-        Returns True if a memory was deleted, False if no close match found.
-        """
-        return await asyncio.to_thread(
-            self._forget_by_query_impl, query_text
-        )
+    # ── sync public API ────────────────────────────────────────────
 
-    # --- Sync public API ---
-
-    def add_memory_sync(
-        self,
-        entry_type: str,
-        content: str,
-        session_id: str | None = None,
-    ) -> int | None:
-        """Sync version of add_memory."""
+    def add_memory_sync(self, entry_type: str, content: str, session_id: str | None = None) -> int | None:
         return self._add_memory_impl(entry_type, content, session_id)
 
     def update_memory_sync(self, entry_id: int, new_content: str) -> None:
-        """Sync version of update_memory."""
         self._update_memory_impl(entry_id, new_content)
 
-    def search_sync(
-        self,
-        query_text: str,
-        limit: int = 10,
-        entry_type: str | None = None,
-    ) -> list[MemoryEntry]:
-        """Sync version of search."""
+    def search_sync(self, query_text: str, limit: int = 10, entry_type: str | None = None) -> list[MemoryEntry]:
         return self._search_impl(query_text, limit, entry_type)
 
-    def extract_memories_sync(
-        self, messages: list, generate_summary: bool = False
-    ) -> None:
-        """Sync version of extract_memories."""
-        self._extract_memories_impl(messages, generate_summary)
-
-    def build_memory_context_sync(
-        self, query_text: str, max_tokens: int = MEMORY_MAX_TOKENS
-    ) -> str:
-        """Sync version of build_memory_context."""
-        return self._build_memory_context_impl(query_text, max_tokens)
+    def checkpoint_sync(self, messages: list, conversation_summary: str = "", final: bool = False) -> dict:
+        return self._checkpoint_impl(messages, conversation_summary, final)
 
     def forget_by_query_sync(self, query_text: str) -> bool:
-        """Sync version of forget_by_query."""
         return self._forget_by_query_impl(query_text)
 
-    # --- Pure sync methods (no embedding needed) ---
+    # ── plain DB access ────────────────────────────────────────────
 
     def delete_memory(self, entry_id: int) -> None:
-        """Delete a single memory entry."""
         with self._lock:
             self._db.execute("DELETE FROM memory_entries WHERE id = ?", (entry_id,))
             self._db.commit()
+        self._block = None
 
     def clear_collection(self) -> None:
-        """Delete all memories for this Wingman's collection."""
         with self._lock:
-            self._db.execute(
-                "DELETE FROM memory_entries WHERE collection = ?", (self.collection,)
-            )
+            self._db.execute("DELETE FROM memory_entries WHERE collection = ?", (self.collection,))
             self._db.commit()
+        self._block = None
 
     def get_all(self, entry_type: str | None = None) -> list[MemoryEntry]:
-        """Get all memories for this Wingman's collection."""
         with self._lock:
             if entry_type:
                 rows = self._db.execute(
@@ -886,39 +790,33 @@ class PersistentMemoryService:
                        ORDER BY created_at DESC""",
                     (self.collection,),
                 ).fetchall()
-
         return [
             MemoryEntry(
                 id=r[0], collection=r[1], entry_type=r[2], content=r[3],
-                source_wingman=r[4], session_id=r[5],
-                created_at=r[6], updated_at=r[7],
+                source_wingman=r[4], session_id=r[5], created_at=r[6], updated_at=r[7],
             )
             for r in rows
         ]
 
     def close(self) -> None:
-        """Close the database connection."""
         with self._lock:
             if self._db:
                 self._db.close()
                 self._db = None
 
     def get_tool_definitions(self) -> list[dict]:
-        """Return the OpenAI-style tool definitions for persistent memory operations.
-        These are exposed to the LLM whenever a PersistentMemoryService is active."""
+        """OpenAI-style tool definitions, exposed to the LLM whenever a
+        PersistentMemoryService is active."""
         return [
             {
                 "type": "function",
                 "function": {
                     "name": "memory_remember",
-                    "description": "Store something about the user that is meant to last: how they want to be addressed, a standing instruction, a preference, a fact about them or their life. Use it right away when the user tells you such a thing or asks you to remember something; do not wait to be asked twice.",
+                    "description": "Store something about the user that should still hold next month: how they want to be addressed, which language to answer in, a standing instruction, what they own, who they play with, what they like or dislike, a goal. Use it right away when the user says such a thing; do not wait to be asked twice. Not for where they are, what they are doing right now, a status, or a mood.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "text": {
-                                "type": "string",
-                                "description": "The fact or detail to remember.",
-                            },
+                            "text": {"type": "string", "description": "The fact, one short sentence in third person."},
                         },
                         "required": ["text"],
                     },
@@ -928,14 +826,11 @@ class PersistentMemoryService:
                 "type": "function",
                 "function": {
                     "name": "memory_recall",
-                    "description": "Search your memory for relevant information. Use when the user asks what you remember or know about a topic.",
+                    "description": "Search your memory. Use only when the user asks what you remember or know about them; never for a question about the world or the game.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "What to search for in memory.",
-                            },
+                            "query": {"type": "string", "description": "What to search for in memory."},
                         },
                         "required": ["query"],
                     },
@@ -949,10 +844,7 @@ class PersistentMemoryService:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Description of the memory to forget.",
-                            },
+                            "query": {"type": "string", "description": "Description of the memory to forget."},
                         },
                         "required": ["query"],
                     },
@@ -960,10 +852,10 @@ class PersistentMemoryService:
             },
         ]
 
-    # --- Private helpers ---
+    # ── private helpers ────────────────────────────────────────────
 
     def _find_duplicate(self, embedding: list[float]) -> MemoryEntry | None:
-        """Find the most similar existing fact if above DEDUP_THRESHOLD."""
+        """The most similar existing fact if above DEDUP_THRESHOLD."""
         with self._lock:
             rows = self._db.execute(
                 """SELECT id, collection, entry_type, content, embedding,
@@ -973,57 +865,25 @@ class PersistentMemoryService:
                    AND embedding IS NOT NULL""",
                 (self.collection,),
             ).fetchall()
-
-        if not rows:
-            return None
-
-        best_row = None
-        best_similarity = -1.0
+        best_row, best = None, -1.0
         for r in rows:
-            stored_embedding = _deserialize_embedding(r[4])
-            similarity = _cosine_similarity(embedding, stored_embedding)
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_row = r
-
-        if best_row is not None and best_similarity >= DEDUP_THRESHOLD:
+            similarity = _cosine_similarity(embedding, _deserialize_embedding(r[4]))
+            if similarity > best:
+                best, best_row = similarity, r
+        if best_row is not None and best >= DEDUP_THRESHOLD:
             return MemoryEntry(
-                id=best_row[0], collection=best_row[1],
-                entry_type=best_row[2], content=best_row[3],
-                source_wingman=best_row[5], session_id=best_row[6],
+                id=best_row[0], collection=best_row[1], entry_type=best_row[2],
+                content=best_row[3], source_wingman=best_row[5], session_id=best_row[6],
                 created_at=best_row[7], updated_at=best_row[8],
             )
         return None
 
-    def _update_entry(
-        self, entry_id: int, content: str, embedding: list[float]
-    ) -> None:
-        """Update an existing entry's content and embedding."""
+    def _update_entry(self, entry_id: int, content: str, embedding: list[float]) -> None:
         now = time.time()
         with self._lock:
             self._db.execute(
-                """UPDATE memory_entries
-                   SET content = ?, embedding = ?, updated_at = ?
-                   WHERE id = ?""",
+                "UPDATE memory_entries SET content = ?, embedding = ?, updated_at = ? WHERE id = ?",
                 (content, _serialize_embedding(embedding), now, entry_id),
             )
             self._db.commit()
-
-    def _enforce_summary_cap(self) -> None:
-        """Delete oldest session summaries beyond MAX_SESSION_SUMMARIES."""
-        with self._lock:
-            rows = self._db.execute(
-                """SELECT id FROM memory_entries
-                   WHERE collection = ? AND entry_type = 'session_summary'
-                   ORDER BY created_at DESC""",
-                (self.collection,),
-            ).fetchall()
-
-            if len(rows) > MAX_SESSION_SUMMARIES:
-                to_delete = [r[0] for r in rows[MAX_SESSION_SUMMARIES:]]
-                placeholders = ",".join("?" * len(to_delete))
-                self._db.execute(
-                    f"DELETE FROM memory_entries WHERE id IN ({placeholders})",
-                    to_delete,
-                )
-                self._db.commit()
+        self._block = None

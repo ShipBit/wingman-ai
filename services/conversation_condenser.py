@@ -295,8 +295,8 @@ class ConversationCondenser:
 
         Args:
             local_ai_service: The local AI service to use for summarization.
-            persistent_memory_service: Optional service for extracting memories.
-            background_tasks: Optional set to track background tasks for memory extraction.
+            persistent_memory_service: Unused; memory has its own checkpoints.
+            background_tasks: Unused.
             force: If True, skip the threshold check (used for manual trigger).
         """
         # On the manual trigger (force), surface skips as self-vanishing toasts —
@@ -404,20 +404,6 @@ class ConversationCondenser:
                 return
 
             to_condense = self._conversation.messages[:cutoff_index]
-
-            # Extract memories from messages about to be condensed (background, non-blocking)
-            if persistent_memory_service:
-                try:
-                    task = asyncio.create_task(
-                        persistent_memory_service.extract_memories(
-                            to_condense, generate_summary=True
-                        )
-                    )
-                    if background_tasks is not None:
-                        background_tasks.add(task)
-                        task.add_done_callback(background_tasks.discard)
-                except Exception:
-                    pass  # Don't let memory extraction block condensation
 
             condensed_text = self._conversation._messages_to_text(to_condense)
             if not condensed_text.strip():
