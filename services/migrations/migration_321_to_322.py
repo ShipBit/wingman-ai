@@ -218,7 +218,30 @@ class Migration321To322(BaseMigration):
         config = dict(old)
         config = self._drop_features(config, label)
         config = self._replace_inworld_prompt(config, label)
+        config = self._unpin_chat_model(config, label)
         return self._drop_stt(config, label)
+
+    def _unpin_chat_model(self, config: dict, label: str) -> dict:
+        """Clear a pinned chat model so everyone follows the plan default.
+
+        3.2.2 makes gpt-4.1-mini the default chat model on the backend. A user
+        who never changed it has `conversation_deployment` empty already and
+        follows along; one who picked a specific model at some point is pinned
+        to it and would miss the new default. Emptying the field puts everyone
+        back on "follow the plan default". Anyone who wants a specific model
+        can pick it again in Settings; the choice is one click and the list is
+        the plan's."""
+        pro = config.get("wingman_pro")
+        if not isinstance(pro, dict):
+            return config
+        pinned = str(pro.get("conversation_deployment") or "").strip()
+        if pinned:
+            pro = dict(pro)
+            pro["conversation_deployment"] = ""
+            config = dict(config)
+            config["wingman_pro"] = pro
+            self.log(f"{label}: chat model '{pinned}' -> plan default (unpinned)")
+        return config
 
     def migrate_settings(self, old: dict) -> dict:
         """Split `voice_activation` into listening (stays) and transcribing (new `stt`),
