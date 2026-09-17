@@ -43,11 +43,22 @@ DELAY_WORSE_BY = 0.1
 GAIN_WINDOW_MS = 1500
 # Output level below this is silence for the purpose of measuring.
 OUTPUT_PRESENT = 1e-3
+# The delay is known to a few frames only: the output is measured in the
+# player's blocks, the microphone in its own, and neither lines up with
+# the other. The expected echo takes the loudest output around the delay,
+# further back than forward, since a delay found short is the usual error.
+JITTER_BACK = 3
+JITTER_FORWARD = 1
 # How the expected echo dies away after the output stops: the room rings
-# on. Per frame; halves in about 150 ms.
-DECAY = 0.86
+# on. Per frame; halves in about 200 ms.
+DECAY = 0.9
 # The microphone has to stay this far above the expected echo ...
 MARGIN = 2.0  # 6 dB
+# ... and the bar rises when a hit turns out to have been the echo after
+# all, up to this, and eases back a little on every real hit.
+MAX_MARGIN = 4.0
+FALSE_ALARM_STEP = 1.25
+CONFIRMED_STEP = 1.1
 # ... for this long. A door or a cough is shorter; a "stop" is not.
 HOLD_MS = 150
 # Below this the microphone is quiet whatever the arithmetic says; keeps a
@@ -69,6 +80,7 @@ class BargeInDetector:
         # per microphone frame, over one frame's worth of time.
         self._output_level = output_level
         self.enabled = True
+        self.margin = MARGIN
         self._playing = False
         self._floor = 0.0
         # Delay in frames and microphone level per unit of output level.
@@ -103,6 +115,15 @@ class BargeInDetector:
 
     def playback_finished(self) -> None:
         self._playing = False
+
+    def false_alarm(self) -> None:
+        """The last hit was the echo after all: what came in was the
+        wingman's own words and nothing else. This room needs more slack."""
+        self.margin = min(self.margin * FALSE_ALARM_STEP, MAX_MARGIN)
+
+    def confirmed(self) -> None:
+        """The last hit was the user. The slack may ease back a little."""
+        self.margin = max(MARGIN, self.margin / CONFIRMED_STEP)
 
     # --- frames ---
 
@@ -141,7 +162,7 @@ class BargeInDetector:
             return False
         self._expected_echo = max(self._gain * lagged, self._expected_echo * DECAY)
         expected = self._floor + self._expected_echo
-        if rms > MARGIN * expected and rms > MIN_LEVEL:
+        if rms > self.margin * expected and rms > MIN_LEVEL:
             self._above += 1
         else:
             self._above = 0
@@ -158,7 +179,7 @@ class BargeInDetector:
         index = len(self._out) - 1 - self._delay
         if index < 0:
             return 0.0
-        window = list(self._out)[max(0, index - 1) : index + 2]
+        window = list(self._out)[max(0, index - JITTER_BACK) : index + JITTER_FORWARD + 1]
         return max(window) if window else 0.0
 
     def _find_delay(self) -> Optional[tuple[int, float]]:

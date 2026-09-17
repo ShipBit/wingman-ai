@@ -124,6 +124,9 @@ ECHO_RATIO = 0.6
 # Fewer words of the user's own than this, next to a mostly echoed sentence,
 # are misheard echo, not the user.
 MIN_OWN_WORDS = 3
+# A transcript that begins during a playback and arrives within this many
+# seconds of a barge-in is the one that barge-in acted on.
+BARGE_IN_VERDICT_S = 8.0
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -725,6 +728,9 @@ class WingmanCore(WebSocketUser):
         self.key_events = {}
         # When "stop" was last said with nothing playing; see _on_transcript.
         self._stop_requested_at = 0.0
+        # When the barge-in detector last stopped a playback. The transcript
+        # of that moment tells whether it was right; see _on_transcript.
+        self._barge_in_at = float("-inf")
 
         # Joystick thread management
         self._joystick_thread: Optional[threading.Thread] = None
@@ -1660,6 +1666,7 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
                 color=LogType.INFO,
             )
+            self._barge_in_at = time.monotonic()
             self._run_on_main_loop(self.stop_playback())
         self.listen_controller.feed(frame)
 
@@ -1712,6 +1719,19 @@ class WingmanCore(WebSocketUser):
         # said while it spoke arrives mixed with the wingman's own words.
         # Those are taken out first; the decisions below are about the rest.
         own = self._without_echo(words) if during_playback else words
+        # The verdict on a barge-in that stopped this playback: the user, or
+        # the echo after all. The detector tunes its bar on that.
+        barged = during_playback and time.monotonic() - self._barge_in_at < BARGE_IN_VERDICT_S
+        if barged:
+            if self._is_echo(words) and not self._has_stop_word(own):
+                self.barge_in.false_alarm()
+                self.printr.print(
+                    f"That was the wingman's own voice - raising the bar to {self.barge_in.margin:.2f}x.",
+                    server_only=True,
+                    color=LogType.INFO,
+                )
+            else:
+                self.barge_in.confirmed()
         if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
             # Over the wingman, a stop word anywhere in what the user said
             # is a stop; the rest of it was talking over an answer they did
