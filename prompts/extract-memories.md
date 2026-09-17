@@ -22,7 +22,7 @@ How to build the new list:
 EPISODE. The story of this session for the next one, continued from the episode so far. Three fields, each one or two sentences, in English:
 - happened: what the user was doing, as a story in one or two sentences: the mission, the place, who was along, how it went. Never the commands issued (powering up, gear, course, landing, lights) and never the questions asked; "asked for the time" is never worth writing down.
 - memorable: the one thing worth bringing up again, if there was one: a close call, a win, a funny moment, a first. Empty when nothing stood out. Do not repeat it in "happened".
-- open: what is unfinished: a mission accepted but not done, a plan for next time, a question left hanging. Empty when nothing is open.
+- open: what the user said they would do later: a mission accepted but not done, a plan for next time, a question left hanging. A flight or trip that is simply still going on is not open. Empty when nothing is open.
 Leave all three empty ("") when the session was only small talk, testing, or commands with nothing to continue.
 
 Output one line of compact JSON and nothing else:
