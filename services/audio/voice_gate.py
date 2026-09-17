@@ -154,6 +154,12 @@ class VoiceGate:
         self._last_speech: Optional[int] = None
         self._split_at: Optional[int] = None
 
+    @property
+    def is_capturing(self) -> bool:
+        """Whether there is speech in the gate right now: an utterance under
+        way, or the first frames of one that may still turn out to be noise."""
+        return self._speaking or self._first_speech is not None or bool(self._candidate)
+
     # --- frames ---
 
     def feed(self, frame: np.ndarray) -> Optional[Utterance]:

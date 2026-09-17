@@ -22,6 +22,7 @@ whether it was "stop", the wingman's own voice, or the user talking on.
 """
 
 import threading
+import time
 from enum import Enum
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -48,6 +49,12 @@ class ListenState(str, Enum):
     ARMED = "armed"
     HELD = "held"
     PAUSED = "paused"
+
+
+# For how long after a playback ended a new utterance still counts as said
+# during it. The wingman's last words are still in the room, the finished
+# event comes through a queue, and the microphone hears the reverb.
+PLAYBACK_TAIL_S = 1.5
 
 
 class ListenController:
@@ -80,6 +87,12 @@ class ListenController:
         self.listen_while_speaking = True
         self.user_muted = False
         self.playing = False
+        # When the last playback ended, monotonic; for the tail after it.
+        self._playback_ended_at = float("-inf")
+        # Whether a wingman spoke at any point while the current utterance was
+        # in the gate. Read when the utterance ends: by then the playback is
+        # usually over, so `playing` alone would say no.
+        self._heard_while_playing = False
         self.held_source: Optional[str] = None
         self.held_wingman: Optional["Wingman"] = None
         self._state = ListenState.OFF
@@ -122,7 +135,18 @@ class ListenController:
     def playback_finished(self) -> None:
         with self._lock:
             self.playing = False
+            self._playback_ended_at = time.monotonic()
             self._apply()
+
+    def _playback_overlaps(self) -> bool:
+        return self.playing or time.monotonic() - self._playback_ended_at < PLAYBACK_TAIL_S
+
+    def _take_heard_while_playing(self) -> bool:
+        """Whether a wingman spoke during the utterance that just ended, and
+        a clean slate for the next one."""
+        playing = self._heard_while_playing
+        self._heard_while_playing = False
+        return playing
 
     def ptt_down(self, source: str, wingman: "Wingman") -> bool:
         """Returns False when another source already holds the gate."""
@@ -174,8 +198,8 @@ class ListenController:
     def _finish_release(self) -> None:
         """Called under the lock from feed(), the watchdog, or a new key."""
         wingman = self.held_wingman
-        playing = self.playing
         utterance = self._gate.release()
+        playing = self._take_heard_while_playing()
         self.held_source = None
         self.held_wingman = None
         self._cancel_release()
@@ -226,9 +250,14 @@ class ListenController:
     def feed(self, frame: np.ndarray) -> None:
         with self._lock:
             state = self._state
+            if self._gate.is_capturing and self._playback_overlaps():
+                self._heard_while_playing = True
             utterance = self._gate.feed(frame)
+            if utterance is None and self._gate.is_capturing and self._playback_overlaps():
+                # The frame that opened the gate counts too.
+                self._heard_while_playing = True
             wingman = self.held_wingman
-            playing = self.playing
+            playing = self._take_heard_while_playing() if utterance is not None else False
             if self._release_in is not None and utterance is None:
                 self._release_in -= 1
                 if self._release_in <= 0:

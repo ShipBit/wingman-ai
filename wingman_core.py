@@ -119,6 +119,11 @@ from hud_server.validation import validate_hud_settings, get_invalid_summary
 # Share of a transcript's words that must occur in what the wingman is saying
 # for the transcript to count as the wingman's own voice.
 ECHO_RATIO = 0.6
+# Fewer words of the user's own than this, next to a mostly echoed sentence,
+# are misheard echo, not the user.
+MIN_OWN_WORDS = 3
+# A stop word said over the wingman counts within this many words.
+STOP_WITHIN_WORDS = 4
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -1685,7 +1690,11 @@ class WingmanCore(WebSocketUser):
             return
         words = _words(text)
         playing = self.audio_player.is_playing
-        if self._is_stop(words):
+        # With speakers the microphone hears the wingman, so what the user
+        # said while it spoke arrives mixed with the wingman's own words.
+        # Those are taken out first; the decisions below are about the rest.
+        own = self._without_echo(words) if during_playback else words
+        if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
             if playing:
                 self.printr.print(
                     f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
@@ -1708,6 +1717,14 @@ class WingmanCore(WebSocketUser):
                 color=LogType.INFO,
             )
             return
+        if during_playback and len(own) < len(words):
+            stripped = " ".join(own)
+            self.printr.print(
+                f"Heard '{text}' over the wingman - taking '{stripped}'.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            text = stripped
         target = wingman or self.tower.get_wingman_from_text(text)
         if not target:
             return
@@ -1753,31 +1770,60 @@ class WingmanCore(WebSocketUser):
         every_word = {word for phrase in phrases for word in phrase}
         return all(word in every_word for word in words)
 
+    def _has_stop_word(self, words: list[str]) -> bool:
+        """Whether a stop word stands in a short utterance. Used for what the
+        user said over the wingman: a "stop" between a few misheard echo
+        words still means stop, but not inside a whole sentence."""
+        if not words or len(words) > STOP_WITHIN_WORDS:
+            return False
+        phrases = [
+            tuple(_words(phrase))
+            for phrase in self.settings_service.settings.voice_activation.stop_words
+        ]
+        on_its_own = {phrase[0] for phrase in phrases if len(phrase) == 1}
+        return any(word in on_its_own for word in words)
+
+    def _echo_hits(self, words: list[str]) -> list[bool]:
+        """For each word, whether it is the wingman's own, said in this order.
+
+        Counting them as a set drops sentences that only share vocabulary
+        with the answer: "is the gear on the target" against an answer about
+        the gear and the target. A user who repeats the wingman's own
+        sentence word for word is still taken for an echo - nothing in the
+        text tells those two apart.
+        """
+        spoken = _words(self.audio_player.speaking_text)
+        hits = []
+        at = 0
+        for word in words:
+            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
+            hits.append(found is not None)
+            if found is not None:
+                at = found + 1
+        return hits
+
+    def _without_echo(self, words: list[str]) -> list[str]:
+        """The words that are not the wingman's: what the user said over it."""
+        return [w for w, hit in zip(words, self._echo_hits(words)) if not hit]
+
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With
         speakers instead of a headset the microphone hears the wingman; the
         transcript then repeats its sentence, word for word or nearly.
 
-        The words have to come back in the order they were said. Counting
-        them as a set drops sentences that only share vocabulary with the
-        answer: "is the gear on the target" against an answer about the gear
-        and the target. A user who repeats the wingman's own sentence word
-        for word is still taken for an echo - nothing in the text tells those
-        two apart.
+        Nearly: the speech model mishears a word or two of the echo, so a few
+        foreign words do not make it the user. Several do, and the user's
+        words are then taken without the wingman's.
         """
-        spoken = _words(self.audio_player.speaking_text)
         meaningful = [w for w in words if len(w) >= 3]
         if not meaningful:
             # "hm", "ah": nothing to act on either way
             return True
-        hits = 0
-        at = 0
-        for word in meaningful:
-            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
-            if found is not None:
-                hits += 1
-                at = found + 1
-        return hits / len(meaningful) >= ECHO_RATIO
+        hits = self._echo_hits(meaningful)
+        own = [w for w, hit in zip(meaningful, hits) if not hit]
+        if not own:
+            return True
+        return sum(hits) / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
 
     # GET /stt/vocabulary/presets
     async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
