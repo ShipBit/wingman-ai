@@ -69,6 +69,9 @@ zeigen setzen stellen legen laufen warten suchen spielen hören lesen wissen den
 glauben heute morgen gestern immer nie oft bald wieder schnell langsam groß klein
 neu alt lang kurz hoch tief weit nah rechts links oben unten vorne hinten start
 stopp halt weiter zurück ende anfang seite platz punkt zeit tag welt wort arbeit
+mir dir ihm ihn ihnen dies diese dieser dieses jede jeder jedes kein keine keinen
+man denn dazu davon damit dabei darum daran darauf dafür dagegen wozu sonst eben
+ganz fast etwa gerade genau eigentlich vielleicht natürlich ziemlich überhaupt
 """
 
 _SPANISH = """

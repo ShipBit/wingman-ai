@@ -9,7 +9,8 @@ entry.
 
 The allowance grows with the length of the entry and the first letter has to
 match unless the word is one edit away. That keeps "complete" from turning
-into "Computer" while "Computa" still does.
+into "Computer" while "Computa" still does. Entries of up to four letters are
+matched exactly only: "dir" must not become "Adir".
 
 Fuzzy matching corrects spellings, not hearing: a word the model dropped or
 replaced with something unrelated stays wrong. For those there is the second
@@ -32,6 +33,10 @@ from services.audio.protected_words import PROTECTED_WORDS
 # Entries shorter than this are not corrected: too many ordinary words are
 # one letter away from "Ava".
 MIN_WORD_LENGTH = 3
+# Entries shorter than this are matched exactly, never by edit distance:
+# one edit away from "Adir" is "dir", from "Dawu" is "dazu", and a short
+# name misheard is rarer than a short everyday word said.
+MIN_FUZZY_LENGTH = 5
 MAX_PHRASE_WORDS = 3
 
 _TOKEN = re.compile(r"[\w'-]+|[^\w'-]+", re.UNICODE)
@@ -129,6 +134,8 @@ class Vocabulary:
         for normalised, entry_words, entry in self._joined:
             if joined == normalised:
                 return entry
+            if len(normalised) < MIN_FUZZY_LENGTH:
+                continue
             # A different word count is a split or a merge ("micro tech"):
             # allowed only when the letters themselves are all but the same,
             # otherwise a three-word window swallows a small word next to a
