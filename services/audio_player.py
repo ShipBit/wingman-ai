@@ -1,7 +1,5 @@
 import asyncio
-from collections import deque
 import io
-import time
 import wave
 from os import path
 from threading import Thread
@@ -15,16 +13,6 @@ from api.interface import SoundConfig
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.pub_sub import PubSub
-# How far back output_level() looks by default.
-OUTPUT_LEVEL_WINDOW_S = 0.1
-
-
-def _full_scale(dtype) -> float:
-    """What a sample of this dtype is at full volume, to bring it to 0..1."""
-    info = np.iinfo(dtype) if np.issubdtype(np.dtype(dtype), np.integer) else None
-    return float(info.max) if info else 1.0
-
-
 from services.sound_effects import (
     get_additional_layer_file,
     get_streaming_gain_boost,
@@ -55,9 +43,6 @@ class AudioPlayer:
         self.voice_state = None
         # What is being spoken right now; set by Wingman.play_to_user.
         self.speaking_text = ""
-        # (monotonic time, rms) of the last output blocks, for the barge-in
-        # detector: how loud the echo in the microphone may be right now.
-        self._output_levels: deque[tuple[float, float]] = deque(maxlen=64)
         self.on_playback_started = on_playback_started
         self.on_playback_finished = on_playback_finished
         self.sample_dir = path.join(
@@ -115,7 +100,6 @@ class AudioPlayer:
             try:
                 current_chunk = current_chunk.reshape((frames, channels))
                 current_chunk = current_chunk * local_volume
-                self._note_output(current_chunk)
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata[:] = current_chunk.astype(outdata.dtype)
                 else:
@@ -151,16 +135,6 @@ class AudioPlayer:
         )
         self.stream.start()
         sd.sleep(int(len(audio) / sample_rate * 1000))
-
-    def _note_output(self, samples: np.ndarray, full_scale: float = 1.0) -> None:
-        if samples.size:
-            rms = float(np.sqrt(np.mean(np.square(samples, dtype=np.float32)))) / full_scale
-            self._output_levels.append((time.monotonic(), rms))
-
-    def output_level(self, window_s: float = OUTPUT_LEVEL_WINDOW_S) -> float:
-        """The loudest the output has been in the last window, 0..1."""
-        since = time.monotonic() - window_s
-        return max((rms for at, rms in list(self._output_levels) if at >= since), default=0.0)
 
     async def stop_playback(self):
         if self.stream is not None:
@@ -512,7 +486,6 @@ class AudioPlayer:
 
                 data_chunk = data_chunk.flatten()
                 data_chunk = data_chunk * config.volume
-                self._note_output(data_chunk, full_scale=_full_scale(dtype))
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]

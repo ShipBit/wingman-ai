@@ -547,16 +547,11 @@ class VoiceActivationSettings(BaseModel):
     pre_roll_ms: int = 300
     """Audio kept from before the detector noticed speech."""
 
-    listen_while_speaking: bool = True
-    """Keep the microphone open while a wingman speaks, so "stop" stops it and
-    talking on skips the answer. With speakers instead of a headset the wingman
-    hears itself; what it hears is compared to what it is saying and dropped
-    when it matches. Off means the old behaviour: deaf while speaking."""
-
-    interrupt_on_speech: bool = True
-    """Whether a voice over the wingman, heard through speakers, stops the
-    playback at once. Off with a television in the room: the wingman finishes
-    and what was said meanwhile is answered afterwards."""
+    listen_while_speaking: bool = False
+    """Whether the microphone stays open while a wingman speaks, so "stop"
+    cuts it off and talking on skips the answer. For headsets: through
+    speakers the microphone hears the wingman itself, and the wingman then
+    answers its own words or stops itself. Off means deaf while speaking."""
 
     stop_words: list[str] = ['stop', 'stopp', 'stop it', 'stop please', 'shut up', 'be quiet', 'silence', 'enough', 'halt', 'sei still', 'ruhe', 'schluss', 'bitte stopp', 'okay stop', 'basta', 'silencio', 'para', 'cállate', 'callate', 'arrête', 'arrete', 'tais-toi', 'assez', "stop s'il te plaît"]
     """Phrases that stop a wingman mid-sentence and are not answered. An

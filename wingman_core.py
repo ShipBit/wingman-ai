@@ -8,7 +8,6 @@ import threading
 import time
 from typing import Optional
 from xml.etree import ElementTree
-import numpy as np
 import pygame
 from google.genai import types
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
@@ -106,7 +105,6 @@ from services.audio import (
     Utterance,
     VoiceGate,
 )
-from services.audio.barge_in import BargeInDetector
 from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
@@ -124,9 +122,6 @@ ECHO_RATIO = 0.6
 # Fewer words of the user's own than this, next to a mostly echoed sentence,
 # are misheard echo, not the user.
 MIN_OWN_WORDS = 3
-# A transcript that begins during a playback and arrives within this many
-# seconds of a barge-in is the one that barge-in acted on.
-BARGE_IN_VERDICT_S = 8.0
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -728,9 +723,6 @@ class WingmanCore(WebSocketUser):
         self.key_events = {}
         # When "stop" was last said with nothing playing; see _on_transcript.
         self._stop_requested_at = 0.0
-        # When the barge-in detector last stopped a playback. The transcript
-        # of that moment tells whether it was right; see _on_transcript.
-        self._barge_in_at = float("-inf")
 
         # Joystick thread management
         self._joystick_thread: Optional[threading.Thread] = None
@@ -853,11 +845,7 @@ class WingmanCore(WebSocketUser):
         self.listen_controller.set_listen_while_speaking(
             self.settings_service.settings.voice_activation.listen_while_speaking
         )
-        # Somebody talking over a wingman through speakers, told by loudness
-        # against the wingman's own output; see services/audio/barge_in.py.
-        self.barge_in = BargeInDetector(output_level=self.audio_player.output_level)
-        self._apply_barge_in_setting(self.settings_service.settings.voice_activation)
-        self.audio_input = AudioInput(on_frame=self._on_frame)
+        self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
 
         if self.settings_service.settings.audio:
             sd.default.device = [
@@ -1658,21 +1646,6 @@ class WingmanCore(WebSocketUser):
 
     # ───────────────── Utterances → text → wingman ───────────────── #
 
-    def _on_frame(self, frame: np.ndarray) -> None:
-        """Every microphone frame, on the audio thread."""
-        if self.barge_in.feed(frame):
-            self.printr.print(
-                "Somebody is talking over the wingman - stopping playback.",
-                server_only=True,
-                color=LogType.INFO,
-            )
-            self._barge_in_at = time.monotonic()
-            self._run_on_main_loop(self.stop_playback())
-        self.listen_controller.feed(frame)
-
-    def _apply_barge_in_setting(self, va: VoiceActivationSettings) -> None:
-        self.barge_in.enabled = va.listen_while_speaking and va.interrupt_on_speech
-
     def _on_utterance(
         self, utterance: Utterance, wingman: Wingman | None, during_playback: bool
     ) -> None:
@@ -1719,19 +1692,6 @@ class WingmanCore(WebSocketUser):
         # said while it spoke arrives mixed with the wingman's own words.
         # Those are taken out first; the decisions below are about the rest.
         own = self._without_echo(words) if during_playback else words
-        # The verdict on a barge-in that stopped this playback: the user, or
-        # the echo after all. The detector tunes its bar on that.
-        barged = during_playback and time.monotonic() - self._barge_in_at < BARGE_IN_VERDICT_S
-        if barged:
-            if self._is_echo(words) and not self._has_stop_word(own):
-                self.barge_in.false_alarm()
-                self.printr.print(
-                    f"That was the wingman's own voice - raising the bar to {self.barge_in.margin:.2f}x.",
-                    server_only=True,
-                    color=LogType.INFO,
-                )
-            else:
-                self.barge_in.confirmed()
         if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
             # Over the wingman, a stop word anywhere in what the user said
             # is a stop; the rest of it was talking over an answer they did
@@ -1742,8 +1702,7 @@ class WingmanCore(WebSocketUser):
                 )
                 self._run_on_main_loop(self.stop_playback())
             elif during_playback:
-                # The playback it meant is over already, stopped by the voice
-                # itself or by the end of the answer. Nothing left to cut off.
+                # The playback it meant is over already. Nothing left to cut off.
                 self.printr.print(f"Heard '{text}' - nothing left to stop.", server_only=True)
             else:
                 # Said in the gap between the question and the answer: the
@@ -1994,7 +1953,6 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_started()
-        self.barge_in.playback_started()
         self._emit_voice_state()
 
         if time.time() - self._stop_requested_at <= STOP_AHEAD_SECONDS:
@@ -2014,7 +1972,6 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_finished()
-        self.barge_in.playback_finished()
         self._emit_voice_state()
 
     async def process_events(self):
@@ -2025,7 +1982,6 @@ class WingmanCore(WebSocketUser):
     def on_va_settings_changed(self, va_settings: VoiceActivationSettings):
         self.listen_controller.update_params(self._gate_params())
         self.listen_controller.set_listen_while_speaking(va_settings.listen_while_speaking)
-        self._apply_barge_in_setting(va_settings)
 
     def start_voice_recognition(
         self,
