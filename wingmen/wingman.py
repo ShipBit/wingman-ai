@@ -171,8 +171,13 @@ class Wingman:
         # --- Local AI / persistent memory ---
         self.local_ai_service = None
         self.persistent_memory_service = None
-        self._memory_recall_notified = False
         self._background_tasks: set[asyncio.Task] = set()
+        # Memory checkpoints: what was said since the last one, how many user
+        # turns that is, when it ran, and the idle timer that closes a session.
+        self._memory_pending: list[dict] = []
+        self._memory_turns = 0
+        self._memory_last_checkpoint = time.time()
+        self._memory_idle_handle: asyncio.TimerHandle | None = None
 
         # --- Image generation (lazy) ---
         self._image_subscription = None
@@ -321,19 +326,7 @@ class Wingman:
             self._background_tasks.clear()
 
         if self.persistent_memory_service:
-            from services.persistent_memory import MIN_MESSAGES_FOR_EXTRACTION
-
-            if len(self.conversation.messages) >= MIN_MESSAGES_FOR_EXTRACTION:
-                try:
-                    await self.persistent_memory_service.extract_memories(
-                        self.conversation.messages, generate_summary=True
-                    )
-                except Exception:
-                    pass
-            try:
-                await self.persistent_memory_service.maybe_consolidate()
-            except Exception:
-                pass
+            await self._memory_checkpoint(final=True)
             self.persistent_memory_service.close()
 
         # Unsubscribe from secret events to prevent duplicate handlers
@@ -367,6 +360,76 @@ class Wingman:
             self.persistent_memory_service.initialize()
             return True
         return False
+
+    def _memory_after_turn(self, response) -> None:
+        """Count the turn, keep the reply, run a checkpoint when it is time,
+        and re-arm the idle timer that closes the session."""
+        if not self.persistent_memory_service:
+            return
+        from services.persistent_memory import CHECKPOINT_SECONDS, CHECKPOINT_TURNS, IDLE_SECONDS
+
+        if response:
+            self._memory_pending.append({"role": "assistant", "content": str(response)})
+        self._memory_turns += 1
+        due = (
+            self._memory_turns >= CHECKPOINT_TURNS
+            or time.time() - self._memory_last_checkpoint >= CHECKPOINT_SECONDS
+        )
+        if due:
+            task = asyncio.create_task(self._memory_checkpoint(final=False))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        loop = asyncio.get_running_loop()
+        if self._memory_idle_handle:
+            self._memory_idle_handle.cancel()
+        self._memory_idle_handle = loop.call_later(IDLE_SECONDS, self._memory_idle)
+
+    def _memory_idle(self) -> None:
+        """No user turn for IDLE_SECONDS: the session is over."""
+        self._memory_idle_handle = None
+        task = asyncio.create_task(self._memory_checkpoint(final=True))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _memory_checkpoint(self, final: bool) -> None:
+        """Hand what was said since the last checkpoint to memory.
+
+        ``final`` closes the episode and starts a new session; the next
+        build of the system prompt says again what was loaded. The condensed
+        summary goes along only at the end: the messages it covers were
+        already seen by the checkpoints before, the rewrite folds them in.
+        """
+        svc = self.persistent_memory_service
+        if not svc:
+            return
+        pending, self._memory_pending = self._memory_pending, []
+        self._memory_turns = 0
+        self._memory_last_checkpoint = time.time()
+        if final and self._memory_idle_handle:
+            self._memory_idle_handle.cancel()
+            self._memory_idle_handle = None
+        if not pending and not final:
+            return
+        try:
+            summary = self.conversation.conversation_summary if final else ""
+            outcome = await svc.checkpoint(pending, conversation_summary=summary, final=final)
+            if outcome.get("changed") or outcome.get("episode"):
+                printr.print(
+                    f"Memory checkpoint for {self.name}: {outcome['before']} → {outcome['after']} facts"
+                    + (", episode updated" if outcome.get("episode") else "")
+                    + (" (session closed)" if final else "") + ".",
+                    color=LogType.MEMORY,
+                    server_only=True,
+                )
+        except Exception as e:
+            printr.print(
+                f"Memory checkpoint for {self.name} failed: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+        if final:
+            self.context_builder.reset_memory_notification()
 
     # ──────────────────────────────── MCP (forwarding) ─────────────────────────── #
 
@@ -452,6 +515,8 @@ class Wingman:
                 if self.settings.streamer_mode:
                     self.tower.save_last_message(self.name, process_result)
                 await self.play_to_user(str(process_result), not interrupt)
+            if transcript:
+                self._memory_after_turn(actual_response)
         except Exception as e:
             await printr.print_async(
                 f"Error during processing of Wingman '{self.name}': {str(e)}",
@@ -752,9 +817,9 @@ class Wingman:
     # ───────────────── Conversation delegation ───────────────── #
 
     async def add_user_message(self, content: str, images: list[tuple[str, str]] = None):
-        """Thin wrapper: resets memory-recall state then delegates to ConversationManager."""
-        self._memory_recall_notified = False
-        self.context_builder.reset_memory_notification()
+        """Delegates to ConversationManager and keeps the message for the next
+        memory checkpoint."""
+        self._memory_pending.append({"role": "user", "content": content})
         await self.conversation.add_user_message(
             content,
             images=images,
@@ -764,14 +829,8 @@ class Wingman:
         )
 
     async def reset_conversation_history(self):
-        if self.persistent_memory_service and len(self.conversation.messages) >= 4:
-            try:
-                await self.persistent_memory_service.extract_memories(
-                    self.conversation.messages, generate_summary=True
-                )
-                await self.persistent_memory_service.maybe_consolidate()
-            except Exception:
-                pass
+        if self.persistent_memory_service:
+            await self._memory_checkpoint(final=True)
 
         await self.conversation.reset()
         self.skill_registry.reset_activations()
@@ -849,16 +908,9 @@ class Wingman:
         return self.context_builder.get_last_context()
 
     async def add_context(self, messages):
-        """Put the system prompt in front and the memories behind.
-
-        The order is the whole point: in front goes what does not change over a
-        session (backstory, skills, instructions), behind it what changes on
-        every turn. Only then can the provider reuse the prefix, and in a long
-        conversation that prefix is almost the entire request.
-        """
+        """Put the system prompt in front."""
         context = await self.get_context()
         messages.insert(0, {"role": "system", "content": context})
-        self.context_builder.attach_memory(messages)
 
     # ───────────────── TTS / play_to_user ───────────────── #
 

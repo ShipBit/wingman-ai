@@ -3102,8 +3102,10 @@ class WingmanCore(WebSocketUser):
         },
         "extract-memories": {
             "production_preset": "Precise",
-            "production_reasoning": True,
+            "production_reasoning": False,
             "example_message": (
+                "STORED FACTS:\n1. Name is Shackles\n2. Owns an Aurora MR\n\n"
+                "EPISODE SO FAR:\n(none)\n\nNEW MESSAGES:\n"
                 "user: Hey, can you check the trade prices for laranite at Lorville?\n"
                 "assistant: Laranite is currently buying at 31.26 aUEC per unit at the TDD in Lorville. "
                 "The sell price at Port Tressler is around 33.10 aUEC, so you'd make about 1.84 per "
@@ -4038,40 +4040,32 @@ class WingmanCore(WebSocketUser):
             raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
 
         from services.file import get_prompt
-
-        # Format messages the same way extract_memories does
-        text_parts = []
-        for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if content and role in ("user", "assistant"):
-                text_parts.append(f"{role}: {content}")
-
-        if not text_parts:
-            raise HTTPException(400, "No valid user/assistant messages provided")
-
         from services.skill_local_ai import SamplingPreset
 
-        conversation_text = "\n".join(text_parts)
-        system_prompt = get_prompt("extract-memories")
+        transcript, user_turns = svc.conversation_text(messages)
+        if not transcript:
+            raise HTTPException(400, "No valid user/assistant messages provided")
 
-        # Call the support model (sync, run in thread)
+        # The same input a checkpoint builds, against the wingman's real
+        # facts, but nothing is written.
+        facts = svc.get_all(entry_type="fact")
+        facts.sort(key=lambda e: e.updated_at)
+        text = svc._checkpoint_input(facts, "", "", transcript)
         result = await asyncio.to_thread(
             svc.local_ai_service.support,
-            text=conversation_text,
-            system_prompt=system_prompt,
+            text=text,
+            system_prompt=get_prompt("extract-memories"),
             preset=SamplingPreset.PRECISE,
         )
 
         if not result or not result.text:
             return {"raw_response": None, "parsed": None, "error": "No response from support model"}
 
-        # Parse JSON (with repair for small-model quirks)
         parsed = svc._parse_json_response(result.text)
 
         return {
             "raw_response": result.text,
             "parsed": parsed,
             "message_count": len(messages),
-            "conversation_length": len(conversation_text),
+            "user_turns": user_turns,
         }

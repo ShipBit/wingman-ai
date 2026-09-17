@@ -93,7 +93,8 @@ class MemoryType(str, Enum):
     """Type-safe enum for memory entry types."""
 
     FACT = "fact"
-    SESSION_SUMMARY = "session_summary"
+    EPISODE = "episode"
+    SESSION_SUMMARY = "session_summary"  # older databases
 
 
 # ── Facade ────────────────────────────────────────────────────────
@@ -527,7 +528,9 @@ class SkillLocalAI:
     # ── Memory: Context ───────────────────────────────────────────
 
     async def memory_context(self, query: str, max_tokens: int = 500) -> str:
-        """Get pre-formatted memory context for system prompt injection.
+        """The MEMORY block as it stands in the system prompt: every fact and
+        the recent episodes. ``query`` and ``max_tokens`` are accepted for
+        older skills and ignored; there is no per-query lookup any more.
 
         Returns empty string on failure — safe to concatenate directly.
         """
@@ -535,7 +538,7 @@ class SkillLocalAI:
         if mem is None:
             return ""
         try:
-            return await mem.build_memory_context(query, max_tokens)
+            return await asyncio.to_thread(mem.memory_block)
         except Exception as e:
             await self._log_error("memory_context", e)
             return ""
@@ -546,7 +549,7 @@ class SkillLocalAI:
         if mem is None:
             return ""
         try:
-            return mem.build_memory_context_sync(query, max_tokens)
+            return mem.memory_block()
         except Exception as e:
             self._log_error_sync("memory_context_sync", e)
             return ""

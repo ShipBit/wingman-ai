@@ -31,13 +31,18 @@ def _is_retryable_download_error(error: Exception) -> bool:
         return False
     return True
 
-# Available support models — keyed by GGUF filename
+# Available support models — keyed by GGUF filename.
+#
+# The 4B is the default since the memory rewrite prompt (2026-09-17): on the
+# same 19 conversations the 2B returned nothing usable in 17 (score 0.35), the
+# 4B scored 0.93, level with the cloud models, at the same speed. The 2B stays
+# listed for machines that cannot spare the RAM.
 SUPPORT_MODELS: dict[str, dict] = {
     "Qwen3.5-4B-Q4_K_M.gguf": {
         "repo": "unsloth/Qwen3.5-4B-GGUF",
         "filename": "Qwen3.5-4B-Q4_K_M.gguf",
         "expected_size_mb": 2740,
-        "label": "Qwen 3.5 4B",
+        "label": "Qwen 3.5 4B (recommended)",
     },
     "gemma-4-E2B-it-Q3_K_M.gguf": {
         "repo": "unsloth/gemma-4-E2B-it-GGUF",
@@ -49,11 +54,11 @@ SUPPORT_MODELS: dict[str, dict] = {
         "repo": "unsloth/Qwen3.5-2B-GGUF",
         "filename": "Qwen3.5-2B-Q4_K_M.gguf",
         "expected_size_mb": 1280,
-        "label": "Qwen 3.5 2B (recommended)",
+        "label": "Qwen 3.5 2B",
     },
 }
 
-DEFAULT_SUPPORT_MODEL = SUPPORT_MODELS["Qwen3.5-2B-Q4_K_M.gguf"]
+DEFAULT_SUPPORT_MODEL = SUPPORT_MODELS["Qwen3.5-4B-Q4_K_M.gguf"]
 
 EMBED_MODELS: dict[str, dict] = {
     "nomic-embed-text-v1.5.f16.gguf": {
@@ -293,7 +298,7 @@ class LocalModelManager:
         Returns True if all succeed.
 
         ``support`` and ``embed`` say which of the two models to fetch. They are
-        separate because the support model is 1.28 GB and only needed when it
+        separate because the support model is 2.74 GB and only needed when it
         runs on this machine, while the embedding model is 250 MB and feeds the
         local vector database no matter where the support model lives.
         """

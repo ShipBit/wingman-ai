@@ -95,7 +95,7 @@ llama_cpp:
   # google/gemini-2.5-flash-lite picks a specific one.
   support_cloud_model: ""
   gpu_backend: cpu
-  support_model: "Qwen3.5-2B-Q4_K_M.gguf"
+  support_model: "Qwen3.5-4B-Q4_K_M.gguf"
   embed_model: "nomic-embed-text-v1.5.f16.gguf"
   n_ctx: 4096
   n_threads: 0
