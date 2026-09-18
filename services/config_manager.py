@@ -47,6 +47,25 @@ SHIPPED_DEFAULT_CONFIG = "Star Citizen"
 _WINGMAN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 -]*$")
 
 
+def deep_merge_configs(base: dict, override: dict) -> dict:
+    """Recursively merge ``override`` into ``base``; override values win.
+
+    Used to fill a config that predates the current models with the shipped
+    template's keys without losing a single user value.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = deep_merge_configs(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class ConfigContextState(BaseModel):
     """State of the user's config directories, stored in configs/context.yaml.
 
@@ -1433,38 +1452,99 @@ class ConfigManager:
     # Settings config:
 
     def create_settings_config(self):
+        """Make sure settings.yaml exists, with the shipped defaults in it.
+
+        copy_templates() normally does this; this is the net for the case where
+        it could not. It writes the template rather than an empty file: an
+        empty settings.yaml has no value for any required field and used to
+        end the process on the next line.
+        """
         if not path.exists(self.settings_config_path):
             try:
-                with open(self.settings_config_path, "w", encoding="UTF-8"):
-                    return True  # just create an empty file
+                template_file = path.join(
+                    self.templates_dir, CONFIGS_DIR, SETTINGS_CONFIG_FILE
+                )
+                if path.exists(template_file):
+                    shutil.copyfile(template_file, self.settings_config_path)
+                else:
+                    with open(self.settings_config_path, "w", encoding="UTF-8"):
+                        pass
+                return True
             except OSError as e:
                 self.printr.toast_error(
                     f"Could not create ({SETTINGS_CONFIG_FILE})\n{str(e)}"
                 )
         return False
 
+    def read_template_config(self, filename: str) -> dict:
+        """The shipped template for one of the top-level config files."""
+        template_file = path.join(self.templates_dir, CONFIGS_DIR, filename)
+        if not path.exists(template_file):
+            return {}
+        parsed = self.read_config(template_file)
+        return parsed if isinstance(parsed, dict) else {}
+
     def load_settings_config(self):
-        """Load and validate Settings config"""
+        """Load and validate Settings config, repairing what is missing.
+
+        The file on disk can be older than the models. ConfigManager runs
+        before the migration that would update it, and a migration that broke
+        off halfway leaves the previous version's file in the new version's
+        folder - that is how a 3.2.1 settings.yaml ended up in a 3_2_2 install,
+        without the `stt` block 3.2.2 requires. Keys the file does not have are
+        filled from the shipped template, the user's values always win, and the
+        repaired file is written back.
+
+        Nothing here may raise. It runs in ConfigManager's constructor, so an
+        exception ends Core on line one of main.py - before the migration that
+        would have fixed the file, which is why every following start hit the
+        same wall.
+        """
         parsed = self.read_config(self.settings_config_path)
-        if parsed:
-            # Same net as the wingman configs: `stt.provider` can still hold a
-            # value carried over from an old settings.yaml.
-            for change in sanitize(SettingsConfig, parsed):
-                self.printr.print(
-                    f"settings: {change}",
-                    color=LogType.WARNING,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
-            try:
-                validated = SettingsConfig(**parsed)
-                return self._apply_backend_override(validated)
-            except ValidationError as e:
-                self.printr.toast_error(
-                    f"Invalid config '{self.settings_config_path}':\n{str(e)}"
-                )
-        return self._apply_backend_override(SettingsConfig())
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        # Same net as the wingman configs: `stt.provider` can still hold a
+        # value carried over from an old settings.yaml.
+        for change in sanitize(SettingsConfig, parsed):
+            self.printr.print(
+                f"settings: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+
+        try:
+            validated = SettingsConfig(**parsed)
+        except ValidationError as error:
+            file_error = error
+        else:
+            return self._apply_backend_override(validated)
+
+        template = self.read_template_config(SETTINGS_CONFIG_FILE)
+        try:
+            validated = SettingsConfig(**deep_merge_configs(template, parsed))
+        except ValidationError:
+            # Values, not missing keys: nobody can guess what the user meant.
+            # Their file stays on disk untouched and Core comes up on the
+            # shipped defaults, so Settings is there to correct it in.
+            self.printr.toast_error(
+                f"Invalid config '{self.settings_config_path}':\n{str(file_error)}"
+            )
+            return self._apply_backend_override(SettingsConfig(**template))
+
+        self.write_config(self.settings_config_path, validated)
+        self.printr.print(
+            f"'{self.settings_config_path}' was missing settings that "
+            f"{LOCAL_VERSION} needs; they were added from the defaults and "
+            "your own values were kept.",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        return self._apply_backend_override(validated)
 
     def _apply_backend_override(self, settings: SettingsConfig) -> SettingsConfig:
         """Lets `WINGMAN_BACKEND_URL` point Core at a different backend.
