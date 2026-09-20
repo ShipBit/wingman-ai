@@ -23,6 +23,7 @@ ordinary word, so it fixes the casing when heard as such and never pulls
 
 import os
 import re
+from difflib import SequenceMatcher
 from os import path
 from typing import Iterable
 
@@ -112,7 +113,7 @@ class Vocabulary:
     def __bool__(self) -> bool:
         return bool(self.entries) or bool(self._mappings)
 
-    def match(self, phrase: str) -> str | None:
+    def match(self, phrase: str, respect_protection: bool = True) -> str | None:
         """The entry this phrase is a misspelling of, or None.
 
         Compared without spaces: speech models split "Microtech" into "micro
@@ -125,7 +126,7 @@ class Vocabulary:
         if mapped is not None:
             return mapped
         words = key.split()
-        if all(w in PROTECTED_WORDS for w in words):
+        if respect_protection and all(w in PROTECTED_WORDS for w in words):
             # Ordinary words of one of our languages. Only a pair may turn
             # them into a name; the fuzzy rule stays away.
             return None
@@ -160,8 +161,15 @@ class Vocabulary:
             return self.match(joined) or m.group(0)
         return _SPELLED.sub(_maybe, text)
 
-    def correct(self, text: str) -> str:
-        """The text with every recognisable misspelling replaced."""
+    def correct(self, text: str, respect_protection: bool = True) -> str:
+        """The text with every recognisable misspelling replaced.
+
+        ``respect_protection=False`` drops the everyday-word blocklist and
+        replaces whatever the letters allow. On its own that is far too
+        eager — it turns "radar" into the outpost "Yadar" — so it exists for
+        one caller: ``proposals()``, which needs to see what the blocklist
+        vetoed in order to ask about it.
+        """
         if not self or not text:
             return text
         text = self._join_spelled_names(text)
@@ -179,7 +187,7 @@ class Vocabulary:
                 candidate = " ".join(phrase.split())
                 if len(candidate.replace(" ", "")) < MIN_WORD_LENGTH:
                     continue
-                entry = self.match(candidate)
+                entry = self.match(candidate, respect_protection=respect_protection)
                 if entry is None:
                     continue
                 # Keep the entry's own spelling and casing; drop the tokens it replaces.
@@ -192,6 +200,42 @@ class Vocabulary:
             if not replaced:
                 i += 1
         return "".join(out)
+
+
+    def proposals(self, text: str) -> list[tuple[str, str, bool]]:
+        """Every replacement the letters allow: ``(heard, entry, blocked)``.
+
+        ``blocked`` marks the ones the everyday-word blocklist vetoes today.
+        Those are not mistakes to be undone — "station" really is two edits
+        from Stanton and must not be rewritten on a whim — they are the ones
+        no list can decide, because only the sentence around them says which
+        was meant.
+
+        Diffed word by word rather than zipped: a name the corrector glues
+        together ("micro tech" -> "MicroTech") changes the word count, and
+        zipping would then report the whole sentence as one proposal.
+        """
+        if not self or not text:
+            return []
+        open_text = self.correct(text, respect_protection=False)
+        if open_text == text:
+            return []
+        today_text = self.correct(text)
+        today_words = {w.strip(".,!?") for w in today_text.split()}
+
+        heard_words = text.split()
+        open_words = open_text.split()
+        out: list[tuple[str, str, bool]] = []
+        for tag, i1, i2, j1, j2 in SequenceMatcher(
+            a=heard_words, b=open_words, autojunk=False
+        ).get_opcodes():
+            if tag == "equal":
+                continue
+            heard = " ".join(heard_words[i1:i2]).strip(".,!?")
+            proposed = " ".join(open_words[j1:j2]).strip(".,!?")
+            if heard and proposed:
+                out.append((heard, proposed, proposed not in today_words))
+        return out
 
 
 # --- bundled presets ---

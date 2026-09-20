@@ -201,3 +201,55 @@ def read_triage(result: JevResult) -> dict[str, Any]:
         "stop": result.noul_value("stop"),
         "echo": result.noul_value("echo"),
     }
+
+
+# ── 4. whether a heard word really is a Star Citizen name ───────────
+
+
+def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
+    """One yes/no per proposed replacement: did the speaker mean the name?
+
+    ``candidates`` is ``(what was heard, the vocabulary entry it matched)``.
+    The fuzzy matcher proposes; this only ever confirms or rejects, so a
+    failed call leaves the matcher's own answer standing.
+
+    The matcher cannot do this itself, and no list can. "Radar" is two edits
+    from the outpost "Yadar" and a word Star Citizen players say in every
+    other sentence; "station" is two from the "Stanton" system and likewise.
+    Which one was meant is in the rest of the sentence, and only the rest of
+    the sentence decides it.
+    """
+    return {
+        f"vocab_{index}": noul(
+            instructions=(
+                "The speaker is playing Star Citizen and talking to their ship's "
+                f'assistant. The speech model wrote "{heard}" and it may have '
+                f'misheard "{entry}", which is a name in that game — a planet, '
+                "moon, station, outpost, company, ship, mineral or commodity. "
+                f'Did the speaker mean "{entry}"? Answer yes if the sentence is '
+                "about the game and the name fits where the word stands, even "
+                "when the word is also an ordinary English or German word or a "
+                "real place on Earth. Answer no when the sentence is using the "
+                "ordinary word in its ordinary sense."
+            )
+        )
+        for index, (heard, entry) in enumerate(candidates)
+    }
+
+
+def read_vocabulary(
+    result: JevResult, candidates: list[tuple[str, str]], threshold: float
+) -> Optional[set[int]]:
+    """Indices of the candidates to actually replace, or None to change nothing.
+
+    None on a failed call is what keeps this safe to switch on: the caller
+    then applies the matcher's own result, which is today's behaviour.
+    """
+    if not result.ok:
+        return None
+    confirmed = set()
+    for index in range(len(candidates)):
+        value = result.noul_value(f"vocab_{index}")
+        if value is not None and value >= threshold:
+            confirmed.add(index)
+    return confirmed

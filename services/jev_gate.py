@@ -28,8 +28,10 @@ from services.jev_decisions import (
     read_command,
     read_tool_groups,
     read_triage,
+    read_vocabulary,
     tool_group_questions,
     triage_questions,
+    vocabulary_questions,
 )
 from services.printr import Printr
 
@@ -69,6 +71,16 @@ tokens. Preselection starts from nothing and adds, and adding every skill on
 a vague sentence undoes progressive disclosure — which exists to keep the
 prompt small. A skill this misses is not lost: the model still sees its one
 line and can activate it the way it does today."""
+
+
+VOCABULARY_THRESHOLD = _threshold("WINGMAN_JEV_VOCABULARY_THRESHOLD", 0.5)
+"""Where "the speaker meant the Star Citizen name" starts.
+
+The middle, and the measurement put a clean gap around it: on 20 cases every
+replacement that should happen scored 0.63 or above and every one that
+should not scored 0.36 or below. Both errors cost the same here — a wrong
+replacement and a missed one each hand the model a word the user did not
+say — so there is no reason to lean either way."""
 
 
 class JevGate:
@@ -197,3 +209,41 @@ class JevGate:
             printr.print(f"Jev triage: {result.error}", color=LogType.WARNING, server_only=True)
             return {}
         return read_triage(result)
+
+    # ── which proposed name corrections are real ────────────────────
+
+    def confirm_vocabulary(
+        self, text: str, proposals: list[tuple[str, str, bool]]
+    ) -> Optional[set[int]]:
+        """Which of the matcher's proposals to apply, or None to change nothing.
+
+        Synchronous: the transcription thread calls this between the speech
+        model and the wingman, and has nothing else to do meanwhile.
+
+        Runs only when there is something to ask about, which on ordinary
+        speech is usually never. "Shields up." produces no candidate and
+        costs nothing.
+        """
+        if not self.active or not proposals:
+            return None
+        candidates = [(heard, entry) for heard, entry, _blocked in proposals]
+        result = self.client.system_one(
+            {"transcript": text}, vocabulary_questions(candidates)
+        )
+        self.last = result
+        if result.error:
+            printr.print(f"Jev vocabulary: {result.error}", color=LogType.WARNING, server_only=True)
+            return None
+        confirmed = read_vocabulary(result, candidates, VOCABULARY_THRESHOLD)
+        printr.print(
+            "Jev vocabulary: "
+            + ", ".join(
+                f"{heard}->{entry} "
+                f"{'yes' if index in (confirmed or set()) else 'no'}"
+                for index, (heard, entry) in enumerate(candidates)
+            )
+            + f" ({result.seconds * 1000:.0f} ms)",
+            color=LogType.SYSTEM,
+            server_only=True,
+        )
+        return confirmed
