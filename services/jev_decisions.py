@@ -71,13 +71,40 @@ def command_description(command: CommandConfig) -> Optional[str]:
     return " — ".join(parts) if parts else None
 
 
+MULTIPLE_KEY = "multiple_commands"
+
+MULTIPLE_INSTRUCTIONS = (
+    "Is the speaker asking for MORE THAN ONE thing to be done? Answer yes "
+    "when two or more separate actions are requested in the same sentence, "
+    "as in 'shields up, weapons hot' or 'launch a decoy and jump out'. "
+    "Answer no when it is a single action, however it is worded."
+)
+"""Asked alongside the choice, because a choice can only name one command.
+
+Without it, "Shields up, weapons hot." fired the shields at 0.85 confidence
+and the turn ended there — the weapons never came up, where the main model
+would have called both. A confident answer to the wrong question is the
+worst kind, and this is the question that was missing.
+
+Measured 2026-09-21 on 12 transcripts: every multi-command one scored 0.97
+or above and every single-command one 0.48 or below, so the gate has room
+either side. The closest single was "Fahrwerk ausfahren, wir kommen rein."
+at 0.48 — a trailing clause reads like a second request."""
+
+
 def command_questions(commands: list[CommandConfig]) -> dict[str, dict]:
-    """A single Choice over the command names, plus the escape hatch."""
+    """A Choice over the command names, the escape hatch, and one more.
+
+    The extra question is whether more than one thing was asked for. A
+    Choice names exactly one command, so without it a two-command request
+    would fire half of itself and stop.
+    """
     criteria: dict[str, Optional[str]] = {
         command.name: command_description(command) for command in commands
     }
     criteria[NONE_OPTION] = NONE_DESCRIPTION
     return {
+        MULTIPLE_KEY: noul(instructions=MULTIPLE_INSTRUCTIONS),
         "command": choice(
             instructions=(
                 "A voice assistant is listening to the pilot of a spacecraft. "
@@ -92,13 +119,25 @@ def command_questions(commands: list[CommandConfig]) -> dict[str, dict]:
     }
 
 
+MULTIPLE_THRESHOLD = 0.7
+"""Above this, the request is taken as more than one command and handed over
+whole. Between the measured 0.48 for a single and 0.97 for a pair, nearer
+the pair: a request wrongly called single fires half of itself, while one
+wrongly called multiple only costs the main-model round it would have taken
+anyway."""
+
+
 def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
     """The command to execute, or None to let the main model decide.
 
-    None covers all three ways this ends without a command: the call failed,
-    Jev picked the escape hatch, or it was not sure enough.
+    None covers every way this ends without a keypress: the call failed, the
+    escape hatch was picked, the answer was not sure enough, or more than
+    one thing was asked for — which a single Choice cannot express, so the
+    whole request goes to the model that can call two tools.
     """
     if not result.ok:
+        return None
+    if (result.noul_value(MULTIPLE_KEY) or 0) >= MULTIPLE_THRESHOLD:
         return None
     picked = result.choice("command", min_confidence=min_confidence)
     if picked is None or picked == NONE_OPTION:
