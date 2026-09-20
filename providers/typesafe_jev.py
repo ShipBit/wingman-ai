@@ -51,23 +51,78 @@ and waiting it out is worse than falling back: the fallback is the path we
 would have taken without Jev at all."""
 
 
-def noul(instructions: str) -> dict:
-    """A yes/no question. The answer is a probability, not a boolean."""
-    return {"type": "noul", "instructions": instructions}
+def guidance(
+    what: str,
+    not_for: Optional[str] = None,
+    examples: Optional[list[str]] = None,
+) -> Any:
+    """Instructions or an option description, plain or structured.
 
+    A bare sentence is enough most of the time. When two things are easy to
+    confuse, saying what something is *not* for separates them better than a
+    longer description of what it is: measured on the same transcript, a
+    structured instruction took the answer from 0.90 confidence to 1.00.
 
-def choice(instructions: str, criteria: dict[str, Optional[str]]) -> dict:
-    """One of ``criteria``, which maps option name to a description (or None).
-
-    Up to 255 options. Give every option a description when two of them could
-    be confused; the descriptions are what the model separates them by.
+    Returns the plain string when there is nothing to add, so a caller can
+    always route through here without producing noise in the request.
     """
-    return {"type": "choice", "instructions": instructions, "criteria": criteria}
+    if not_for is None and not examples:
+        return what
+    block: dict[str, Any] = {"what": what}
+    if not_for:
+        block["not_for"] = not_for
+    if examples:
+        block["examples"] = list(examples)
+    return block
 
 
-def score(instructions: str, criteria: list[str]) -> dict:
-    """A rating on the ordered levels in ``criteria``, lowest first."""
-    return {"type": "score", "instructions": instructions, "criteria": criteria}
+def noul(
+    instructions: str,
+    not_for: Optional[str] = None,
+    examples: Optional[list[str]] = None,
+) -> dict:
+    """A yes/no question. The answer is a probability, not a boolean."""
+    return {"type": "noul", "instructions": guidance(instructions, not_for, examples)}
+
+
+def choice(
+    instructions: str,
+    criteria: dict[str, Any],
+    not_for: Optional[str] = None,
+    examples: Optional[list[str]] = None,
+) -> dict:
+    """One of ``criteria``, which maps option name to a description.
+
+    Up to 255 options. A description may be None, a sentence, or the
+    structured form from ``guidance()``. Give one to every option that has a
+    near neighbour: on Wingman's own command routing, descriptions cut wrong
+    answers from 16 to 3 out of 152 and cost nothing in latency.
+    """
+    return {
+        "type": "choice",
+        "instructions": guidance(instructions, not_for, examples),
+        "criteria": criteria,
+    }
+
+
+def score(
+    instructions: str,
+    criteria: list[str],
+    not_for: Optional[str] = None,
+    examples: Optional[list[str]] = None,
+) -> dict:
+    """A rating on the ordered levels in ``criteria``, lowest first.
+
+    The answer is not one of the levels. It is a position on the scale they
+    span — ``1.99`` on three levels means "almost entirely the third one" —
+    plus a legend mapping index to label. ``JevResult.level()`` turns that
+    back into the label a caller asked about.
+    """
+    return {
+        "type": "score",
+        "instructions": guidance(instructions, not_for, examples),
+        "criteria": criteria,
+    }
 
 
 @dataclass
@@ -124,12 +179,62 @@ class JevResult:
         return float((answer or {}).get("confidence") or 0.0)
 
     def probabilities(self, key: str) -> dict[str, float]:
-        answer = self.answers.get(key)
-        return dict((answer or {}).get("probabilities") or {})
+        """Every option with its share, summing to 1, keyed by name.
 
-    def score(self, key: str) -> Optional[str]:
+        A score reports its shares by level index, not by label. They are
+        mapped back through the legend here so a caller never has to know
+        which of the two kinds of question it asked.
+        """
+        answer = self.answers.get(key) or {}
+        raw = answer.get("probabilities") or {}
+        legend = answer.get("legend")
+        if not legend:
+            return {str(name): float(value) for name, value in raw.items()}
+        return {
+            legend.get(str(index), str(index)): float(value)
+            for index, value in raw.items()
+        }
+
+    def keys(self) -> list[str]:
+        """The questions that came back with an answer."""
+        return sorted(self.answers)
+
+    def raw(self, key: str) -> dict:
+        """The answer exactly as the model sent it, for anything not covered
+        by a reader above."""
+        return dict(self.answers.get(key) or {})
+
+    def score(self, key: str) -> Optional[float]:
+        """Where on the scale the answer sits, as a number.
+
+        The levels span 0 to len-1, and the value is continuous: ``1.99`` on
+        three levels is "almost entirely the third one", ``1.4`` is between
+        the second and the third. Use ``level()`` for the label and this when
+        the distance itself matters — a threshold, a slider, a sort.
+        """
         answer = self.answers.get(key)
-        return None if not answer else answer.get("score")
+        if not answer or answer.get("score") is None:
+            return None
+        return float(answer["score"])
+
+    def levels(self, key: str) -> list[str]:
+        """The level labels, lowest first, as the model echoed them back."""
+        answer = self.answers.get(key) or {}
+        legend = answer.get("legend") or {}
+        return [legend[index] for index in sorted(legend, key=int)]
+
+    def level(self, key: str) -> Optional[str]:
+        """The nearest level label, which is what most callers want.
+
+        Rounds: 1.99 and 1.6 are both the third of three levels. A caller who
+        needs the distance rather than the bucket reads ``score()``.
+        """
+        value = self.score(key)
+        labels = self.levels(key)
+        if value is None or not labels:
+            return None
+        index = min(len(labels) - 1, max(0, round(value)))
+        return labels[index]
 
 
 class JevClient:

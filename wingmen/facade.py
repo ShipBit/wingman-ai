@@ -1065,43 +1065,64 @@ class SkillSettings:
         return audio.input if audio else None
 
 
+
+
 class SkillSystemOne:
     """Typed decisions instead of generated text (`self.wingman.system_one`).
 
-    A System One model answers a fixed set of questions in one parallel pass and
-    cannot answer outside the options it is given. Use it wherever a skill needs
-    a *decision* rather than a sentence: which of these does the user mean, how
-    urgent is this, is this worth acting on. It answers in about 300 ms — several
-    times faster than `self.wingman.ai.generate()` — and costs a fraction of it.
+    A System One model answers a fixed set of questions in one parallel pass
+    and cannot answer outside the options it is given. Reach for it wherever a
+    skill needs a *decision* rather than a sentence: which of these does the
+    user mean, how bad is this, is it worth acting on. It answers in about
+    300 ms — several times faster than `self.wingman.ai.generate()` — and
+    costs a fraction of it.
 
-    Three kinds of question:
+    This is a thin wrapper around TypeSafe's Jev, and it keeps their names so
+    that their documentation reads straight across:
 
-        choice(...)  one of up to 255 named options, with a confidence
-        score(...)   a rating on ordered levels, lowest first
-        yes_no(...)  a probability between 0 and 1
+        TypeSafe SDK                      here
+        ------------------------------    ----------------------------------
+        Choice(instructions, criteria)    so.choice(instructions, criteria)
+        Score(instructions, criteria)     so.score(instructions, criteria)
+        Noul(instructions)                so.noul(instructions)
+        client.system_one(state, q)       await so.decide(state, q)
+        answers[k].choice / .confidence   answers.choice(k) / .confidence(k)
+        answers[k].score                  answers.score(k)
+        answers[k].noul                   answers.noul(k)
+        answers[k].probabilities          answers.probabilities(k)
 
-    Ask everything at once with `decide()`. The questions in one call are
-    evaluated in parallel, so eight cost about what one costs — measured at
-    13 ms and 28% more tokens for seven extra questions. One call with the
-    questions you might need beats three calls with the ones you did.
+    Only three things are ours, and each fills a gap their API leaves:
+    `so.describe()` builds their structured description object, `level()`
+    turns a score back into its label, and `yes_no()` applies a threshold to
+    a noul. Everything else is theirs, spelled the same way.
 
-        answers = await self.wingman.system_one.decide(
-            state={"transcript": text, "cargo": cargo_list},
+        so = self.wingman.system_one
+        answers = await so.decide(
+            state={"transcript": text, "shields": 12},
             questions={
-                "intent": self.wingman.system_one.choice(
-                    "What does the pilot want?",
-                    {"sell": "offload cargo", "buy": "acquire cargo", "other": None},
-                ),
-                "urgent": self.wingman.system_one.yes_no("Does this need doing now?"),
+                "action": so.choice("What should happen?",
+                                    {"flee": "run away", "fight": "engage",
+                                     "repair": "fix the ship"}),
+                "urgency": so.score("How urgent is this?",
+                                    ["can wait", "soon", "right now"]),
+                "hostile": so.noul("Is the ship under attack?"),
             },
         )
-        if answers.choice("intent", min_confidence=0.8) == "sell":
-            ...
+        answers.choice("action", min_confidence=0.8)   # "repair" or None
+        answers.level("urgency")                       # "right now"
+        answers.noul("hostile")                        # 0.93
+        answers.yes_no("hostile")                      # True
 
-    `available` is False when the user switched System One off in Settings or
-    the plan has no access. Check it, or handle the empty result: every reader
-    on the result returns None when there is no answer, so a skill that forgets
-    gets nothing rather than a crash.
+    Ask everything at once. Questions in one call are evaluated in parallel,
+    so eight cost about what one costs — measured at 13 ms and 28% more
+    tokens for seven extra questions. One call with the questions you might
+    need beats three calls with the ones you did.
+
+    **`available` is False when the user switched System One off in Settings,
+    or the plan has no access.** Check it. If you forget, nothing breaks:
+    `decide()` returns an empty answer and every reader gives back None — but
+    your skill then silently takes the None branch, which is rarely what you
+    meant.
     """
 
     def __init__(self, gate) -> None:
@@ -1109,45 +1130,111 @@ class SkillSystemOne:
 
     @property
     def available(self) -> bool:
-        """Whether a call would reach a model. False = decide some other way."""
+        """Whether a call would reach a model.
+
+        False for all of: the user turned it off in Settings, no Wingman Pro
+        session, a plan without the role. The skill then decides some other
+        way — with `self.wingman.ai.generate()`, or a rule of its own.
+        """
         return bool(self._gate and self._gate.active)
 
     # --- building questions -------------------------------------------------
+    #
+    # `not_for` and `examples` are optional on all three and build TypeSafe's
+    # structured instruction object. They are the single biggest lever on
+    # answer quality: on Wingman's own command routing, descriptions took
+    # wrong answers from 16 to 3 out of 152, and a structured instruction
+    # moved one transcript from 0.90 confidence to 1.00. They cost nothing in
+    # latency.
 
     @staticmethod
-    def choice(instructions: str, options: dict) -> dict:
-        """One of ``options``, which maps name to a description (or None).
+    def choice(
+        instructions: str,
+        criteria: dict,
+        *,
+        not_for: Optional[str] = None,
+        examples: Optional[list] = None,
+    ) -> dict:
+        """One of `criteria`: a map of option name to description.
 
-        Give a description to any two options a reader could confuse. Measured
-        on Wingman's own command routing, descriptions cut wrong answers from
-        16 to 3 out of 152 and cost nothing in latency.
+        A description may be None, a sentence, or `so.describe(...)` for an
+        option with a near neighbour. Up to 255 options.
+
+        Include an explicit "none of these" option whenever the honest answer
+        might be that nothing applies. Without one the probability has nowhere
+        to go but onto the real options, and a confidence gate then lets the
+        least wrong one through.
         """
         from providers.typesafe_jev import choice as _choice
 
-        return _choice(instructions, options)
+        return _choice(instructions, criteria, not_for=not_for, examples=examples)
 
     @staticmethod
-    def score(instructions: str, levels: list) -> dict:
-        """A rating on ``levels``, lowest first (e.g. ``["low", "high"]``)."""
+    def score(
+        instructions: str,
+        criteria: list,
+        *,
+        not_for: Optional[str] = None,
+        examples: Optional[list] = None,
+    ) -> dict:
+        """A rating on `criteria`, lowest level first: `["low", "high"]`.
+
+        Read it back with `level()` for the label, `score()` for the position
+        between labels.
+        """
         from providers.typesafe_jev import score as _score
 
-        return _score(instructions, levels)
+        return _score(instructions, criteria, not_for=not_for, examples=examples)
 
     @staticmethod
-    def yes_no(instructions: str) -> dict:
-        """A yes/no question. The answer is a probability, not a boolean."""
+    def noul(
+        instructions: str,
+        *,
+        not_for: Optional[str] = None,
+        examples: Optional[list] = None,
+    ) -> dict:
+        """A yes/no question. TypeSafe's name for it, and the answer is a
+        probability rather than a boolean — `answers.noul(key)` gives the
+        number, `answers.yes_no(key)` applies a threshold."""
         from providers.typesafe_jev import noul as _noul
 
-        return _noul(instructions)
+        return _noul(instructions, not_for=not_for, examples=examples)
+
+    # For anyone who has not read TypeSafe's docs and is looking for the
+    # obvious name. Same question, same answer.
+    yes_no = noul
+
+    @staticmethod
+    def describe(
+        what: str,
+        *,
+        not_for: Optional[str] = None,
+        examples: Optional[list] = None,
+    ) -> Any:
+        """TypeSafe's structured description, for an option a neighbour could
+        be mistaken for.
+
+            {"gear": so.describe("the landing gear alone",
+                                 not_for="landing the ship",
+                                 examples=["gear down", "retract the gear"])}
+
+        Returns the plain string when there is nothing to add, so it is safe
+        to route every description through here.
+        """
+        from providers.typesafe_jev import guidance
+
+        return guidance(what, not_for=not_for, examples=examples)
 
     # --- asking -------------------------------------------------------------
 
     async def decide(self, state, questions: dict) -> "SystemOneAnswers":
-        """Answer every question against ``state``. Never raises.
+        """Answer every question against `state`. Never raises.
 
-        ``state`` is whatever the questions are about — a string, or a dict of
-        several things. It is sent as-is, so keep it to what the questions need:
-        it is what the call is billed on.
+        TypeSafe's `client.system_one(state=..., questions=...)`, with the
+        same two arguments. `state` is whatever the questions are about — a
+        string, or a dict of several things. It is sent as-is, so keep it to
+        what the questions need: it is what the call is billed on, and the
+        limit is 32k tokens.
         """
         if not self.available or not questions:
             return SystemOneAnswers(None)
@@ -1161,8 +1248,15 @@ class SkillSystemOne:
 
 
 class SystemOneAnswers:
-    """What came back. Every reader returns None when there is no answer, so a
-    skill that does not check `available` gets nothing rather than an error."""
+    """What came back, keyed by the question names you asked under.
+
+    TypeSafe hands back `response.answers[key].choice`; here that is
+    `answers.choice(key)`. The values are theirs, untouched.
+
+    Every reader returns None (or an empty collection) when there is no
+    answer, so a skill that does not check `available` gets nothing rather
+    than an exception.
+    """
 
     def __init__(self, result) -> None:
         self._result = result
@@ -1173,37 +1267,89 @@ class SystemOneAnswers:
 
     @property
     def error(self) -> Optional[str]:
-        """Why there is no answer, or None. For logging, not for control flow —
-        branch on the value being None instead."""
+        """Why there is no answer, or None. For logging, not for control
+        flow — branch on the value being None instead."""
         return self._result.error if self._result else "system one is off"
 
     @property
     def seconds(self) -> float:
         return self._result.seconds if self._result else 0.0
 
-    def choice(self, key: str, min_confidence: float = 0.0) -> Optional[str]:
-        """The chosen option, or None below ``min_confidence``.
+    def keys(self) -> list:
+        """The questions that were answered."""
+        return self._result.keys() if self._result else []
 
-        A threshold is worth setting when acting on the answer is hard to undo.
-        It separates unsure from sure; it will not separate two options that
-        genuinely overlap, which is what the descriptions are for.
+    # --- choice -------------------------------------------------------------
+
+    def choice(self, key: str, min_confidence: float = 0.0) -> Optional[str]:
+        """The chosen option, or None below `min_confidence`.
+
+        A threshold is worth setting when acting on the answer is hard to
+        undo. It separates unsure from sure; it will not separate two options
+        that genuinely overlap, which is what descriptions are for. If the
+        wrong neighbour keeps winning at high confidence, write a better
+        description rather than raising this.
         """
         return self._result.choice(key, min_confidence=min_confidence) if self._result else None
 
     def confidence(self, key: str) -> float:
+        """How concentrated the answer is, 0 to 1. Choice and score only."""
         return self._result.confidence(key) if self._result else 0.0
 
     def probabilities(self, key: str) -> dict:
-        """Every option with its share, summing to 1."""
+        """Every option with its share, summing to 1.
+
+        Keyed by option name for a choice. A score reports its shares by
+        level index; they are mapped back through the legend here, so a
+        caller never has to know which of the two it asked.
+        """
         return self._result.probabilities(key) if self._result else {}
 
-    def score(self, key: str) -> Optional[str]:
+    # --- score --------------------------------------------------------------
+
+    def score(self, key: str) -> Optional[float]:
+        """TypeSafe's score: a position on the scale, 0 to len(criteria) - 1.
+
+        Continuous, not a label — `1.99` on three levels is "almost entirely
+        the third". Use this when the distance matters and `level()` when the
+        bucket does.
+        """
         return self._result.score(key) if self._result else None
 
+    def level(self, key: str) -> Optional[str]:
+        """The nearest level label. Usually what you want from a score.
+
+        Ours, not TypeSafe's: they return the number and a legend, and this
+        does the lookup.
+        """
+        return self._result.level(key) if self._result else None
+
+    def levels(self, key: str) -> list:
+        """The level labels, lowest first, from the answer's legend."""
+        return self._result.levels(key) if self._result else []
+
+    # --- noul ---------------------------------------------------------------
+
+    def noul(self, key: str) -> Optional[float]:
+        """TypeSafe's noul: the yes/no answer as a probability, 0 to 1."""
+        return self._result.noul_value(key) if self._result else None
+
     def yes_no(self, key: str, threshold: float = 0.5) -> Optional[bool]:
-        """The yes/no answer above ``threshold``, or None if it was not answered."""
+        """The same answer as a boolean, above `threshold`.
+
+        Ours, not TypeSafe's. Raise the threshold for a yes that is expensive
+        to get wrong.
+        """
         return self._result.noul(key, threshold=threshold) if self._result else None
 
-    def probability(self, key: str) -> Optional[float]:
-        """The raw 0-1 value of a yes/no question, for your own threshold."""
-        return self._result.noul_value(key) if self._result else None
+    # --- escape hatch -------------------------------------------------------
+
+    def raw(self, key: Optional[str] = None) -> dict:
+        """The answers exactly as the model sent them — one, or all of them.
+
+        For anything the readers above do not cover. Everything else should
+        go through them.
+        """
+        if not self._result:
+            return {}
+        return self._result.raw(key) if key is not None else dict(self._result.answers)
