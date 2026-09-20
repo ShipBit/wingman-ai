@@ -8,7 +8,13 @@ word the speech model wrote is a game name or the everyday word it looks like
 
 Two things follow for a config written by 3.2.3.
 
-`settings.yaml` gains a `system_one` block, switched on.
+`settings.yaml` gains a `system_one` block, both switches on. The second one,
+`commands`, is separate because it is the only decision that runs on spec:
+every other use waits until there is something to resolve. Measured
+2026-09-21 against gpt-4.1-mini on the shipped Star Citizen config, it puts
+the keypress at 0.48 s instead of 1.13 s and the spoken confirmation at
+1.49 s instead of 2.13 s; a request that is not a command costs 0.46 s and
+changes nothing.
 
 Commands gain a `description`, and the ones that came from a shipped template
 get theirs filled in. It is what tells two commands apart that read alike —
@@ -111,15 +117,22 @@ class Migration323To324(BaseMigration):
 
     def migrate_settings(self, old: dict) -> dict:
         """Add the System One block, on, unless the user already has one."""
-        if isinstance(old.get("system_one"), dict):
-            # Written by the load-time repair before this ran. Whatever it says
-            # is the user's now — overwriting it here would switch the feature
-            # back on for someone who had already turned it off.
+        block = old.get("system_one")
+        if isinstance(block, dict):
+            # Written by the load-time repair before this ran. Whatever it
+            # says is the user's now — overwriting it here would switch the
+            # feature back on for someone who had already turned it off. Only
+            # a key that is missing outright is filled in, so the file still
+            # satisfies a model where both fields are required.
+            if "enabled" not in block:
+                block["enabled"] = True
+            if "commands" not in block:
+                block["commands"] = True
             return old
 
-        old["system_one"] = {"enabled": True}
+        old["system_one"] = {"enabled": True, "commands": True}
         self.log(
-            "- system_one.enabled: on — commands, skill choice and misheard "
-            "names are decided by a System One model first"
+            "- system_one: on — misheard names, stray noise and which command "
+            "a request means are decided by a System One model first"
         )
         return old

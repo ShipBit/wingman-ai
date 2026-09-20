@@ -561,11 +561,6 @@ class Wingman:
         # one without still needs the model for something to say, but no longer
         # needs it to pick the command.
         #
-        # Both questions go in one call. They used to be two, which measured
-        # 950 ms against 475 ms for the same two questions batched — the
-        # answers are evaluated in parallel, so the second one is nearly free
-        # and only the round trip was being paid twice.
-        #
         # No snapshot around this: the gate times every decision it takes,
         # including the ones skills make later in the turn, and they are added
         # together at the end.
@@ -818,52 +813,13 @@ class Wingman:
         )
 
     async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
-        """One call for both of the turn's decisions, then act on each.
-
-        Which command was asked for, and which skills the turn could need.
-        They are independent, so nothing is lost by asking together — and a
-        skill preselected for a turn that turns out to be a command costs
-        nothing, because that turn ends before the tool list is read.
-        """
-        commands = self.command_executor.eligible_commands()
-        groups = self._discoverable_groups()
-        executed, response = False, None
-
-        answers = await self.jev.decide_turn(transcript, commands, groups)
-        if answers is None:
-            return executed, response
-
-        name = answers.get("command")
-        if name:
-            executed, response = await self._run_jev_command(name)
-        if not executed and answers.get("capabilities"):
-            await self._activate(answers["capabilities"])
-        return executed, response
-
-    def _discoverable_groups(self) -> dict[str, str]:
-        """The skills that are off and could be switched on, with the line the
-        main model would otherwise read to decide that for itself."""
-        return {
-            manifest.name: manifest.get_discovery_description()
-            for manifest in self.skill_registry.get_discoverable_skills()
-            if manifest.name not in self.skill_registry.active_skill_names
-        }
-
-    async def _activate(self, names: set[str]) -> None:
-        """Switch on what the turn looks like it needs.
-
-        Only activates, never deactivates. A skill the user switched on by
-        hand, or one a previous turn discovered, stays on — taking it away
-        because one sentence did not mention it would break the turn after.
-        """
-        for name in sorted(names):
-            success, message, _needs_validation = await self.skill_registry.activate_skill(name)
-            if not success:
-                printr.print(
-                    f"Jev preselected '{name}' but activation failed: {message}",
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
+        """Ask which command the request means, and run it if the answer holds."""
+        name = await self.jev.pick_command(
+            transcript, self.command_executor.eligible_commands()
+        )
+        if not name:
+            return False, None
+        return await self._run_jev_command(name)
 
     async def _run_jev_command(self, name: str) -> tuple[bool, str | None]:
         """Run the command the System One model picked.

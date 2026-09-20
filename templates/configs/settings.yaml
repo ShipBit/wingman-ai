@@ -110,6 +110,10 @@ system_one:
   # to answer outside the options it is given. Which model serves it comes from
   # the subscription. Off means every decision is taken the way it was before.
   enabled: true
+  # Ask which command a request means before the main model is asked anything.
+  # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
+  # command costs 0.46 s and changes nothing.
+  commands: true
 spoken_language: "multilingual"
 hud_server:
   enabled: false

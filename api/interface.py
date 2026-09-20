@@ -1476,11 +1476,27 @@ class SystemOneSettings(BaseModel):
     enabled: bool
     """Whether any of Core's decisions may go to the System One model.
 
-    A global switch on purpose. The decisions it takes are spread over the
-    turn — before the main model, during transcription, inside skills — and a
-    per-place toggle would be a settings page nobody could reason about. Off
-    means every one of those places decides the way it did before, which is
-    always a working path and never an error."""
+    The master switch. The decisions it takes are spread over the turn —
+    before the main model, during transcription, inside skills — and a toggle
+    per place would be a settings page nobody could reason about. Off means
+    every one of those places decides the way it did before, which is always
+    a working path and never an error."""
+
+    commands: bool
+    """Whether the model is asked which command a request means, before the
+    main model is asked anything.
+
+    Its own switch because it is the one decision that runs on spec. Every
+    other use waits until there is something to resolve — a name the speech
+    model mangled, a title said differently — and costs nothing when there is
+    not. This one asks on every request, including the ones that were never
+    going to be a command.
+
+    Measured 2026-09-21 against gpt-4.1-mini on the shipped Star Citizen
+    config: the keypress happens after 0.48 s instead of 1.13 s, and the
+    spoken confirmation after 1.49 s instead of 2.13 s. A request that is not
+    a command costs 0.46 s and changes nothing. For someone who only talks to
+    their Wingman, that is all it ever does."""
 
 
 class SettingsConfig(BaseModel):

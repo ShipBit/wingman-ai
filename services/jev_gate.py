@@ -25,10 +25,8 @@ from providers.typesafe_jev import JevClient, JevResult
 from services.jev_decisions import (
     command_questions,
     read_command,
-    read_tool_groups,
     read_triage,
     read_vocabulary,
-    tool_group_questions,
     triage_questions,
     vocabulary_questions,
 )
@@ -60,17 +58,6 @@ answered with the full Landing Sequence macro, came back at 0.92 confidence.
 Calibration separates unsure from sure, not two commands that genuinely
 overlap — a description on each of them does that, and moved exactly those
 cases to 0.99. See the findings file."""
-
-CAPABILITY_THRESHOLD = _threshold("WINGMAN_JEV_CAPABILITY_THRESHOLD", 0.5)
-"""Where "this turn could need that skill" starts.
-
-Higher than the threshold that would suit plain filtering. Filtering starts
-from everything and takes away, so erring towards keeping is free apart from
-tokens. Preselection starts from nothing and adds, and adding every skill on
-a vague sentence undoes progressive disclosure — which exists to keep the
-prompt small. A skill this misses is not lost: the model still sees its one
-line and can activate it the way it does today."""
-
 
 MAX_COMMAND_OPTIONS = 254
 """How many commands fit in one question. TypeSafe's limit is 255 options and
@@ -164,60 +151,48 @@ class JevGate:
 
     # ── everything the turn wants to know, in one call ──────────────
 
-    async def decide_turn(
-        self,
-        transcript: str,
-        commands: list[CommandConfig],
-        groups: dict[str, str],
-    ) -> Optional[dict]:
-        """Which command the turn asks for and which skills it could need.
+    async def pick_command(
+        self, transcript: str, commands: list[CommandConfig]
+    ) -> Optional[str]:
+        """The command this request means, or None to let the main model decide.
 
-        One call for both. They are evaluated in parallel, so the second
-        question is nearly free: measured 2026-09-20, asking them separately
-        took 950 ms and asking them together 475 ms for the same answers.
-        Anything else Core wants to decide per turn belongs in here for the
-        same reason, not in a call of its own.
+        Asked before the main model, not alongside it: the model call that
+        follows has to know the command already fired, so it cannot be
+        started first and corrected afterwards.
 
-        None means nothing was decided and the caller carries on as before.
+        Skill preselection used to ride along in this call and was taken out
+        (2026-09-21). It saved about a second on the quarter of turns that
+        needed a skill not yet active, which is 0.26 s expected, against
+        0.46 s spent on every turn — a net loss of 0.2 s, measured the same
+        way on two very different configs. What made most of its value free
+        instead was dropping already-active capabilities from the
+        `activate_capability` offer.
+
+        None means nothing was decided: off, no access, no commands, a config
+        too big to ask about, or an answer below the gate.
         """
-        if not self.active:
+        if not (self.active and self.settings and self.settings.system_one.commands):
             return None
 
-        questions: dict[str, dict] = {}
         askable = self._askable_commands(commands)
-        if askable:
-            questions.update(command_questions(askable))
-        if groups:
-            questions.update(tool_group_questions(groups))
-        if not questions:
+        if not askable:
             return None
 
-        result = await self._ask({"transcript": transcript}, questions, "Turn decisions")
+        result = await self._ask(
+            {"transcript": transcript}, command_questions(askable), "Command choice"
+        )
         if not result.ok:
             return None
 
-        decided: dict = {"command": None, "capabilities": set()}
-        if askable:
-            decided["command"] = read_command(result, COMMAND_CONFIDENCE)
-            if not decided["command"]:
-                printr.print(
-                    f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
-                    "model decides this turn.",
-                    color=LogType.SYSTEM,
-                    server_only=True,
-                )
-        if groups:
-            kept = read_tool_groups(
-                result, groups, CAPABILITY_THRESHOLD, unanswered_kept=False
+        picked = read_command(result, COMMAND_CONFIDENCE)
+        if not picked:
+            printr.print(
+                f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
+                "model decides this turn.",
+                color=LogType.SYSTEM,
+                server_only=True,
             )
-            decided["capabilities"] = kept or set()
-            if kept:
-                printr.print(
-                    f"Jev preselected: {', '.join(sorted(kept))}",
-                    color=LogType.SYSTEM,
-                    server_only=True,
-                )
-        return decided
+        return picked
 
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.
