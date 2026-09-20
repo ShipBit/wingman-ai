@@ -524,21 +524,24 @@ class ConfigService:
                 config_dir=config_dir, wingman_file=wingman_file
             )
 
-            # Initialize discoverable_skills if needed (should always be present as non-optional)
-            if (
-                not hasattr(wingman_config, "discoverable_skills")
-                or wingman_config.discoverable_skills is None
-            ):
-                wingman_config.discoverable_skills = []
+            # The new list is ASSIGNED, never appended to in place. save_wingman_config
+            # merges a partial payload over what is on disk and keeps the disk value
+            # for any field the caller did not set. Pydantic only counts a field as
+            # set when it is assigned or was present in the parsed YAML - mutating
+            # the list in place marks nothing, so for a Wingman whose file has no
+            # `discoverable_skills` yet the toggle was written to memory, the skill
+            # really ran, and the next time the menu opened it read the old file and
+            # showed the switch as off again.
+            discoverable_skills = list(wingman_config.discoverable_skills or [])
 
             if enabled:
-                # Add to discoverable list (enable the skill)
-                if skill_name not in wingman_config.discoverable_skills:
-                    wingman_config.discoverable_skills.append(skill_name)
+                if skill_name not in discoverable_skills:
+                    discoverable_skills.append(skill_name)
             else:
-                # Remove from discoverable list (disable the skill)
-                if skill_name in wingman_config.discoverable_skills:
-                    wingman_config.discoverable_skills.remove(skill_name)
+                if skill_name in discoverable_skills:
+                    discoverable_skills.remove(skill_name)
+
+            wingman_config.discoverable_skills = discoverable_skills
 
             # Save the config WITHOUT reinitializing all skills
             await self.save_wingman_config(
@@ -967,21 +970,17 @@ class ConfigService:
                 config_dir=config_dir, wingman_file=wingman_file
             )
 
-            # Initialize discoverable_mcps if needed (should always be present as non-optional)
-            if (
-                not hasattr(wingman_config, "discoverable_mcps")
-                or wingman_config.discoverable_mcps is None
-            ):
-                wingman_config.discoverable_mcps = []
+            # Assigned, not mutated in place — same reason as the skill toggle above.
+            discoverable_mcps = list(wingman_config.discoverable_mcps or [])
 
             if enabled:
-                # Add to discoverable list (enable the MCP)
-                if mcp_name not in wingman_config.discoverable_mcps:
-                    wingman_config.discoverable_mcps.append(mcp_name)
+                if mcp_name not in discoverable_mcps:
+                    discoverable_mcps.append(mcp_name)
             else:
-                # Remove from discoverable list (disable the MCP)
-                if mcp_name in wingman_config.discoverable_mcps:
-                    wingman_config.discoverable_mcps.remove(mcp_name)
+                if mcp_name in discoverable_mcps:
+                    discoverable_mcps.remove(mcp_name)
+
+            wingman_config.discoverable_mcps = discoverable_mcps
 
             # Save the config WITHOUT reinitializing all MCPs
             await self.save_wingman_config(
