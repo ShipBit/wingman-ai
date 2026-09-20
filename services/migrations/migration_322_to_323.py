@@ -14,10 +14,6 @@ practice:
 Both are only rewritten when the user still has the old default. A value the
 user changed is kept.
 
-A `system_one` block is added, switched on. It is a new required field, so a
-settings.yaml without it would not load; the model behind it comes from the
-subscription as a fixed role, the way transcription and speech do.
-
 3.2.3 also fixes how an existing settings.yaml is read: a file that predates
 the current models is filled from the shipped template when it is loaded,
 which needs no migration step.
@@ -60,14 +56,6 @@ class Migration322To323(BaseMigration):
         return (template.get("prompts") or {}).get("system_prompt")
 
     def migrate_settings(self, old: dict) -> dict:
-        # The System One block is new in 3.2.3 and the field is required, so a
-        # settings.yaml without it would not load at all. On by default: the
-        # model behind it is a fixed role of every plan, and every decision it
-        # takes falls back to the old path when it is unavailable.
-        if not isinstance(old.get("system_one"), dict):
-            old["system_one"] = {"enabled": True}
-            self.log("- system_one.enabled: added, on (decisions get a System One model)")
-
         va = old.get("voice_activation")
         if not isinstance(va, dict):
             return old

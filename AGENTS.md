@@ -87,18 +87,21 @@ Skills declare OS support via `platforms` in `default_config.yaml` (`windows`, `
 
 ## Version Bumps and Migrations
 
-Version lives in `services/system_manager.py` as `LOCAL_VERSION`. Migration templates in `templates/migration/{version}/configs/` are frozen snapshots of default configs for each version.
+The version is written in seven places across Core and the Client. Do not edit them by hand:
 
-**When bumping a version** (e.g., 2.1.1 → 2.2.0):
+```
+python scripts/bump_version.py 3.2.4
+```
 
-1. Create skeleton migration `services/migrations/migration_211_to_220.py` with no-op `migrate_defaults` and `migrate_wingman` methods
-2. Update `LOCAL_VERSION`
+That sets `LOCAL_VERSION` in `services/system_manager.py`, the six client spots (`package.json`, both places in `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`), and writes the skeleton migration `services/migrations/migration_<old>_to_<new>.py`. The chain loader scans that directory, so there is nothing to register. `python scripts/bump_version.py --check` reports disagreement and is what `tests/test_version_consistency.py` runs.
+
+There are no frozen per-version config snapshots. A migration reads the user's own file and the *current* `templates/configs/`; fields no step adds are backfilled from the template at the end of the chain.
 
 **When adding a feature that changes config:**
 
 1. Update the Pydantic model in `api/interface.py`
 2. Update `templates/configs/` with new defaults
-3. Add migration step(s) to the current migration file
+3. Add a migration step to the migration **into the release you are building** — never to one that already shipped. If the current `LOCAL_VERSION` is already out with testers, bump first and put the step in the new file.
 
 ## Client API Regeneration
 
