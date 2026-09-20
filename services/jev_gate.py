@@ -72,6 +72,10 @@ prompt small. A skill this misses is not lost: the model still sees its one
 line and can activate it the way it does today."""
 
 
+MAX_COMMAND_OPTIONS = 254
+"""How many commands fit in one question. TypeSafe's limit is 255 options and
+one of them is the "no command" escape hatch."""
+
 VOCABULARY_THRESHOLD = _threshold("WINGMAN_JEV_VOCABULARY_THRESHOLD", 0.5)
 """Where "the speaker meant the Star Citizen name" starts.
 
@@ -103,6 +107,8 @@ class JevGate:
         Core's part of it."""
         self._warned_without_access = False
         """A plan without System One access must not say so on every utterance."""
+        self._warned_about_command_count = False
+        """Nor must a config too big to ask about."""
 
     def update_settings(self, settings: SettingsConfig) -> None:
         """Settings changed in the client. The subscription goes with them: a
@@ -156,59 +162,91 @@ class JevGate:
         )
         return self._record(label, result)
 
-    # ── the command a transcript asks for ───────────────────────────
+    # ── everything the turn wants to know, in one call ──────────────
 
-    async def pick_command(
-        self, transcript: str, commands: list[CommandConfig]
-    ) -> Optional[str]:
-        """The command to run without asking the main model, or None.
+    async def decide_turn(
+        self,
+        transcript: str,
+        commands: list[CommandConfig],
+        groups: dict[str, str],
+    ) -> Optional[dict]:
+        """Which command the turn asks for and which skills it could need.
 
-        None is not a failure: it is the answer for every turn that needs a
-        sentence rather than a keypress, and for every turn Jev was not sure
-        enough about. Both go on to the main model exactly as before.
+        One call for both. They are evaluated in parallel, so the second
+        question is nearly free: measured 2026-09-20, asking them separately
+        took 950 ms and asking them together 475 ms for the same answers.
+        Anything else Core wants to decide per turn belongs in here for the
+        same reason, not in a call of its own.
+
+        None means nothing was decided and the caller carries on as before.
         """
-        if not self.active or not commands:
+        if not self.active:
             return None
-        result = await self._ask(
-            {"transcript": transcript}, command_questions(commands), "Command choice"
-        )
-        picked = read_command(result, COMMAND_CONFIDENCE)
-        if not picked and result.ok:
+
+        questions: dict[str, dict] = {}
+        askable = self._askable_commands(commands)
+        if askable:
+            questions.update(command_questions(askable))
+        if groups:
+            questions.update(tool_group_questions(groups))
+        if not questions:
+            return None
+
+        result = await self._ask({"transcript": transcript}, questions, "Turn decisions")
+        if not result.ok:
+            return None
+
+        decided: dict = {"command": None, "capabilities": set()}
+        if askable:
+            decided["command"] = read_command(result, COMMAND_CONFIDENCE)
+            if not decided["command"]:
+                printr.print(
+                    f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
+                    "model decides this turn.",
+                    color=LogType.SYSTEM,
+                    server_only=True,
+                )
+        if groups:
+            kept = read_tool_groups(
+                result, groups, CAPABILITY_THRESHOLD, unanswered_kept=False
+            )
+            decided["capabilities"] = kept or set()
+            if kept:
+                printr.print(
+                    f"Jev preselected: {', '.join(sorted(kept))}",
+                    color=LogType.SYSTEM,
+                    server_only=True,
+                )
+        return decided
+
+    def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
+        """The commands that fit in one question, or none at all.
+
+        A choice takes 255 options and we need one of them for "no command",
+        so 254 is the ceiling. Over it the model answers 400 and the turn
+        falls back — which works, but costs a rejected request and a warning
+        on *every* turn, forever, for exactly the users with the biggest
+        configs. Measured 2026-09-20: 254 options go through at 592 ms and
+        3,001 input tokens; 400 are refused outright.
+
+        Asking about a subset was the other option and is worse than not
+        asking. The fuzzy pre-filters that work elsewhere match letters, and
+        the whole reason this question exists is that "Schilde hoch" shares
+        no letters with "Toggle Shields" — a pre-filter would throw away the
+        right answer and leave a confident wrong one.
+        """
+        if len(commands) <= MAX_COMMAND_OPTIONS:
+            return commands
+        if not self._warned_about_command_count:
+            self._warned_about_command_count = True
             printr.print(
-                f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
-                "model decides this turn.",
-                color=LogType.SYSTEM,
+                f"{len(commands)} commands is past the {MAX_COMMAND_OPTIONS} a "
+                "System One choice takes, so commands are left to the main "
+                "model for this Wingman. Skill preselection still runs.",
+                color=LogType.WARNING,
                 server_only=True,
             )
-        return picked
-
-    # ── which skills this turn could need ───────────────────────────
-
-    async def preselect_capabilities(
-        self, transcript: str, groups: dict[str, str]
-    ) -> Optional[set[str]]:
-        """The skills worth activating up front, or None to change nothing.
-
-        Today a skill the user needs costs an extra round trip: the model
-        calls ``activate_capability``, the tool list changes, and the model
-        is called again before anything happens. Naming the skill here skips
-        that second call, which is the expensive half of the turn.
-        """
-        if not self.active or not groups:
-            return None
-        result = await self._ask(
-            {"transcript": transcript}, tool_group_questions(groups), "Skill preselection"
-        )
-        kept = read_tool_groups(
-            result, groups, CAPABILITY_THRESHOLD, unanswered_kept=False
-        )
-        if kept:
-            printr.print(
-                f"Jev preselected: {', '.join(sorted(kept))}",
-                color=LogType.SYSTEM,
-                server_only=True,
-            )
-        return kept
+        return []
 
     # ── what an utterance actually was ──────────────────────────────
 

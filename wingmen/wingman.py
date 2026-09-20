@@ -560,18 +560,21 @@ class Wingman:
         # written response ends the turn here without a main-model call at all;
         # one without still needs the model for something to say, but no longer
         # needs it to pick the command.
+        #
+        # Both questions go in one call. They used to be two, which measured
+        # 950 ms against 475 ms for the same two questions batched — the
+        # answers are evaluated in parallel, so the second one is nearly free
+        # and only the round trip was being paid twice.
+        #
+        # No snapshot around this: the gate times every decision it takes,
+        # including the ones skills make later in the turn, and they are added
+        # together at the end.
         if self.jev.active and not instant_command_executed:
-            # No snapshot around this: the gate times every decision it takes,
-            # including the ones skills make later in the turn, and they are
-            # added together at the end.
-            jev_executed, jev_response = await self._try_jev_command(transcript)
+            jev_executed, jev_response = await self._ask_jev_about_the_turn(transcript)
             if jev_response:
                 await self.conversation.add_assistant_message(jev_response)
                 return jev_response, jev_response, None, True
             instant_command_executed = instant_command_executed or jev_executed
-
-        if self.jev.active and not instant_command_executed:
-            await self._preselect_capabilities(transcript)
 
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
@@ -814,32 +817,46 @@ class Wingman:
             pending_tool_calls=self.conversation.pending_tool_calls,
         )
 
-    async def _preselect_capabilities(self, transcript: str) -> None:
-        """Activate the skills this turn looks like it needs, before asking.
+    async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
+        """One call for both of the turn's decisions, then act on each.
 
-        Progressive disclosure costs a whole extra round trip today: the model
-        sees a one-line summary per skill, calls ``activate_capability``, the
-        tool list changes, and only the second call can do the work. Naming
-        the skill from the transcript removes the first of those two calls.
+        Which command was asked for, and which skills the turn could need.
+        They are independent, so nothing is lost by asking together — and a
+        skill preselected for a turn that turns out to be a command costs
+        nothing, because that turn ends before the tool list is read.
+        """
+        commands = self.command_executor.eligible_commands()
+        groups = self._discoverable_groups()
+        executed, response = False, None
+
+        answers = await self.jev.decide_turn(transcript, commands, groups)
+        if answers is None:
+            return executed, response
+
+        name = answers.get("command")
+        if name:
+            executed, response = await self._run_jev_command(name)
+        if not executed and answers.get("capabilities"):
+            await self._activate(answers["capabilities"])
+        return executed, response
+
+    def _discoverable_groups(self) -> dict[str, str]:
+        """The skills that are off and could be switched on, with the line the
+        main model would otherwise read to decide that for itself."""
+        return {
+            manifest.name: manifest.get_discovery_description()
+            for manifest in self.skill_registry.get_discoverable_skills()
+            if manifest.name not in self.skill_registry.active_skill_names
+        }
+
+    async def _activate(self, names: set[str]) -> None:
+        """Switch on what the turn looks like it needs.
 
         Only activates, never deactivates. A skill the user switched on by
         hand, or one a previous turn discovered, stays on — taking it away
         because one sentence did not mention it would break the turn after.
         """
-        discoverable = [
-            manifest
-            for manifest in self.skill_registry.get_discoverable_skills()
-            if manifest.name not in self.skill_registry.active_skill_names
-        ]
-        if not discoverable:
-            return
-
-        groups = {m.name: m.get_discovery_description() for m in discoverable}
-        wanted = await self.jev.preselect_capabilities(transcript, groups)
-        if wanted is None:
-            return
-
-        for name in sorted(wanted):
+        for name in sorted(names):
             success, message, _needs_validation = await self.skill_registry.activate_skill(name)
             if not success:
                 printr.print(
@@ -848,24 +865,18 @@ class Wingman:
                     server_only=True,
                 )
 
-    async def _try_jev_command(self, transcript: str) -> tuple[bool, str | None]:
-        """Let the System One model pick a command, and run it if it is sure.
+    async def _run_jev_command(self, name: str) -> tuple[bool, str | None]:
+        """Run the command the System One model picked.
 
-        Returns ``(executed, spoken_response)``. Both empty means Jev did not
-        decide and the turn goes on untouched. ``executed`` without a response
-        means the keypress happened but the command has no written response,
-        so the main model is still asked for something to say — with tools
-        switched off, exactly as after an instant activation.
+        Returns ``(executed, spoken_response)``. ``executed`` without a
+        response means the keypress happened but the command has no written
+        response, so the main model is still asked for something to say —
+        with tools switched off, exactly as after an instant activation.
 
         The executed command is written into the history as the assistant's
         own tool call, the same way instant activation does it. Without that,
         the model's next turn has no idea the landing gear is down.
         """
-        commands = self.command_executor.eligible_commands()
-        name = await self.jev.pick_command(transcript, commands)
-        if not name:
-            return False, None
-
         command = self.command_executor.get_command(name)
         if not command:
             # A command that vanished between the question and the answer.
