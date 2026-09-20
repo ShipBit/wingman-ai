@@ -197,18 +197,27 @@ class JevGate:
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.
 
-        A choice takes 255 options and we need one of them for "no command",
-        so 254 is the ceiling. Over it the model answers 400 and the turn
-        falls back — which works, but costs a rejected request and a warning
-        on *every* turn, forever, for exactly the users with the biggest
-        configs. Measured 2026-09-20: 254 options go through at 592 ms and
-        3,001 input tokens; 400 are refused outright.
+        Nothing is limited or truncated by this. A Wingman may have as many
+        commands as its owner likes and the main model is offered every one
+        of them, exactly as before. The only thing that stops past the
+        ceiling is *asking the System One model*, and that Wingman then
+        works the way it did in 3.2.3.
+
+        A choice takes 255 options and one of them is the "no command"
+        escape hatch, so 254 is the ceiling. Over it the model answers 400
+        and the turn falls back — which works, but costs a rejected request
+        and a warning on *every* turn, forever, for exactly the users with
+        the biggest configs. Measured 2026-09-20: 254 options go through at
+        592 ms and 3,001 input tokens; 400 are refused outright.
 
         Asking about a subset was the other option and is worse than not
         asking. The fuzzy pre-filters that work elsewhere match letters, and
         the whole reason this question exists is that "Schilde hoch" shares
         no letters with "Toggle Shields" — a pre-filter would throw away the
-        right answer and leave a confident wrong one.
+        right answer and leave a confident wrong one. A prior worth having
+        would be which commands this user actually triggers, which nothing
+        records today. Not worth building for a ceiling nobody is near: the
+        heaviest real config on this machine has 86.
         """
         if len(commands) <= MAX_COMMAND_OPTIONS:
             return commands
@@ -216,8 +225,8 @@ class JevGate:
             self._warned_about_command_count = True
             printr.print(
                 f"{len(commands)} commands is past the {MAX_COMMAND_OPTIONS} a "
-                "System One choice takes, so commands are left to the main "
-                "model for this Wingman. Skill preselection still runs.",
+                "System One choice takes, so this Wingman's commands stay "
+                "with the main model. Nothing else changes.",
                 color=LogType.WARNING,
                 server_only=True,
             )
