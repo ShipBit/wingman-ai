@@ -37,6 +37,34 @@ class TurnMetrics:
             )
         )
 
+    def add_system_one_snapshot(
+        self, benchmark: Benchmark, decisions: list[tuple[str, float]]
+    ) -> None:
+        """What the decision layer cost this turn, and on what.
+
+        One line in the tooltip with the individual decisions under it, the
+        same shape tool execution uses. Nothing is added when the layer is
+        off, so a user who never switched it on does not get an empty row
+        asking what it is.
+        """
+        if not decisions:
+            return
+        benchmark.snapshots.append(
+            BenchmarkResult(
+                label="System 1 decision making",
+                execution_time_ms=sum(ms for _label, ms in decisions),
+                formatted_execution_time=format_ms(sum(ms for _label, ms in decisions)),
+                snapshots=[
+                    BenchmarkResult(
+                        label=label,
+                        execution_time_ms=ms,
+                        formatted_execution_time=format_ms(ms),
+                    )
+                    for label, ms in decisions
+                ],
+            )
+        )
+
     def add_tool_execution_snapshot(
         self,
         benchmark: Benchmark,

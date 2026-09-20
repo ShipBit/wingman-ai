@@ -127,9 +127,12 @@ class Llm:
             state={"heard": search, "context": "Star Citizen, spoken to a ship assistant"},
             questions={
                 "match": system_one.choice(
-                    "Which name from the list did the speaker mean? It comes from "
-                    "speech recognition, so it may be misspelled, shortened or "
-                    "have words in a different order.",
+                    "Which name from the list did the speaker mean? It comes "
+                    "from speech recognition, so it may be misspelled, "
+                    "shortened, have words in a different order, or be a word "
+                    "that merely SOUNDS like part of the right name. Prefer a "
+                    "longer name whose extra part sounds like what was heard "
+                    "over a shorter name that is only a prefix of it.",
                     criteria,
                     examples=[
                         "'Hercules A2' with A2/C2/M2 Hercules in the list -> A2 Hercules",

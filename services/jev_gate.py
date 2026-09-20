@@ -95,7 +95,12 @@ class JevGate:
         self.settings = settings
         self.client = JevClient(subscription=settings.wingman_pro if settings else None)
         self.last: Optional[JevResult] = None
-        """The most recent answer, for the benchmark snapshot and the log."""
+        """The most recent answer, for the log."""
+        self.turn_decisions: list[tuple[str, float]] = []
+        """What this turn asked and how long each took, for the benchmark the
+        client shows. Skills share the wingman's gate, so their decisions land
+        here too and the user sees the whole cost of the layer, not only
+        Core's part of it."""
         self._warned_without_access = False
         """A plan without System One access must not say so on every utterance."""
 
@@ -127,15 +132,29 @@ class JevGate:
             )
         return False
 
-    async def _ask(self, state, questions) -> JevResult:
-        """Off the event loop. An HTTP call of up to two seconds on the loop
+    def take_decisions(self) -> list[tuple[str, float]]:
+        """Everything decided since the last call, and reset.
+
+        Read once per turn when the benchmark is assembled. Draining rather
+        than clearing separately means a turn that ends early cannot leave
+        its timings to be counted against the next one.
+        """
+        decisions, self.turn_decisions = self.turn_decisions, []
+        return decisions
+
+    def _record(self, label: str, result: JevResult) -> JevResult:
+        self.last = result
+        self.turn_decisions.append((label, result.seconds * 1000))
+        return result
+
+    async def _ask(self, state, questions, label: str = "System One") -> JevResult:
+        """Off the event loop. An HTTP call of several seconds on the loop
         would hold up playback and the next utterance behind it."""
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None, lambda: self.client.system_one(state, questions)
         )
-        self.last = result
-        return result
+        return self._record(label, result)
 
     # ── the command a transcript asks for ───────────────────────────
 
@@ -151,7 +170,7 @@ class JevGate:
         if not self.active or not commands:
             return None
         result = await self._ask(
-            {"transcript": transcript}, command_questions(commands)
+            {"transcript": transcript}, command_questions(commands), "Command choice"
         )
         picked = read_command(result, COMMAND_CONFIDENCE)
         if not picked and result.ok:
@@ -177,7 +196,9 @@ class JevGate:
         """
         if not self.active or not groups:
             return None
-        result = await self._ask({"transcript": transcript}, tool_group_questions(groups))
+        result = await self._ask(
+            {"transcript": transcript}, tool_group_questions(groups), "Skill preselection"
+        )
         kept = read_tool_groups(
             result, groups, CAPABILITY_THRESHOLD, unanswered_kept=False
         )
@@ -214,7 +235,7 @@ class JevGate:
             },
             triage_questions(wingman_names, during_playback),
         )
-        self.last = result
+        self._record("Utterance triage", result)
         if result.error:
             return {}
         return read_triage(result)
@@ -239,7 +260,7 @@ class JevGate:
         result = self.client.system_one(
             {"transcript": text}, vocabulary_questions(candidates)
         )
-        self.last = result
+        self._record("Vocabulary check", result)
         if result.error:
             return None
         confirmed = read_vocabulary(result, candidates, VOCABULARY_THRESHOLD)
@@ -264,12 +285,13 @@ class JevGate:
         """
         if not self.active:
             return None
-        return await self._ask(state, questions)
+        return await self._ask(state, questions, f"Skill: {len(questions)} question(s)")
 
     def ask_sync(self, state, questions: dict) -> Optional[JevResult]:
         """Blocking version, for a skill already off the event loop."""
         if not self.active:
             return None
-        result = self.client.system_one(state, questions)
-        self.last = result
-        return result
+        return self._record(
+            f"Skill: {len(questions)} question(s)",
+            self.client.system_one(state, questions),
+        )

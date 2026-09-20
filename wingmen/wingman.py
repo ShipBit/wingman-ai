@@ -494,6 +494,12 @@ class Wingman:
                         transcript=transcript, benchmark=benchmark_llm, images=images
                     )
                 )
+                # Every path out of the turn passes here, including the ones
+                # that end early on a command. Skills add their own decisions
+                # to the same list on the way, so this is the whole layer.
+                self.metrics.add_system_one_snapshot(
+                    benchmark_llm, self.jev.take_decisions()
+                )
 
                 actual_response = instant_response or process_result
 
@@ -555,18 +561,17 @@ class Wingman:
         # one without still needs the model for something to say, but no longer
         # needs it to pick the command.
         if self.jev.active and not instant_command_executed:
-            benchmark.start_snapshot("Jev command decision")
+            # No snapshot around this: the gate times every decision it takes,
+            # including the ones skills make later in the turn, and they are
+            # added together at the end.
             jev_executed, jev_response = await self._try_jev_command(transcript)
-            benchmark.finish_snapshot()
             if jev_response:
                 await self.conversation.add_assistant_message(jev_response)
                 return jev_response, jev_response, None, True
             instant_command_executed = instant_command_executed or jev_executed
 
         if self.jev.active and not instant_command_executed:
-            benchmark.start_snapshot("Jev capability preselection")
             await self._preselect_capabilities(transcript)
-            benchmark.finish_snapshot()
 
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
