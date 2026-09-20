@@ -81,6 +81,27 @@ class ProviderFactory:
             )
         return secret
 
+    async def _retrieve_optional_secret(self, requester: str) -> str:
+        """Read an API key that the endpoint may or may not want.
+
+        Used for OpenAI-compatible endpoints the user points at themselves: a
+        llama.cpp server on localhost needs no key, Ollama Cloud or a hosted
+        gateway does. Never prompts and never fails - a missing key would
+        otherwise pop a dialog on every start for the people running keyless.
+        "not-set" is the placeholder the 1.8.2 -> 2.0.0 migration wrote into
+        secrets.yaml and means the same as empty. The OpenAI client rejects an
+        empty api_key, so keyless falls back to a dummy the server ignores.
+        """
+        secret = await self._secret_keeper.retrieve(
+            requester=requester,
+            key=requester,
+            prompt_if_missing=False,
+        )
+        secret = (secret or "").strip()
+        if not secret or secret == "not-set":
+            return "not-needed"
+        return secret
+
     async def create_tts(
         self, errors: list[WingmanInitializationError]
     ) -> TtsInterface | None:
@@ -226,7 +247,7 @@ class ProviderFactory:
             local_llm = None
             if self._config.local_llm.endpoint:
                 local_llm = OpenAi(
-                    api_key="not-needed",
+                    api_key=await self._retrieve_optional_secret("local_llm"),
                     base_url=self._config.local_llm.endpoint,
                 )
             return LocalLlm(openai_instance=local_llm, config=self._config)

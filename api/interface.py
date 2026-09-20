@@ -534,10 +534,10 @@ class VoiceActivationSettings(BaseModel):
     """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
     whisper. Applies to push-to-talk too, where it trims silence off the clip."""
 
-    end_pause_ms: int = 700
+    end_pause_ms: int = 500
     """Silence that ends an utterance."""
 
-    max_utterance_s: float = 12.0
+    max_utterance_s: float = 160.0
     """Cut here even mid-sentence and send what was said; the rest becomes the
     next utterance. Keeps commands quick for people who never stop talking."""
 

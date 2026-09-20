@@ -48,11 +48,11 @@ class GateParams:
 
     sensitivity: float = 0.5
     """0 = only unmistakable speech opens the gate, 1 = almost anything does."""
-    end_pause_ms: int = 700
+    end_pause_ms: int = 500
     """Silence that ends an utterance."""
     min_speech_ms: int = 200
     """Shorter bursts of speech are noise."""
-    max_utterance_s: float = 12.0
+    max_utterance_s: float = 160.0
     """Cut here even mid-sentence; what follows starts a new utterance."""
     pre_roll_ms: int = 300
     """Audio kept from before the detector noticed speech."""

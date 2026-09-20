@@ -37,10 +37,12 @@ voice_activation:
   # whisper. Applies to push-to-talk too, where it trims silence off the clip.
   sensitivity: 0.5
   # Silence that ends an utterance.
-  end_pause_ms: 700
-  # Cut here even mid-sentence and send what was said; the rest becomes the
-  # next utterance. Keeps commands quick for people who never stop talking.
-  max_utterance_s: 12
+  end_pause_ms: 500
+  # Emergency stop for a microphone that never goes quiet: cut here even
+  # mid-sentence and send what was said. Set high on purpose - a cut lands in
+  # the middle of a word, which costs a second LLM call and garbles numbers.
+  # Shorten end_pause_ms instead if you want faster commands.
+  max_utterance_s: 160
   min_speech_ms: 200
   pre_roll_ms: 300
   # Keep listening while a wingman speaks: "stop" stops it, talking on skips
