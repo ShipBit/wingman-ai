@@ -45,10 +45,15 @@ PRICE_PER_INPUT_TOKEN = 0.042 / 1_000_000
 """TypeSafe's list price, $0.042 per million input tokens, output free. A
 53-command Choice measured 1,224 input tokens, so about $0.00005 a call."""
 
-DEFAULT_TIMEOUT = 2.0
-"""Jev answers in 70-500 ms. Anything past two seconds is a gateway problem,
-and waiting it out is worse than falling back: the fallback is the path we
-would have taken without Jev at all."""
+DEFAULT_TIMEOUT = 4.0
+"""Jev answers in 70-500 ms direct, p50 503 ms through Wingman Pro, which adds
+a hop. Two seconds looked generous against the first of those numbers and was
+not: measured 2026-09-20, a normal call through Pro hit it and fell back for
+nothing, paying the wait *and* losing the answer.
+
+Four is the point where waiting has stopped being worth it — a chat model's
+own p95 is 1.7 s and its worst measured call 7.5 s, so the fallback is not
+cheap either. It only bites when something is actually wrong."""
 
 
 def guidance(

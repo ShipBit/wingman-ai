@@ -41,6 +41,41 @@ printr = Printr()
 
 
 class HUD(Skill):
+
+    # A panel list is short and the titles are the user's own words, said out
+    # loud, so the same panel comes back phrased differently a minute later.
+    # High threshold: acting on the wrong panel is worse than saying "which
+    # one?", and the exact match above already caught everything unambiguous.
+    SYSTEM_ONE_MIN_CONFIDENCE = 0.7
+
+    async def _resolve_title(self, title: str) -> str | None:
+        """The panel the user means, or None if there is no telling.
+
+        The exact key wins whenever it exists — this only runs after that
+        failed. Returns None when System One is off, so the caller reports
+        "not found" exactly as it did before.
+        """
+        if title in self._persistent_items:
+            return title
+        system_one = getattr(self.wingman, "system_one", None)
+        if not system_one or not system_one.available or not self._persistent_items:
+            return None
+
+        criteria = {name: None for name in self._persistent_items}
+        criteria["none_of_these"] = "no panel on the list is the one meant"
+        answers = await system_one.decide(
+            state={"asked_for": title, "panels_on_the_hud": list(self._persistent_items)},
+            questions={
+                "panel": system_one.choice(
+                    "Which panel on the HUD is being asked about? The title was "
+                    "spoken, so it may be shortened or worded differently from "
+                    "how it was created.",
+                    criteria,
+                )
+            },
+        )
+        picked = answers.choice("panel", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
+        return None if picked in (None, "none_of_these") else picked
     """
     HUD Skill - Display information on a transparent overlay.
 
@@ -1104,7 +1139,13 @@ class HUD(Skill):
         if not await self._ensure_connected():
             return "HUD server is not available."
 
-        self._persistent_items.pop(title, None)
+        # Reported as removed whatever happened, so a title that was never
+        # there came back as a success and the model told the user so.
+        resolved = await self._resolve_title(title)
+        if resolved is None or self._persistent_items.pop(resolved, None) is None:
+            known = ", ".join(self._persistent_items) or "none"
+            return f"No info panel called '{title}'. Currently on the HUD: {known}."
+        title = resolved
 
         self._send_command_sync(
             self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
@@ -1299,8 +1340,14 @@ class HUD(Skill):
         if not await self._ensure_connected():
             return "HUD server is not available."
 
-        if title not in self._persistent_items:
-            return f"Progress '{title}' not found. Use hud_show_progress first."
+        resolved = await self._resolve_title(title)
+        if resolved is None:
+            known = ", ".join(self._persistent_items) or "none"
+            return (
+                f"Progress '{title}' not found. Use hud_show_progress first. "
+                f"Currently on the HUD: {known}."
+            )
+        title = resolved
 
         item = self._persistent_items[title]
         if not item.get('is_progress'):
@@ -1355,8 +1402,14 @@ class HUD(Skill):
         if not await self._ensure_connected():
             return "HUD server is not available."
 
-        if title not in self._persistent_items:
-            return f"Info '{title}' not found. Use hud_add_info first."
+        resolved = await self._resolve_title(title)
+        if resolved is None:
+            known = ", ".join(self._persistent_items) or "none"
+            return (
+                f"Info '{title}' not found. Use hud_add_info first. "
+                f"Currently on the HUD: {known}."
+            )
+        title = resolved
 
         item = self._persistent_items[title]
         item['description'] = description_markdown
