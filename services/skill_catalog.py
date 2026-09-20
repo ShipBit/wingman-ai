@@ -137,6 +137,12 @@ class SkillCatalog:
         them from Wingman configs. Excludes entries with no name."""
         return {e.name for e in self._entries if e.verdict != SkillVerdict.OK and e.name}
 
+    def ineligible_folders(self) -> set[str]:
+        """Skill FOLDER names that are NOT eligible. Needed next to
+        ineligible_skill_names() because `discoverable_skills` stores skill names
+        while a Wingman's `skills` entries are addressed by module/folder."""
+        return {e.folder for e in self._entries if e.verdict != SkillVerdict.OK}
+
     def is_eligible(self, folder: str) -> bool:
         return folder in self.eligible_folders()
 

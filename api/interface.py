@@ -949,6 +949,21 @@ class WingmanSkillState(BaseModel):
     """Whether the skill is enabled for this wingman (in discoverable_skills list)."""
 
 
+class MissingSkillInfo(BaseModel):
+    """A skill a Wingman is configured for that is not installed on this system.
+
+    Core knows nothing about it beyond the name the Wingman config stores, so it
+    cannot appear in the normal skill list. The client renders it as a disabled
+    row instead of letting it disappear without a word.
+    """
+
+    name: str
+    """The skill name as stored in the Wingman's discoverable_skills."""
+
+    module: Optional[str] = None
+    """The module path from the Wingman's skills list, if the config has one."""
+
+
 # ─────────────────────────────── MCP Configuration ─────────────────────────────── #
 
 

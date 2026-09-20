@@ -1,5 +1,6 @@
 import asyncio
 import shutil
+from os import path
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from api.enums import LogSource, LogType, McpAuthType
@@ -16,6 +17,7 @@ from api.interface import (
     McpOAuthStatus,
     McpServerConfig,
     McpServerState,
+    MissingSkillInfo,
     NestedConfig,
     NewWingmanTemplate,
     CommandCategoryConfig,
@@ -186,6 +188,13 @@ class ConfigService:
             path="/wingman-skills",
             endpoint=self.get_wingman_skills,
             response_model=list[WingmanSkillState],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/wingman-skills/missing",
+            endpoint=self.get_missing_wingman_skills,
+            response_model=list[MissingSkillInfo],
             tags=tags,
         )
         self.router.add_api_route(
@@ -393,6 +402,77 @@ class ConfigService:
             self.printr.toast_error(str(e))
             return []
 
+    # GET /wingman-skills/missing
+    async def get_missing_wingman_skills(
+        self,
+        config_name: str,
+        wingman_name: str,
+    ) -> list[MissingSkillInfo]:
+        """Skills this Wingman is switched on for that are not installed here.
+
+        They cannot appear in /wingman-skills: that list is built from the
+        installed manifests, and Core knows nothing about a skill whose folder
+        is missing. Without this the skill just vanishes from the UI and the
+        user has no way to find out why.
+
+        The Wingman file is read raw on purpose - merge_configs drops
+        uninstalled skills, so the merged config no longer shows them.
+        """
+        try:
+            config_dir = self.config_manager.get_config_dir(config_name)
+            wingman_files = self.config_manager.get_wingmen_configs(config_dir)
+            wingman_file = next(
+                (f for f in wingman_files if f.name == wingman_name), None
+            )
+            if not wingman_file:
+                return []
+
+            raw = (
+                self.config_manager.read_config(
+                    path.join(
+                        self.config_manager.config_dir,
+                        config_dir.directory,
+                        wingman_file.file,
+                    )
+                )
+                or {}
+            )
+
+            installed_names = {
+                skill.name for skill in ModuleManager.read_available_skills()
+            }
+
+            # A skill name ('SC_LogReader') and its folder ('sc_log_reader') only
+            # match once case and underscores are out of the way. Only entries
+            # whose skill is actually missing are considered.
+            def squash(value: str) -> str:
+                return value.replace("_", "").lower()
+
+            modules_by_key = {}
+            for entry in raw.get("skills") or []:
+                if not isinstance(entry, dict) or not entry.get("module"):
+                    continue
+                if self.config_manager.find_skill_default_config_path(entry["module"]):
+                    continue
+                folder = self.config_manager._skill_dir_from_module(entry["module"])
+                modules_by_key[squash(folder)] = entry["module"]
+
+            missing = []
+            for name in raw.get("discoverable_skills") or []:
+                if name in installed_names:
+                    continue
+                missing.append(
+                    MissingSkillInfo(name=name, module=modules_by_key.get(squash(name)))
+                )
+            return missing
+        except Exception as e:
+            self.printr.print(
+                f"get_missing_wingman_skills failed for '{config_name}/{wingman_name}': {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return []
+
     # POST /wingman-skills/toggle
     async def toggle_wingman_skill(
         self,
@@ -462,22 +542,58 @@ class ConfigService:
             self.printr.toast_error(str(e))
             raise e
 
-    async def disable_ineligible_skills(self, ineligible_skill_names: set[str]) -> None:
-        """Remove legacy/incompatible skills from every Wingman's discoverable_skills and persist.
+    async def disable_ineligible_skills(
+        self,
+        ineligible_skill_names: set[str],
+        ineligible_skill_folders: set[str] | None = None,
+    ) -> None:
+        """Remove legacy/incompatible skills from every Wingman and persist.
 
         Called once at startup (after the SkillCatalog scan). The catalog already refuses to LOAD
         these skills; this keeps the saved config honest so the UI shows them disabled. Skills that
         are merely platform-incompatible are NOT in this set (the catalog marks them eligible), so
         they are left untouched.
+
+        Every config is cleaned, not just the one that happens to be open. A user
+        with several configs (Xul has nine) would otherwise keep seeing the skill
+        switched on in every config until he opens it, and the switch would do
+        nothing.
+
+        The skill's stored settings go too (`ineligible_skill_folders`): a skill
+        that has to be rewritten for the v3 API gets new properties anyway, so
+        keeping the old values only leaves dead weight in the file. Skills that
+        are merely NOT INSTALLED are untouched here - they are still listed in
+        the Wingman and come back with the skill.
         """
-        if not ineligible_skill_names or not self.current_config_dir:
+        if not ineligible_skill_names and not ineligible_skill_folders:
             return
-        config_dir = self.current_config_dir
+        try:
+            config_dirs = self.config_manager.get_config_dirs()
+        except Exception as e:
+            self.printr.print(
+                f"disable_ineligible_skills: could not enumerate configs: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return
+        for config_dir in config_dirs:
+            self._disable_ineligible_skills_in_config(
+                config_dir, ineligible_skill_names, ineligible_skill_folders or set()
+            )
+
+    def _disable_ineligible_skills_in_config(
+        self,
+        config_dir: ConfigDirInfo,
+        ineligible_skill_names: set[str],
+        ineligible_skill_folders: set[str],
+    ) -> None:
+        """Remove ineligible skills from every Wingman of one config."""
         try:
             wingman_files = self.config_manager.get_wingmen_configs(config_dir)
         except Exception as e:
             self.printr.print(
-                f"disable_ineligible_skills: could not enumerate wingmen: {e}",
+                f"disable_ineligible_skills: could not enumerate wingmen in "
+                f"'{config_dir.name}': {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
@@ -487,17 +603,25 @@ class ConfigService:
                 wingman_config = self.config_manager.load_wingman_config(
                     config_dir=config_dir, wingman_file=wingman_file
                 )
-                if not wingman_config or not wingman_config.discoverable_skills:
+                if not wingman_config:
                     continue
                 to_remove = [
                     name
-                    for name in wingman_config.discoverable_skills
+                    for name in (wingman_config.discoverable_skills or [])
                     if name in ineligible_skill_names
                 ]
-                if not to_remove:
+                settings_to_remove = [
+                    skill
+                    for skill in (wingman_config.skills or [])
+                    if self.config_manager._skill_dir_from_module(skill.module)
+                    in ineligible_skill_folders
+                ]
+                if not to_remove and not settings_to_remove:
                     continue
                 for name in to_remove:
                     wingman_config.discoverable_skills.remove(name)
+                for skill in settings_to_remove:
+                    wingman_config.skills.remove(skill)
                 # Pure disk write (config_manager, not config_service): this runs during
                 # initialize_tower BEFORE the tower exists, so the tower-gated
                 # config_service.save_wingman_config would reject it. We only need to persist
@@ -508,8 +632,12 @@ class ConfigService:
                     wingman_file=wingman_file,
                     wingman_config=wingman_config,
                 )
+                removed = to_remove or [skill.name for skill in settings_to_remove]
                 self.printr.print(
-                    f"Auto-disabled incompatible skill(s) {to_remove} in wingman '{wingman_file.name}'.",
+                    f"Removed incompatible skill(s) {removed} from wingman "
+                    f"'{config_dir.name}/{wingman_file.name}', including their "
+                    "settings. The skill needs an update from its developer and "
+                    "has to be installed again.",
                     color=LogType.WARNING,
                     server_only=True,
                 )
