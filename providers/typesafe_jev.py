@@ -28,6 +28,10 @@ import requests
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 MODEL = "typesafe-ai/jev"
 
+PRICE_PER_INPUT_TOKEN = 0.042 / 1_000_000
+"""TypeSafe's list price, $0.042 per million input tokens, output free. A
+53-command Choice measured 1,224 input tokens, so about $0.00005 a call."""
+
 DEFAULT_TIMEOUT = 2.0
 """Jev answers in 70-500 ms. Anything past two seconds is a gateway problem,
 and waiting it out is worse than falling back: the fallback is the path we
@@ -60,8 +64,17 @@ class JevResult:
     answers: dict[str, Any] = field(default_factory=dict)
     seconds: float = 0.0
     cost: float = 0.0
+    """What the gateway billed. Measured 2026-09-20 it comes back as 0 on
+    every System One call — either it is below the precision the field is
+    reported in, or the gateway does not meter this endpoint yet. Use
+    ``estimated_cost`` for anything that has to add up."""
     input_tokens: int = 0
     error: Optional[str] = None
+
+    @property
+    def estimated_cost(self) -> float:
+        """Input tokens at TypeSafe's list price. Output is free."""
+        return self.input_tokens * PRICE_PER_INPUT_TOKEN
 
     @property
     def ok(self) -> bool:

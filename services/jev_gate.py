@@ -43,10 +43,22 @@ def _threshold(name: str, fallback: float) -> float:
         return fallback
 
 
-COMMAND_CONFIDENCE = _threshold("WINGMAN_JEV_COMMAND_CONFIDENCE", 0.9)
-"""How sure Jev has to be before a key is pressed without asking the main
-model. High, because the two ways this can be wrong are both visible to the
-user in a game: a keypress they did not ask for, or the wrong one."""
+COMMAND_CONFIDENCE = _threshold("WINGMAN_JEV_COMMAND_CONFIDENCE", 0.8)
+"""How sure Jev has to be before a key is pressed without asking the main model.
+
+Measured on the shipped Star Citizen config, 40 command turns and 22 that are
+not commands (evals/jev_bench, 2026-09-20):
+
+    0.0   fires 40/40, 37 right, 0 fired on a non-command
+    0.8   fires 36/40, 34 right, 0 fired on a non-command
+    0.9   fires 29/40, 28 right, 0 fired on a non-command
+
+0.8 keeps nine of ten wins that 0.9 throws away. Raising it further is not
+the way to stop the remaining errors: the worst of them, "put the gear down"
+answered with the full Landing Sequence macro, came back at 0.92 confidence.
+Calibration separates unsure from sure, not two commands that genuinely
+overlap — a description on each of them does that, and moved exactly those
+cases to 0.99. See the findings file."""
 
 CAPABILITY_THRESHOLD = _threshold("WINGMAN_JEV_CAPABILITY_THRESHOLD", 0.5)
 """Where "this turn could need that skill" starts.

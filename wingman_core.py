@@ -128,7 +128,12 @@ STOP_AHEAD_SECONDS = 6.0
 # Below this, a voice-activated utterance is taken as room noise rather than a
 # request, and nothing answers it. Low on purpose: an answer nobody asked for
 # is a nuisance, but silence when the user did ask is a bug report.
-NOT_ADDRESSED_BELOW = 0.2
+#
+# 0.15 measured best on the triage set (evals/jev_bench, 2026-09-20): 93%
+# against 90% at 0.2, and it is the highest gate that drops none of the real
+# user speech. "No wait, I meant the other ship." scores 0.18 and is exactly
+# the kind of sentence that must still get through.
+NOT_ADDRESSED_BELOW = 0.15
 
 
 def _key_source(key) -> str:

@@ -22,6 +22,24 @@ recommend an explicit escape hatch over inferring one from low confidence:
 without one, the probability mass has nowhere to go but onto the real
 commands, and the confidence gate lets the least wrong one through."""
 
+NONE_DESCRIPTION = (
+    "Nothing should be triggered right now. Choose this whenever the speaker "
+    "is not ordering an action to happen this moment, even when the sentence "
+    "names one. That includes: questions about a command ('should I put the "
+    "gear down?', 'what does the landing system do?'), talk about the past "
+    "('I forgot to raise the shields', 'you turned the lights on yesterday'), "
+    "asking to be reminded of something later ('remind me to jettison the "
+    "cargo'), and anything that wants an answer, information or conversation "
+    "instead of a keypress."
+)
+"""Spelled out because the measurement said so.
+
+With a one-line description the model matched on the presence of the command
+words rather than on what the speaker wanted done with them: five of five
+precision traps fired, among them "remind me to jettison the cargo before I
+land", which is a timer, not a keypress. The examples here are written in the
+shape the docs recommend for options that are easy to confuse."""
+
 
 # ── 1. Which command, if any ────────────────────────────────────────
 
@@ -48,16 +66,16 @@ def command_questions(commands: list[CommandConfig]) -> dict[str, dict]:
     criteria: dict[str, Optional[str]] = {
         command.name: command_description(command) for command in commands
     }
-    criteria[NONE_OPTION] = (
-        "The user is not asking for any of the commands above: a question, "
-        "small talk, or a request that needs a real answer."
-    )
+    criteria[NONE_OPTION] = NONE_DESCRIPTION
     return {
         "command": choice(
             instructions=(
-                "The user is speaking to a voice assistant that can trigger "
-                "commands in a game or application. Which command are they "
-                "asking for?"
+                "A voice assistant is listening to the pilot of a spacecraft. "
+                "It can press keys to trigger the commands below. Which command "
+                "is the speaker ordering to happen right now? Decide by what "
+                "the speaker wants done, not by which words appear: a command "
+                "named inside a question, a memory, or a request for a later "
+                "reminder is not an order to run it."
             ),
             criteria=criteria,
         )
