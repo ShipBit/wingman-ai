@@ -125,6 +125,10 @@ MIN_OWN_WORDS = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
+# Below this, a voice-activated utterance is taken as room noise rather than a
+# request, and nothing answers it. Low on purpose: an answer nobody asked for
+# is a nuisance, but silence when the user did ask is a bug report.
+NOT_ADDRESSED_BELOW = 0.2
 
 
 def _key_source(key) -> str:
@@ -1772,6 +1776,11 @@ class WingmanCore(WebSocketUser):
         target = wingman or self.tower.get_wingman_from_text(text)
         if not target:
             return
+        if wingman is None and not self._jev_addressed(text, target, during_playback):
+            # Voice activation only. A held key already says the utterance was
+            # meant for the wingman; there is nothing left to ask about, and
+            # asking would put a round trip in front of every push-to-talk turn.
+            return
         if playing:
             # Talking on means: skip the rest of the answer.
             self._run_on_main_loop(self.stop_playback())
@@ -1787,6 +1796,38 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
+
+    def _jev_addressed(self, text: str, target, during_playback: bool) -> bool:
+        """Whether a voice-activated utterance was really meant for a wingman.
+
+        The word matcher that runs above has no answer for this. It sorts an
+        utterance into stop, echo, or answer it — and everything that is not
+        one of the first two gets answered, including two people talking in
+        the room and the speech model writing "Thank you for watching!" over
+        a second of fan noise. This is the one question it cannot ask.
+
+        True whenever Jev is off, failed, or unsure, so the behaviour without
+        a working gateway is exactly today's.
+        """
+        gate = getattr(target, "jev", None)
+        if not gate or not gate.active:
+            return True
+        values = gate.triage(
+            transcript=text,
+            wingman_names=[w.name for w in self.tower.wingmen] if self.tower else [],
+            during_playback=during_playback,
+            speaking_text=self.audio_player.speaking_text,
+        )
+        addressed = values.get("addressed")
+        if addressed is None or addressed >= NOT_ADDRESSED_BELOW:
+            return True
+        self.printr.print(
+            f"Dropped '{text}': not addressed to a wingman "
+            f"(Jev {addressed:.2f}).",
+            server_only=True,
+            color=LogType.INFO,
+        )
+        return False
 
     def _is_stop(self, words: list[str]) -> bool:
         """Whether the whole utterance is a stop command. The phrases are read

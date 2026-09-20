@@ -198,17 +198,27 @@ class CommandExecutor:
 
     # ───────────────── Tool definition ───────────────────────── #
 
-    def get_tool_definition(self) -> dict | None:
-        """Return the OpenAI-style execute_command tool definition, or None if no
-        eligible commands are configured."""
+    def eligible_commands(self) -> list[CommandConfig]:
+        """The commands a model may pick from.
+
+        A force-instant command is the user saying "only on that exact phrase"
+        and must never be chosen by meaning; one without effective actions has
+        nothing to trigger. Shared with the System One path so the two can
+        never be offered different lists.
+        """
         if not self.config.commands:
-            return None
-        commands = [
-            command.name
+            return []
+        return [
+            command
             for command in self.config.commands
             if (not command.force_instant_activation)
             and _command_has_effective_actions(command)
         ]
+
+    def get_tool_definition(self) -> dict | None:
+        """Return the OpenAI-style execute_command tool definition, or None if no
+        eligible commands are configured."""
+        commands = [command.name for command in self.eligible_commands()]
         if not commands:
             return None
         return {

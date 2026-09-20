@@ -58,6 +58,7 @@ from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.turn_metrics import TurnMetrics
 from services.instant_response_generator import InstantResponseGenerator
+from services.jev_gate import JevGate
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -191,6 +192,9 @@ class Wingman:
 
         # --- Conversation state ---
         self.last_gpt_call = None
+
+        # --- System One decisions (prototype, off unless WINGMAN_JEV is set) ---
+        self.jev = JevGate(wingman_name=name)
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -545,6 +549,25 @@ class Wingman:
             return instant_response, instant_response, None, True
         benchmark.finish_snapshot()
 
+        # The same shape as instant activation above, one step less exact: the
+        # phrase list matches words, this matches meaning. A command with a
+        # written response ends the turn here without a main-model call at all;
+        # one without still needs the model for something to say, but no longer
+        # needs it to pick the command.
+        if self.jev.active and not instant_command_executed:
+            benchmark.start_snapshot("Jev command decision")
+            jev_executed, jev_response = await self._try_jev_command(transcript)
+            benchmark.finish_snapshot()
+            if jev_response:
+                await self.conversation.add_assistant_message(jev_response)
+                return jev_response, jev_response, None, True
+            instant_command_executed = instant_command_executed or jev_executed
+
+        if self.jev.active and not instant_command_executed:
+            benchmark.start_snapshot("Jev capability preselection")
+            await self._preselect_capabilities(transcript)
+            benchmark.finish_snapshot()
+
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
         tool_timings: list[tuple[str, float]] = []
@@ -785,6 +808,69 @@ class Wingman:
             add_tool_response_fn=self.conversation.add_tool_response,
             pending_tool_calls=self.conversation.pending_tool_calls,
         )
+
+    async def _preselect_capabilities(self, transcript: str) -> None:
+        """Activate the skills this turn looks like it needs, before asking.
+
+        Progressive disclosure costs a whole extra round trip today: the model
+        sees a one-line summary per skill, calls ``activate_capability``, the
+        tool list changes, and only the second call can do the work. Naming
+        the skill from the transcript removes the first of those two calls.
+
+        Only activates, never deactivates. A skill the user switched on by
+        hand, or one a previous turn discovered, stays on — taking it away
+        because one sentence did not mention it would break the turn after.
+        """
+        discoverable = [
+            manifest
+            for manifest in self.skill_registry.get_discoverable_skills()
+            if manifest.name not in self.skill_registry.active_skill_names
+        ]
+        if not discoverable:
+            return
+
+        groups = {m.name: m.get_discovery_description() for m in discoverable}
+        wanted = await self.jev.preselect_capabilities(transcript, groups)
+        if wanted is None:
+            return
+
+        for name in sorted(wanted):
+            success, message, _needs_validation = await self.skill_registry.activate_skill(name)
+            if not success:
+                printr.print(
+                    f"Jev preselected '{name}' but activation failed: {message}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+
+    async def _try_jev_command(self, transcript: str) -> tuple[bool, str | None]:
+        """Let the System One model pick a command, and run it if it is sure.
+
+        Returns ``(executed, spoken_response)``. Both empty means Jev did not
+        decide and the turn goes on untouched. ``executed`` without a response
+        means the keypress happened but the command has no written response,
+        so the main model is still asked for something to say — with tools
+        switched off, exactly as after an instant activation.
+
+        The executed command is written into the history as the assistant's
+        own tool call, the same way instant activation does it. Without that,
+        the model's next turn has no idea the landing gear is down.
+        """
+        commands = self.command_executor.eligible_commands()
+        name = await self.jev.pick_command(transcript, commands)
+        if not name:
+            return False, None
+
+        command = self.command_executor.get_command(name)
+        if not command:
+            # A command that vanished between the question and the answer.
+            return False, None
+
+        instant_response, _function_response = await self.command_executor.execute_command(
+            command, is_instant=True
+        )
+        await self.conversation.add_forced_assistant_command_calls([command])
+        return True, instant_response or None
 
     async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, Any]
