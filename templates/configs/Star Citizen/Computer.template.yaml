@@ -110,6 +110,7 @@ command_categories:
     name: Camera - Advanced Camera Controls
 commands:
   - name: Flight Ready
+    description: Power the ship up from cold and make it ready to fly. This is what "get ready", "spin her up", "start the ship" and "ready for departure" mean. The ship stays on the pad; nothing takes off.
     additional_context: All ship systems turned on and ready for takeoff
     category_id: 01120b29-2487-422e-82ff-6327eacbd7fe
     is_system_command: false
@@ -131,6 +132,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: Next Operator Mode
+    description: 'Step to the next operator mode of the seat: flight, weapons, scanning, mining.'
     category_id: 8483a2f5-5273-435f-82ee-561c5a485317
     is_system_command: false
     force_instant_activation: false
@@ -138,6 +140,7 @@ commands:
       - mouse:
           button: middle
   - name: Toggle Light Amplification
+    description: 'Night vision in the helmet or cockpit: amplify what little light there is. Not the headlights.'
     category_id: 8483a2f5-5273-435f-82ee-561c5a485317
     is_system_command: false
     force_instant_activation: false
@@ -154,6 +157,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: Toggle Hardpoint Lock
+    description: Lock the weapon hardpoints in place so they stop tracking.
     category_id: 01120b29-2487-422e-82ff-6327eacbd7fe
     is_system_command: false
     force_instant_activation: false
@@ -170,6 +174,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: Cycle Camera View
+    description: Step to the next camera angle, without choosing a specific one.
     category_id: f65a8f08-4c7d-4a33-8473-96e00614504d
     is_system_command: false
     force_instant_activation: false
@@ -177,6 +182,7 @@ commands:
       - keyboard:
           hotkey: f4
   - name: Toggle Cruise Mode
+    description: Hold the current speed without the throttle being touched, like cruise control in a car.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -184,6 +190,7 @@ commands:
       - keyboard:
           hotkey: alt+c
   - name: Toggle Decoupled Mode
+    description: Let the ship drift instead of holding its heading, so the nose can point away from the direction of travel.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -191,6 +198,7 @@ commands:
       - keyboard:
           hotkey: c
   - name: Toggle Landing System
+    description: The landing gear alone. Lower it or raise it. Nothing else happens, the ship is not landed and no autopilot is engaged.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -198,6 +206,7 @@ commands:
       - keyboard:
           hotkey: n
   - name: Toggle VToL
+    description: Swivel the thrusters for vertical take-off and landing.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -205,6 +214,7 @@ commands:
       - keyboard:
           hotkey: k
   - name: Cycle Configuration
+    description: Step to the next saved flight configuration.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -212,6 +222,7 @@ commands:
       - keyboard:
           hotkey: alt+k
   - name: Autoland
+    description: Hand the landing to the autopilot, which flies the ship down to the pad by itself. The speaker wants the ship landed, not the gear moved.
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     instant_activation:
@@ -223,6 +234,7 @@ commands:
           hotkey: n
           hold: 2.0
   - name: Contact ATC
+    description: Open a channel to air traffic control without asking for anything specific yet.
     additional_context: Contacting ATC for clearance
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
@@ -231,6 +243,7 @@ commands:
       - keyboard:
           hotkey: alt+n
   - name: Toggle Quantum or Navigation or SCM or Master Mode
+    description: 'Switch the ship between its master modes: quantum travel, navigation and combat. For a speaker asking to change mode generally, not for a specific system like shields or weapons.'
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -239,6 +252,7 @@ commands:
           hotkey: b
           hold: 2.0
   - name: Open Jump Gate
+    description: Open a jump point to another star system. Not the in-system quantum jump.
     additional_context: Energy burst fired, jump gate is opening
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
@@ -247,6 +261,7 @@ commands:
       - mouse:
           button: left
   - name: Initiate Quantum Jump
+    description: Spool the quantum drive and jump to the destination that is already marked. Travel across the system.
     category_id: d5d831d2-3990-41c8-afc3-c205c83f39b0
     is_system_command: false
     force_instant_activation: false
@@ -255,6 +270,7 @@ commands:
           button: left
           hold: 2.0
   - name: Clear Target
+    description: Drop the current target and lock onto nothing.
     category_id: eb2b63a4-251b-44f1-b6d2-3627e8e66083
     is_system_command: false
     force_instant_activation: false
@@ -262,6 +278,7 @@ commands:
       - keyboard:
           hotkey: alt+t
   - name: Autodock
+    description: Hand docking with a station or a larger ship to the autopilot. Docking, not landing on a surface or a pad.
     category_id: 4e9a4be4-a6e6-4052-9f5e-d84b2313cc33
     is_system_command: false
     instant_activation:
@@ -274,6 +291,7 @@ commands:
           hotkey: n
           hold: 2.0
   - name: Cycle Target
+    description: Step to the next target of any kind at all, friendly, neutral or hostile.
     category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
     is_system_command: false
     force_instant_activation: false
@@ -281,6 +299,7 @@ commands:
       - keyboard:
           hotkey: t
   - name: Cycle Attacker
+    description: 'Step to the next ship that is currently shooting at us. Narrower than hostile: only the ones actually attacking right now.'
     category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
     is_system_command: false
     force_instant_activation: false
@@ -288,6 +307,7 @@ commands:
       - keyboard:
           hotkey: "4"
   - name: Cycle Hostile
+    description: Step to the next target that is hostile. Only enemies are stepped through, not everything in sight.
     category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
     is_system_command: false
     force_instant_activation: false
@@ -295,6 +315,7 @@ commands:
       - keyboard:
           hotkey: "5"
   - name: Ping Area for Resources and Vehicles
+    description: 'Send a scanner pulse to find what is around: rocks worth mining, ships, wrecks, signatures.'
     category_id: 8878cd3f-e81d-4cc5-b2ed-dd9337b52456
     is_system_command: false
     force_instant_activation: false
@@ -302,6 +323,7 @@ commands:
       - keyboard:
           hotkey: tab
   - name: Switch Mining Laser
+    description: Change to a different mining laser head.
     category_id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
     is_system_command: false
     force_instant_activation: false
@@ -315,6 +337,7 @@ commands:
           hotkey: alt
           release: true
   - name: Jettison Cargo
+    description: Dump the cargo out of the hold, right now.
     category_id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
     is_system_command: false
     force_instant_activation: false
@@ -322,6 +345,7 @@ commands:
       - keyboard:
           hotkey: alt+j
   - name: Cycle Turret Mode
+    description: Step through the turret's firing modes.
     category_id: 72be05a7-901f-4434-9f46-0e8e7d23b2f4
     is_system_command: false
     force_instant_activation: false
@@ -329,6 +353,7 @@ commands:
       - keyboard:
           hotkey: q
   - name: Toggle Gyro Turret Stabilization
+    description: Turn the turret's gyro stabilisation on or off, so it stops drifting with the ship.
     category_id: 72be05a7-901f-4434-9f46-0e8e7d23b2f4
     is_system_command: false
     force_instant_activation: false
@@ -336,6 +361,7 @@ commands:
       - keyboard:
           hotkey: e
   - name: Recenter Turret
+    description: Swing the turret back to point straight ahead.
     category_id: 2e6724e6-3c0e-46b4-8fa8-3ca421817a2b
     is_system_command: false
     force_instant_activation: false
@@ -344,6 +370,7 @@ commands:
           hotkey: c
           hold: 3.0
   - name: Change Turret Position
+    description: Move to a different turret seat on the ship.
     category_id: 2e6724e6-3c0e-46b4-8fa8-3ca421817a2b
     is_system_command: false
     force_instant_activation: false
@@ -351,6 +378,7 @@ commands:
       - keyboard:
           hotkey: s
   - name: Toggle Weapon Gimbals
+    description: Switch the guns between gimballed aim, which follows the target, and fixed aim. About how the guns aim, not about powering them.
     category_id: a0479a7c-e43f-427c-b626-a1a6ca1a7aef
     is_system_command: false
     force_instant_activation: false
@@ -358,6 +386,7 @@ commands:
       - keyboard:
           hotkey: g
   - name: Cycle Weapon Aim Mode
+    description: Step through the aiming modes of the weapons.
     category_id: a0479a7c-e43f-427c-b626-a1a6ca1a7aef
     is_system_command: false
     force_instant_activation: false
@@ -374,6 +403,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: More missiles
+    description: Arm one more missile for the next salvo, raising how many fire at once.
     additional_context: Missile salvo size cycled by +1
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
@@ -382,6 +412,7 @@ commands:
       - keyboard:
           hotkey: g
   - name: Reset missiles
+    description: Set the armed missile count back to the start.
     additional_context: Missile salvo size set to one
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
@@ -390,6 +421,7 @@ commands:
       - keyboard:
           hotkey: alt+g
   - name: Launch Countermeasure Decoy
+    description: Fire flares that pull heat-seeking missiles away from the ship.
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false
@@ -397,6 +429,7 @@ commands:
       - keyboard:
           hotkey: h
   - name: Increase Decoys
+    description: Raise how many decoys go out per launch. Does not fire anything.
     additional_context: Decoy count configuration increased for next use of decoy countermeasures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
@@ -414,6 +447,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: Decrease Decoys
+    description: Lower how many decoys go out per launch. Does not fire anything.
     additional_context: Decoy count configuration decreased for next use of decoy countermeasures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
@@ -422,6 +456,7 @@ commands:
       - keyboard:
           hotkey: alt+h
   - name: Launch Countermeasure Noise
+    description: Fire chaff that jams radar-guided missiles. Noise, not flares.
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false
@@ -429,6 +464,7 @@ commands:
       - keyboard:
           hotkey: j
   - name: Toggle Main Power On or Off
+    description: The ship's main power, everything at once. Not one of the individual systems.
     additional_context: Vehicles power generators turned off. Vehicle is without power now.
     category_id: 58262631-2984-4bf0-99ee-f409a753df44
     is_system_command: false
@@ -437,6 +473,7 @@ commands:
       - keyboard:
           hotkey: u
   - name: Toggle Thrusters
+    description: Power to the thrusters, on or off. One of four separate power switches, and the one about moving.
     category_id: 58262631-2984-4bf0-99ee-f409a753df44
     is_system_command: false
     force_instant_activation: false
@@ -444,6 +481,7 @@ commands:
       - keyboard:
           hotkey: i
   - name: Toggle Shields
+    description: Power to the shields, on or off.
     category_id: 58262631-2984-4bf0-99ee-f409a753df44
     is_system_command: false
     force_instant_activation: false
@@ -451,6 +489,7 @@ commands:
       - keyboard:
           hotkey: o
   - name: Toggle Weapons
+    description: Power to the weapons, on or off. Arming the guns, not firing them and not changing how they aim.
     category_id: 58262631-2984-4bf0-99ee-f409a753df44
     is_system_command: false
     force_instant_activation: false
@@ -458,6 +497,7 @@ commands:
       - keyboard:
           hotkey: p
   - name: Toggle Headlights
+    description: The ship's exterior lights, on or off.
     category_id: 7b4d2e70-c42d-4b43-8266-b82b39e6c9b9
     is_system_command: false
     force_instant_activation: false
@@ -465,6 +505,7 @@ commands:
       - keyboard:
           hotkey: l
   - name: Open Inner Thought Menu
+    description: Open the interaction wheel for whatever the player is looking at.
     category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
     is_system_command: false
     force_instant_activation: false
@@ -472,6 +513,7 @@ commands:
       - keyboard:
           hotkey: alt+f
   - name: Inventory
+    description: Open the player's own inventory to see what they are carrying.
     category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
     is_system_command: false
     force_instant_activation: false
@@ -479,6 +521,7 @@ commands:
       - keyboard:
           hotkey: i
   - name: Loot
+    description: Take items from a body, a crate or a wreck. Someone else's things, not the player's own inventory.
     category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
     is_system_command: false
     force_instant_activation: false
@@ -487,6 +530,7 @@ commands:
           hotkey: i
           hold: 3.0
   - name: Save View 1
+    description: Store the current camera angle as view number one. Saving a view, not going to one.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -503,6 +547,7 @@ commands:
           hotkey: f4
           release: true
   - name: Save View 2
+    description: Store the current camera angle as view number two. Saving a view, not going to one.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -519,6 +564,7 @@ commands:
           hotkey: f4
           release: true
   - name: Save View 3
+    description: Store the current camera angle as view number three. Saving a view, not going to one.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -535,6 +581,7 @@ commands:
           hotkey: f4
           release: true
   - name: View 1
+    description: Jump to saved camera view number one.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -551,6 +598,7 @@ commands:
           hotkey: f4
           release: true
   - name: Launch Sequence
+    description: 'The whole automated departure run as one macro: clearance, power, lift-off and gear, without the pilot doing any of it. Only when the speaker names the sequence itself or asks for the entire departure to be done for them. Wanting the ship made ready is Flight Ready, not this.'
     additional_context: Start-request sent to ATC, energy systems and engines turned on, Liftoff completed, landing gear retracted and VTOL disabled
     is_system_command: false
     instant_activation:
@@ -573,6 +621,7 @@ commands:
       - keyboard:
           hotkey: k
   - name: Landing Sequence
+    description: 'The whole automated arrival in one go: gear, approach and touchdown together. Only for a speaker who names the sequence itself or asks for everything to be done for them at once.'
     additional_context: VTOL enabled, landing gear deployed, ship landed and engines and energy systems turned off. Touchdown and landing sequence complete
     is_system_command: false
     instant_activation:
@@ -593,6 +642,7 @@ commands:
       - keyboard:
           hotkey: u
   - name: View 2
+    description: Jump to saved camera view number two.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -609,6 +659,7 @@ commands:
           hotkey: f4
           release: true
   - name: View 3
+    description: Jump to saved camera view number three.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -625,6 +676,7 @@ commands:
           hotkey: f4
           release: true
   - name: Clear Saved View
+    description: Delete a stored camera view.
     category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
     force_instant_activation: false
@@ -632,6 +684,7 @@ commands:
       - keyboard:
           hotkey: num 0
   - name: Toggle Mining or Salvage Mode
+    description: Switch the ship between mining and salvage operation.
     category_id: 8483a2f5-5273-435f-82ee-561c5a485317
     is_system_command: false
     force_instant_activation: false

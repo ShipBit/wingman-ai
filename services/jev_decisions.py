@@ -47,12 +47,22 @@ shape the docs recommend for options that are easy to confuse."""
 def command_description(command: CommandConfig) -> Optional[str]:
     """What tells this command apart from its neighbours.
 
-    The command name is already written to be self-describing — "DeployLandingGear"
-    rather than "cmd_7" — so the description only has to add what the name
-    leaves out. The instant-activation phrases are the best material for that:
-    they are the user's own words for this command, written by the user.
+    The written description first, because it is the only one of these three
+    that was put there to answer this question. The instant-activation
+    phrases come next: they are the user's own words for this command. Last
+    the additional context, which is really the text handed to the model
+    *after* the command ran — it often says what the command did, so it is
+    worth something here, but it was written for a different job.
+
+    None when there is nothing to say, which is normal. A command the user
+    recorded themselves has only its name, and for most commands the name is
+    enough. Measured on the shipped Star Citizen config, descriptions took the
+    System One model from 0.863 to 0.973 — but every one of the thirteen it
+    fixed was a command with a near neighbour, not a lonely one.
     """
     parts = []
+    if command.description and command.description.strip():
+        parts.append(" ".join(command.description.split()))
     phrases = [p for p in (command.instant_activation or []) if p]
     if phrases:
         parts.append("Said as: " + ", ".join(f'"{p}"' for p in phrases[:6]))

@@ -6,8 +6,20 @@ skills a turn needs, whether the microphone heard a request at all, whether a
 word the speech model wrote is a game name or the everyday word it looks like
 — in about 300 ms, where a chat model takes over a second.
 
-One thing follows for a config written by 3.2.3: `settings.yaml` gains a
-`system_one` block, switched on.
+Two things follow for a config written by 3.2.3.
+
+`settings.yaml` gains a `system_one` block, switched on.
+
+Commands gain a `description`, and the ones that came from a shipped template
+get theirs filled in. It is what tells two commands apart that read alike —
+"Autoland", "Autodock", "Toggle Landing System" and "Landing Sequence" all
+mean "land the ship" to a reader who only has the names. Measured 2026-09-20
+on 152 spoken transcripts: the chat model went from 0.884 to 0.952 with them
+and the System One model from 0.863 to 0.973.
+
+Only commands that still carry the shipped name and have no description are
+touched. A command the user wrote, renamed or already described is left
+alone, and the field stays optional: most commands never need one.
 
 On by default because there is nothing to weigh up. The model behind it is a
 fixed role of every plan, like transcription and speech, so it costs the user
@@ -22,6 +34,11 @@ is a safety net for files that skipped a migration, and a value the user is
 meant to own belongs in the chain where the log says it was set.
 """
 
+import os
+from os import path
+
+import yaml
+
 from services.migrations.base_migration import BaseMigration
 
 
@@ -30,6 +47,67 @@ class Migration323To324(BaseMigration):
 
     old_version = "3_2_3"
     new_version = "3_2_4"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._descriptions: dict[str, str] | None = None
+
+    def _shipped_descriptions(self) -> dict[str, str]:
+        """Command name to description, from every template this build ships.
+
+        Read from the templates rather than pasted in here because there are
+        67 of them and two copies would drift. The risk that usually argues
+        against this — a migration whose result depends on the installed
+        files — does not apply: the templates ship with the build that runs
+        the migration.
+        """
+        if self._descriptions is not None:
+            return self._descriptions
+
+        self._descriptions = {}
+        configs = path.join(self.templates_dir, "configs")
+        for root, _dirs, files in os.walk(configs):
+            for file_name in files:
+                if not file_name.endswith(".template.yaml"):
+                    continue
+                try:
+                    with open(path.join(root, file_name), encoding="utf-8") as f:
+                        template = yaml.safe_load(f) or {}
+                except Exception as e:
+                    self.log_warning(f"- could not read {file_name}: {e}")
+                    continue
+                for command in template.get("commands") or []:
+                    name, text = command.get("name"), command.get("description")
+                    if name and text:
+                        self._descriptions[name] = text
+        return self._descriptions
+
+    def migrate_wingman(self, old: dict) -> dict:
+        """Fill in the descriptions for commands that came from a template."""
+        commands = old.get("commands")
+        if not isinstance(commands, list):
+            return old
+
+        shipped = self._shipped_descriptions()
+        if not shipped:
+            self.log_warning("- no command descriptions found in the templates; skipping")
+            return old
+
+        filled = 0
+        for command in commands:
+            if not isinstance(command, dict) or command.get("description"):
+                continue
+            text = shipped.get(command.get("name"))
+            if text:
+                command["description"] = text
+                filled += 1
+
+        if filled:
+            self.log(
+                f"- {filled} command(s) got the description the template ships, "
+                "which is what tells two commands that read alike apart"
+            )
+        return old
 
     def migrate_settings(self, old: dict) -> dict:
         """Add the System One block, on, unless the user already has one."""
