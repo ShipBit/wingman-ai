@@ -285,6 +285,10 @@ class SettingsService:
             await self.local_ai_service.update_settings_async(settings.llama_cpp)
             self.config_manager.settings_config.llama_cpp = settings.llama_cpp
 
+        # System One. Nothing to react to: the gates read the flag on every
+        # call, so the next utterance follows it without a restart.
+        self.config_manager.settings_config.system_one = settings.system_one
+
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation
 
