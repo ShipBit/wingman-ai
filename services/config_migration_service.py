@@ -10,6 +10,7 @@ from services.config_manager import (
     CONFIGS_DIR,
     CONTEXT_FILE,
     ConfigManager,
+    deep_merge_configs,
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
 from services.migrations import discover_migrations
@@ -691,17 +692,7 @@ class ConfigMigrationService:
 
     def _deep_merge_over(self, base: dict, override: dict) -> dict:
         """Recursively merge ``override`` into ``base``; override values win."""
-        merged = dict(base)
-        for key, value in override.items():
-            if (
-                key in merged
-                and isinstance(merged[key], dict)
-                and isinstance(value, dict)
-            ):
-                merged[key] = self._deep_merge_over(merged[key], value)
-            else:
-                merged[key] = value
-        return merged
+        return deep_merge_configs(base, override)
 
     def backfill_from_template(self, template_filename: str, migrated: dict) -> dict:
         """Deep-merge a migrated config over its current template.
@@ -968,6 +959,15 @@ class ConfigMigrationService:
                             )
                     except ValidationError as e:
                         self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
+                        # Never leave the previous version's file in the new
+                        # version's folder: ConfigManager reads it on every
+                        # start, long after this step is marked done. The
+                        # template-backfilled dict has every current key; what
+                        # failed here are values, and those are the user's to
+                        # correct in Settings.
+                        self.config_manager.write_config(
+                            new_file, migrated_settings
+                        )
                 # defaults
                 elif filename == "defaults.yaml":
                     self.log_highlight("Migrating defaults.yaml...")
@@ -994,6 +994,9 @@ class ConfigMigrationService:
                             )
                     except ValidationError as e:
                         self.err(f"Unable to migrate defaults.yaml:\n{str(e)}")
+                        self.config_manager.write_config(
+                            new_file, migrated_defaults
+                        )
                 # MCP
                 # NOTE: mcp.yaml is a top-level config file, not a wingman.
                 # It's handled after the main walk so we can create it from template
