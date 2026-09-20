@@ -51,8 +51,8 @@ if getattr(sys, "frozen", False):
         )
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,8 +65,10 @@ from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager, ConfigValidationError
 from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
+from services.file import get_generated_images_dir
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.websocket_user import WebSocketUser
 from services.mcp_oauth import CALLBACK_PATH, get_oauth_service
 from services.system_manager import LOCAL_VERSION, SystemManager
 from wingman_core import WingmanCore
@@ -163,6 +165,8 @@ def exit_handler():
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # executed before the application starts
+    # WebSocket sends from worker threads have to be routed back to this loop
+    WebSocketUser.set_main_loop(asyncio.get_running_loop())
     modify_openapi()
 
     yield
@@ -476,6 +480,31 @@ def _callback_page(accepted: bool, message: str) -> str:
   <p>{message}</p>
   <p style="margin-top:1rem">You can close this tab and go back to Wingman AI.</p>
 </main></body></html>"""
+
+
+@app.get("/generated-images/{filename}", tags=["main"], include_in_schema=False)
+async def get_generated_image(filename: str):
+    """Serve one image the Image Generation skill produced.
+
+    The client renders these with a plain <img src>, so they travel over HTTP
+    instead of through the WebSocket - a generated image as a base64 data URL is
+    several megabytes and used to stall the socket for every other message.
+
+    Kept out of the OpenAPI schema: the client builds the URL from the path Core
+    broadcasts, there is no generated method to call.
+    """
+    images_dir = path.realpath(get_generated_images_dir())
+    # No traversal: the name must be a plain file directly inside the directory.
+    if path.basename(filename) != filename:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    file_path = path.realpath(path.join(images_dir, filename))
+    if path.commonpath([images_dir, file_path]) != images_dir or not path.isfile(
+        file_path
+    ):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return FileResponse(file_path)
 
 
 @app.get("/client/plan", tags=["main"], response_model=str)

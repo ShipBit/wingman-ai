@@ -6,6 +6,9 @@ from services.system_manager import LOCAL_VERSION
 APP_NAME = "WingmanAI"
 APP_AUTHOR = "ShipBit"
 
+# Skill name of the bundled Image Generation skill, used for its generated files dir
+IMAGE_GENERATION_SKILL = "ImageGeneration"
+
 _PROMPTS_DIR = path.join(path.abspath(path.dirname(__file__)), "..", "prompts")
 
 
@@ -231,3 +234,13 @@ Le meilleur format wav pour le clonage est 22.050Hz Mono.
     if not path.exists(readme_path):
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+
+def get_generated_images_dir() -> str:
+    """Where the Image Generation skill stores its images.
+
+    Core serves them from here via GET /generated-images/{filename} so the
+    WebSocket does not have to carry a multi-megabyte data URL per image.
+    Location: APPDATA/WingmanAI/generated_files/ImageGeneration/
+    """
+    return get_generated_files_dir(IMAGE_GENERATION_SKILL)
