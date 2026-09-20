@@ -137,6 +137,12 @@ class SkillCatalog:
         them from Wingman configs. Excludes entries with no name."""
         return {e.name for e in self._entries if e.verdict != SkillVerdict.OK and e.name}
 
+    def ineligible_folders(self) -> set[str]:
+        """Skill FOLDER names that are NOT eligible. Needed next to
+        ineligible_skill_names() because `discoverable_skills` stores skill names
+        while a Wingman's `skills` entries are addressed by module/folder."""
+        return {e.folder for e in self._entries if e.verdict != SkillVerdict.OK}
+
     def is_eligible(self, folder: str) -> bool:
         return folder in self.eligible_folders()
 
@@ -163,6 +169,18 @@ class SkillCatalog:
         }
         self._runtime_outcomes[h] = record
         return record
+
+    def current_records(self) -> list[dict]:
+        """Scan verdicts with this boot's runtime failures folded in.
+
+        The same records WingmanCore broadcasts, but as a snapshot a client can
+        ask for. The broadcast only happens once, while the tower initializes -
+        a client that reloads after that has no way to learn why a skill is off.
+        """
+        by_hash = {rec["id_hash"]: rec for rec in self.telemetry_records()}
+        for rec in self._runtime_outcomes.values():
+            by_hash[rec["id_hash"]] = rec
+        return list(by_hash.values())
 
     def telemetry_records(self) -> list[dict]:
         """Scan verdicts (one per skill) as telemetry records."""

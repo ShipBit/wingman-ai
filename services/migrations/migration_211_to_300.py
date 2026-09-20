@@ -47,18 +47,35 @@ class Migration211To300(BaseMigration):
             llama["support_remote_port"] = llama.pop("summarize_remote_port")
             self.log("- renamed llama_cpp.summarize_remote_port \u2192 support_remote_port")
 
-        # Add Parakeet STT settings
+        # Add Parakeet STT settings.
+        # Parakeet replaces FasterWhisper, so its execution provider has to be
+        # decided the same way 1.8.2 -> 2.0.0 decided FasterWhisper's: by asking
+        # the machine. `hardware_scan_performed` is already True for everyone
+        # coming from 2.x (it was set for FasterWhisper), so the boot-time
+        # hardware scan never runs again and would leave every GPU owner
+        # transcribing on the CPU.
+        cuda_available = self.system_manager.is_cuda_available()
+        gpu_name = self.system_manager.get_gpu_name()
+        execution_provider = "cuda" if cuda_available else "cpu"
+
         va = old.get("voice_activation", {})
         if "parakeet" not in va:
             va["parakeet"] = {
                 "enable": False,
                 "run_locally": True,
                 "model_variant": "v3",
-                "execution_provider": "cpu",
+                "execution_provider": execution_provider,
                 "host": "http://127.0.0.1",
                 "port": 9876,
             }
             self.log("- added new voice activation setting: parakeet")
+        else:
+            va["parakeet"]["execution_provider"] = execution_provider
+        self.log(f"- detected GPU: {gpu_name or 'None'}")
+        self.log(
+            f"- set parakeet.execution_provider to '{execution_provider}' "
+            f"(CUDA {'available' if cuda_available else 'not available'})"
+        )
         if "parakeet_config" not in va:
             va["parakeet_config"] = {
                 "temperature": 0.0,

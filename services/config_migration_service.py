@@ -122,9 +122,17 @@ class ConfigMigrationService:
                     )
                     self.log_message += f"{warning_message}\n"
 
+            self.audit_skill_availability()
+
             self.log_highlight(
                 f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}"
             )
+            # perform_migration() wrote the marker at the end of the last chain
+            # step, so everything after the chain - custom skill warnings, the
+            # skill audit, this line - only ever reached the terminal. Rewrite
+            # the marker with the full log so the file a user sends us is the
+            # whole story.
+            self._flush_migration_log()
             return
 
         # No old version found - check if this is an existing installation or fresh install
@@ -141,6 +149,92 @@ class ConfigMigrationService:
         # No old version and no existing configs - fresh install
         self.log_highlight("No valid version directories found for migration.")
         self._apply_fresh_install_cuda_settings()
+
+    def _flush_migration_log(self) -> None:
+        """Rewrite the latest version's .migration marker with the full log."""
+        if not self.latest_config_path:
+            return
+        marker = path.join(self.latest_config_path, MIGRATION_LOG)
+        try:
+            with open(marker, "w", encoding="UTF-8") as stream:
+                stream.write(self.log_message)
+        except OSError as e:
+            self.printr.print(
+                f"Could not write the migration log to '{marker}': {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+
+    def audit_skill_availability(self) -> None:
+        """Report skills the migrated Wingmen reference but that aren't installed.
+
+        Custom skills live outside the version directories (custom_skills/),
+        so the migration never copies or checks them for anyone coming from
+        2.0.0 or newer. If the user upgraded without carrying that folder
+        along, ConfigManager silently drops the skill from the Wingman at load
+        time and the skill vanishes from the UI - the migration log, which is
+        what we read when a user reports something missing, said nothing at
+        all about it.
+
+        Two lists can point at a missing skill and they use different
+        identifiers: `skills` holds module paths ('skills.sc_log_reader.main')
+        and only carries settings, while `discoverable_skills` holds skill
+        names ('SC_LogReader') and is what the UI shows as switched on.
+        """
+        if not self.latest_config_path or not path.exists(self.latest_config_path):
+            return
+
+        missing_modules: dict[str, list[str]] = {}
+        missing_enabled: dict[str, list[str]] = {}
+        installed_names = set(self._get_all_skill_names())
+
+        def collect(config: Optional[dict], where: str) -> None:
+            for skill in (config or {}).get("skills") or []:
+                module = skill.get("module")
+                if not module:
+                    continue
+                if self.config_manager.find_skill_default_config_path(module):
+                    continue
+                skill_dir = module.replace(".main", "").split(".")[-1]
+                missing_modules.setdefault(skill_dir, []).append(where)
+            for name in (config or {}).get("discoverable_skills") or []:
+                if name not in installed_names:
+                    missing_enabled.setdefault(name, []).append(where)
+
+        defaults_file = path.join(self.latest_config_path, "defaults.yaml")
+        if path.exists(defaults_file):
+            collect(self.config_manager.read_config(defaults_file), "defaults.yaml")
+
+        for config_dir in sorted(os.listdir(self.latest_config_path)):
+            dir_path = path.join(self.latest_config_path, config_dir)
+            if not path.isdir(dir_path):
+                continue
+            for filename in sorted(os.listdir(dir_path)):
+                if not filename.endswith(".yaml") or filename.endswith(
+                    "template.yaml"
+                ):
+                    continue
+                collect(
+                    self.config_manager.read_config(path.join(dir_path, filename)),
+                    f"{config_dir}/{filename.removesuffix('.yaml')}",
+                )
+
+        if not missing_modules and not missing_enabled:
+            self.log("All skills referenced by the migrated Wingmen are installed.")
+            return
+
+        custom_skills_dir = get_custom_skills_dir()
+        for name, users in sorted(missing_enabled.items()):
+            self.log_warning(
+                f"Skill '{name}' is switched on for {', '.join(users)} but is not "
+                f"installed. Those Wingmen lose it until the skill is (re)installed "
+                f"to '{custom_skills_dir}'."
+            )
+        for skill_dir, users in sorted(missing_modules.items()):
+            self.log_warning(
+                f"Settings for the missing skill folder '{skill_dir}' were kept for "
+                f"{', '.join(users)}. They come back with the skill; nothing was deleted."
+            )
 
     def find_latest_migratable_version(self, users_dir):
         """Find the latest migratable version to start migration from.
@@ -795,7 +889,15 @@ class ConfigMigrationService:
 
         shutil.copyfile(old_file, new_file)
 
-        self.log_highlight(f"Copied file: {path.basename(new_file)}")
+        # Same reason as the Wingman lines: name the config dir for files that
+        # live in one, so 'Copied file: zRandom NPC.png' is traceable.
+        parent = path.basename(path.dirname(new_file))
+        label = (
+            path.basename(new_file)
+            if parent == CONFIGS_DIR
+            else path.join(parent, path.basename(new_file))
+        )
+        self.log_highlight(f"Copied file: {label}")
 
     def migrate(
         self,
@@ -1016,7 +1118,14 @@ class ConfigMigrationService:
                     if filename.endswith("template.yaml"):
                         self.copy_file(old_file, new_file)
                         continue
-                    self.log_highlight(f"Migrating Wingman {filename}...")
+                    # The config dir belongs in the line: users have the same
+                    # Wingman name in several configs (Xul's 'zRandom NPC'
+                    # exists three times), and a bare file name makes the log
+                    # unreadable exactly for the people with the most to lose.
+                    config_dir_name = path.basename(root)
+                    self.log_highlight(
+                        f"Migrating Wingman {config_dir_name}/{filename}..."
+                    )
                     # defaults are already migrated because the Wingman config is in a subdirectory
                     try:
                         default_config = self.config_manager.read_default_config()
