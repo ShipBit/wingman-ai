@@ -135,12 +135,6 @@ class JevGate:
             None, lambda: self.client.system_one(state, questions)
         )
         self.last = result
-        if result.error:
-            printr.print(
-                f"Jev: {result.error}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
         return result
 
     # ── the command a transcript asks for ───────────────────────────
@@ -160,14 +154,13 @@ class JevGate:
             {"transcript": transcript}, command_questions(commands)
         )
         picked = read_command(result, COMMAND_CONFIDENCE)
-        printr.print(
-            f"Jev command: {result.choice('command')} "
-            f"(confidence {result.confidence('command'):.2f}, "
-            f"{result.seconds * 1000:.0f} ms) -> "
-            f"{picked or 'main model decides'}",
-            color=LogType.SYSTEM,
-            server_only=True,
-        )
+        if not picked and result.ok:
+            printr.print(
+                f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
+                "model decides this turn.",
+                color=LogType.SYSTEM,
+                server_only=True,
+            )
         return picked
 
     # ── which skills this turn could need ───────────────────────────
@@ -188,10 +181,9 @@ class JevGate:
         kept = read_tool_groups(
             result, groups, CAPABILITY_THRESHOLD, unanswered_kept=False
         )
-        if kept is not None:
+        if kept:
             printr.print(
-                f"Jev capabilities: {', '.join(sorted(kept)) or 'none'} "
-                f"({result.seconds * 1000:.0f} ms)",
+                f"Jev preselected: {', '.join(sorted(kept))}",
                 color=LogType.SYSTEM,
                 server_only=True,
             )
@@ -224,7 +216,6 @@ class JevGate:
         )
         self.last = result
         if result.error:
-            printr.print(f"Jev triage: {result.error}", color=LogType.WARNING, server_only=True)
             return {}
         return read_triage(result)
 
@@ -250,20 +241,16 @@ class JevGate:
         )
         self.last = result
         if result.error:
-            printr.print(f"Jev vocabulary: {result.error}", color=LogType.WARNING, server_only=True)
             return None
         confirmed = read_vocabulary(result, candidates, VOCABULARY_THRESHOLD)
-        printr.print(
-            "Jev vocabulary: "
-            + ", ".join(
-                f"{heard}->{entry} "
-                f"{'yes' if index in (confirmed or set()) else 'no'}"
-                for index, (heard, entry) in enumerate(candidates)
+        applied = [candidates[i] for i in sorted(confirmed or set())]
+        if applied:
+            printr.print(
+                "Jev vocabulary, replacing: "
+                + ", ".join(f"{heard} -> {entry}" for heard, entry in applied),
+                color=LogType.SYSTEM,
+                server_only=True,
             )
-            + f" ({result.seconds * 1000:.0f} ms)",
-            color=LogType.SYSTEM,
-            server_only=True,
-        )
         return confirmed
 
     # ── the open door for skills ────────────────────────────────────
@@ -285,6 +272,4 @@ class JevGate:
             return None
         result = self.client.system_one(state, questions)
         self.last = result
-        if result.error:
-            printr.print(f"Jev: {result.error}", color=LogType.WARNING, server_only=True)
         return result

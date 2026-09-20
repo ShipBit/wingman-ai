@@ -34,12 +34,29 @@ from typing import Any, Optional
 
 import requests
 
+from api.enums import LogType
+from services.printr import Printr
+
+printr = Printr()
+
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 """The direct route, for a user with their own AI Gateway key."""
 
 MODEL = "typesafe-ai/jev"
 """Only sent on the direct route. Through Wingman Pro the backend picks the
 model from the plan's role and ignores anything we would put here."""
+
+INSTRUCTION_CHARS = 160
+"""How much of a question reaches the log. Long enough to recognise which one
+it was, short enough that a 54-option choice does not bury the answer."""
+
+STATE_CHARS = 300
+"""The state can be a whole tool response. This is enough to see what was
+being decided about."""
+
+TOP_SHARES = 4
+"""Options listed with their share. Everything below the fourth is noise in a
+54-option choice and the chosen one is always among them."""
 
 PRICE_PER_INPUT_TOKEN = 0.042 / 1_000_000
 """TypeSafe's list price, $0.042 per million input tokens, output free. A
@@ -242,6 +259,94 @@ class JevResult:
         return labels[index]
 
 
+def _shorten(text: Any, limit: int) -> str:
+    """One line, no longer than ``limit``. A transcript with a newline in it
+    would otherwise break the alignment of everything under it."""
+    flat = " ".join(str(text).split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "\u2026"
+
+
+def _instructions_of(question: dict) -> str:
+    """The question as one line, structured or plain."""
+    instructions = question.get("instructions")
+    if isinstance(instructions, dict):
+        parts = [str(instructions.get("what", ""))]
+        if instructions.get("not_for"):
+            parts.append(f"NOT: {instructions['not_for']}")
+        return _shorten(" | ".join(parts), INSTRUCTION_CHARS)
+    return _shorten(instructions, INSTRUCTION_CHARS)
+
+
+def _answer_line(answer: dict) -> str:
+    """What came back, with enough of the distribution to argue with.
+
+    The runners-up are the point: a wrong choice at 0.51 against a 0.49 is a
+    different problem from a wrong one at 0.99, and only the log can say
+    which happened after the fact.
+    """
+    kind = answer.get("type")
+    if kind == "noul":
+        return f"{answer.get('noul')}"
+    shares = answer.get("probabilities") or {}
+    legend = answer.get("legend")
+    if legend:
+        shares = {legend.get(str(k), str(k)): v for k, v in shares.items()}
+    ranked = sorted(shares.items(), key=lambda item: -float(item[1]))[:TOP_SHARES]
+    tail = ", ".join(f"{name} {float(value):.2f}" for name, value in ranked)
+    if kind == "score":
+        value = answer.get("score")
+        label = None
+        if legend and value is not None:
+            labels = [legend[i] for i in sorted(legend, key=int)]
+            label = labels[min(len(labels) - 1, max(0, round(float(value))))]
+        head = f"{value} ({label})" if label else f"{value}"
+    else:
+        head = str(answer.get("choice"))
+    return f"{head}  conf {float(answer.get('confidence') or 0):.2f}  [{tail}]"
+
+
+def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") -> "JevResult":
+    """A call that produced nothing, and what it was about.
+
+    Logged as a warning rather than swallowed: the caller carries on with its
+    old path and the user sees a working assistant, so without this line a
+    gateway that is down looks exactly like a gateway nobody configured.
+    """
+    printr.print(
+        f"Jev failed after {result.seconds * 1000:.0f} ms: {result.error}\n"
+        f"  asked: {', '.join(questions)}\n"
+        f"  state: {_shorten(state, STATE_CHARS)}",
+        color=LogType.WARNING,
+        server_only=True,
+    )
+    return result
+
+
+def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -> None:
+    """Every exchange, in the log file and nowhere else.
+
+    Always, not behind debug_mode: these decisions happen before the main
+    model sees anything and change what it is even asked. When a user reports
+    that the wrong command fired or a name came out wrong, this is the only
+    place the reason is written down, and asking them to reproduce it with a
+    flag set means asking them to reproduce a 300 ms decision they cannot
+    see.
+    """
+    lines = [
+        f"Jev: {len(questions)} question(s), {result.seconds * 1000:.0f} ms, "
+        f"{result.input_tokens} tok, ${result.estimated_cost:.8f}",
+        f"  state: {_shorten(state, STATE_CHARS)}",
+    ]
+    for key, question in questions.items():
+        kind = question.get("type", "?")
+        criteria = question.get("criteria")
+        size = f"({len(criteria)})" if isinstance(criteria, (dict, list)) else ""
+        lines.append(f"  ? {key} [{kind}{size}] {_instructions_of(question)}")
+        answer = result.answers.get(key)
+        lines.append(f"  = {key}: {_answer_line(answer) if answer else 'not answered'}")
+    printr.print("\n".join(lines), color=LogType.SYSTEM, server_only=True)
+
+
 class JevClient:
     """One HTTP call per decision batch. Holds no state beyond the credential.
 
@@ -312,23 +417,26 @@ class JevClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
-            return JevResult(seconds=time.perf_counter() - started, error=str(e))
+            return _log_failure(state, questions, JevResult(
+                seconds=time.perf_counter() - started, error=str(e)))
 
         seconds = time.perf_counter() - started
         if not response.ok:
-            return JevResult(
-                seconds=seconds, error=f"HTTP {response.status_code}: {response.text[:300]}"
-            )
+            return _log_failure(state, questions, JevResult(
+                seconds=seconds, error=f"HTTP {response.status_code}: {response.text[:300]}"))
         try:
             body = response.json()
         except json.JSONDecodeError as e:
-            return JevResult(seconds=seconds, error=f"bad JSON: {e}")
+            return _log_failure(state, questions, JevResult(
+                seconds=seconds, error=f"bad JSON: {e}"))
 
         usage = body.get("usage") or {}
         gateway = ((body.get("provider_metadata") or {}).get("gateway")) or {}
-        return JevResult(
+        result = JevResult(
             answers=body.get("answers") or {},
             seconds=seconds,
             cost=float(gateway.get("cost") or 0.0),
             input_tokens=int(usage.get("input_tokens") or 0),
         )
+        _log_exchange(state, questions, result)
+        return result
