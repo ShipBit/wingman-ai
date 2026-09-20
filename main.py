@@ -67,6 +67,7 @@ from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.websocket_user import WebSocketUser
 from services.mcp_oauth import CALLBACK_PATH, get_oauth_service
 from services.system_manager import LOCAL_VERSION, SystemManager
 from wingman_core import WingmanCore
@@ -163,6 +164,8 @@ def exit_handler():
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # executed before the application starts
+    # WebSocket sends from worker threads have to be routed back to this loop
+    WebSocketUser.set_main_loop(asyncio.get_running_loop())
     modify_openapi()
 
     yield
