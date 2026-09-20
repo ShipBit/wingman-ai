@@ -1160,7 +1160,22 @@ class WingmanCore(WebSocketUser):
         return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
 
     async def start_joysticks(self):
-        pygame.init()
+        # This runs on its own thread, and pygame.init() starts EVERY pygame
+        # module - including the mixer, which opens an output device while
+        # Core's own audio stack already holds one, and the video subsystem.
+        # Only display and joystick are needed here: the loop reads joystick
+        # events and never draws. pygame.event.get() refuses to work without a
+        # video driver, so display is initialized but left without a window.
+        #
+        # On macOS the video subsystem reaches into Cocoa and sets the
+        # application's main menu, which AppKit only allows on the main thread.
+        # Core died with 'API misuse: setting the main menu on a non-main
+        # thread' for every user who had a joystick button bound. The dummy
+        # driver has no Cocoa in it. Windows and Linux keep their driver.
+        if platform.system() == "Darwin":
+            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        pygame.display.init()
+        pygame.joystick.init()
         # Initialize ALL joysticks upfront so they generate events for both
         # normal operation and recording mode.
         joysticks = [
