@@ -8,8 +8,8 @@ tags:
   - Image
   - Internet
 description:
-  en: Use Wingman AI to generate images based on your input. It uses DALL-E 3.
-  de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren. Es verwendet DALL-E 3.
+  en: Use Wingman AI to generate images based on your input.
+  de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren.
 discovery_keywords:
   - create image
   - generate picture
@@ -19,9 +19,9 @@ discovery_keywords:
   - AI art
   - image creation
 custom_properties:
-  - hint: Whether generated images should be saved to disk. Images will be saved to your WingmanAI APPDATA directory in a subdirectory called "generated_files"
+  - hint: Whether generated images should be kept. They are always written to your WingmanAI APPDATA directory in a subdirectory called "generated_files" so the client can display them - with this off, only the 25 most recent ones are kept there.
     id: save_images
-    name: Save generated images
+    name: Keep generated images
     property_type: boolean
     required: false
     value: false
