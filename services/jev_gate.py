@@ -1,19 +1,18 @@
-"""Where Core asks Jev, and what it does with an answer it does not trust.
+"""Where Core asks the System One model, and what it does without an answer.
 
-One object per wingman, built whether or not Jev is switched on, so the call
-sites stay a single ``if`` and never grow a second code path. Switched off —
-no key, or ``WINGMAN_JEV`` unset — every method returns the value that means
-"decide the way you did before", and nothing reaches the network.
+One object per caller, built whether or not the feature is switched on, so
+the call sites stay a single ``if`` and never grow a second code path.
+Switched off — ``settings.system_one.enabled`` false, or nothing to
+authenticate with — every method returns the value that means "decide the way
+you did before", and nothing reaches the network.
 
-Deliberately not a config setting yet. A field in ``interface.py`` costs a
-template default, a migration and a regenerated TypeScript client, and this
-is a prototype that has to earn those first. An environment variable is the
-honest shape for something we are still measuring:
+The switch is read on every call rather than captured at construction. A user
+turning it off in Settings expects the next utterance to stop asking, not the
+next restart.
 
-    WINGMAN_JEV=1 AI_GATEWAY_API_KEY=... python main.py
-
-Thresholds can be moved from the environment too, because the right value is
-what the measurement says, not what looked sensible while writing this.
+Thresholds can still be moved from the environment. They are not user-facing
+settings: the right value is what the measurement says, and a user turning a
+dial they cannot measure makes their own experience worse.
 """
 
 import asyncio
@@ -21,7 +20,7 @@ import os
 from typing import Optional
 
 from api.enums import LogType
-from api.interface import CommandConfig
+from api.interface import CommandConfig, SettingsConfig
 from providers.typesafe_jev import JevClient, JevResult
 from services.jev_decisions import (
     command_questions,
@@ -91,23 +90,42 @@ class JevGate:
     old latency and nothing else.
     """
 
-    def __init__(self, wingman_name: str = ""):
+    def __init__(self, wingman_name: str = "", settings: Optional[SettingsConfig] = None):
         self.wingman_name = wingman_name
-        self.enabled = os.environ.get("WINGMAN_JEV", "") not in ("", "0", "false")
-        self.client = JevClient() if self.enabled else None
-        if self.enabled and not (self.client and self.client.is_ready()):
-            printr.print(
-                "WINGMAN_JEV is set but there is no AI_GATEWAY_API_KEY - staying off.",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            self.enabled = False
+        self.settings = settings
+        self.client = JevClient(subscription=settings.wingman_pro if settings else None)
         self.last: Optional[JevResult] = None
         """The most recent answer, for the benchmark snapshot and the log."""
+        self._warned_without_access = False
+        """A plan without System One access must not say so on every utterance."""
+
+    def update_settings(self, settings: SettingsConfig) -> None:
+        """Settings changed in the client. The subscription goes with them: a
+        user who signs in gets a token the client has to start using."""
+        self.settings = settings
+        self.client.subscription = settings.wingman_pro if settings else None
+
+    @property
+    def enabled(self) -> bool:
+        """What the user asked for, read fresh on every call."""
+        return bool(self.settings and self.settings.system_one.enabled)
 
     @property
     def active(self) -> bool:
-        return self.enabled and self.client is not None
+        """Whether a call would actually reach a model."""
+        if not self.enabled:
+            return False
+        if self.client.is_ready():
+            return True
+        if not self._warned_without_access:
+            self._warned_without_access = True
+            printr.print(
+                "System One is on, but there is no Wingman Pro session and no "
+                "AI_GATEWAY_API_KEY - decisions stay with the main model.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+        return False
 
     async def _ask(self, state, questions) -> JevResult:
         """Off the event loop. An HTTP call of up to two seconds on the loop
@@ -247,3 +265,26 @@ class JevGate:
             server_only=True,
         )
         return confirmed
+
+    # ── the open door for skills ────────────────────────────────────
+
+    async def ask(self, state, questions: dict) -> Optional[JevResult]:
+        """Any questions a skill wants answered. None when the feature is off.
+
+        Deliberately unconstrained: the four decisions above are Core's, and a
+        skill's will be something we did not think of. What it does not get is
+        a way around the switch — off is off, here as everywhere.
+        """
+        if not self.active:
+            return None
+        return await self._ask(state, questions)
+
+    def ask_sync(self, state, questions: dict) -> Optional[JevResult]:
+        """Blocking version, for a skill already off the event loop."""
+        if not self.active:
+            return None
+        result = self.client.system_one(state, questions)
+        self.last = result
+        if result.error:
+            printr.print(f"Jev: {result.error}", color=LogType.WARNING, server_only=True)
+        return result

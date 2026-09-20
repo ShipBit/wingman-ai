@@ -1063,3 +1063,147 @@ class SkillSettings:
     def input_device(self):
         audio = object.__getattribute__(self, "_wingman").settings.audio
         return audio.input if audio else None
+
+
+class SkillSystemOne:
+    """Typed decisions instead of generated text (`self.wingman.system_one`).
+
+    A System One model answers a fixed set of questions in one parallel pass and
+    cannot answer outside the options it is given. Use it wherever a skill needs
+    a *decision* rather than a sentence: which of these does the user mean, how
+    urgent is this, is this worth acting on. It answers in about 300 ms — several
+    times faster than `self.wingman.ai.generate()` — and costs a fraction of it.
+
+    Three kinds of question:
+
+        choice(...)  one of up to 255 named options, with a confidence
+        score(...)   a rating on ordered levels, lowest first
+        yes_no(...)  a probability between 0 and 1
+
+    Ask everything at once with `decide()`. The questions in one call are
+    evaluated in parallel, so eight cost about what one costs — measured at
+    13 ms and 28% more tokens for seven extra questions. One call with the
+    questions you might need beats three calls with the ones you did.
+
+        answers = await self.wingman.system_one.decide(
+            state={"transcript": text, "cargo": cargo_list},
+            questions={
+                "intent": self.wingman.system_one.choice(
+                    "What does the pilot want?",
+                    {"sell": "offload cargo", "buy": "acquire cargo", "other": None},
+                ),
+                "urgent": self.wingman.system_one.yes_no("Does this need doing now?"),
+            },
+        )
+        if answers.choice("intent", min_confidence=0.8) == "sell":
+            ...
+
+    `available` is False when the user switched System One off in Settings or
+    the plan has no access. Check it, or handle the empty result: every reader
+    on the result returns None when there is no answer, so a skill that forgets
+    gets nothing rather than a crash.
+    """
+
+    def __init__(self, gate) -> None:
+        self._gate = gate
+
+    @property
+    def available(self) -> bool:
+        """Whether a call would reach a model. False = decide some other way."""
+        return bool(self._gate and self._gate.active)
+
+    # --- building questions -------------------------------------------------
+
+    @staticmethod
+    def choice(instructions: str, options: dict) -> dict:
+        """One of ``options``, which maps name to a description (or None).
+
+        Give a description to any two options a reader could confuse. Measured
+        on Wingman's own command routing, descriptions cut wrong answers from
+        16 to 3 out of 152 and cost nothing in latency.
+        """
+        from providers.typesafe_jev import choice as _choice
+
+        return _choice(instructions, options)
+
+    @staticmethod
+    def score(instructions: str, levels: list) -> dict:
+        """A rating on ``levels``, lowest first (e.g. ``["low", "high"]``)."""
+        from providers.typesafe_jev import score as _score
+
+        return _score(instructions, levels)
+
+    @staticmethod
+    def yes_no(instructions: str) -> dict:
+        """A yes/no question. The answer is a probability, not a boolean."""
+        from providers.typesafe_jev import noul as _noul
+
+        return _noul(instructions)
+
+    # --- asking -------------------------------------------------------------
+
+    async def decide(self, state, questions: dict) -> "SystemOneAnswers":
+        """Answer every question against ``state``. Never raises.
+
+        ``state`` is whatever the questions are about — a string, or a dict of
+        several things. It is sent as-is, so keep it to what the questions need:
+        it is what the call is billed on.
+        """
+        if not self.available or not questions:
+            return SystemOneAnswers(None)
+        return SystemOneAnswers(await self._gate.ask(state, questions))
+
+    def decide_sync(self, state, questions: dict) -> "SystemOneAnswers":
+        """Blocking version, for a skill already off the event loop."""
+        if not self.available or not questions:
+            return SystemOneAnswers(None)
+        return SystemOneAnswers(self._gate.ask_sync(state, questions))
+
+
+class SystemOneAnswers:
+    """What came back. Every reader returns None when there is no answer, so a
+    skill that does not check `available` gets nothing rather than an error."""
+
+    def __init__(self, result) -> None:
+        self._result = result
+
+    @property
+    def ok(self) -> bool:
+        return bool(self._result and self._result.ok)
+
+    @property
+    def error(self) -> Optional[str]:
+        """Why there is no answer, or None. For logging, not for control flow —
+        branch on the value being None instead."""
+        return self._result.error if self._result else "system one is off"
+
+    @property
+    def seconds(self) -> float:
+        return self._result.seconds if self._result else 0.0
+
+    def choice(self, key: str, min_confidence: float = 0.0) -> Optional[str]:
+        """The chosen option, or None below ``min_confidence``.
+
+        A threshold is worth setting when acting on the answer is hard to undo.
+        It separates unsure from sure; it will not separate two options that
+        genuinely overlap, which is what the descriptions are for.
+        """
+        return self._result.choice(key, min_confidence=min_confidence) if self._result else None
+
+    def confidence(self, key: str) -> float:
+        return self._result.confidence(key) if self._result else 0.0
+
+    def probabilities(self, key: str) -> dict:
+        """Every option with its share, summing to 1."""
+        return self._result.probabilities(key) if self._result else {}
+
+    def score(self, key: str) -> Optional[str]:
+        return self._result.score(key) if self._result else None
+
+    def yes_no(self, key: str, threshold: float = 0.5) -> Optional[bool]:
+        """The yes/no answer above ``threshold``, or None if it was not answered."""
+        return self._result.noul(key, threshold=threshold) if self._result else None
+
+    def probability(self, key: str) -> Optional[float]:
+        """The raw 0-1 value of a yes/no question, for your own threshold."""
+        return self._result.noul_value(key) if self._result else None

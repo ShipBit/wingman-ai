@@ -43,8 +43,9 @@ class SttService:
         self.get_hotwords = get_hotwords or (lambda: [])
         self.printr = Printr()
         self._preset_cache: dict[str, list[str]] = {}
-        # Prototype, off unless WINGMAN_JEV is set. See services/jev_gate.py.
-        self.jev = JevGate(wingman_name="STT")
+        # Reads settings_service on every call, so a toggle in the client
+        # applies to the next utterance. See services/jev_gate.py.
+        self.jev = JevGate(wingman_name="STT", settings=settings_service.settings)
 
     @property
     def provider(self) -> SttProvider:
@@ -94,6 +95,9 @@ class SttService:
         Every way this can fail — gate off, no key, gateway down, Jev unsure
         — ends in the matcher's own answer, which is today's behaviour.
         """
+        # Settings are re-read here rather than kept: SttService outlives every
+        # save, and the gate must follow the switch the user just flipped.
+        self.jev.update_settings(self.settings_service.settings)
         vocabulary = self.vocabulary()
         if not self.jev.active:
             return vocabulary.correct(text)

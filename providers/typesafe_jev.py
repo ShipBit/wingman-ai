@@ -1,4 +1,4 @@
-"""Jev, TypeSafe AI's System One model, reached through the Vercel AI Gateway.
+"""The System One model, reached through Wingman Pro.
 
 A System One model does not write text. It takes a state and a set of typed
 questions and answers all of them in one parallel pass — a `noul` is a yes/no
@@ -12,8 +12,17 @@ same wall clock as asking one. So the callers here ask everything they might
 want in a single call and throw away what the turn did not need, rather than
 making one round trip per decision.
 
+Which model answers is the subscription's decision, not ours: it is a fixed
+role like transcription and speech, so it can be swapped in the backend
+without a Wingman release. Core never names a model here.
+
+There is a second, direct route to the Vercel AI Gateway, used by the
+benchmarks in ``evals/jev_bench`` and by anyone with their own gateway key.
+It is the same request and the same response — the backend forwards both
+untouched — so a measurement taken through one holds for the other.
+
 Failures never raise. Every decision this model makes has an existing path
-behind it — the main LLM, a word match, a token threshold — and a gateway
+behind it — the main LLM, a word match, a token threshold — and a backend
 that is down or slow must cost a few milliseconds, not the turn.
 """
 
@@ -26,7 +35,11 @@ from typing import Any, Optional
 import requests
 
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
+"""The direct route, for a user with their own AI Gateway key."""
+
 MODEL = "typesafe-ai/jev"
+"""Only sent on the direct route. Through Wingman Pro the backend picks the
+model from the plan's role and ignores anything we would put here."""
 
 PRICE_PER_INPUT_TOKEN = 0.042 / 1_000_000
 """TypeSafe's list price, $0.042 per million input tokens, output free. A
@@ -128,13 +141,34 @@ class JevClient:
     a base URL change.
     """
 
-    def __init__(self, api_key: str = "", timeout: float = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        api_key: str = "",
+        timeout: float = DEFAULT_TIMEOUT,
+        subscription: Optional[Any] = None,
+    ):
+        self.subscription = subscription
+        """``WingmanProSettings`` when Core is signed in. Its presence is what
+        chooses the route: the plan pays for the call and the backend picks the
+        model, so there is nothing for a user to configure."""
         self.api_key = api_key or os.environ.get("AI_GATEWAY_API_KEY", "")
         self.timeout = timeout
         self._session = requests.Session()
+        self._secret_keeper = None
+
+    def _pro_token(self) -> str:
+        """The subscription token, read fresh: a user can sign in while Core
+        runs, and a client built at startup must not stay signed out."""
+        if self.subscription is None:
+            return ""
+        if self._secret_keeper is None:
+            from services.secret_keeper import SecretKeeper
+
+            self._secret_keeper = SecretKeeper()
+        return self._secret_keeper.secrets.get("wingman_pro", "") or ""
 
     def is_ready(self) -> bool:
-        return bool(self.api_key)
+        return bool(self._pro_token() or self.api_key)
 
     def system_one(self, state: Any, questions: dict[str, dict]) -> JevResult:
         """Answer every question in ``questions`` against ``state``.
@@ -142,18 +176,26 @@ class JevClient:
         ``state`` is whatever the decision is about: a transcript, or a dict of
         several things the questions may refer to. It is sent as-is.
         """
-        if not self.api_key:
-            return JevResult(error="no AI_GATEWAY_API_KEY")
         if not questions:
             return JevResult(error="no questions")
 
-        payload = {"model": MODEL, "state": state, "questions": questions}
+        token = self._pro_token()
+        if token:
+            url = f"{self.subscription.base_url}/api/v1/systemone"
+            payload = {"state": state, "questions": questions}
+        elif self.api_key:
+            token = self.api_key
+            url = GATEWAY_URL
+            payload = {"model": MODEL, "state": state, "questions": questions}
+        else:
+            return JevResult(error="not signed in to Wingman Pro and no AI_GATEWAY_API_KEY")
+
         started = time.perf_counter()
         try:
             response = self._session.post(
-                GATEWAY_URL,
+                url,
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
                 json=payload,

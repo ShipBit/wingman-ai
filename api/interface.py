@@ -1443,6 +1443,30 @@ class LlamaCppSettings(BaseModel):
         return self.mode != LocalAiMode.SERVER
 
 
+class SystemOneSettings(BaseModel):
+    """The System One model: a decision layer in front of the main model.
+
+    A System One model answers typed questions instead of writing text — which
+    command was asked for, which skills a turn needs, whether the microphone
+    heard a request at all, whether a heard word is a game name. It answers in
+    about 300 ms where a chat model takes over a second, and it cannot return
+    a value outside the options it was given.
+
+    Which model that is comes from the subscription, not from here: it is a
+    fixed role like transcription and speech, so it can be changed in /admin
+    without a Wingman release. The user's choice is whether to use one at all.
+    """
+
+    enabled: bool
+    """Whether any of Core's decisions may go to the System One model.
+
+    A global switch on purpose. The decisions it takes are spread over the
+    turn — before the main model, during transcription, inside skills — and a
+    per-place toggle would be a settings page nobody could reason about. Off
+    means every one of those places decides the way it did before, which is
+    always a working path and never an error."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1451,6 +1475,7 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
     llama_cpp: LlamaCppSettings
+    system_one: SystemOneSettings
     hud_server: HudServerSettings
     debug_mode: bool
     streamer_mode: bool
@@ -1477,6 +1502,9 @@ class SubscriptionRoutes(BaseModel):
     """Speech."""
     image: Optional[SubscriptionModel] = None
     """Image generation."""
+    systemone: Optional[SubscriptionModel] = None
+    """The decision model. None means the plan has no System One access, and
+    the client then says so rather than naming a model that will not answer."""
     downgraded: Optional[SubscriptionModel] = None
     """What chat falls back to once the allowance is used up."""
 

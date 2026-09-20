@@ -193,8 +193,8 @@ class Wingman:
         # --- Conversation state ---
         self.last_gpt_call = None
 
-        # --- System One decisions (prototype, off unless WINGMAN_JEV is set) ---
-        self.jev = JevGate(wingman_name=name)
+        # --- System One decisions (settings.system_one.enabled) ---
+        self.jev = JevGate(wingman_name=name, settings=settings)
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -1250,6 +1250,7 @@ class Wingman:
             self.tool_executor._settings = settings
             self.mcp_manager.settings = settings
             self.skill_manager.settings = settings
+            self.jev.update_settings(settings)
 
             for skill in self.skills:
                 skill.settings = settings

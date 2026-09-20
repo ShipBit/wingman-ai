@@ -271,7 +271,50 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
 resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
+
+# SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
+self.wingman.system_one.available                        # user has it on AND the plan grants it
+answers = await self.wingman.system_one.decide(state, questions)   # also decide_sync(...)
+answers.choice(key, min_confidence=0.8) / .score(key) / .yes_no(key) / .probability(key) / .probabilities(key)
 ```
+
+### System One — ask for a decision, not a sentence
+
+Use it whenever the skill needs to **pick, rate or judge** rather than write.
+It cannot answer outside the options you give it, so there is nothing to parse
+and nothing to validate.
+
+```python
+so = self.wingman.system_one
+if so.available:
+    answers = await so.decide(
+        state={"transcript": text, "cargo": cargo},
+        questions={
+            "intent": so.choice("What does the pilot want?",
+                                {"sell": "offload cargo", "buy": "acquire cargo", "other": None}),
+            "urgent": so.yes_no("Does this need doing right now?"),
+            "risk":   so.score("How risky is this route?", ["safe", "watchful", "dangerous"]),
+        },
+    )
+    if answers.choice("intent", min_confidence=0.8) == "sell":
+        ...
+```
+
+Three rules that come out of measuring it (`evals/FINDINGS-jev-2026-09-20.md`):
+
+- **Ask everything in one `decide()`.** Questions are evaluated in parallel:
+  eight cost 13 ms and 28% more tokens than one. Three calls for three
+  questions is three times the latency for nothing.
+- **Describe options that could be confused.** Descriptions cut wrong answers
+  from 16 to 3 out of 152 on Wingman's own command routing, at no cost in
+  latency. A bare option name is fine when nothing else is close to it.
+- **`min_confidence` separates unsure from sure, not two overlapping options.**
+  If it keeps picking the wrong neighbour at high confidence, the fix is a
+  better description, not a higher threshold.
+
+Always handle `available` being False — the user can switch System One off in
+Settings, and a plan may not include it. Every reader on the result returns
+`None`/`{}` in that case, so the safe fallback is to branch on the value.
 
 **Removed (do NOT use):** the raw LLM call (`self.llm_call(...)` / `actual_llm_call` — use `self.wingman.ai.generate`),
 `self.wingman.switch_tts_provider(...)` (runtime provider switching is not allowed; use `tts.set_voice`),

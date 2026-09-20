@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings,
+        SkillSettings, SkillSystemOne,
     )
     from wingmen.wingman import Wingman
 
@@ -63,6 +63,7 @@ class WingmanContext:
         self.__tools = None
         self.__conversation = None
         self.__memory = None
+        self.__system_one = None
         self.__secrets = None
         self.__skills = None
         self.__settings = None
@@ -179,6 +180,15 @@ class WingmanContext:
             from services.skill_local_ai import SkillLocalAI
             self.__memory = SkillMemory(SkillLocalAI(self.__wingman))
         return self.__memory
+
+    @property
+    def system_one(self) -> "SkillSystemOne":
+        if self.__system_one is None:
+            from wingmen.facade import SkillSystemOne
+            # The wingman's own gate, so a skill obeys the same switch, the same
+            # subscription and the same off-means-old-path rule as Core does.
+            self.__system_one = SkillSystemOne(self.__wingman.jev)
+        return self.__system_one
 
     @property
     def secrets(self) -> "SkillSecrets":
