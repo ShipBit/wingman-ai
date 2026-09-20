@@ -23,6 +23,7 @@ from api.interface import (
     CommandCategoryConfig,
     SkillConfig,
     SkillBase,
+    SkillVerdictInfo,
     WingmanConfig,
     WingmanConfigFileInfo,
     WingmanSkillState,
@@ -195,6 +196,13 @@ class ConfigService:
             path="/wingman-skills/missing",
             endpoint=self.get_missing_wingman_skills,
             response_model=list[MissingSkillInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/skill-verdicts",
+            endpoint=self.get_skill_verdicts,
+            response_model=list[SkillVerdictInfo],
             tags=tags,
         )
         self.router.add_api_route(
@@ -468,6 +476,30 @@ class ConfigService:
         except Exception as e:
             self.printr.print(
                 f"get_missing_wingman_skills failed for '{config_name}/{wingman_name}': {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return []
+
+    # GET /skill-verdicts
+    async def get_skill_verdicts(self) -> list[SkillVerdictInfo]:
+        """What Core decided about every skill on this boot.
+
+        Core broadcasts the same records once while the tower initializes. A
+        client that reloads afterwards misses them and would show an
+        incompatible skill as plainly switched off, with nothing saying why.
+        Empty while the tower has not initialized yet (the catalog is scanned
+        there); the client asks again with the skill list.
+        """
+        from services.skill_catalog import SkillCatalog
+
+        try:
+            return [
+                SkillVerdictInfo(**record) for record in SkillCatalog().current_records()
+            ]
+        except Exception as e:
+            self.printr.print(
+                f"get_skill_verdicts failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )

@@ -949,6 +949,28 @@ class WingmanSkillState(BaseModel):
     """Whether the skill is enabled for this wingman (in discoverable_skills list)."""
 
 
+class SkillVerdictInfo(BaseModel):
+    """What the SkillCatalog decided about one skill on this boot.
+
+    Same payload as the `skill_registered` WebSocket command, offered as a
+    snapshot: the broadcast happens once while the tower initializes, so a
+    client that connects or reloads later would never learn why a skill is off.
+    """
+
+    skill: str
+    """Name of the skill."""
+    origin: str
+    """Where the skill came from: 'bundled' | 'custom'."""
+    outcome: str
+    """'ok' | 'failed' | 'quarantined' | 'legacy_v2'."""
+    id_hash: str
+    """Hash of the skill's identity."""
+    version: Optional[str] = None
+    """Skill version if available."""
+    api_version: Optional[int] = None
+    """Skill API version if available."""
+
+
 class MissingSkillInfo(BaseModel):
     """A skill a Wingman is configured for that is not installed on this system.
 
