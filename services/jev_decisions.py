@@ -1,0 +1,304 @@
+"""The three decisions the prototype hands to Jev, and how to read the answers.
+
+Kept apart from the places that use them so each one can be measured on its
+own against the path it would replace. Every function here is pure: it builds
+questions or reads a ``JevResult``. Nothing calls the gateway, nothing touches
+a wingman.
+
+Each decision has a fallback and a threshold, and the two belong together:
+below the threshold the caller does what it does today. That is what makes
+this safe to switch on — a Jev that is unsure costs a few hundred milliseconds
+and changes nothing.
+"""
+
+from typing import Any, Optional
+
+from api.interface import CommandConfig
+from providers.typesafe_jev import JevResult, choice, noul
+
+NONE_OPTION = "none_of_these"
+"""The option that means the user did not ask for any command. Jev's docs
+recommend an explicit escape hatch over inferring one from low confidence:
+without one, the probability mass has nowhere to go but onto the real
+commands, and the confidence gate lets the least wrong one through."""
+
+NONE_DESCRIPTION = (
+    "Nothing should be triggered right now. Choose this whenever the speaker "
+    "is not ordering an action to happen this moment, even when the sentence "
+    "names one. That includes: questions about a command ('should I put the "
+    "gear down?', 'what does the landing system do?'), talk about the past "
+    "('I forgot to raise the shields', 'you turned the lights on yesterday'), "
+    "asking to be reminded of something later ('remind me to jettison the "
+    "cargo'), and anything that wants an answer, information or conversation "
+    "instead of a keypress."
+)
+"""Spelled out because the measurement said so.
+
+With a one-line description the model matched on the presence of the command
+words rather than on what the speaker wanted done with them: five of five
+precision traps fired, among them "remind me to jettison the cargo before I
+land", which is a timer, not a keypress. The examples here are written in the
+shape the docs recommend for options that are easy to confuse."""
+
+
+# ── 1. Which command, if any ────────────────────────────────────────
+
+
+def command_description(command: CommandConfig) -> Optional[str]:
+    """What tells this command apart from its neighbours.
+
+    The written description first, because it is the only one of these three
+    that was put there to answer this question. The instant-activation
+    phrases come next: they are the user's own words for this command. Last
+    the additional context, which is really the text handed to the model
+    *after* the command ran — it often says what the command did, so it is
+    worth something here, but it was written for a different job.
+
+    None when there is nothing to say, which is normal. A command the user
+    recorded themselves has only its name, and for most commands the name is
+    enough. Measured on the shipped Star Citizen config, descriptions took the
+    System One model from 0.863 to 0.973 — but every one of the thirteen it
+    fixed was a command with a near neighbour, not a lonely one.
+    """
+    parts = []
+    if command.description and command.description.strip():
+        parts.append(" ".join(command.description.split()))
+    phrases = [p for p in (command.instant_activation or []) if p]
+    if phrases:
+        parts.append("Said as: " + ", ".join(f'"{p}"' for p in phrases[:6]))
+    if command.additional_context:
+        parts.append(command.additional_context.strip())
+    return " — ".join(parts) if parts else None
+
+
+MULTIPLE_KEY = "multiple_commands"
+
+MULTIPLE_INSTRUCTIONS = (
+    "Is the speaker asking for MORE THAN ONE thing to be done? Answer yes "
+    "when two or more separate actions are requested in the same sentence, "
+    "as in 'shields up, weapons hot' or 'launch a decoy and jump out'. "
+    "Answer no when it is a single action, however it is worded."
+)
+"""Asked alongside the choice, because a choice can only name one command.
+
+Without it, "Shields up, weapons hot." fired the shields at 0.85 confidence
+and the turn ended there — the weapons never came up, where the main model
+would have called both. A confident answer to the wrong question is the
+worst kind, and this is the question that was missing.
+
+Measured 2026-09-21 on 12 transcripts: every multi-command one scored 0.97
+or above and every single-command one 0.48 or below, so the gate has room
+either side. The closest single was "Fahrwerk ausfahren, wir kommen rein."
+at 0.48 — a trailing clause reads like a second request."""
+
+
+def command_questions(commands: list[CommandConfig]) -> dict[str, dict]:
+    """A Choice over the command names, the escape hatch, and one more.
+
+    The extra question is whether more than one thing was asked for. A
+    Choice names exactly one command, so without it a two-command request
+    would fire half of itself and stop.
+    """
+    criteria: dict[str, Optional[str]] = {
+        command.name: command_description(command) for command in commands
+    }
+    criteria[NONE_OPTION] = NONE_DESCRIPTION
+    return {
+        MULTIPLE_KEY: noul(instructions=MULTIPLE_INSTRUCTIONS),
+        "command": choice(
+            instructions=(
+                "A voice assistant is listening to the pilot of a spacecraft. "
+                "It can press keys to trigger the commands below. Which command "
+                "is the speaker ordering to happen right now? Decide by what "
+                "the speaker wants done, not by which words appear: a command "
+                "named inside a question, a memory, or a request for a later "
+                "reminder is not an order to run it."
+            ),
+            criteria=criteria,
+        )
+    }
+
+
+MULTIPLE_THRESHOLD = 0.7
+"""Above this, the request is taken as more than one command and handed over
+whole. Between the measured 0.48 for a single and 0.97 for a pair, nearer
+the pair: a request wrongly called single fires half of itself, while one
+wrongly called multiple only costs the main-model round it would have taken
+anyway."""
+
+
+def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
+    """The command to execute, or None to let the main model decide.
+
+    None covers every way this ends without a keypress: the call failed, the
+    escape hatch was picked, the answer was not sure enough, or more than
+    one thing was asked for — which a single Choice cannot express, so the
+    whole request goes to the model that can call two tools.
+    """
+    if not result.ok:
+        return None
+    if (result.noul_value(MULTIPLE_KEY) or 0) >= MULTIPLE_THRESHOLD:
+        return None
+    picked = result.choice("command", min_confidence=min_confidence)
+    if picked is None or picked == NONE_OPTION:
+        return None
+    return picked
+
+
+# ── 2. Which tool groups this turn could need ───────────────────────
+
+
+def tool_group_questions(groups: dict[str, str]) -> dict[str, dict]:
+    """One yes/no per skill or MCP server: could this turn need it?
+
+    Grouping rather than asking per tool is deliberate. A skill's tools belong
+    together — a turn that needs ``play_track`` often needs ``search_track``
+    first — and dropping one sibling is the failure that actually hurts. At
+    group level a wrong no costs the whole skill, which is easier to see in a
+    measurement than a tool quietly missing from a list of thirty.
+    """
+    return {
+        f"group_{name}": noul(
+            instructions=(
+                f"Could answering the user's last message need {description}? "
+                "Answer yes if it might be needed, even indirectly."
+            )
+        )
+        for name, description in groups.items()
+    }
+
+
+def read_tool_groups(
+    result: JevResult,
+    groups: dict[str, str],
+    threshold: float,
+    unanswered_kept: bool = True,
+) -> Optional[set[str]]:
+    """The groups above ``threshold``, or None if there is no usable answer.
+
+    ``unanswered_kept`` is what to do with a question Jev did not answer, and
+    the right value depends on which direction the caller is moving in. A
+    caller that filters an existing tool list keeps it — a skipped question
+    must not silently disable a skill. A caller that activates skills that
+    are off drops it — a skipped question must not silently switch one on.
+    """
+    if not result.ok:
+        return None
+    kept = set()
+    for name in groups:
+        value = result.noul_value(f"group_{name}")
+        if value is None:
+            if unanswered_kept:
+                kept.add(name)
+            continue
+        if value >= threshold:
+            kept.add(name)
+    return kept
+
+
+# ── 3. What an utterance heard over the wingman actually was ────────
+
+
+def triage_questions(wingman_names: list[str], during_playback: bool) -> dict[str, dict]:
+    """The three things ``_on_transcript`` decides today by matching words.
+
+    All three in one call, because they are one decision really: the text is
+    either for us, or it is a stop, or it is our own voice coming back through
+    the speakers. Asking them separately would cost three round trips to learn
+    the same thing.
+    """
+    names = ", ".join(wingman_names) or "the assistant"
+    questions = {
+        "addressed": noul(
+            instructions=(
+                f"Is this spoken to a voice assistant ({names}) — a request, a "
+                "question, or an order to it? Answer no for talk between people "
+                "in the room, thinking out loud, or background noise written out "
+                "as words."
+            )
+        ),
+        "stop": noul(
+            instructions=(
+                "Does the speaker want the assistant to stop talking right now? "
+                "Answer yes for interruptions like 'stop', 'be quiet', 'enough'. "
+                "Answer no when the word stop is part of a request, as in "
+                "'stop the engines'."
+            )
+        ),
+    }
+    if during_playback:
+        questions["echo"] = noul(
+            instructions=(
+                "This was picked up while the assistant itself was speaking "
+                "through the speakers. Is this the assistant's own sentence "
+                "heard back by the microphone, rather than a person talking?"
+            )
+        )
+    return questions
+
+
+def read_triage(result: JevResult) -> dict[str, Any]:
+    """The three answers as probabilities, for a caller that sets its own gates.
+
+    Deliberately not a verdict. The thresholds belong where the consequences
+    are: stopping playback by mistake is a small annoyance, answering the room's
+    conversation is a large one, and only the caller knows which it is about
+    to do.
+    """
+    return {
+        "addressed": result.noul_value("addressed"),
+        "stop": result.noul_value("stop"),
+        "echo": result.noul_value("echo"),
+    }
+
+
+# ── 4. whether a heard word really is a Star Citizen name ───────────
+
+
+def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
+    """One yes/no per proposed replacement: did the speaker mean the name?
+
+    ``candidates`` is ``(what was heard, the vocabulary entry it matched)``.
+    The fuzzy matcher proposes; this only ever confirms or rejects, so a
+    failed call leaves the matcher's own answer standing.
+
+    The matcher cannot do this itself, and no list can. "Radar" is two edits
+    from the outpost "Yadar" and a word Star Citizen players say in every
+    other sentence; "station" is two from the "Stanton" system and likewise.
+    Which one was meant is in the rest of the sentence, and only the rest of
+    the sentence decides it.
+    """
+    return {
+        f"vocab_{index}": noul(
+            instructions=(
+                "The speaker is playing Star Citizen and talking to their ship's "
+                f'assistant. The speech model wrote "{heard}" and it may have '
+                f'misheard "{entry}", which is a name in that game — a planet, '
+                "moon, station, outpost, company, ship, mineral or commodity. "
+                f'Did the speaker mean "{entry}"? Answer yes if the sentence is '
+                "about the game and the name fits where the word stands, even "
+                "when the word is also an ordinary English or German word or a "
+                "real place on Earth. Answer no when the sentence is using the "
+                "ordinary word in its ordinary sense."
+            )
+        )
+        for index, (heard, entry) in enumerate(candidates)
+    }
+
+
+def read_vocabulary(
+    result: JevResult, candidates: list[tuple[str, str]], threshold: float
+) -> Optional[set[int]]:
+    """Indices of the candidates to actually replace, or None to change nothing.
+
+    None on a failed call is what keeps this safe to switch on: the caller
+    then applies the matcher's own result, which is today's behaviour.
+    """
+    if not result.ok:
+        return None
+    confirmed = set()
+    for index in range(len(candidates)):
+        value = result.noul_value(f"vocab_{index}")
+        if value is not None and value >= threshold:
+            confirmed.add(index)
+    return confirmed

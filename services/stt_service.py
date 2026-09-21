@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
 from services.audio.vocabulary import Vocabulary, apply_override, load_preset
+from services.jev_gate import JevGate
 from services.printr import Printr
 
 if TYPE_CHECKING:
@@ -42,6 +43,9 @@ class SttService:
         self.get_hotwords = get_hotwords or (lambda: [])
         self.printr = Printr()
         self._preset_cache: dict[str, list[str]] = {}
+        # Reads settings_service on every call, so a toggle in the client
+        # applies to the next utterance. See services/jev_gate.py.
+        self.jev = JevGate(wingman_name="STT", settings=settings_service.settings)
 
     @property
     def provider(self) -> SttProvider:
@@ -71,11 +75,44 @@ class SttService:
                 server_only=True,
             )
             return None
-        corrected = self.vocabulary().correct(text)
+        corrected = self._correct(text)
         if corrected != text:
             self.printr.print(
                 f"Vocabulary: '{text}' -> '{corrected}'", server_only=True, color=LogType.INFO
             )
+        return corrected
+
+    def _correct(self, text: str) -> str:
+        """The transcript with the misheard names put right.
+
+        Without the gate this is the fuzzy matcher on its own, which decides
+        by letters and a blocklist of everyday words. Both of its mistakes
+        are silent: "radar" becomes the outpost "Yadar" because radar is not
+        on the blocklist, and "station" can never become "Stanton" because
+        it is. Whether a word is the name or the everyday word is in the
+        sentence around it, which is what the gate asks about.
+
+        Every way this can fail — gate off, no key, gateway down, Jev unsure
+        — ends in the matcher's own answer, which is today's behaviour.
+        """
+        # Settings are re-read here rather than kept: SttService outlives every
+        # save, and the gate must follow the switch the user just flipped.
+        self.jev.update_settings(self.settings_service.settings)
+        vocabulary = self.vocabulary()
+        if not self.jev.active:
+            return vocabulary.correct(text)
+
+        proposals = vocabulary.proposals(text)
+        if not proposals:
+            return text
+        confirmed = self.jev.confirm_vocabulary(text, proposals)
+        if confirmed is None:
+            return vocabulary.correct(text)
+
+        corrected = text
+        for index in sorted(confirmed):
+            heard, entry, _blocked = proposals[index]
+            corrected = corrected.replace(heard, entry, 1)
         return corrected
 
     def vocabulary(self) -> Vocabulary:

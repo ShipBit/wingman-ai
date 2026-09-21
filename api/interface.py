@@ -775,6 +775,22 @@ class CommandConfig(BaseModel):
     We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
     If the Wingman doesn't call your command, try to rephrase the name here.
     """
+    description: Optional[str] = None
+    """What this command does, in one line, for the models that have to pick it.
+
+    Optional, and empty is normal: a command the user recorded themselves has
+    no description until they write one, and the name alone is usually enough.
+    It earns its keep where two commands are easy to confuse — "Autoland",
+    "Autodock", "Toggle Landing System" and "Landing Sequence" all read as
+    "land the ship", and the name cannot say which is which.
+
+    Measured 2026-09-20 on the shipped Star Citizen config, 152 spoken
+    transcripts: descriptions took the chat model from 0.884 to 0.952 and the
+    System One model from 0.863 to 0.973. They cost nothing in latency. Say
+    what the command does and, where a neighbour could be mistaken for it,
+    what it is NOT for.
+    """
+
     category_id: Optional[str] = None
     """Optional category ID to group commands."""
     is_system_command: Optional[bool] = False
@@ -1443,6 +1459,46 @@ class LlamaCppSettings(BaseModel):
         return self.mode != LocalAiMode.SERVER
 
 
+class SystemOneSettings(BaseModel):
+    """The System One model: a decision layer in front of the main model.
+
+    A System One model answers typed questions instead of writing text — which
+    command was asked for, which skills a turn needs, whether the microphone
+    heard a request at all, whether a heard word is a game name. It answers in
+    about 300 ms where a chat model takes over a second, and it cannot return
+    a value outside the options it was given.
+
+    Which model that is comes from the subscription, not from here: it is a
+    fixed role like transcription and speech, so it can be changed in /admin
+    without a Wingman release. The user's choice is whether to use one at all.
+    """
+
+    enabled: bool
+    """Whether any of Core's decisions may go to the System One model.
+
+    The master switch. The decisions it takes are spread over the turn —
+    before the main model, during transcription, inside skills — and a toggle
+    per place would be a settings page nobody could reason about. Off means
+    every one of those places decides the way it did before, which is always
+    a working path and never an error."""
+
+    commands: bool
+    """Whether the model is asked which command a request means, before the
+    main model is asked anything.
+
+    Its own switch because it is the one decision that runs on spec. Every
+    other use waits until there is something to resolve — a name the speech
+    model mangled, a title said differently — and costs nothing when there is
+    not. This one asks on every request, including the ones that were never
+    going to be a command.
+
+    Measured 2026-09-21 against gpt-4.1-mini on the shipped Star Citizen
+    config: the keypress happens after 0.48 s instead of 1.13 s, and the
+    spoken confirmation after 1.49 s instead of 2.13 s. A request that is not
+    a command costs 0.46 s and changes nothing. For someone who only talks to
+    their Wingman, that is all it ever does."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1451,6 +1507,7 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
     llama_cpp: LlamaCppSettings
+    system_one: SystemOneSettings
     hud_server: HudServerSettings
     debug_mode: bool
     streamer_mode: bool
@@ -1477,6 +1534,9 @@ class SubscriptionRoutes(BaseModel):
     """Speech."""
     image: Optional[SubscriptionModel] = None
     """Image generation."""
+    systemone: Optional[SubscriptionModel] = None
+    """The decision model. None means the plan has no System One access, and
+    the client then says so rather than naming a model that will not answer."""
     downgraded: Optional[SubscriptionModel] = None
     """What chat falls back to once the allowance is used up."""
 

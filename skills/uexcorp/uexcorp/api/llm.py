@@ -96,6 +96,60 @@ class Llm:
 
         return answer
 
+    # difflib hands over ten, but the substring pass after it is unbounded: a
+    # short search term can pull in hundreds. A choice takes 255 options, and
+    # a list that long is not a disambiguation anyway.
+    SYSTEM_ONE_MAX_OPTIONS = 60
+
+    # Below this the answer is a guess between near-equals. The prompt this
+    # replaces asked for the same thing in words ("if more than one match is
+    # very likely, prefer not to match at all"); here it is a number.
+    SYSTEM_ONE_MIN_CONFIDENCE = 0.5
+
+    async def __system_one_match(self, search: str, close_matches: list[str]) -> str | None:
+        """The closest name, or None to let the main model decide as before.
+
+        None covers every way this does not produce an answer: the user
+        switched System One off, the plan has no access, the shortlist is too
+        long to ask about, the model was not sure enough, or it said none of
+        them fit. All of those fall through to the prompt below.
+        """
+        if len(close_matches) > self.SYSTEM_ONE_MAX_OPTIONS:
+            return None
+        wingman = self.__helper.get_handler_config().get_wingman()
+        system_one = getattr(wingman, "system_one", None)
+        if not system_one or not system_one.available:
+            return None
+
+        criteria = {name: None for name in close_matches}
+        criteria["none_of_these"] = "none of the names above is what was meant"
+        answers = await system_one.decide(
+            state={"heard": search, "context": "Star Citizen, spoken to a ship assistant"},
+            questions={
+                "match": system_one.choice(
+                    "Which name from the list did the speaker mean? It comes "
+                    "from speech recognition, so it may be misspelled, "
+                    "shortened, have words in a different order, or be a word "
+                    "that merely SOUNDS like part of the right name. Prefer a "
+                    "longer name whose extra part sounds like what was heard "
+                    "over a shorter name that is only a prefix of it.",
+                    criteria,
+                    examples=[
+                        "'Hercules A2' with A2/C2/M2 Hercules in the list -> A2 Hercules",
+                        "'Connie Taurus' -> Constellation Taurus",
+                    ],
+                )
+            },
+        )
+        picked = answers.choice("match", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
+        if picked is None or picked == "none_of_these":
+            return None
+        self.__helper.get_handler_debug().write(
+            f"System One matched '{search}' to '{picked}' "
+            f"(confidence {answers.confidence('match'):.2f}, {answers.seconds * 1000:.0f} ms)."
+        )
+        return picked
+
     async def find_closest_match(
         self, search: str | None, lst: list[str] | set[str]
     ) -> (str | None, list[str] | set[str]):
@@ -126,6 +180,19 @@ class Llm:
                 f"No close matches found for '{search}' in list. Returning None.", True
             )
             return None, "No approximate matches found, given name too abstract."
+
+        # A System One model decides this better than a prompt can: it cannot
+        # answer outside the list, and its confidence says "more than one fits"
+        # without being asked to phrase that in prose. Measured 2026-09-20 on
+        # twelve misheard ship names against a pool with the real variant
+        # collisions: 11/12 against difflib's own 10/12, ~500 ms against a full
+        # main-model roundtrip. Off, or unavailable, and the prompt below runs
+        # exactly as before.
+        picked = await self.__system_one_match(search, close_matches)
+        if picked is not None:
+            self.__helper.add_context(f"Note for function parameters: Use '{picked}' instead of '{search}'.")
+            self.__cache_search[checksum] = picked
+            return picked, None
 
         messages = MessageHistory()
         messages.add_direct(

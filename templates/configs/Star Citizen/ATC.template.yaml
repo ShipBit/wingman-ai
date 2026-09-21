@@ -40,14 +40,17 @@ openai:
   tts_voice: onyx
 commands:
   - name: Request Landing Permission
+    description: Call the tower and ask for clearance to land. A radio call; nothing on the ship moves and no landing happens by itself.
     actions:
       - keyboard:
           hotkey: alt+n
   - name: Request Departure
+    description: Call the tower and ask for clearance to take off.
     actions:
       - keyboard:
           hotkey: alt+n
   - name: Contact ATC
+    description: Open a channel to air traffic control without asking for anything specific yet.
     additional_context: Contacting ATC for clearance
     actions:
       - keyboard:

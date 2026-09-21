@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 
 
 class Msfs2020Control(Skill):
+    # Below this the fifteen candidates are near-equals and the model reading
+    # them with the rest of the conversation in front of it knows more than a
+    # decision taken on the intent string alone. Then it gets all fifteen.
+    SYSTEM_ONE_MIN_CONFIDENCE = 0.6
+
 
     def __init__(
         self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
@@ -97,6 +102,16 @@ class Msfs2020Control(Skill):
         """
         
         matches = self.command_matcher.find_matches(user_intent)
+
+        # The fuzzy pass has to stay — the SimConnect corpus is thousands of
+        # entries, far past what a choice takes. But once it is down to
+        # fifteen, naming the one is a decision, and handing the model fifteen
+        # blocks of text to read instead costs a turn's worth of tokens here
+        # and in every turn that follows.
+        picked = await self._pick_one_command(user_intent, matches)
+        if picked:
+            return self.command_matcher.matches_as_string([picked])
+
         matches_string = self.command_matcher.matches_as_string(matches)
         if self.settings.debug_mode:
             self.log.info(
@@ -104,6 +119,44 @@ class Msfs2020Control(Skill):
                 server_only=True,
             )
         return matches_string
+
+    async def _pick_one_command(self, user_intent: str, matches: list) -> dict | None:
+        """The one command the intent asks for, or None to hand over all of them.
+
+        None whenever there is nothing to gain or nothing to ask with: System
+        One off, no plan access, fewer than two candidates, or an answer the
+        model was not sure enough about. The caller then returns the full list
+        exactly as it did before.
+        """
+        system_one = getattr(self.wingman, "system_one", None)
+        if not system_one or not system_one.available or len(matches) < 2:
+            return None
+
+        by_name = {m["name"]: m for m in matches}
+        criteria = {
+            name: f"[{m['type']}] {m['description']}"[:200] for name, m in by_name.items()
+        }
+        criteria["none_of_these"] = "none of them does what was asked"
+        answers = await system_one.decide(
+            state={"intent": user_intent, "simulator": "Microsoft Flight Simulator"},
+            questions={
+                "command": system_one.choice(
+                    "Which SimConnect event or SimVar does the pilot's intent ask for?",
+                    criteria,
+                    not_for="a command that only sounds similar but does something else",
+                )
+            },
+        )
+        name = answers.choice("command", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
+        if name is None or name == "none_of_these":
+            return None
+        if self.settings.debug_mode:
+            self.log.info(
+                f"System One picked '{name}' for '{user_intent}' "
+                f"(confidence {answers.confidence('command'):.2f}, {answers.seconds * 1000:.0f} ms)",
+                server_only=True,
+            )
+        return by_name[name]
 
     @tool(
         description="Retrieve data from MSFS2020 via SimConnect SimVars. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."

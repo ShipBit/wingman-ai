@@ -58,6 +58,7 @@ from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.turn_metrics import TurnMetrics
 from services.instant_response_generator import InstantResponseGenerator
+from services.jev_gate import JevGate
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -191,6 +192,9 @@ class Wingman:
 
         # --- Conversation state ---
         self.last_gpt_call = None
+
+        # --- System One decisions (settings.system_one.enabled) ---
+        self.jev = JevGate(wingman_name=name, settings=settings)
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -490,6 +494,12 @@ class Wingman:
                         transcript=transcript, benchmark=benchmark_llm, images=images
                     )
                 )
+                # Every path out of the turn passes here, including the ones
+                # that end early on a command. Skills add their own decisions
+                # to the same list on the way, so this is the whole layer.
+                self.metrics.add_system_one_snapshot(
+                    benchmark_llm, self.jev.take_decisions()
+                )
 
                 actual_response = instant_response or process_result
 
@@ -544,6 +554,22 @@ class Wingman:
                 instant_response = None
             return instant_response, instant_response, None, True
         benchmark.finish_snapshot()
+
+        # The same shape as instant activation above, one step less exact: the
+        # phrase list matches words, this matches meaning. A command with a
+        # written response ends the turn here without a main-model call at all;
+        # one without still needs the model for something to say, but no longer
+        # needs it to pick the command.
+        #
+        # No snapshot around this: the gate times every decision it takes,
+        # including the ones skills make later in the turn, and they are added
+        # together at the end.
+        if self.jev.active and not instant_command_executed:
+            jev_executed, jev_response = await self._ask_jev_about_the_turn(transcript)
+            if jev_response:
+                await self.conversation.add_assistant_message(jev_response)
+                return jev_response, jev_response, None, True
+            instant_command_executed = instant_command_executed or jev_executed
 
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
@@ -785,6 +811,38 @@ class Wingman:
             add_tool_response_fn=self.conversation.add_tool_response,
             pending_tool_calls=self.conversation.pending_tool_calls,
         )
+
+    async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
+        """Ask which command the request means, and run it if the answer holds."""
+        name = await self.jev.pick_command(
+            transcript, self.command_executor.eligible_commands()
+        )
+        if not name:
+            return False, None
+        return await self._run_jev_command(name)
+
+    async def _run_jev_command(self, name: str) -> tuple[bool, str | None]:
+        """Run the command the System One model picked.
+
+        Returns ``(executed, spoken_response)``. ``executed`` without a
+        response means the keypress happened but the command has no written
+        response, so the main model is still asked for something to say —
+        with tools switched off, exactly as after an instant activation.
+
+        The executed command is written into the history as the assistant's
+        own tool call, the same way instant activation does it. Without that,
+        the model's next turn has no idea the landing gear is down.
+        """
+        command = self.command_executor.get_command(name)
+        if not command:
+            # A command that vanished between the question and the answer.
+            return False, None
+
+        instant_response, _function_response = await self.command_executor.execute_command(
+            command, is_instant=True
+        )
+        await self.conversation.add_forced_assistant_command_calls([command])
+        return True, instant_response or None
 
     async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, Any]
@@ -1164,6 +1222,7 @@ class Wingman:
             self.tool_executor._settings = settings
             self.mcp_manager.settings = settings
             self.skill_manager.settings = settings
+            self.jev.update_settings(settings)
 
             for skill in self.skills:
                 skill.settings = settings

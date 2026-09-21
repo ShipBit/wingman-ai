@@ -1,3 +1,4 @@
+import inspect
 from typing import TYPE_CHECKING, Literal, Optional
 import spotipy
 from spotipy.oauth2 import SpotifyOauthError, SpotifyOAuth, SpotifyStateError
@@ -148,14 +149,7 @@ class Spotify(Skill):
                                     "description": "The action to take",
                                     "enum": ["get_playlists", "play_playlist"],
                                 },
-                                "playlist": {
-                                    "type": "string",
-                                    "description": "The name of the playlist to interact with",
-                                    "enum": [
-                                        playlist["name"]
-                                        for playlist in self.get_user_playlists()
-                                    ],
-                                },
+                                "playlist": self._playlist_parameter(),
                             },
                             "required": ["action"],
                         },
@@ -188,6 +182,11 @@ class Spotify(Skill):
             parameters.pop("action", None)
             function = getattr(self, action if action else tool_name)
             function_response = function(**parameters)
+            # Most actions are plain functions; the ones that have to resolve a
+            # name are not. Awaiting only what is awaitable keeps this dispatch
+            # working for both without a list to keep in step.
+            if inspect.isawaitable(function_response):
+                function_response = await function_response
 
             benchmark.finish_snapshot()
 
@@ -225,15 +224,72 @@ class Spotify(Skill):
         except Exception:
             return []
 
-    def get_playlist_uri(self, playlist_name: str):
-        playlists = self.spotify.current_user_playlists()
-        playlist = next(
-            (
-                playlist
-                for playlist in playlists["items"]
-                if playlist["name"].lower() == playlist_name.lower()
-            ),
-            None,
+    def _playlist_parameter(self) -> dict:
+        """How the model is told to name a playlist.
+
+        Every playlist name used to be an `enum` here, which is carried in
+        the tool schema on *every* LLM call while Spotify is active whether
+        or not music comes up: 103 tokens at 14 playlists, 375 at 50, 900 at
+        120. With System One the model says the name in the user's words and
+        `_match_playlist` resolves it once, on the turns that need it.
+
+        Without System One the enum stays. It is what makes the exact-match
+        lookup below work, so taking it away would break the skill for anyone
+        who switched the feature off.
+        """
+        parameter = {
+            "type": "string",
+            "description": "The name of the playlist to interact with",
+        }
+        system_one = getattr(self.wingman, "system_one", None)
+        if not system_one or not system_one.available:
+            parameter["enum"] = [p["name"] for p in self.get_user_playlists()]
+        return parameter
+
+    # Low on purpose: the worst this gets wrong is the wrong playlist
+    # starting, which is one sentence to undo, while "not found" for a
+    # playlist the user can see is the worse answer.
+    #
+    # Measured 2026-09-20 on four realistic playlists: "deutscher rap"
+    # resolves at 0.92, "something for the car" at 0.63, and "opera" is
+    # correctly refused. "my coding playlist" -> "Late Night Coding" sits on
+    # the line at 0.42 and moves either side of it between runs, because the
+    # none-of-these option takes 0.31 of the mass on its own. That one is not
+    # reliably caught at any threshold that still refuses "opera", so it
+    # stays unresolved — which is what happens today anyway.
+    SYSTEM_ONE_MIN_CONFIDENCE = 0.4
+
+    async def _match_playlist(self, playlist_name: str, playlists: list) -> dict | None:
+        """The playlist meant, or None. Exact first, then System One."""
+        exact = next(
+            (p for p in playlists if p["name"].lower() == playlist_name.lower()), None
+        )
+        if exact or not playlists:
+            return exact
+
+        system_one = getattr(self.wingman, "system_one", None)
+        if not system_one or not system_one.available:
+            return None
+
+        by_name = {p["name"]: p for p in playlists}
+        criteria = {name: None for name in by_name}
+        criteria["none_of_these"] = "none of the playlists is the one meant"
+        answers = await system_one.decide(
+            state={"asked_for": playlist_name, "playlists": list(by_name)},
+            questions={
+                "playlist": system_one.choice(
+                    "Which of the user's playlists did they ask for? The name was "
+                    "spoken, so it may be shortened, translated or worded loosely.",
+                    criteria,
+                )
+            },
+        )
+        picked = answers.choice("playlist", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
+        return None if picked in (None, "none_of_these") else by_name[picked]
+
+    async def get_playlist_uri(self, playlist_name: str):
+        playlist = await self._match_playlist(
+            playlist_name, self.spotify.current_user_playlists().get("items", [])
         )
         return playlist["uri"] if playlist else None
 
@@ -278,11 +334,11 @@ class Spotify(Skill):
 
         return "No playlists found."
 
-    def play_playlist(self, playlist: str = None):
+    async def play_playlist(self, playlist: str = None):
         if not playlist:
             return "Which playlist would you like to play?"
 
-        playlist_uri = self.get_playlist_uri(playlist)
+        playlist_uri = await self.get_playlist_uri(playlist)
         if playlist_uri:
             self.spotify.start_playback(context_uri=playlist_uri)
             return f"Playing playlist '{playlist}'."

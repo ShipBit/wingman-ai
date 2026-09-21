@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from api.enums import LogType
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "3.2.3"
+LOCAL_VERSION = "3.2.4"
 
 
 class SystemManager:

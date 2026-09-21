@@ -271,7 +271,77 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
 resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
+
+# SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
+self.wingman.system_one.available                        # user has it on AND the plan grants it
+answers = await self.wingman.system_one.decide(state, questions)   # also decide_sync(...)
 ```
+
+### System One — ask for a decision, not a sentence
+
+Use it whenever the skill needs to **pick, rate or judge** rather than write.
+It cannot answer outside the options you give it, so there is nothing to parse
+and nothing to validate.
+
+This is a thin wrapper around [TypeSafe's Jev](https://docs.typesafe.ai) and
+keeps their names, so their docs and examples read straight across:
+
+| TypeSafe SDK | here |
+|---|---|
+| `Choice(instructions, criteria)` | `so.choice(instructions, criteria)` |
+| `Score(instructions, criteria)` | `so.score(instructions, criteria)` |
+| `Noul(instructions)` | `so.noul(instructions)` |
+| `client.system_one(state, questions)` | `await so.decide(state, questions)` |
+| `answers[k].choice` / `.confidence` | `answers.choice(k)` / `.confidence(k)` |
+| `answers[k].score` / `.probabilities` | `answers.score(k)` / `.probabilities(k)` |
+| `answers[k].noul` | `answers.noul(k)` |
+
+Three things are ours, each filling a gap: `so.describe()` builds their
+structured description object, `answers.level()` turns a score back into its
+label, and `answers.yes_no()` applies a threshold to a noul.
+
+```python
+so = self.wingman.system_one
+if so.available:
+    answers = await so.decide(
+        state={"transcript": text, "cargo": cargo},
+        questions={
+            "intent": so.choice("What does the pilot want?", {
+                "sell": so.describe("offload cargo", not_for="buying more"),
+                "buy":  "acquire cargo",
+                "none": "nothing about cargo",          # always give it an out
+            }),
+            "urgent": so.noul("Does this need doing right now?"),
+            "risk":   so.score("How risky is this route?", ["safe", "watchful", "dangerous"]),
+        },
+    )
+    answers.choice("intent", min_confidence=0.8)   # "sell", or None if unsure
+    answers.noul("urgent")                         # 0.94 — a probability
+    answers.yes_no("urgent")                       # True — thresholded at 0.5
+    answers.level("risk")                          # "dangerous"
+    answers.score("risk")                          # 1.99 — the position, continuous
+    answers.probabilities("risk")                  # {"safe": 0.0, ... } keyed by label
+```
+
+Four rules that come out of measuring it (`evals/FINDINGS-jev-2026-09-20.md`):
+
+- **Ask everything in one `decide()`.** Questions are evaluated in parallel:
+  eight cost 13 ms and 28% more tokens than one. Three calls for three
+  questions is three times the latency for nothing.
+- **Describe options that could be confused.** Descriptions cut wrong answers
+  from 16 to 3 out of 152 on Wingman's own command routing, at no cost in
+  latency. `not_for=` separates two neighbours better than a longer
+  description of either. A bare option name is fine when nothing is close.
+- **Give a choice a "none of these" option** whenever nothing applying is an
+  honest answer. Without one the probability has nowhere to go but onto the
+  real options.
+- **`min_confidence` separates unsure from sure, not two overlapping options.**
+  If the wrong neighbour keeps winning at high confidence, the fix is a better
+  description, not a higher threshold.
+
+Always handle `available` being False — the user can switch System One off in
+Settings, and a plan may not include it. Every reader returns `None`/`{}` in
+that case, so the skill silently takes the None branch unless you check.
 
 **Removed (do NOT use):** the raw LLM call (`self.llm_call(...)` / `actual_llm_call` — use `self.wingman.ai.generate`),
 `self.wingman.switch_tts_provider(...)` (runtime provider switching is not allowed; use `tts.set_voice`),
