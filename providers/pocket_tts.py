@@ -13,6 +13,16 @@ from pocket_tts import TTSModel
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from pocket_tts.utils.utils import get_predefined_voice
+
+try:
+    # Private in pocket-tts; the list of built-in voices it has embeddings for.
+    from pocket_tts.utils.utils import _ORIGINS_OF_PREDEFINED_VOICES as _PREDEFINED
+except ImportError:  # renamed in a later release: the 3.1.0 set
+    _PREDEFINED = dict.fromkeys(
+        "alba anna azelma bill_boerst caro_davy charles cosette eponine estelle "
+        "eve fantine george giovanni jane javert jean juergen lola marius mary "
+        "michael paul peter_yearsley rafael stuart_bell vera".split()
+    )
 from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider
 from api.interface import (
     PocketTTSConfig,
@@ -50,6 +60,13 @@ def _library_version() -> str:
 
 
 POCKET_TTS_VERSION = _library_version()
+
+BUILTIN_MODEL_TEMPERATURE = 0.3
+"""Sampling temperature for the built-in models. pocket-tts 3.0 set 0.3 for
+English after human listening tests (#223) and left every other language on
+the library's 0.7. Measured 2026-09-23, German model, 3 voices x 5 sentences x
+2 seeds, transcribed by Parakeet: 10.6% word errors at 0.7, 6.3% at 0.3
+(English: 5.7%). A user's own YAML model keeps the temperature it sets."""
 
 
 
@@ -307,7 +324,7 @@ class PocketTTS:
                         f"connection and restart Wingman AI.\nError: {fetch_err}"
                     )
                 self.model = TTSModel.load_model(
-                    config=config_path,
+                    config=config_path, temp=BUILTIN_MODEL_TEMPERATURE
                 )
             else:
                 self.printr.print(
@@ -316,7 +333,7 @@ class PocketTTS:
                     server_only=True,
                 )
                 self.model = TTSModel.load_model(
-                    language=model_id,
+                    language=model_id, temp=BUILTIN_MODEL_TEMPERATURE
                 )
 
             self.printr.print(
@@ -395,37 +412,6 @@ class PocketTTS:
                     )
         return result
 
-    # Probably can delete after testing
-    def list_voices(self):
-        """List available voices: Built-ins + Scanned Directory."""
-        builtin_map = {
-            "alba": "alba",
-            "marius": "marius",
-            "javert": "javert",
-            "jean": "jean",
-            "fantine": "fantine",
-            "cosette": "cosette",
-            "eponine": "eponine",
-            "azelma": "azelma",
-        }
-
-        voices = []
-        for name_id, _ in builtin_map.items():
-            voices.append({"id": name_id, "name": name_id.capitalize()})
-
-        if self.voices_dir and os.path.isdir(self.voices_dir):
-            extensions = ("*.wav", "*.mp3", "*.flac")
-            audio_files = []
-            for ext in extensions:
-                audio_files.extend(glob.glob(os.path.join(self.voices_dir, ext)))
-
-            for f in audio_files:
-                name = os.path.basename(f)
-                stem = os.path.splitext(name)[0]
-                voices.append({"id": stem, "name": f"Local: {stem}"})
-
-        return voices
-
     async def get_available_voices(self) -> list[VoiceInfo]:
         """List available voices for API: Built-ins (provider: pocket_tts) + Custom (provider: custom_voices)."""
         # Remote mode — fetch from server
@@ -438,25 +424,24 @@ class PocketTTS:
                 )
             return []
 
-        builtin_map = {
-            "alba": "alba",
-            "marius": "marius",
-            "javert": "javert",
-            "jean": "jean",
-            "fantine": "fantine",
-            "cosette": "cosette",
-            "eponine": "eponine",
-            "azelma": "azelma",
-        }
-
-        voices: list[VoiceInfo] = []
-        # Built-in voices
-        for name_id, _ in builtin_map.items():
-            voices.append(
-                VoiceInfo(
-                    id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts"
-                )
+        # Built-in voices: native speakers of the spoken language first, then
+        # the rest by name. `languages` is the speaker's own language; every
+        # built-in voice speaks the active model's language (per-language
+        # embeddings), with that speaker's accent.
+        spoken = self.spoken_language.value
+        builtins = sorted(
+            self._BUILTIN_VOICE_IDS,
+            key=lambda v: (self._voice_native_language(v) != spoken, v),
+        )
+        voices: list[VoiceInfo] = [
+            VoiceInfo(
+                id=voice_id,
+                name=voice_id.replace("_", " ").title(),
+                languages=[self._voice_native_language(voice_id)],
+                provider="pocket_tts",
             )
+            for voice_id in builtins
+        ]
         # Custom voices. Built-in stems are excluded: their downloaded
         # per-language embeddings live in the same directory (see
         # _ensure_builtin_voice) but are already listed as built-ins above.
@@ -711,9 +696,24 @@ class PocketTTS:
     # download the embedding matching the active model into custom_voices as
     # ``<voice>.<model_id>.safetensors`` on first use (see _ensure_builtin_voice)
     # and resolve them exactly like cloned custom voices from there on.
-    _BUILTIN_VOICE_IDS = frozenset(
-        {"alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"}
-    )
+    # Taken from the library, so a pocket-tts upgrade that adds voices adds
+    # them here too (3.x has 26; Wingman up to 3.2.3 offered 8).
+    _BUILTIN_VOICE_IDS = frozenset(_PREDEFINED)
+
+    # The language each built-in voice's speaker spoke in the recording it was
+    # made from. Kyutai recorded one native speaker per non-English language
+    # (their default voice for that language); all others are English.
+    _NATIVE_VOICES = {
+        "juergen": "de",
+        "estelle": "fr",
+        "lola": "es",
+        "giovanni": "it",
+        "rafael": "pt",
+    }
+
+    @classmethod
+    def _voice_native_language(cls, voice_id: str) -> str:
+        return cls._NATIVE_VOICES.get(voice_id, "en")
 
     def _builtin_voice_cache_path(self, voice_id: str) -> str:
         """Where a built-in voice's embedding for the active model lives on disk."""
