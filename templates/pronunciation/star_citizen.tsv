@@ -8,7 +8,9 @@
 # matching line wins, so the German one comes first.
 # Everything but aUEC is switched off for now: the spelled-out letters broke
 # the flow of speech, and we are listening to what the model says on its own.
-aUEC	Alpha Juh Ih Ssi	de
+# Lower case: capitals made the voice stress every letter (+2.9 dB against
+# +1.1 dB in the sentence around it, measured 2026-09-24).
+aUEC	alpha juh ih ssi	de
 aUEC	Alpha U E C
 # UEC	Juh Ih Ssi	de
 # UEC	U E C
