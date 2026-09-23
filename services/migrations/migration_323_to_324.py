@@ -74,7 +74,7 @@ seconds into every longer answer. On torch 2.11 with the kernels it was still
 slower than the plain model (5.9x against 6.9x), so there is nothing to offer.
 
 `settings.yaml` also gains `pronunciation`: the user's own rules for how a
-voice says what the chat shows ("aUEC" -> "A U E C"), and the bundled lists
+voice says what the chat shows ("aUEC" -> "Alpha U E C"), and the bundled lists
 switched on, Star Citizen by default. Abbreviations, units and numbers of the
 spoken language are spelled out for every TTS provider (services/speech_text.py).
 """

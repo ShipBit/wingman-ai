@@ -9,7 +9,7 @@ Applied in this order, each step on what the previous one left:
 
 1. the user's own rules (Settings > TTS), which always win,
 2. the bundled lists the user switched on, one per game
-   (templates/pronunciation/<id>.tsv), e.g. "aUEC" -> "A U E C",
+   (templates/pronunciation/<id>.tsv), e.g. "aUEC" -> "Alpha U E C",
 3. abbreviations of the spoken language ("z.B.", "Lt.", "Blvd."),
 4. units after a number ("10 km", "$20"),
 5. numbers (services/spoken_numbers.py).

@@ -568,7 +568,7 @@ class VoiceActivationSettings(BaseModel):
 
 
 class PronunciationRule(BaseModel):
-    """How to say something the voice gets wrong: "aUEC" -> "A U E C"."""
+    """How to say something the voice gets wrong: "aUEC" -> "Alpha U E C"."""
 
     written: str
     spoken: str
