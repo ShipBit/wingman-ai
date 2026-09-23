@@ -3,6 +3,13 @@ audio: {}
 streamer_mode: false
 show_token_count: false
 filler_responses: true
+# How the text is rewritten before a voice reads it: abbreviations, units and
+# numbers are spelled out in the spoken language. Your own rules win; presets
+# are bundled lists per game (templates/pronunciation).
+pronunciation:
+  rules: []
+  presets:
+    - star_citizen
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
 stt:

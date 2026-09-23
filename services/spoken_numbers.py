@@ -62,9 +62,9 @@ _GERMAN_MONTHS = (
 # A number as people write it: optional minus, digits, and thousands or
 # decimal separators between digit groups. Not part of a word ("A320", "3D")
 # and not chained with hyphens (the ISO date 2026-09-23, IDs): left as they are.
-_NUMBER = re.compile(
-    r"(?<![\w.,])(?<!\d-)(-?)(\d+(?:[.,\u00a0\u202f ]\d+)*)(?![\w]|-\d)"
-)
+NUMBER_PATTERN = r"(?<![\w.,])(?<!\d-)(-?)(\d+(?:[.,\u00a0\u202f ]\d+)*)"
+"""Sign and digits of a written number; shared with the units in speech_text."""
+_NUMBER = re.compile(NUMBER_PATTERN + r"(?![\w]|-\d)")
 _TIME = re.compile(r"(?<![\w.:])([01]?\d|2[0-3]):([0-5]\d)(?![\w:])")
 _PERCENT = re.compile(r"(\d)\s?%")
 # "3-4 Stunden", "10–15 Minuten": a range, read "3 bis 4". Short numbers only,
@@ -94,7 +94,7 @@ def spell_out_numbers(text: str, language: SpokenLanguage) -> str:
 def _number(sign: str, body: str, language: SpokenLanguage) -> str | None:
     lang = _NUM2WORDS_LANG[language]
     body = body.replace(" ", " ").replace(" ", " ")
-    integer, decimals = _split(body, language)
+    integer, decimals = split_number(body, language)
     if integer is None:
         return None
 
@@ -116,7 +116,7 @@ def _number(sign: str, body: str, language: SpokenLanguage) -> str | None:
     return words
 
 
-def _split(body: str, language: SpokenLanguage) -> tuple[str | None, str | None]:
+def split_number(body: str, language: SpokenLanguage) -> tuple[str | None, str | None]:
     """Integer digits and decimal digits of a written number, by the
     language's convention: English "1,234.5", the others "1.234,5" (French
     also "1 234,5"). A lone separator followed by exactly three digits is a

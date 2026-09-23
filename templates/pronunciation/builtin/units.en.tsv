@@ -1,0 +1,41 @@
+# Units, only after a number ("10 km"). written<TAB>spoken for 1<TAB>spoken for every other value.
+km/h	one kilometer per hour	kilometers per hour
+m/s	one meter per second	meters per second
+mph	one mile per hour	miles per hour
+km	one kilometer	kilometers
+cm	one centimeter	centimeters
+mm	one millimeter	millimeters
+m	one meter	meters
+mi	one mile	miles
+ft	one foot	feet
+kg	one kilogram	kilograms
+g	one gram	grams
+lbs	one pound	pounds
+lb	one pound	pounds
+t	one ton	tons
+ml	one milliliter	milliliters
+l	one liter	liters
+°C	one degree Celsius	degrees Celsius
+°F	one degree Fahrenheit	degrees Fahrenheit
+°	one degree	degrees
+h	one hour	hours
+hrs	one hour	hours
+min	one minute	minutes
+ms	one millisecond	milliseconds
+s	one second	seconds
+sec	one second	seconds
+GHz	one gigahertz	gigahertz
+MHz	one megahertz	megahertz
+kHz	one kilohertz	kilohertz
+Hz	one hertz	hertz
+TB	one terabyte	terabytes
+GB	one gigabyte	gigabytes
+MB	one megabyte	megabytes
+kB	one kilobyte	kilobytes
+kWh	one kilowatt hour	kilowatt hours
+kW	one kilowatt	kilowatts
+MW	one megawatt	megawatts
+W	one watt	watts
+€	one euro	euros
+$	one dollar	dollars
+£	one pound	pounds

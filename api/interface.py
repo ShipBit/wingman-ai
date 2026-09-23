@@ -567,6 +567,32 @@ class VoiceActivationSettings(BaseModel):
     "okay stop please" works with "okay stop" and "stop please" listed."""
 
 
+class PronunciationRule(BaseModel):
+    """How to say something the voice gets wrong: "aUEC" -> "A U E C"."""
+
+    written: str
+    spoken: str
+    """Digits are fine: they are read in the spoken language afterwards."""
+
+
+class PronunciationSettings(BaseModel):
+    """How the text handed to the voice is rewritten, for every TTS provider
+    (services/speech_text.py). The chat keeps what the Wingman wrote."""
+
+    rules: list[PronunciationRule]
+    """The user's own rules. They win over every bundled one."""
+    presets: list[str]
+    """Bundled lists switched on, by id ("star_citizen")."""
+
+
+class PronunciationPreset(BaseModel):
+    """A bundled pronunciation list, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
 class VocabularyPreset(BaseModel):
     """A bundled word list for the speech correction, one per game."""
 
@@ -1520,6 +1546,7 @@ class SettingsConfig(BaseModel):
     filler_responses: bool
     """Speak a short line, written by the support model in the user's language,
     while a slow tool runs and the Wingman has not said anything yet."""
+    pronunciation: PronunciationSettings
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None

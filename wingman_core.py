@@ -55,6 +55,8 @@ from api.interface import (
     PocketTTSPreloadResult,
     SoundConfig,
     PresetOverride,
+    PronunciationPreset,
+    PronunciationRule,
     SttTestResult,
     SubscriptionRoutes,
     VocabularyPreset,
@@ -108,6 +110,7 @@ from services.audio import (
 from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
+from services import speech_text
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -158,6 +161,7 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
+        speech_text.configure(app_root_path)
         self.system_manager = system_manager
         self.is_client_logged_in: bool = False
         self.client_plan: str = "Free"
@@ -217,6 +221,29 @@ class WingmanCore(WebSocketUser):
             path="/stt/vocabulary/presets/{preset_id}",
             endpoint=self.put_stt_vocabulary_preset,
             response_model=list[str],
+            tags=tags,
+        )
+        # How the voice says what the chat shows: bundled lists per game, and
+        # a preview of the rewritten text for the settings page.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/tts/pronunciation/presets",
+            endpoint=self.get_pronunciation_presets,
+            response_model=list[PronunciationPreset],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/tts/pronunciation/presets/{preset_id}",
+            endpoint=self.get_pronunciation_preset,
+            response_model=list[PronunciationRule],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/tts/pronunciation/preview",
+            endpoint=self.preview_pronunciation,
+            response_model=str,
             tags=tags,
         )
         # The microphone test in Settings: hold, speak, release, read the text.
@@ -1956,6 +1983,33 @@ class WingmanCore(WebSocketUser):
         self.config_manager.save_settings_config()
         self.stt_service._preset_cache.pop(preset_id, None)
         return apply_override(bundled, overrides.get(preset_id))
+
+    # ───────────────── Pronunciation (Settings > TTS) ───────────────── #
+
+    # GET /tts/pronunciation/presets
+    async def get_pronunciation_presets(self) -> list[PronunciationPreset]:
+        return [
+            PronunciationPreset(id=pid, name=name, count=count)
+            for pid, name, count in speech_text.list_presets(self.app_root_path)
+        ]
+
+    # GET /tts/pronunciation/presets/{preset_id}
+    async def get_pronunciation_preset(self, preset_id: str) -> list[PronunciationRule]:
+        return [
+            PronunciationRule(written=r.written, spoken=r.spoken)
+            for r in speech_text.load_preset(self.app_root_path, preset_id)
+        ]
+
+    # POST /tts/pronunciation/preview
+    async def preview_pronunciation(self, text: str = Body(..., embed=True)) -> str:
+        """What a voice would be handed for ``text`` with the current rules."""
+        settings = self.settings_service.settings
+        return speech_text.prepare_for_speech(
+            text,
+            settings.spoken_language,
+            settings.pronunciation.rules,
+            settings.pronunciation.presets,
+        )
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

@@ -72,6 +72,11 @@ real time instead of 5.6x. The text prompt at every sentence boundary then
 took up to 1.9 s, and playback ran dry at the first one - the click a few
 seconds into every longer answer. On torch 2.11 with the kernels it was still
 slower than the plain model (5.9x against 6.9x), so there is nothing to offer.
+
+`settings.yaml` also gains `pronunciation`: the user's own rules for how a
+voice says what the chat shows ("aUEC" -> "A U E C"), and the bundled lists
+switched on, Star Citizen by default. Abbreviations, units and numbers of the
+spoken language are spelled out for every TTS provider (services/speech_text.py).
 """
 
 import os
@@ -241,6 +246,13 @@ class Migration323To324(BaseMigration):
         unless the user already has them. Replace the per-provider language
         settings by the one `spoken_language`."""
         self._one_language(old)
+
+        if "pronunciation" not in old:
+            # The Star Citizen list on, like the speech vocabulary's: most
+            # users play it, and "aUEC" read as a word is the first thing
+            # they would notice.
+            old["pronunciation"] = {"rules": [], "presets": ["star_citizen"]}
+            self.log("- pronunciation: added, with the Star Citizen list on")
 
         if "show_token_count" not in old:
             # Off: the counts on each message were an estimate of the message
