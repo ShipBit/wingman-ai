@@ -35,8 +35,8 @@ def _is_retryable_download_error(error: Exception) -> bool:
 #
 # The 4B is the default since the memory rewrite prompt (2026-09-17): on the
 # same 19 conversations the 2B returned nothing usable in 17 (score 0.35), the
-# 4B scored 0.93, level with the cloud models, at the same speed. The 2B stays
-# listed for machines that cannot spare the RAM.
+# 4B scored 0.93, level with the cloud models, at the same speed. The 2B is no
+# longer offered; a user who still has its file sees it as a custom model.
 SUPPORT_MODELS: dict[str, dict] = {
     "Qwen3.5-4B-Q4_K_M.gguf": {
         "repo": "unsloth/Qwen3.5-4B-GGUF",
@@ -49,12 +49,6 @@ SUPPORT_MODELS: dict[str, dict] = {
         "filename": "gemma-4-E2B-it-Q3_K_M.gguf",
         "expected_size_mb": 2540,
         "label": "Gemma 4 E2B",
-    },
-    "Qwen3.5-2B-Q4_K_M.gguf": {
-        "repo": "unsloth/Qwen3.5-2B-GGUF",
-        "filename": "Qwen3.5-2B-Q4_K_M.gguf",
-        "expected_size_mb": 1280,
-        "label": "Qwen 3.5 2B",
     },
 }
 

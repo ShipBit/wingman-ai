@@ -1,7 +1,7 @@
 """Append-only debug log of local-AI memory operations (extraction + greeting).
 
 Captures the raw input and raw model output of every memory extraction and
-greeting generation, so the behaviour of the tiny local model against our
+greeting generation, so the behaviour of the support model against our
 prompts can be analysed against *real* usage later instead of guessed at.
 
 Enabled by default; set ``WINGMAN_MEMORY_DEBUG_LOG=0`` to disable. Writes JSON
