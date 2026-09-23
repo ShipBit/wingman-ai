@@ -15,6 +15,11 @@ from safetensors.torch import load_file, save_file
 from pocket_tts.utils.utils import get_predefined_voice
 
 try:
+    from pocket_tts.models.text_chunking import split_into_best_sentences
+except ImportError:  # before 3.1.0 it lived in tts_model
+    from pocket_tts.models.tts_model import split_into_best_sentences
+
+try:
     # Private in pocket-tts; the list of built-in voices it has embeddings for.
     from pocket_tts.utils.utils import _ORIGINS_OF_PREDEFINED_VOICES as _PREDEFINED
 except ImportError:  # renamed in a later release: the 3.1.0 set
@@ -32,6 +37,7 @@ from api.interface import (
     VoiceInfo,
 )
 from providers.interfaces import TtsInterface, tts_provider
+from providers.pocket_tts_chunks import MAX_TOKENS, pieces_for_speech
 from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
@@ -1130,7 +1136,7 @@ class PocketTTS:
             # Protect model lifecycle: a settings-change reload waits on this
             # lock before swapping self.model out.
             with self._model_swap_lock:
-                return self.model.generate_audio(voice_state, text)
+                return torch.cat(list(self._speech_stream(voice_state, text)))
 
         audio_tensor = await loop.run_in_executor(None, _generate)
 
@@ -1166,6 +1172,35 @@ class PocketTTS:
             use_gain_boost=True,
         )
 
+    def _speech_stream(self, voice_state, text: str):
+        """Audio chunks for ``text``, generated piece by piece so no piece
+        is longer than the model handles cleanly (see pocket_tts_chunks).
+        Caller holds ``_model_swap_lock``."""
+        try:
+            tokenizer = self.model.flow_lm.conditioner.tokenizer
+            pieces = pieces_for_speech(
+                text,
+                split_sentences=lambda t: split_into_best_sentences(
+                    tokenizer,
+                    t,
+                    MAX_TOKENS,
+                    self.model.pad_with_spaces_for_short_inputs,
+                    remove_semicolons=self.model.remove_semicolons,
+                ),
+                count_tokens=lambda t: len(tokenizer(t)[0]),
+                language=self.spoken_language,
+            )
+        except Exception as e:
+            # A later pocket-tts moving these internals must not cost speech.
+            self.printr.print(
+                f"PocketTTS: could not split the text, speaking it as one: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            pieces = [text]
+        for piece in pieces:
+            yield from self.model.generate_audio_stream(voice_state, piece)
+
     # Audio the speakers hold back before they start. Covers a slow first
     # sentence boundary on a machine that makes audio only a little faster
     # than real time, at the cost of that much delay before the first word.
@@ -1198,7 +1233,7 @@ class PocketTTS:
                 with self._model_swap_lock:
                     # ``frames_after_eos=None`` lets pocket-tts pick the
                     # trailing frames from the text length.
-                    for tensor in self.model.generate_audio_stream(voice_state, text):
+                    for tensor in self._speech_stream(voice_state, text):
                         if cancelled.is_set():
                             break
                         if tensor.is_cuda:
