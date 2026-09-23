@@ -3,7 +3,11 @@
 # Digits in the spoken form are fine: they are read in the spoken language
 # afterwards ("F 7 C" becomes "F sieben C" in German).
 # Name: Star Citizen
+# German voices would read "U E C" as German letters; players say them in
+# English. The first matching line wins, so the German one comes first.
+aUEC	Alpha Juh Ih Sih	de
 aUEC	Alpha U E C
+UEC	Juh Ih Sih	de
 UEC	U E C
 SCU	S C U
 QT	Quantum
