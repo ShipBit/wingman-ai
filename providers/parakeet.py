@@ -18,19 +18,19 @@ from api.interface import (
 from services.printr import Printr
 
 
+# No CoreML: on a Mac Parakeet runs on the CPU. Measured 2026-09-23 on an M2
+# Pro with onnxruntime 1.22, CoreML took 219 ms per sentence against 128 ms on
+# the CPU and 3 s longer to load (older versions crashed on the model's
+# external data files). Configs that still say "coreml" get the CPU.
 EXECUTION_PROVIDER_MAP = {
     "cpu": ["CPUExecutionProvider"],
     "directml": ["DmlExecutionProvider", "CPUExecutionProvider"],
-    "coreml": ["CoreMLExecutionProvider", "CPUExecutionProvider"],
     "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
 }
 
 # v3 only. v2 transcribes English alone and was only marginally better at it;
 # with one spoken language per user it was a setting that could only break.
 PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
-
-# CoreML is excluded for TDT models — they use external data files that CoreML can't handle
-COREML_EXCLUDED_PROVIDERS = ["CoreMLExecutionProvider"]
 
 
 class Parakeet:
@@ -66,13 +66,6 @@ class Parakeet:
             providers = EXECUTION_PROVIDER_MAP.get(
                 self.settings.execution_provider, ["CPUExecutionProvider"]
             )
-
-            # Exclude CoreML for TDT models — crashes with external data files
-            providers = [
-                p for p in providers if p not in COREML_EXCLUDED_PROVIDERS
-            ]
-            if not providers:
-                providers = ["CPUExecutionProvider"]
 
             # Filter requested providers against what ONNX Runtime actually has
             # available, so we know up front whether CUDA will really be used.

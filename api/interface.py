@@ -205,7 +205,8 @@ class PocketTTSPreloadResult(BaseModel):
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
     execution_provider: str
-    """cpu, directml, coreml, or cuda"""
+    """cpu, directml (Windows, any GPU) or cuda (NVIDIA). Picked on the first
+    start: cuda when nvidia-smi finds a GPU, else cpu."""
     host: str = ""
     """Where a Parakeet server runs when `run_locally` is off. Empty until
     the user fills it in; nothing is contacted before that."""

@@ -218,6 +218,11 @@ class Migration323To324(BaseMigration):
         if "language" in parakeet:
             del parakeet["language"]
             self.log("- removed stt.parakeet.language (Parakeet detects the language itself)")
+        if parakeet.get("execution_provider") == "coreml":
+            # Never used: Core dropped CoreML when loading, and it is slower
+            # than the CPU on Apple Silicon anyway.
+            parakeet["execution_provider"] = "cpu"
+            self.log("- stt.parakeet.execution_provider: cpu (CoreML is slower on a Mac and was never used)")
         variant = parakeet.pop("model_variant", None)
         if variant == "v2":
             self.log(
