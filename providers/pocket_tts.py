@@ -37,7 +37,7 @@ from api.interface import (
     VoiceInfo,
 )
 from providers.interfaces import TtsInterface, tts_provider
-from providers.pocket_tts_chunks import MAX_TOKENS, pieces_for_speech
+from providers.pocket_tts_chunks import MAX_TOKENS, faded_edges, pieces_for_speech
 from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
@@ -1174,8 +1174,9 @@ class PocketTTS:
 
     def _speech_stream(self, voice_state, text: str):
         """Audio chunks for ``text``, generated piece by piece so no piece
-        is longer than the model handles cleanly (see pocket_tts_chunks).
-        Caller holds ``_model_swap_lock``."""
+        is longer than the model handles cleanly, each faded in and out so
+        the joins do not click (see pocket_tts_chunks). Caller holds
+        ``_model_swap_lock``."""
         try:
             tokenizer = self.model.flow_lm.conditioner.tokenizer
             pieces = pieces_for_speech(
@@ -1199,7 +1200,9 @@ class PocketTTS:
             )
             pieces = [text]
         for piece in pieces:
-            yield from self.model.generate_audio_stream(voice_state, piece)
+            yield from faded_edges(
+                self.model.generate_audio_stream(voice_state, piece), self.model.sample_rate
+            )
 
     # Audio the speakers hold back before they start. Covers a slow first
     # sentence boundary on a machine that makes audio only a little faster

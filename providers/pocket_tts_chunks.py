@@ -10,12 +10,22 @@ front of a conjunction nearest the middle, else at the word nearest the
 middle, until every piece fits.
 """
 
-from typing import Callable
+from typing import Callable, Iterable, Iterator
+
+import torch
 
 from api.enums import SpokenLanguage
 
 MAX_TOKENS = 50
 """pocket-tts's own limit per piece (MAX_TOKEN_PER_CHUNK)."""
+
+FADE_SECONDS = 0.01
+"""Fade at the start and end of every piece. Each piece starts from a fresh
+model state, and the German model with a voice recorded in English often
+starts at full loudness on the first sample: 8 of 12 starts with Eponine, 0
+with Juergen (measured 2026-09-23). Straight after the silence of the piece
+before, that jump is a click across the whole spectrum, heard as a cut in
+front of the word. 10 ms is too short to hear as a fade."""
 
 # A clause usually starts here, so the voice can pause naturally in front.
 _CONJUNCTIONS = {
@@ -69,3 +79,26 @@ def pieces_for_speech(
     for piece in split_sentences(text):
         pieces.extend(split_long(piece, count_tokens, language))
     return pieces
+
+
+def faded_edges(chunks: Iterable[torch.Tensor], sample_rate: int) -> Iterator[torch.Tensor]:
+    """The audio chunks of one piece, faded in at the start and out at the
+    end. Holds back one chunk (80 ms) to know which one is the last."""
+    fade = max(1, int(sample_rate * FADE_SECONDS))
+    ramp = 0.5 - 0.5 * torch.cos(torch.linspace(0, torch.pi, fade))
+    held = None
+    first = True
+    for chunk in chunks:
+        if first:
+            chunk = chunk.clone()
+            n = min(fade, chunk.shape[-1])
+            chunk[..., :n] *= ramp[:n].to(chunk.dtype)
+            first = False
+        if held is not None:
+            yield held
+        held = chunk
+    if held is not None:
+        held = held.clone()
+        n = min(fade, held.shape[-1])
+        held[..., held.shape[-1] - n :] *= ramp[:n].flip(0).to(held.dtype)
+        yield held
