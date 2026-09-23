@@ -6,21 +6,21 @@
 # German voices would read "U E C" as German letters; players say these
 # terms in English, so the German lines spell the English sound. The first
 # matching line wins, so the German one comes first.
-# Everything but aUEC is switched off for now: the spelled-out letters broke
-# the flow of speech, and we are listening to what the model says on its own.
-# Lower case: capitals made the voice stress every letter (+2.9 dB against
-# +1.1 dB in the sentence around it, measured 2026-09-24).
-aUEC	alpha juh ih ssi	de
+# Only aUEC, QT and ATC are on for now: the other spelled-out letters broke
+# the flow of speech. Hyphens make the German voice say the letters as one
+# word instead of stressing each; without a rule it swallows ATC (heard 0 of
+# 6 times by Parakeet, 6 of 6 with "Ey-Tih-Ssi"; measured 2026-09-24).
+aUEC	Alpha Juh-Ih-Ssi	de
 aUEC	Alpha U E C
 # UEC	Juh Ih Ssi	de
 # UEC	U E C
 # SCU	Ess Ssi Juh	de
 # SCU	S C U
-# QT	Quantum
+QT	Quantum
 # QD	Quantum Dampener
 # MFD	M F D
-# ATC	Ey Tih Ssi	de
-# ATC	A T C
+ATC	Ey-Tih-Ssi	de
+ATC	A T C
 # EVA	E V A
 # RSI	R S I
 # MISC	Misc
