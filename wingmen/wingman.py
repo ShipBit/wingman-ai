@@ -1052,7 +1052,12 @@ class Wingman:
         # the chat already shows the answer as the Wingman wrote it.
         pronunciation = self.settings.pronunciation
         text = speech_text.prepare_for_speech(
-            text, self.settings.spoken_language, pronunciation.rules, pronunciation.presets
+            text,
+            self.settings.spoken_language,
+            pronunciation.rules,
+            pronunciation.presets,
+            reads_numbers=self.config.features.tts_provider
+            in speech_text.VOICES_THAT_READ_NUMBERS,
         )
         # The listen controller compares short interruptions against this so
         # the wingman saying "stop" does not stop itself - so it is what the

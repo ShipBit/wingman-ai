@@ -14,6 +14,12 @@ Applied in this order, each step on what the previous one left:
 4. units after a number ("10 km", "$20"),
 5. numbers (services/spoken_numbers.py).
 
+Inworld (directly or through the subscription) reads digits, clock times,
+dates, amounts of money and temperatures itself, and better than these rules
+write them out. For it, steps 4 and 5 leave those alone; the rules, the
+abbreviations and the other units still apply ("3-4 km" -> "3 bis 4
+Kilometer", "1 h" -> "eine Stunde").
+
 Rules may leave digits in what they write ("F7C" -> "F 7 C"): step 5 reads
 them in the spoken language. Markup in angle or square brackets (Inworld's
 <break>, audio markups like [laughs]) is never touched.
@@ -28,7 +34,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable, Optional
 
-from api.enums import SpokenLanguage
+from api.enums import SpokenLanguage, TtsProvider
 from services.printr import Printr
 from services.spoken_numbers import (
     NUMBER_PATTERN,
@@ -41,6 +47,13 @@ PRONUNCIATION_DIR = os.path.join("templates", "pronunciation")
 BUILTIN_DIR = os.path.join(PRONUNCIATION_DIR, "builtin")
 
 _app_root: Optional[str] = None
+
+VOICES_THAT_READ_NUMBERS = frozenset({TtsProvider.INWORLD, TtsProvider.WINGMAN_PRO})
+"""Providers that read numbers, times, dates, money and temperatures
+themselves. The subscription's voices are Inworld's."""
+
+# Units such a voice reads right after the digits.
+_UNITS_THE_VOICE_READS = frozenset({"€", "$", "£", "°C", "°F", "°"})
 
 
 def configure(app_root_path: str) -> None:
@@ -125,6 +138,10 @@ _MARKUP = re.compile(r"(<[^<>]+>|\[[^\[\]]+\])")
 _CURRENCY_FIRST = re.compile(r"(?<![\w.,])([$€£])\s?(\d+(?:[.,]\d+)*)")
 
 
+# Nothing but whitespace since the start of the text or the end of a sentence.
+_SENTENCE_START = re.compile(r"(?:^|[.!?]\s)\s*$")
+
+
 @lru_cache(maxsize=64)
 def _rule_pattern(writtens: tuple[str, ...]) -> re.Pattern:
     # Longest first, so "CRU-L1" wins over a shorter rule inside it. Not in
@@ -142,6 +159,9 @@ def _apply_rules(text: str, rules: Iterable[Rule]) -> str:
 
     def spoken(m: re.Match) -> str:
         said = table[m.group(0)]
+        # "Capt. Kirk" opening a sentence stays capitalized: "Captain Kirk".
+        if said[:1].islower() and m.group(0)[:1].isupper() and _SENTENCE_START.search(text[: m.start()]):
+            said = said[0].upper() + said[1:]
         # "Sunshine Blvd." at the end: the dot also ended the sentence.
         rest = text[m.end() :]
         if m.group(0).endswith(".") and (not rest.strip() or rest.startswith("\n")):
@@ -187,14 +207,22 @@ def _apply_units(
     return _unit_pattern(units).sub(spoken, text)
 
 
-def _speak_segment(segment: str, language: SpokenLanguage, rules: list[Rule]) -> str:
+def _speak_segment(
+    segment: str, language: SpokenLanguage, rules: list[Rule], reads_numbers: bool
+) -> str:
     code = language.value
     segment = _apply_rules(segment, rules)
     if _app_root:
         segment = _apply_rules(segment, _abbreviations(_app_root, code))
-        segment = _CURRENCY_FIRST.sub(lambda m: f"{m.group(2)} {m.group(1)}", segment)
+        units = _units(_app_root, code)
+        if reads_numbers:
+            units = tuple(u for u in units if u[0] not in _UNITS_THE_VOICE_READS)
+        else:
+            segment = _CURRENCY_FIRST.sub(lambda m: f"{m.group(2)} {m.group(1)}", segment)
         segment = expand_ranges(segment, language)
-        segment = _apply_units(segment, _units(_app_root, code), language)
+        segment = _apply_units(segment, units, language)
+    if reads_numbers:
+        return segment
     return safe_spell_out_numbers(segment, language)
 
 
@@ -211,15 +239,20 @@ def active_rules(language: SpokenLanguage, own: Iterable, presets: Iterable[str]
 
 
 def prepare_for_speech(
-    text: str, language: SpokenLanguage, own_rules: Iterable = (), presets: Iterable[str] = ()
+    text: str,
+    language: SpokenLanguage,
+    own_rules: Iterable = (),
+    presets: Iterable[str] = (),
+    reads_numbers: bool = False,
 ) -> str:
-    """``text`` as it should be spoken. Never raises: on any error the text
-    is returned as it came, an unreadable number beats a lost answer."""
+    """``text`` as it should be spoken. ``reads_numbers`` for a voice in
+    VOICES_THAT_READ_NUMBERS. Never raises: on any error the text is
+    returned as it came, an unreadable number beats a lost answer."""
     try:
         rules = active_rules(language, own_rules, presets)
         parts = _MARKUP.split(text)
         return "".join(
-            part if i % 2 else _speak_segment(part, language, rules)
+            part if i % 2 else _speak_segment(part, language, rules, reads_numbers)
             for i, part in enumerate(parts)
         )
     except Exception as e:
