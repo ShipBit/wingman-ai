@@ -207,9 +207,6 @@ class PocketTTSPreloadResult(BaseModel):
 
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
-    model_variant: str
-    """v2 (English only) or v3 (25 languages, detects which one itself). v2 is
-    only used when `spoken_language` is English."""
     execution_provider: str
     """cpu, directml, coreml, or cuda"""
     host: str = ""

@@ -17,7 +17,6 @@ from services.local_ai_service import LocalAiService
 from services.config_service import ConfigService
 from services.printr import Printr
 from services.pub_sub import PubSub
-from services.spoken_language import parakeet_variant
 
 
 class SettingsService:
@@ -184,10 +183,6 @@ class SettingsService:
         # endpoint. The settings page holds the block it loaded, so taking its
         # copy here would throw away every edit made since - keep ours.
         new_stt.preset_overrides = old_stt.preset_overrides
-        # v2 only knows English; a user who speaks anything else gets v3.
-        new_stt.parakeet.model_variant = parakeet_variant(
-            settings.spoken_language, new_stt.parakeet.model_variant
-        )
         # The shared providers hold a reference to their settings object;
         # hand them the new one before anything reads it.
         self.parakeet.settings = new_stt.parakeet
@@ -197,8 +192,7 @@ class SettingsService:
         if new_stt.provider == SttProvider.PARAKEET:
             old_pk, new_pk = old_stt.parakeet, new_stt.parakeet
             reload_needed = reload_needed or (
-                old_pk.model_variant != new_pk.model_variant
-                or old_pk.execution_provider != new_pk.execution_provider
+                old_pk.execution_provider != new_pk.execution_provider
                 or old_pk.run_locally != new_pk.run_locally
             )
         if reload_needed and self.stt_provider_manager:

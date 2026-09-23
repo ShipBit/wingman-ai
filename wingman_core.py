@@ -2361,13 +2361,7 @@ class WingmanCore(WebSocketUser):
                     server_only=True,
                 )
                 return
-        future = asyncio.run_coroutine_threadsafe(
-            self._preload_pocket_tts_voices(
-                state_message_prefix="Preloading voices",
-                restore_ready_state=True,
-            ),
-            loop,
-        )
+        future = asyncio.run_coroutine_threadsafe(self._after_pocket_tts_reload(), loop)
 
         def _log_preload_failure(fut):
             exc = fut.exception()
@@ -2379,6 +2373,30 @@ class WingmanCore(WebSocketUser):
                 )
 
         future.add_done_callback(_log_preload_failure)
+
+    async def _after_pocket_tts_reload(self) -> None:
+        """Get the voices ready for the model that was just loaded.
+
+        The voices the Wingmen use come first, with the loading indicator: the
+        next answer needs them. When the load replaced another model - the user
+        picked a new spoken language or quality - every other custom voice is
+        cloned for it in the background, so switching a Wingman to one of them
+        later does not stall its first answer. Not on the first load after
+        start: those voices were prepared when the model was chosen.
+        """
+        await self._preload_pocket_tts_voices(
+            state_message_prefix="Preloading voices",
+            restore_ready_state=True,
+        )
+        if not self.pocket_tts.last_load_switched_model:
+            return
+        result = await self.precompute_pocket_tts_voices()
+        if result.get("started"):
+            await self.printr.print_async(
+                f"Pocket TTS: preparing {result['total']} custom voice(s) for the "
+                f"'{self.pocket_tts.model_id}' model in the background.",
+                color=LogType.INFO,
+            )
 
     # POST /pocket_tts/preload_voice
     async def preload_pocket_tts_voice(self, voice: str) -> PocketTTSPreloadResult:

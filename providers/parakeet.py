@@ -22,10 +22,9 @@ EXECUTION_PROVIDER_MAP = {
     "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
 }
 
-MODEL_VARIANT_MAP = {
-    "v2": "nemo-parakeet-tdt-0.6b-v2",
-    "v3": "nemo-parakeet-tdt-0.6b-v3",
-}
+# v3 only. v2 transcribes English alone and was only marginally better at it;
+# with one spoken language per user it was a setting that could only break.
+PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
 # CoreML is excluded for TDT models — they use external data files that CoreML can't handle
 COREML_EXCLUDED_PROVIDERS = ["CoreMLExecutionProvider"]
@@ -60,9 +59,7 @@ class Parakeet:
         try:
             import onnx_asr
 
-            model_name = MODEL_VARIANT_MAP.get(
-                self.settings.model_variant, "nemo-parakeet-tdt-0.6b-v3"
-            )
+            model_name = PARAKEET_MODEL
             providers = EXECUTION_PROVIDER_MAP.get(
                 self.settings.execution_provider, ["CPUExecutionProvider"]
             )

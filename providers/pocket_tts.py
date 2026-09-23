@@ -114,6 +114,11 @@ class PocketTTS:
         self.voice_cache: OrderedDict[str, dict] = OrderedDict()
         self._loading = False
         self.on_model_reloaded: Optional[Callable[[], None]] = None
+        # The model the last successful load brought up, and whether that load
+        # replaced a different one (a new spoken language or quality) rather
+        # than being the first load after start.
+        self._loaded_model_id: Optional[str] = None
+        self.last_load_switched_model = False
         # Two layers of serialization for v2's explicitly-non-thread-safe TTSModel:
         # - _async_gen_lock: only one coroutine may synthesize at a time. This
         #   singleton outlives any single event loop: push-to-talk interactions
@@ -314,6 +319,10 @@ class PocketTTS:
                 color=LogType.POSITIVE,
                 server_only=True,
             )
+            self.last_load_switched_model = (
+                self._loaded_model_id is not None and self._loaded_model_id != model_id
+            )
+            self._loaded_model_id = model_id
             load_ok = True
         except Exception as e:
             self.printr.print(

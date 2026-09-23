@@ -1,9 +1,9 @@
 """Everything language-specific, derived from ``settings.spoken_language``.
 
-The user picks one language, once. The answer language, the Pocket TTS model,
-the Parakeet model and the language hints sent to the cloud transcription and
-to Inworld all follow from it here, so the providers can never be set to
-languages that do not match. Until 3.2.4 each had its own setting, and the
+The user picks one language, once. The answer language, the Pocket TTS model
+and the language hints sent to the cloud transcription and to Inworld all
+follow from it here, so the providers can never be set to languages that do
+not match. Parakeet needs nothing: v3 detects the language itself. Until 3.2.4 each had its own setting, and the
 default combination ("multilingual" with the English Pocket TTS model) read
 German answers with an English voice.
 """
@@ -92,14 +92,6 @@ def pocket_tts_has_high_quality(language: SpokenLanguage) -> bool:
     """Whether HIGH loads a different model than STANDARD for this language."""
     models = POCKET_TTS_MODELS[language]
     return models[PocketTtsQuality.HIGH] != models[PocketTtsQuality.STANDARD]
-
-
-def parakeet_variant(language: SpokenLanguage, chosen: str) -> str:
-    """Parakeet v2 transcribes English only. Anything else needs v3, whatever
-    the settings say."""
-    if language != SpokenLanguage.EN and chosen == "v2":
-        return "v3"
-    return chosen
 
 
 def transcription_tag(language: SpokenLanguage) -> str:

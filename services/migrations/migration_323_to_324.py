@@ -61,8 +61,9 @@ are derived from `spoken_language` now, so `pocket_tts.model`,
 the size the user picked as `quality` and a custom YAML config as
 `custom_model`. The language of a "multilingual" file is taken from what the
 user had set up: the Pocket TTS model if it was not English, else English -
-the client asks again whoever picked "multilingual" in it. Parakeet v2 only
-knows English, so anyone else on v2 moves to v3.
+the client asks again whoever picked "multilingual" in it.
+`stt.parakeet.model_variant` is removed too: Parakeet is always v3. v2 only
+transcribed English and was only marginally better at it.
 
 `pocket_tts.quantize` is switched off. With the torch Wingman ships, torchao
 has no native kernels, and measured 2026-09-23 on an M2 Pro the quantized
@@ -216,9 +217,15 @@ class Migration323To324(BaseMigration):
         if "language" in parakeet:
             del parakeet["language"]
             self.log("- removed stt.parakeet.language (Parakeet detects the language itself)")
-        if spoken != "en" and parakeet.get("model_variant") == "v2":
-            parakeet["model_variant"] = "v3"
-            self.log("- stt.parakeet.model_variant: v3 — v2 only transcribes English")
+        variant = parakeet.pop("model_variant", None)
+        if variant == "v2":
+            self.log(
+                "- stt.parakeet.model_variant removed: Parakeet is always v3 now, "
+                "v2 only transcribed English. v3 is downloaded on the next start; "
+                "the v2 files in models/parakeet can be deleted."
+            )
+        elif variant is not None:
+            self.log("- stt.parakeet.model_variant removed: Parakeet is always v3 now")
 
         if pocket:
             old["pocket_tts"] = pocket

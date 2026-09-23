@@ -19,7 +19,6 @@ stt:
   preset_overrides: {}
   parakeet:
     run_locally: true
-    model_variant: v3
     execution_provider: cpu
     # Only read when run_locally is off: the Parakeet server of yours.
     # Empty until you fill it in.

@@ -10,11 +10,8 @@ from services.printr import Printr
 from services.system_manager import SystemManager
 
 
-# HuggingFace repo IDs for Parakeet models
-PARAKEET_REPO_MAP = {
-    "v2": "istupakov/parakeet-tdt-0.6b-v2-onnx",
-    "v3": "istupakov/parakeet-tdt-0.6b-v3-onnx",
-}
+# HuggingFace repo of the Parakeet model (v3, 25 languages)
+PARAKEET_REPO = "istupakov/parakeet-tdt-0.6b-v3-onnx"
 
 class SttProviderManager:
     """Manages STT provider lifecycle: CUDA detection, model download, load/unload."""
@@ -73,13 +70,7 @@ class SttProviderManager:
         pk_settings = self.settings_service.settings.stt.parakeet
 
         # Download model
-        variant = pk_settings.model_variant
-        repo_id = PARAKEET_REPO_MAP.get(variant)
-        if not repo_id:
-            self.printr.toast_error(
-                f"Unknown Parakeet model variant: {variant}. Using v3."
-            )
-            repo_id = PARAKEET_REPO_MAP["v3"]
+        repo_id = PARAKEET_REPO
 
         model_path = None
         try:
