@@ -28,7 +28,7 @@ except ImportError:  # renamed in a later release: the 3.1.0 set
         "eve fantine george giovanni jane javert jean juergen lola marius mary "
         "michael paul peter_yearsley rafael stuart_bell vera".split()
     )
-from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider
+from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider, TtsVoiceGender
 from api.interface import (
     PocketTTSConfig,
     SoundConfig,
@@ -38,6 +38,7 @@ from api.interface import (
 )
 from providers.interfaces import TtsInterface, tts_provider
 from providers.pocket_tts_chunks import MAX_TOKENS, faded_edges, pieces_for_speech
+from providers.pocket_tts_voices import install_bundled_voices, load_bundled_voices
 from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
@@ -130,6 +131,7 @@ class PocketTTS:
         settings: Optional[PocketTTSSettings] = None,
         spoken_language: SpokenLanguage = SpokenLanguage.EN,
         defer_load: bool = False,
+        app_root_path: Optional[str] = None,
     ):
         if settings is None:
             settings = PocketTTSSettings(
@@ -146,6 +148,10 @@ class PocketTTS:
         self.remote_client: Optional[OpenAiCompatibleTts] = None
         self.voices_dir = get_custom_voices_dir()
         self.models_dir = get_pocket_tts_models_dir()
+        # Recordings of native speakers Wingman ships (see pocket_tts_voices),
+        # by voice id. Once copied into voices_dir they are custom voices.
+        self.app_root_path = app_root_path
+        self.bundled_voices = {v.id: v for v in load_bundled_voices(app_root_path)}
         # LRU-bounded voice state cache — each entry is a dict of tensors and
         # can be tens of MB. Keep the most recent 32 voices (well over a
         # typical tower size) and drop the oldest on overflow.
@@ -451,14 +457,54 @@ class PocketTTS:
         # Custom voices. Built-in stems are excluded: their downloaded
         # per-language embeddings live in the same directory (see
         # _ensure_builtin_voice) but are already listed as built-ins above.
+        # Recordings Wingman shipped for the spoken language go right after
+        # the native built-ins, with their name and language.
+        native_count = sum(1 for v in voices if v.languages == [spoken])
+        shipped: list[VoiceInfo] = []
         for stem in self._list_voice_stems(self.voices_dir):
             if stem in self._BUILTIN_VOICE_IDS:
                 continue
-            voices.append(
-                VoiceInfo(id=stem, name=f"Local: {stem}", provider="custom_voices")
-            )
+            bundled = self.bundled_voices.get(stem)
+            if bundled:
+                info = VoiceInfo(
+                    id=stem,
+                    name=bundled.name,
+                    languages=[bundled.language],
+                    gender=next(
+                        (g for g in TtsVoiceGender if g.value.lower() == bundled.gender.lower()),
+                        TtsVoiceGender.UNKNOWN,
+                    ),
+                    provider="custom_voices",
+                )
+                if bundled.language == spoken:
+                    shipped.append(info)
+                    continue
+                voices.append(info)
+            else:
+                voices.append(
+                    VoiceInfo(id=stem, name=f"Local: {stem}", provider="custom_voices")
+                )
+        voices[native_count:native_count] = sorted(shipped, key=lambda v: v.name)
 
         return voices
+
+    def install_bundled_voices(self) -> list[str]:
+        """Copy the recordings Wingman ships for the spoken language into
+        the custom voices folder (see pocket_tts_voices). Returns the ids
+        copied now; they still need cloning for the active model."""
+        if not self.settings.run_locally or not self.bundled_voices:
+            return []
+        try:
+            return install_bundled_voices(
+                self.app_root_path, self.voices_dir, self.spoken_language.value
+            )
+        except OSError as e:
+            self.printr.print(
+                f"PocketTTS: could not copy Wingman's voices: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return []
 
     def _known_model_tags(self) -> set[str]:
         """Canonical model IDs usable as a ``<stem>.<tag>.safetensors`` tag.

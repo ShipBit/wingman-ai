@@ -1,0 +1,14 @@
+# Recordings of native speakers Wingman clones as Pocket TTS voices (see
+# providers/pocket_tts_voices.py). 9 to 13 seconds each, 24 kHz mono, cut at
+# pauses from the source and picked by how well their clones speak German
+# (UTMOS, Parakeet word error rate; 2026-09-24). Credited in README.md too.
+# file	name	language	gender	credit
+de-felix.flac	Felix	de	Male	Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-schimmelreiter-by-theodor-storm/
+de-markus.flac	Markus	de	Male	Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain: https://librivox.org/die-verwandlung-von-franz-kafka/
+de-rainer.flac	Rainer	de	Male	Rainer, reading Die Leiden des jungen Werther (Goethe) for LibriVox, public domain: https://librivox.org/die-leiden-des-jungen-werthers-by-johann-wolfgang-von-goethe/
+de-stefan.flac	Stefan	de	Male	Stefan Schmelz, reading Kleider machen Leute (Gottfried Keller) for LibriVox, public domain: https://librivox.org/kleider-machen-leute-by-gottfried-keller/
+de-thorsten.flac	Thorsten	de	Male	Thorsten Müller, Thorsten-Voice dataset (TV-2022.10-Neutral), CC0 1.0: https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full
+de-franziska.flac	Franziska	de	Female	Franziska Nelson, reading Der kleine Häwelmann (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-kleine-haewelmann-by-theodor-storm/
+de-gesine.flac	Gesine	de	Female	Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain: https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/
+de-hokuspokus.flac	Hokuspokus	de	Female	Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain: https://librivox.org/der-golem-by-gustav-meyrink/
+de-stephanie.flac	Stephanie	de	Female	Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain: https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/

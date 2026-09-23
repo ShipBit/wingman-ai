@@ -816,6 +816,7 @@ class WingmanCore(WebSocketUser):
             settings=self.settings_service.settings.pocket_tts,
             spoken_language=self.settings_service.settings.spoken_language,
             defer_load=True,
+            app_root_path=app_root_path,
         )
         self.pocket_tts.on_model_reloaded = self._on_pocket_tts_reloaded
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -2446,15 +2447,18 @@ class WingmanCore(WebSocketUser):
         what re-clones a user's voices after a Wingman update brought a
         pocket-tts that computes them differently.
         """
+        # Recordings Wingman ships for the spoken language (see
+        # providers/pocket_tts_voices.py): new ones are cloned right away.
+        installed = self.pocket_tts.install_bundled_voices()
         await self._preload_pocket_tts_voices(
             state_message_prefix="Preloading voices",
             restore_ready_state=True,
         )
-        # A new model: every custom voice. The same model: only clones that
-        # exist but are outdated - after a Wingman update brought another
-        # pocket-tts, or a recording was replaced.
+        # A new model or new recordings: every custom voice. The same model:
+        # only clones that exist but are outdated - after a Wingman update
+        # brought another pocket-tts, or a recording was replaced.
         result = await self._start_precompute(
-            only_stale=not self.pocket_tts.last_load_switched_model
+            only_stale=not (self.pocket_tts.last_load_switched_model or installed)
         )
         if result.get("started"):
             await self.printr.print_async(
