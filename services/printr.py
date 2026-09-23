@@ -9,6 +9,7 @@ from os import path
 from api.commands import LogCommand, ToastCommand
 from api.enums import CommandTag, LogSource, LogType, ToastType
 from api.interface import BenchmarkResult
+from services import error_reporting
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 
@@ -178,6 +179,7 @@ class Printr(WebSocketUser):
         self.print_colored(
             text, color=self.get_terminal_color(color), source_name=source_name
         )
+        self._report(text, color, toast, source_name)
 
         if not server_only and self._connection_manager is not None:
             # send to GUI without print() having to be async
@@ -222,6 +224,7 @@ class Printr(WebSocketUser):
             color=self.get_terminal_color(color),
             source_name=source_name,
         )
+        self._report(text, color, toast, source_name)
         if benchmark_result and benchmark_result.snapshots:
             for snapshot in benchmark_result.snapshots:
                 self.print_colored(
@@ -256,6 +259,13 @@ class Printr(WebSocketUser):
         self.print(text, toast=ToastType.ERROR, color=LogType.ERROR)
 
     # INTERNAL METHODS
+
+    def _report(self, text, color: LogType, toast: ToastType, source_name: str):
+        """Hands the line to error reporting, which does nothing until Sentry runs."""
+        log_type = getattr(color, "value", str(color))
+        error_reporting.add_breadcrumb(text, log_type, source_name)
+        if log_type == LogType.ERROR.value or toast == ToastType.ERROR:
+            error_reporting.capture_logged_error(text, source_name)
 
     def get_terminal_color(self, tag: LogType):
         # System/Runtime messages

@@ -23,6 +23,7 @@ from api.interface import (
     ConfigWithDirInfo,
 )
 from mouse import mouse
+from services import error_reporting
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -288,6 +289,10 @@ class CommandHandler:
     async def handle_client_logged_in(
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
+        # Before the early return: a second account signing in on the same
+        # machine arrives as a keepalive too.
+        error_reporting.set_user(command.user_id)
+
         if self.core.is_client_logged_in:
             # keepalive / token refresh, but the Tower is already initialized
             return
@@ -330,6 +335,7 @@ class CommandHandler:
         # Read the name before clearing it, so the log line says who left.
         name = self.core.client_account_name
         self.core.is_client_logged_in = False
+        error_reporting.set_user(None)
         self.core.client_plan = "Free"
         self.core.client_account_name = ""
 

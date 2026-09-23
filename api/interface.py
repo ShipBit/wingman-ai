@@ -70,6 +70,11 @@ class SystemInfo(BaseModel):
     core: SystemCore
 
 
+class ErrorReportingState(BaseModel):
+    enabled: Optional[bool]
+    """None until the user has chosen. Core sends nothing before that."""
+
+
 class ChangelogEntry(BaseModel):
     """One published changelog entry, proxied from the public Canny RSS feed."""
 

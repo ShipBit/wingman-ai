@@ -65,6 +65,7 @@ from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager, ConfigValidationError
 from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
+from services import error_reporting
 from services.file import get_generated_images_dir
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -80,6 +81,10 @@ connection_manager = ConnectionManager()
 
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
+
+# Before the config is loaded, so a crash in the migration is reported too.
+# Sends nothing until the user has agreed in the client.
+error_reporting.init()
 
 app_is_bundled = getattr(sys, "frozen", False)
 app_root_path = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
@@ -121,6 +126,18 @@ core = WingmanCore(
     system_manager=system_manager,
 )
 core.set_connection_manager(connection_manager)
+
+
+def _error_report_tags() -> dict:
+    settings = config_manager.settings_config
+    return {
+        "stt_provider": getattr(settings.stt.provider, "value", None),
+        "voice_activation": settings.voice_activation.enabled,
+        "plan": core.client_plan,
+    }
+
+
+error_reporting.set_tag_provider(_error_report_tags)
 
 keyboard.hook(core.on_key)
 
@@ -167,6 +184,7 @@ async def lifespan(_app: FastAPI):
     # executed before the application starts
     # WebSocket sends from worker threads have to be routed back to this loop
     WebSocketUser.set_main_loop(asyncio.get_running_loop())
+    error_reporting.watch_event_loop(asyncio.get_running_loop())
     modify_openapi()
 
     yield
