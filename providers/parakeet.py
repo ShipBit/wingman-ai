@@ -1,7 +1,10 @@
 import gc
 import platform
 import threading
+import time
 from typing import Optional
+
+import numpy as np
 
 import requests
 
@@ -108,6 +111,7 @@ class Parakeet:
                 server_only=True,
                 color=LogType.POSITIVE,
             )
+            self._warm_up()
         except ImportError:
             self.printr.toast_error(
                 "Parakeet requires 'onnx-asr' and 'onnxruntime'. Install with: pip install onnx-asr onnxruntime"
@@ -115,6 +119,32 @@ class Parakeet:
         except Exception as e:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
+            )
+
+    def _warm_up(self):
+        """Run one recognition on a second of faint noise and throw it away.
+
+        ONNX Runtime sets up its kernels on the first run: measured 2026-09-23
+        on an M2 Pro, the first real sentence took 696 ms and every later one
+        140 ms. Paid here, during loading, the user's first sentence is as fast
+        as the rest. The noise stands in for speech; the encoder is where the
+        time goes, and it does the same work either way.
+        """
+        try:
+            noise = (np.random.default_rng(0).standard_normal(16000) * 0.003).astype(
+                np.float32
+            )
+            started = time.monotonic()
+            self.model.recognize(noise, sample_rate=16000)
+            self.printr.print(
+                f"Parakeet warmed up in {(time.monotonic() - started) * 1000:.0f} ms.",
+                server_only=True,
+            )
+        except Exception as e:
+            self.printr.print(
+                f"Parakeet warm-up failed, the first sentence will be slower: {e}",
+                color=LogType.WARNING,
+                server_only=True,
             )
 
     def unload(self):

@@ -3,6 +3,7 @@ import io
 import glob
 import asyncio
 import threading
+import time
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -119,6 +120,8 @@ class PocketTTS:
         # than being the first load after start.
         self._loaded_model_id: Optional[str] = None
         self.last_load_switched_model = False
+        # The model the one-off warm-up generation ran on (see warm_up).
+        self._warmed_model_id: Optional[str] = None
         # Two layers of serialization for v2's explicitly-non-thread-safe TTSModel:
         # - _async_gen_lock: only one coroutine may synthesize at a time. This
         #   singleton outlives any single event loop: push-to-talk interactions
@@ -355,6 +358,7 @@ class PocketTTS:
             torch.cuda.empty_cache()
 
         self.voice_cache.clear()
+        self._warmed_model_id = None
 
         self.printr.print(
             "PocketTTS Model unloaded.", color=LogType.INFO, server_only=True
@@ -722,6 +726,34 @@ class PocketTTS:
                 )
                 results[voice_id] = False
         return results
+
+    def warm_up(self, voice_id: str) -> None:
+        """Generate one short line with ``voice_id`` and throw it away.
+
+        The first generation after a load sets up torch's kernels and caches.
+        Done during loading, the first answer the user hears starts as fast
+        as every later one. Once per loaded model; a no-op after that.
+        """
+        if not self.settings.run_locally or not self.model:
+            return
+        if self._warmed_model_id == self.model_id:
+            return
+        try:
+            state = self.get_voice_state(voice_id)
+            started = time.monotonic()
+            with self._model_swap_lock:
+                self.model.generate_audio(state, "Okay.")
+            self._warmed_model_id = self.model_id
+            self.printr.print(
+                f"PocketTTS warmed up in {(time.monotonic() - started) * 1000:.0f} ms.",
+                server_only=True,
+            )
+        except Exception as e:
+            self.printr.print(
+                f"PocketTTS warm-up failed, the first answer will be slower: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
 
     def list_custom_voices_needing_precompute(self) -> list[str]:
         """Return custom voice stems whose tagged safetensor for the active

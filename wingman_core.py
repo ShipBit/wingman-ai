@@ -2329,11 +2329,17 @@ class WingmanCore(WebSocketUser):
         if not voice_ids:
             return {}
 
+        def preload_and_warm_up() -> dict[str, bool]:
+            results = self.pocket_tts.preload_voice_states(voice_ids)
+            # Inside the loading phase, so the first answer is not the one
+            # that pays for the model's first run.
+            ready = next((v for v, ok in results.items() if ok), None)
+            if ready:
+                self.pocket_tts.warm_up(ready)
+            return results
+
         loop = asyncio.get_running_loop()
-        preload_task = loop.run_in_executor(
-            None,
-            lambda: self.pocket_tts.preload_voice_states(voice_ids),
-        )
+        preload_task = loop.run_in_executor(None, preload_and_warm_up)
         try:
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
