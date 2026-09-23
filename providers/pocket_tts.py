@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import torch
 import torchaudio
-from pocket_tts import TTSModel
-from pocket_tts.models.tts_model import export_model_state
+from pocket_tts import TTSModel, export_model_state
 from pocket_tts.utils.utils import get_predefined_voice
-from api.enums import LogType, TtsProvider
+from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider
 from api.interface import (
     PocketTTSConfig,
     SoundConfig,
@@ -28,6 +27,7 @@ from providers.pocket_tts_r2 import (
     use_r2_mirror,
 )
 from services.file import get_custom_voices_dir, get_pocket_tts_models_dir
+from services.spoken_language import pocket_tts_has_high_quality, pocket_tts_model
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from providers.open_ai import OpenAiCompatibleTts
@@ -53,12 +53,6 @@ BUILTIN_MODELS = [
     {"id": "portuguese",      "label": "portuguese",      "quality": "6L"},
     {"id": "portuguese_24l",  "label": "portuguese_24l",  "quality": "24L"},
 ]
-
-# Legacy model IDs that should be silently upgraded to the canonical ID.
-LEGACY_MODEL_ALIASES = {
-    "english": "english_2026-04",
-    "english_2026-01": "english_2026-04",
-}
 
 
 class PocketTTS:
@@ -95,11 +89,20 @@ class PocketTTS:
     def __init__(
         self,
         settings: Optional[PocketTTSSettings] = None,
+        spoken_language: SpokenLanguage = SpokenLanguage.EN,
         defer_load: bool = False,
     ):
         if settings is None:
-            settings = PocketTTSSettings(enable=False, host="localhost", port=5002)
+            settings = PocketTTSSettings(
+                enable=False,
+                quality=PocketTtsQuality.STANDARD,
+                quantize=False,
+                host="localhost",
+                port=5002,
+            )
         self.settings = settings
+        # The model follows the language the user speaks; see model_id.
+        self.spoken_language = spoken_language
         self.printr = Printr()
         self.model: Optional[TTSModel] = None
         self.remote_client: Optional[OpenAiCompatibleTts] = None
@@ -109,7 +112,6 @@ class PocketTTS:
         # can be tens of MB. Keep the most recent 32 voices (well over a
         # typical tower size) and drop the oldest on overflow.
         self.voice_cache: OrderedDict[str, dict] = OrderedDict()
-        self._playback_buffer = bytearray()
         self._loading = False
         self.on_model_reloaded: Optional[Callable[[], None]] = None
         # Two layers of serialization for v2's explicitly-non-thread-safe TTSModel:
@@ -173,9 +175,13 @@ class PocketTTS:
     def validate(self, errors: list[WingmanInitializationError]):
         pass
 
-    def update_settings(self, settings: PocketTTSSettings):
+    def update_settings(
+        self, settings: PocketTTSSettings, spoken_language: SpokenLanguage
+    ):
         old = self.settings
+        old_model_id = self.model_id
         self.settings = settings
+        self.spoken_language = spoken_language
         self.voices_dir = get_custom_voices_dir()
 
         if not settings.enable:
@@ -193,7 +199,7 @@ class PocketTTS:
             needs_reload = (
                 not old.enable
                 or not old.run_locally
-                or old.model != settings.model
+                or old_model_id != self.model_id
                 or old.quantize != settings.quantize
             )
             if needs_reload:
@@ -221,6 +227,14 @@ class PocketTTS:
 
         self.printr.print("PocketTTS settings updated.", server_only=True)
 
+    @property
+    def model_id(self) -> str:
+        """The model for the spoken language in the chosen size, or the user's
+        own YAML config when one is set."""
+        return pocket_tts_model(
+            self.spoken_language, self.settings.quality, self.settings.custom_model
+        )
+
     def _is_custom_model(self, model_id: str) -> bool:
         """Check if a model ID refers to a custom YAML file in the models dir."""
         return model_id.endswith(".yaml") or model_id.endswith(".yml")
@@ -229,8 +243,7 @@ class PocketTTS:
         """Load the PocketTTS model using v2.0 API."""
         self._loading = True
         try:
-            model_id = self.settings.model or "english_2026-04"
-            model_id = LEGACY_MODEL_ALIASES.get(model_id, model_id)
+            model_id = self.model_id
 
             # int8 quantization compounds error across layers; on 24L variants
             # it audibly degrades cloned voices. Force it off for 24L regardless
@@ -343,7 +356,10 @@ class PocketTTS:
         return {
             "is_loading": self._loading,
             "model_loaded": self.model is not None,
-            "model": self.settings.model,
+            "model": self.model_id,
+            # Whether "high" loads a bigger model for this language than
+            # "standard"; French and English have only one size.
+            "has_high_quality": pocket_tts_has_high_quality(self.spoken_language),
             "quantize": self.settings.quantize,
             "precompute_running": self._precompute_running,
             "precompute_current": self._precompute_current,
@@ -453,8 +469,7 @@ class PocketTTS:
 
     def _active_model_tag(self) -> str:
         """Current model ID, post-alias-resolution, safe to embed in filenames."""
-        raw = self.settings.model or "english_2026-04"
-        raw = LEGACY_MODEL_ALIASES.get(raw, raw)
+        raw = self.model_id
         # Strip custom-model YAML extension if present.
         if raw.lower().endswith((".yaml", ".yml")):
             raw = os.path.splitext(raw)[0]
@@ -1005,90 +1020,69 @@ class PocketTTS:
             use_gain_boost=True,
         )
 
+    # Audio the speakers hold back before they start. Covers a slow first
+    # sentence boundary on a machine that makes audio only a little faster
+    # than real time, at the cost of that much delay before the first word.
+    _STREAM_PREBUFFER_MS = 200
+
     async def _stream_audio(
         self, text, voice_state, sound_config, audio_player, wingman_name
     ):
         """Stream generation.
 
-        Holds ``_model_swap_lock`` across the whole playback so the settings-
-        change reload thread waits for the stream to finish before swapping
-        the model. Safe to hold across ``await`` because ``_async_gen_lock``
-        already guarantees no other coroutine is entering this path
-        concurrently, so nothing on the event-loop thread tries to acquire
-        ``_model_swap_lock`` synchronously.
+        The model runs in a thread of its own and hands every chunk to the
+        event loop through a queue, so waiting for audio never blocks the loop.
+        That thread holds ``_model_swap_lock`` while it generates, so a
+        settings-change reload waits until the text is spoken.
         """
+        loop = asyncio.get_running_loop()
         sample_rate = self.model.sample_rate
-        self._model_swap_lock.acquire()
-        try:
-            # Initialize the stream generator. ``frames_after_eos=None`` lets pocket-tts
-            # auto-pick 1-3 trailing frames based on text length.
-            stream = self.model.generate_audio_stream(voice_state, text)
-            iterator = iter(stream)
-        except BaseException:
-            # Anything that raises between acquire and the main try/finally below
-            # must still release the lock, or future reloads deadlock.
-            self._model_swap_lock.release()
-            raise
+        chunks: asyncio.Queue[Optional[bytes]] = asyncio.Queue()
+        cancelled = threading.Event()
 
-        # Internal buffer to store excess data from generator
-        self._playback_buffer = bytearray()
-
-        def buffer_callback(out_buffer: bytearray) -> int:
-            """
-            Callback for AudioPlayer to pull data.
-            It fills `out_buffer` and returns number of bytes written.
-            """
-            out_capacity = len(out_buffer)
-            written = 0
-
-            # 1. Fill from internal buffer first
-            if len(self._playback_buffer) > 0:
-                to_copy = min(len(self._playback_buffer), out_capacity)
-                out_buffer[:to_copy] = self._playback_buffer[:to_copy]
-                self._playback_buffer[:] = self._playback_buffer[
-                    to_copy:
-                ]  # Remove copied data
-                written += to_copy
-
-                if written == out_capacity:
-                    return written
-
-            # 2. If we need more, fetch from generator
+        def hand_over(chunk: Optional[bytes]) -> None:
             try:
-                # Keep fetching chunks until we fill the buffer or run out
-                while written < out_capacity:
-                    # Note: next(iterator) blocks. We accept this for now
-                    # as true async processing requires substantial AudioPlayer changes.
-                    chunk_tensor = next(iterator)
+                loop.call_soon_threadsafe(chunks.put_nowait, chunk)
+            except RuntimeError:
+                # The interaction's loop is gone; nobody is listening.
+                cancelled.set()
 
-                    if chunk_tensor.is_cuda:
-                        chunk_tensor = chunk_tensor.cpu()
-                    if chunk_tensor.dim() == 1:
-                        chunk_tensor = chunk_tensor.unsqueeze(0)
-
-                    # Convert to int16 PCM bytes
-                    c = (chunk_tensor * 32767).clamp(-32768, 32767).to(torch.int16)
-                    chunk_bytes = c.numpy().tobytes()
-
-                    # Determine how much fits
-                    space_left = out_capacity - written
-                    to_copy = min(len(chunk_bytes), space_left)
-
-                    data_to_write = chunk_bytes[:to_copy]
-                    out_buffer[written : written + len(data_to_write)] = data_to_write
-                    written += len(data_to_write)
-
-                    # Store excess
-                    if len(chunk_bytes) > to_copy:
-                        self._playback_buffer.extend(chunk_bytes[to_copy:])
-
-            except StopIteration:
-                pass  # End of stream
+        def produce() -> None:
+            try:
+                with self._model_swap_lock:
+                    # ``frames_after_eos=None`` lets pocket-tts pick the
+                    # trailing frames from the text length.
+                    for tensor in self.model.generate_audio_stream(voice_state, text):
+                        if cancelled.is_set():
+                            break
+                        if tensor.is_cuda:
+                            tensor = tensor.cpu()
+                        pcm = (tensor * 32767).clamp(-32768, 32767).to(torch.int16)
+                        hand_over(pcm.numpy().tobytes())
             except Exception as e:
-                self.printr.print(f"PocketTTS stream error: {e}", color=LogType.ERROR)
+                self.printr.print(
+                    f"PocketTTS stream error: {e}", color=LogType.ERROR, server_only=True
+                )
+            finally:
+                hand_over(None)
 
+        pending = bytearray()
+        finished = False
+
+        async def buffer_callback(out_buffer: bytearray) -> int:
+            nonlocal finished
+            while not pending and not finished:
+                chunk = await chunks.get()
+                if chunk is None:
+                    finished = True
+                else:
+                    pending.extend(chunk)
+            written = min(len(out_buffer), len(pending))
+            out_buffer[:written] = pending[:written]
+            del pending[:written]
             return written
 
+        threading.Thread(target=produce, daemon=True).start()
         try:
             await audio_player.stream_with_effects(
                 buffer_callback=buffer_callback,
@@ -1098,9 +1092,11 @@ class PocketTTS:
                 dtype="int16",
                 channels=1,
                 use_gain_boost=True,
+                prebuffer_ms=self._STREAM_PREBUFFER_MS,
             )
         finally:
-            self._model_swap_lock.release()
+            # Stopped playback: let the thread end after its current chunk.
+            cancelled.set()
 
     # --- Utilities ---
     def _convert_audio(

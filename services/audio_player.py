@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import io
 import wave
 from os import path
@@ -426,10 +427,23 @@ class AudioPlayer:
         channels=1,
         dtype="int16",
         use_gain_boost=False,
+        prebuffer_ms: int = 0,
     ):
+        """Play audio as a provider delivers it.
+
+        ``buffer_callback`` fills the bytearray it is handed and returns how
+        many bytes it wrote, 0 at the end. It may be a coroutine function, so a
+        provider that has to wait for its next chunk does not block the event
+        loop while it does.
+
+        ``prebuffer_ms`` holds the speakers back until that much audio is
+        queued. A provider that makes audio barely faster than real time
+        otherwise runs dry at its first pause and the speakers click.
+        """
         buffer = bytearray()
         stream_finished = False
         data_received = False
+        playing = prebuffer_ms <= 0
         mixed_pos = 0
 
         mix_layer_file = None
@@ -473,7 +487,7 @@ class AudioPlayer:
             return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal buffer, stream_finished, data_received, mixed_pos
+            nonlocal buffer, stream_finished, data_received, mixed_pos, playing
             # Silence first, always. The stream starts before the voice
             # provider has delivered its first chunk, and PortAudio hands
             # the callback a buffer that still holds the previous playback:
@@ -482,6 +496,10 @@ class AudioPlayer:
             if data_received and len(buffer) == 0:
                 stream_finished = True
                 return
+            if not playing:
+                if not data_received and len(buffer) < prebuffer_bytes:
+                    return
+                playing = True
 
             if len(buffer) > 0:
                 num_elements = frames * channels
@@ -516,6 +534,16 @@ class AudioPlayer:
 
         device_rate = self.output_rate(sample_rate)
         converters = [RateConverter(sample_rate, device_rate) for _ in range(channels)]
+        # ``buffer`` holds audio at the device rate.
+        prebuffer_bytes = (
+            device_rate * channels * np.dtype(dtype).itemsize * prebuffer_ms // 1000
+        )
+
+        async def fill(target: bytearray) -> int:
+            filled = buffer_callback(target)
+            if inspect.isawaitable(filled):
+                filled = await filled
+            return filled
 
         def to_device_rate(chunk: np.ndarray) -> np.ndarray:
             if device_rate == sample_rate:
@@ -561,7 +589,7 @@ class AudioPlayer:
                 [] if wingman_name == PREVIEW_WINGMAN_NAME else None
             )
             audio_buffer = bytearray(buffer_size)
-            filled_size = buffer_callback(audio_buffer)
+            filled_size = await fill(audio_buffer)
             while filled_size > 0 and self.raw_stream is stream:
                 data_in_numpy = np.frombuffer(
                     audio_buffer[:filled_size], dtype=dtype
@@ -589,7 +617,7 @@ class AudioPlayer:
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(to_device_rate(data_in_numpy).astype(dtype).tobytes())
                 await self.stream_event.publish("audio", processed_buffer)
-                filled_size = buffer_callback(audio_buffer)
+                filled_size = await fill(audio_buffer)
 
             data_received = True
 

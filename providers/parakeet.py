@@ -152,13 +152,9 @@ class Parakeet:
             return None
 
         try:
-            # Empty/None = auto-detect (only consumed by Whisper/Canary models;
-            # Parakeet TDT silently ignores the kwarg).
-            effective_language = (self.settings.language or "").strip() or None
-            if effective_language:
-                text = self.model.recognize(filename, language=effective_language)
-            else:
-                text = self.model.recognize(filename)
+            # No language hint: Parakeet TDT detects the language itself and
+            # ignores the argument.
+            text = self.model.recognize(filename)
 
             if isinstance(text, list):
                 text = " ".join(text)

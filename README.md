@@ -58,7 +58,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - Inworld
 - **Sound effects** that work with every supported TTS provider
 - **Audio markups (aka "emotions")** that work with every supported TTS provider
-- **Multilingual** by default
+- **Speaks your language**: English, German, French, Spanish, Italian or Portuguese, picked once for speech recognition, answers and voice
 - **Command recording & execution** (keyboard & mouse)
   - **AI-powered**: OpenAI decides when to execute commands based on user input. Users don't need to say exact phrases.
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.

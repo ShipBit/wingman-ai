@@ -134,7 +134,9 @@ class ProviderFactory:
             from providers.inworld import Inworld, InworldTts
 
             inworld = Inworld(api_key=api_key, wingman_name=self._wingman_name)
-            return InworldTts(inworld_instance=inworld, config=self._config)
+            return InworldTts(
+                inworld_instance=inworld, config=self._config, settings=self._settings
+            )
         elif tts_enum == TtsProvider.OPENAI:
             api_key = await self._retrieve_secret("openai", errors)
             if not api_key:
@@ -176,7 +178,9 @@ class ProviderFactory:
                 wingman_name=self._wingman_name,
                 settings=self._settings.wingman_pro,
             )
-            return WingmanSubscriptionTts(ws_instance=ws, config=self._config)
+            return WingmanSubscriptionTts(
+                ws_instance=ws, config=self._config, settings=self._settings
+            )
         return None
 
     async def create_llm(

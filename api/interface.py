@@ -6,6 +6,8 @@ from api.enums import (
     CoreState,
     ImageGenerationProvider,
     LocalAiMode,
+    PocketTtsQuality,
+    SpokenLanguage,
     McpAuthType,
     McpTransportType,
     CustomPropertyType,
@@ -184,8 +186,15 @@ class XVASynthSettings(BaseModel):
 class PocketTTSSettings(BaseModel):
     enable: bool
     run_locally: bool = True
-    model: str = "english"
-    quantize: bool = True
+    quality: PocketTtsQuality
+    """Size of the model for `spoken_language`. The model itself follows the
+    language and is not a setting of its own (services/spoken_language.py)."""
+    custom_model: Optional[str] = None
+    """A YAML config from the Pocket TTS models folder to load instead of the
+    built-in model. None loads the built-in model for `spoken_language`."""
+    quantize: bool
+    """int8 weights. Off by default: with our torch 2.8, torchao has no native
+    kernels and the quantized model runs 5x slower than the plain one."""
     host: str
     port: int
 
@@ -199,11 +208,10 @@ class PocketTTSPreloadResult(BaseModel):
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
     model_variant: str
-    """v2 (English) or v3 (Multilingual, 25 languages)"""
+    """v2 (English only) or v3 (25 languages, detects which one itself). v2 is
+    only used when `spoken_language` is English."""
     execution_provider: str
     """cpu, directml, coreml, or cuda"""
-    language: Optional[str] = None
-    """Transcription language. Empty means auto-detect."""
     host: str = ""
     """Where a Parakeet server runs when `run_locally` is off. Empty until
     the user fills it in; nothing is contacted before that."""
@@ -600,11 +608,6 @@ class SttSettings(BaseModel):
     talking (record key and voice activation)."""
 
     provider: SttProvider
-
-    languages: list[str]
-    """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
-    en-US. Used by the Wingman backend; the local providers have their own
-    language settings."""
 
     vocabulary: list[str] = []
     """Special words no speech model knows: place names, ship names, people.
@@ -1527,7 +1530,9 @@ class SettingsConfig(BaseModel):
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
-    spoken_language: str = "multilingual"
+    spoken_language: SpokenLanguage
+    """The one language the user and their Wingmen speak. Every
+    language-specific provider setting is derived from it."""
 
 
 class SubscriptionModel(BaseModel):

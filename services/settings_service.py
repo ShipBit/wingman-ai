@@ -17,17 +17,7 @@ from services.local_ai_service import LocalAiService
 from services.config_service import ConfigService
 from services.printr import Printr
 from services.pub_sub import PubSub
-
-
-SPOKEN_TO_POCKET_TTS = {
-    "en": "english_2026-04",
-    "de": "german",
-    # French has no 6-layer model in pocket-tts v2 — 24l is the only variant.
-    "fr": "french_24l",
-    "es": "spanish",
-    "it": "italian",
-    "pt": "portuguese",
-}
+from services.spoken_language import parakeet_variant
 
 
 class SettingsService:
@@ -194,6 +184,10 @@ class SettingsService:
         # endpoint. The settings page holds the block it loaded, so taking its
         # copy here would throw away every edit made since - keep ours.
         new_stt.preset_overrides = old_stt.preset_overrides
+        # v2 only knows English; a user who speaks anything else gets v3.
+        new_stt.parakeet.model_variant = parakeet_variant(
+            settings.spoken_language, new_stt.parakeet.model_variant
+        )
         # The shared providers hold a reference to their settings object;
         # hand them the new one before anything reads it.
         self.parakeet.settings = new_stt.parakeet
@@ -251,34 +245,20 @@ class SettingsService:
                 "PocketTTS is not initialized. Please run SettingsService.initialize()",
             )
             return
-        self.pocket_tts.update_settings(settings=settings.pocket_tts)
+        # The spoken language picks the Pocket TTS model, so a new language
+        # reloads it like a new quality does.
+        self.config_manager.settings_config.spoken_language = settings.spoken_language
+        self.pocket_tts.update_settings(
+            settings=settings.pocket_tts, spoken_language=settings.spoken_language
+        )
         self.config_manager.settings_config.pocket_tts = settings.pocket_tts
-
-        # Spoken language cascade
-        old_spoken = old.spoken_language
-        new_spoken = settings.spoken_language
-        if new_spoken != old_spoken:
-            self.config_manager.settings_config.spoken_language = new_spoken
-
-            # Cascade to PocketTTS model language
-            pocket_lang = SPOKEN_TO_POCKET_TTS.get(new_spoken, "english_2026-04")
-            if settings.pocket_tts.model != pocket_lang:
-                settings.pocket_tts.model = pocket_lang
-                self.config_manager.settings_config.pocket_tts.model = pocket_lang
-                self.pocket_tts.update_settings(settings=settings.pocket_tts)
-
-            # Cascade to the STT language
-            stt_lang = None if new_spoken == "multilingual" else new_spoken
-            settings.stt.parakeet.language = stt_lang
-
+        if settings.spoken_language != old.spoken_language:
             self.printr.print(
-                f"Spoken language changed to '{new_spoken}'. "
-                f"PocketTTS: {pocket_lang}, STT: {stt_lang or 'auto-detect'}",
+                f"Spoken language: {settings.spoken_language.value}. "
+                f"Pocket TTS model: {self.pocket_tts.model_id}.",
                 server_only=True,
                 color=LogType.INFO,
             )
-        else:
-            self.config_manager.settings_config.spoken_language = new_spoken
 
         # Local AI (llama.cpp)
         if self.local_ai_service:

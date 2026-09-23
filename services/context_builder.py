@@ -11,6 +11,7 @@ from api.enums import (
     WingmanProTtsProvider,
 )
 from services.printr import Printr
+from services.spoken_language import language_name
 from services.token_utils import count_tokens, truncate_to_tokens
 
 if TYPE_CHECKING:
@@ -20,12 +21,6 @@ if TYPE_CHECKING:
     from skills.skill_base import Skill
 
 printr = Printr()
-
-LANGUAGE_NAMES = {
-    "en": "English", "de": "German", "fr": "French",
-    "es": "Spanish", "it": "Italian", "pt": "Portuguese",
-}
-"""``settings.spoken_language`` codes the prompts spell out by name."""
 
 
 class ContextBuilder:
@@ -163,11 +158,9 @@ class ContextBuilder:
             except Exception:
                 pass  # Don't let memory failures break conversation
 
-        spoken = getattr(self._settings, "spoken_language", "multilingual")
-        if spoken == "multilingual":
-            language_instruction = "- Respond in whatever language the user speaks to you"
-        else:
-            language_instruction = f"- Always respond in {LANGUAGE_NAMES.get(spoken, spoken)}"
+        language_instruction = (
+            f"- Always respond in {language_name(self._settings.spoken_language)}"
+        )
 
         context = self._config.prompts.system_prompt.format(
             backstory=backstory,

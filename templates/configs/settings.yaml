@@ -10,11 +10,6 @@ stt:
   # on a server of yours) or wingman_pro (the subscription's cloud service).
   # One choice for every wingman and for both ways of talking.
   provider: parakeet
-  # Languages the cloud provider may auto-detect. Parakeet has its own
-  # language field.
-  languages:
-    - en-US
-    - de-DE
   # Special words no speech model knows; every transcript is corrected
   # against them. The Settings page can fill this from your configuration.
   vocabulary: []
@@ -87,8 +82,14 @@ xvasynth:
 pocket_tts:
   enable: true
   run_locally: true
-  model: "english_2026-04"
-  quantize: true
+  # standard (6 layers) or high (24 layers). The model itself follows
+  # spoken_language.
+  quality: standard
+  # A YAML config from the Pocket TTS models folder, used instead of the
+  # built-in model for spoken_language.
+  custom_model: null
+  # int8 weights. Slower than the plain model with the torch Wingman ships.
+  quantize: false
   host: "localhost"
   port: 5002
 llama_cpp:
@@ -116,7 +117,9 @@ system_one:
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
   commands: true
-spoken_language: "multilingual"
+# The one language you and your Wingmen speak: en, de, fr, es, it or pt.
+# Answer language, voice model and speech recognition all follow it.
+spoken_language: en
 hud_server:
   enabled: false
   host: "127.0.0.1"

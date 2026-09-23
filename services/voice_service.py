@@ -23,6 +23,7 @@ from providers.pocket_tts import PocketTTS
 from services.audio_player import AudioPlayer
 from services.config_manager import ConfigManager
 from services.printr import Printr
+from services.spoken_language import inworld_language
 
 
 class VoiceService:
@@ -308,6 +309,9 @@ class VoiceService:
             )
         )
 
+    def _inworld_language(self) -> str:
+        return inworld_language(self.config_manager.settings_config.spoken_language)
+
     # POST /play/inworld
     async def play_inworld(
         self, text: str, api_key: str, config: InworldConfig, sound_config: SoundConfig
@@ -320,6 +324,7 @@ class VoiceService:
                 sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name="system",
+                language=self._inworld_language(),
             )
         )
 
@@ -374,5 +379,6 @@ class VoiceService:
                 sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name="system",
+                language=self._inworld_language(),
             )
         )

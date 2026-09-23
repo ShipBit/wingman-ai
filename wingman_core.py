@@ -787,6 +787,7 @@ class WingmanCore(WebSocketUser):
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(
             settings=self.settings_service.settings.pocket_tts,
+            spoken_language=self.settings_service.settings.spoken_language,
             defer_load=True,
         )
         self.pocket_tts.on_model_reloaded = self._on_pocket_tts_reloaded
