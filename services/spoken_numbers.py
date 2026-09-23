@@ -86,9 +86,16 @@ def spell_out_numbers(text: str, language: SpokenLanguage) -> str:
         )
 
     text = _TIME.sub(lambda m: _time(int(m.group(1)), int(m.group(2)), language), text)
-    text = _RANGE.sub(lambda m: f"{m.group(1)} {_RANGE_WORD[language]} {m.group(2)}", text)
+    text = expand_ranges(text, language)
     text = _PERCENT.sub(lambda m: f"{m.group(1)} {_PERCENT_WORD[language]}", text)
     return _NUMBER.sub(lambda m: _number(m.group(1), m.group(2), language) or m.group(0), text)
+
+
+def expand_ranges(text: str, language: SpokenLanguage) -> str:
+    """"3-4 km" -> "3 bis 4 km". Its own step so the units can run after it:
+    a number right after a hyphen is left alone there (ISO dates), which would
+    leave the "km" of "3-4 km" unread."""
+    return _RANGE.sub(lambda m: f"{m.group(1)} {_RANGE_WORD[language]} {m.group(2)}", text)
 
 
 def _number(sign: str, body: str, language: SpokenLanguage) -> str | None:

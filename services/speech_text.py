@@ -30,7 +30,12 @@ from typing import Iterable, Optional
 
 from api.enums import SpokenLanguage
 from services.printr import Printr
-from services.spoken_numbers import NUMBER_PATTERN, safe_spell_out_numbers, split_number
+from services.spoken_numbers import (
+    NUMBER_PATTERN,
+    expand_ranges,
+    safe_spell_out_numbers,
+    split_number,
+)
 
 PRONUNCIATION_DIR = os.path.join("templates", "pronunciation")
 BUILTIN_DIR = os.path.join(PRONUNCIATION_DIR, "builtin")
@@ -188,6 +193,7 @@ def _speak_segment(segment: str, language: SpokenLanguage, rules: list[Rule]) ->
     if _app_root:
         segment = _apply_rules(segment, _abbreviations(_app_root, code))
         segment = _CURRENCY_FIRST.sub(lambda m: f"{m.group(2)} {m.group(1)}", segment)
+        segment = expand_ranges(segment, language)
         segment = _apply_units(segment, _units(_app_root, code), language)
     return safe_spell_out_numbers(segment, language)
 
