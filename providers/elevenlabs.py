@@ -490,6 +490,9 @@ class ElevenLabs:
 
         # Wait for the result to be ready
         await result_ready.wait()
+        # The effect used up characters: the Audio Library reloads the count next.
+        with _LOOKUP_LOCK:
+            _lookup_cache.pop((self.api_key, "subscription"), None)
         return audio
 
     def get_available_voices(self):
