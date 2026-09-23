@@ -46,17 +46,16 @@ MODEL = "typesafe-ai/jev"
 """Only sent on the direct route. Through Wingman Pro the backend picks the
 model from the plan's role and ignores anything we would put here."""
 
-INSTRUCTION_CHARS = 160
-"""How much of a question reaches the log. Long enough to recognise which one
-it was, short enough that a 54-option choice does not bury the answer."""
-
-STATE_CHARS = 300
+STATE_CHARS = 120
 """The state can be a whole tool response. This is enough to see what was
 being decided about."""
 
-TOP_SHARES = 4
-"""Options listed with their share. Everything below the fourth is noise in a
-54-option choice and the chosen one is always among them."""
+RUNNERS_UP = 2
+"""Options listed after the chosen one, and only those with at least
+``RUNNER_UP_MIN`` of the share. A wrong choice at 0.51 against 0.49 is a
+different problem from a wrong one at 0.99 — the log has to show which."""
+
+RUNNER_UP_MIN = 0.01
 
 PRICE_PER_INPUT_TOKEN = 0.042 / 1_000_000
 """TypeSafe's list price, $0.042 per million input tokens, output free. A
@@ -266,43 +265,47 @@ def _shorten(text: Any, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "\u2026"
 
 
-def _instructions_of(question: dict) -> str:
-    """The question as one line, structured or plain."""
-    instructions = question.get("instructions")
-    if isinstance(instructions, dict):
-        parts = [str(instructions.get("what", ""))]
-        if instructions.get("not_for"):
-            parts.append(f"NOT: {instructions['not_for']}")
-        return _shorten(" | ".join(parts), INSTRUCTION_CHARS)
-    return _shorten(instructions, INSTRUCTION_CHARS)
+def _state_line(state: Any) -> str:
+    """The transcript in quotes when that is all the state is, else the state."""
+    if isinstance(state, dict) and set(state) == {"transcript"}:
+        return f'"{_shorten(state["transcript"], STATE_CHARS)}"'
+    return _shorten(state, STATE_CHARS)
 
 
 def _answer_line(answer: dict) -> str:
-    """What came back, with enough of the distribution to argue with.
+    """What came back: the answer, how sure, and any close runner-up.
 
-    The runners-up are the point: a wrong choice at 0.51 against a 0.49 is a
-    different problem from a wrong one at 0.99, and only the log can say
-    which happened after the fact.
+    ``no (0.07)`` for a yes/no, ``none_of_these (0.99)`` for a choice,
+    ``2 good (0.91)`` for a score. Runners-up follow after a dot, only when
+    they got a share worth reading.
     """
     kind = answer.get("type")
     if kind == "noul":
-        return f"{answer.get('noul')}"
+        value = float(answer.get("noul") or 0)
+        return f"{'yes' if value >= 0.5 else 'no'} ({value:.2f})"
     shares = answer.get("probabilities") or {}
     legend = answer.get("legend")
     if legend:
         shares = {legend.get(str(k), str(k)): v for k, v in shares.items()}
-    ranked = sorted(shares.items(), key=lambda item: -float(item[1]))[:TOP_SHARES]
-    tail = ", ".join(f"{name} {float(value):.2f}" for name, value in ranked)
     if kind == "score":
         value = answer.get("score")
         label = None
         if legend and value is not None:
             labels = [legend[i] for i in sorted(legend, key=int)]
             label = labels[min(len(labels) - 1, max(0, round(float(value))))]
-        head = f"{value} ({label})" if label else f"{value}"
+        head = f"{value} {label}" if label else f"{value}"
     else:
         head = str(answer.get("choice"))
-    return f"{head}  conf {float(answer.get('confidence') or 0):.2f}  [{tail}]"
+    line = f"{head} ({float(answer.get('confidence') or 0):.2f})"
+    ranked = sorted(shares.items(), key=lambda item: -float(item[1]))
+    others = [
+        f"{name} {float(value):.2f}"
+        for name, value in ranked
+        if str(name) != head and float(value) >= RUNNER_UP_MIN
+    ][:RUNNERS_UP]
+    if others:
+        line += f"  · next: {', '.join(others)}"
+    return line
 
 
 def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") -> "JevResult":
@@ -315,7 +318,7 @@ def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") ->
     printr.print(
         f"Jev failed after {result.seconds * 1000:.0f} ms: {result.error}\n"
         f"  asked: {', '.join(questions)}\n"
-        f"  state: {_shorten(state, STATE_CHARS)}",
+        f"  state: {_state_line(state)}",
         color=LogType.WARNING,
         server_only=True,
     )
@@ -333,17 +336,15 @@ def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -
     see.
     """
     lines = [
-        f"Jev: {len(questions)} question(s), {result.seconds * 1000:.0f} ms, "
-        f"{result.input_tokens} tok, ${result.estimated_cost:.8f}",
-        f"  state: {_shorten(state, STATE_CHARS)}",
+        f"Jev {result.seconds * 1000:.0f} ms · {result.input_tokens:,} tok · "
+        f"{_state_line(state)}"
     ]
-    for key, question in questions.items():
-        kind = question.get("type", "?")
-        criteria = question.get("criteria")
-        size = f"({len(criteria)})" if isinstance(criteria, (dict, list)) else ""
-        lines.append(f"  ? {key} [{kind}{size}] {_instructions_of(question)}")
+    width = max((len(key) for key in questions), default=0)
+    for key in questions:
         answer = result.answers.get(key)
-        lines.append(f"  = {key}: {_answer_line(answer) if answer else 'not answered'}")
+        lines.append(
+            f"  {key.ljust(width)}  {_answer_line(answer) if answer else 'not answered'}"
+        )
     printr.print("\n".join(lines), color=LogType.SYSTEM, server_only=True)
 
 

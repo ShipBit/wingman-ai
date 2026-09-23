@@ -187,8 +187,8 @@ class JevGate:
         picked = read_command(result, COMMAND_CONFIDENCE)
         if not picked:
             printr.print(
-                f"Jev command below {COMMAND_CONFIDENCE} or none - the main "
-                "model decides this turn.",
+                f"Jev: no command at {COMMAND_CONFIDENCE} or above, the main "
+                "model decides.",
                 color=LogType.SYSTEM,
                 server_only=True,
             )
