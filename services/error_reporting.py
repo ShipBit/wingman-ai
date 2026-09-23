@@ -79,6 +79,7 @@ _started = False
 _enabled: Optional[bool] = None
 _install_id: Optional[str] = None
 _user_id: Optional[str] = None
+_channel: Optional[str] = None
 _sent_keys: set[str] = set()
 _tag_provider: Optional[Callable[[], dict]] = None
 _sent_count = 0
@@ -111,9 +112,10 @@ def _is_allowed_build() -> bool:
 def init():
     """Called once at startup, before the config is loaded, so a crash in the
     migration is reported too."""
-    global _enabled, _install_id
+    global _enabled, _install_id, _channel
     state = _read_state()
     _install_id = state.get("install_id")
+    _channel = state.get("channel")
     enabled = state.get("enabled")
     _enabled = enabled if isinstance(enabled, bool) else None
     if _enabled:
@@ -194,6 +196,8 @@ def _start():
         scope.set_tag("os", platform.system())
         scope.set_tag("os_version", platform.release())
         scope.set_tag("arch", platform.machine())
+        if _channel:
+            scope.set_tag("channel", _channel)
         _started = True
     except Exception as e:
         # Error reporting must never be the reason Core does not start.
@@ -211,6 +215,22 @@ def set_user(user_id: Optional[str]):
     import sentry_sdk
 
     sentry_sdk.get_global_scope().set_user({"id": user_id or _install_id})
+
+
+def set_channel(channel: str):
+    """The update channel (stable, unstable) the client was installed from.
+    Core cannot tell by itself, so the client sends it. Stored, so a crash on
+    the next start, before the client connects, carries it too."""
+    global _channel
+    _channel = channel
+    state = _read_state()
+    if state.get("channel") != channel:
+        state["channel"] = channel
+        _write_state(state)
+    if _started:
+        import sentry_sdk
+
+        sentry_sdk.get_global_scope().set_tag("channel", channel)
 
 
 def set_tag_provider(provider: Callable[[], dict]):

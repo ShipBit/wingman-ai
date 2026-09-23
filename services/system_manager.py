@@ -34,6 +34,12 @@ class SystemManager:
             response_model=ErrorReportingState,
             tags=["system"],
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/error-reporting/channel",
+            endpoint=self.set_error_reporting_channel,
+            tags=["system"],
+        )
 
         self._cuda_available: bool | None = None  # Cached CUDA availability
         self._gpu_name: str | None = None  # Cached GPU name
@@ -133,6 +139,12 @@ class SystemManager:
 
         error_reporting.set_enabled(enabled)
         return ErrorReportingState(enabled=error_reporting.get_enabled())
+
+    # POST /error-reporting/channel
+    def set_error_reporting_channel(self, channel: str):
+        from services import error_reporting
+
+        error_reporting.set_channel(channel)
 
     # GET /system-info
     def get_system_info(self):
