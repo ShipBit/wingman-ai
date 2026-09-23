@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 import torch
 import torchaudio
 from pocket_tts import TTSModel, export_model_state
+from safetensors import safe_open
 from pocket_tts.utils.utils import get_predefined_voice
 from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider
 from api.interface import (
@@ -531,7 +532,9 @@ class PocketTTS:
         """Resolve a voice ID or path to its final filesystem path.
 
         Preference order per directory:
-          1. ``<id>.<active_model>.safetensors`` — model-specific cache (fastest)
+          1. ``<id>.<active_model>.safetensors`` — model-specific cache (fastest),
+             unless the voice's audio file is newer: then the user replaced it
+             and the cache is stale
           2. ``<id>.wav`` / ``.mp3`` / ``.flac`` — raw audio (will clone+cache)
           3. ``<id>.safetensors`` — legacy unlabeled cache
         """
@@ -552,12 +555,69 @@ class PocketTTS:
             for ext in extension_order:
                 p = base + ext
                 if os.path.exists(p):
+                    if ext == f".{active_tag}.safetensors":
+                        stale = self._audio_newer_than(base, p) or (
+                            not self._cloned_by_current_library(p)
+                            and self._audio_for(base)
+                        )
+                        if stale:
+                            return os.path.abspath(stale)
                     return os.path.abspath(p)
 
         if os.path.exists(voice_id_or_path):
             return os.path.abspath(voice_id_or_path)
 
         return voice_id_or_path
+
+    @staticmethod
+    def _audio_newer_than(base: str, cache_path: str) -> Optional[str]:
+        """The voice's audio file (``base`` + .wav/.mp3/.flac) if it was
+        changed after ``cache_path`` was written, else None.
+
+        Replacing a voice's WAV under the same name must not keep the voice
+        cloned from the old recording.
+        """
+        cache_time = os.path.getmtime(cache_path)
+        for ext in (".wav", ".mp3", ".flac"):
+            audio = base + ext
+            if os.path.exists(audio) and PocketTTS._changed_at(audio) > cache_time:
+                return audio
+        return None
+
+    @staticmethod
+    def _audio_for(base: str) -> Optional[str]:
+        for ext in (".wav", ".mp3", ".flac"):
+            if os.path.exists(base + ext):
+                return base + ext
+        return None
+
+    @staticmethod
+    def _cloned_by_current_library(path: str) -> bool:
+        """Whether a cloned voice state was written by pocket-tts 3.x.
+
+        3.x computes slightly different states from the same recording (tanh
+        GELU in the backbone, #278): measured 2026-09-23, clones made with
+        2.1.0 differ from 3.1.0's by about 1.5% on average. They still load,
+        so nothing fails; they are just not the voice 3.x would make. 3.x also
+        writes a ``pad`` entry per attention layer that 2.x did not, which is
+        what tells the two apart. Only for voices cloned from audio: the
+        built-in embeddings are downloaded as Kyutai ships them, without it.
+        """
+        try:
+            with safe_open(path, "pt") as f:
+                return any(key.endswith("/pad") for key in f.keys())
+        except Exception:
+            # Unreadable: let the regular load report it and re-clone.
+            return True
+
+    @staticmethod
+    def _changed_at(path: str) -> float:
+        """When a file last got new content. Finder and Explorer keep the
+        modification time when copying, so a replaced WAV can look older than
+        the cache; ctime (macOS/Linux: inode change, Windows: creation) moves
+        on every copy."""
+        stat = os.stat(path)
+        return max(stat.st_mtime, stat.st_ctime)
 
     def _find_audio_for_safetensors(self, safetensors_path: str) -> Optional[str]:
         """Find a raw audio file sharing the voice stem of a .safetensors file.
@@ -757,8 +817,8 @@ class PocketTTS:
 
     def list_custom_voices_needing_precompute(self) -> list[str]:
         """Return custom voice stems whose tagged safetensor for the active
-        model does NOT yet exist on disk — these are the ones that would
-        actually be cloned by a precompute pass.
+        model does not exist yet, or is older than the voice's audio file —
+        these are the ones that would actually be cloned by a precompute pass.
 
         Excludes built-in voices — their embeddings are downloaded ready-made
         (see _ensure_builtin_voice), never cloned from audio.
@@ -780,7 +840,11 @@ class PocketTTS:
                 tagged = os.path.join(
                     self.voices_dir, f"{stem}.{active_tag}.safetensors"
                 )
-                if not os.path.exists(tagged):
+                if (
+                    not os.path.exists(tagged)
+                    or self._changed_at(f) > os.path.getmtime(tagged)
+                    or not self._cloned_by_current_library(tagged)
+                ):
                     needs.append(stem)
         return needs
 
