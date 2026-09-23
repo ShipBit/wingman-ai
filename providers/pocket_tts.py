@@ -41,6 +41,7 @@ from providers.pocket_tts_r2 import (
 )
 from services.file import get_custom_voices_dir, get_pocket_tts_models_dir
 from services.spoken_language import pocket_tts_has_high_quality, pocket_tts_model
+from services.spoken_numbers import safe_spell_out_numbers
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from providers.open_ai import OpenAiCompatibleTts
@@ -1065,6 +1066,9 @@ class PocketTTS:
     ):
         if not text:
             return
+        # The model reads digits poorly, German worst; Kyutai leaves text
+        # normalization to the caller (see services/spoken_numbers.py).
+        text = safe_spell_out_numbers(text, self.spoken_language)
 
         # Remote mode — delegate to OpenAI-compatible client
         if not self.settings.run_locally:
