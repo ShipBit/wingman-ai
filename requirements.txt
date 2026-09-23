@@ -22,6 +22,7 @@ python-multipart==0.0.21
 PyYAML==6.0.3
 rapidfuzz==3.14.3
 requests==2.32.5
+sentry-sdk==2.70.0
 scipy==1.17.0
 setuptools==75.8.0
 show-in-file-manager==1.1.6

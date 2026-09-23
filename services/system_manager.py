@@ -5,7 +5,7 @@ import sys
 from typing import Optional
 from fastapi import APIRouter
 from api.enums import LogType
-from api.interface import SystemCore, SystemInfo
+from api.interface import ErrorReportingState, SystemCore, SystemInfo
 
 LOCAL_VERSION = "3.2.4"
 
@@ -18,6 +18,26 @@ class SystemManager:
             path="/system-info",
             endpoint=self.get_system_info,
             response_model=SystemInfo,
+            tags=["system"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/error-reporting",
+            endpoint=self.get_error_reporting,
+            response_model=ErrorReportingState,
+            tags=["system"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/error-reporting",
+            endpoint=self.set_error_reporting,
+            response_model=ErrorReportingState,
+            tags=["system"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/error-reporting/channel",
+            endpoint=self.set_error_reporting_channel,
             tags=["system"],
         )
 
@@ -104,6 +124,27 @@ class SystemManager:
         """
         self._detect_gpu()
         return self._gpu_name
+
+    # GET /error-reporting
+    def get_error_reporting(self):
+        # Imported here: error_reporting needs services.file, which imports
+        # LOCAL_VERSION from this module.
+        from services import error_reporting
+
+        return ErrorReportingState(enabled=error_reporting.get_enabled())
+
+    # POST /error-reporting
+    def set_error_reporting(self, enabled: bool):
+        from services import error_reporting
+
+        error_reporting.set_enabled(enabled)
+        return ErrorReportingState(enabled=error_reporting.get_enabled())
+
+    # POST /error-reporting/channel
+    def set_error_reporting_channel(self, channel: str):
+        from services import error_reporting
+
+        error_reporting.set_channel(channel)
 
     # GET /system-info
     def get_system_info(self):

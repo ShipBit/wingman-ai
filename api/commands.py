@@ -55,6 +55,8 @@ class ClientLoggedInCommand(WebSocketCommandModel):
     command: Literal["client_logged_in"] = "client_logged_in"
     plan: str
     account_name: str
+    user_id: Optional[str] = None
+    """Supabase user ID, for error reports. Older clients do not send it."""
 
 
 class ClientLoggedOutCommand(WebSocketCommandModel):
