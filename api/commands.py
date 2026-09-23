@@ -9,7 +9,7 @@ from api.enums import (
     RecordingDevice,
     ToastType,
 )
-from api.interface import AudioFile, CommandActionConfig, BenchmarkResult
+from api.interface import AudioFile, CommandActionConfig, BenchmarkResult, TokenUsage
 
 
 # We use this Marker base class for reflection to "iterate all commands"
@@ -77,6 +77,9 @@ class LogCommand(WebSocketCommandModel):
     skill_name: Optional[str] = None
     additional_data: Optional[dict] = None
     benchmark_result: Optional[BenchmarkResult] = None
+    token_usage: Optional[TokenUsage] = None
+    """What the turn behind this message used. None on every message that did
+    not come out of a model call."""
 
 
 class PromptSecretCommand(WebSocketCommandModel):

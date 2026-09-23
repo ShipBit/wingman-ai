@@ -1516,6 +1516,10 @@ class SettingsConfig(BaseModel):
     hud_server: HudServerSettings
     debug_mode: bool
     streamer_mode: bool
+    show_token_count: bool
+    """Show token counts on Wingman messages and in the conversation status
+    bar. Off by default: most users do not know what a token is, and the
+    number means nothing to them."""
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
@@ -1554,3 +1558,21 @@ class BenchmarkResult(BaseModel):
 
 
 BenchmarkResult.model_rebuild()
+
+
+class TokenUsage(BaseModel):
+    """What one Wingman turn used, as the provider counted it.
+
+    A turn with tool calls asks the model two or three times, and each of those
+    requests sends the whole conversation again, so every field is the sum over
+    all requests of the turn. Only token counts, never money: the backend
+    strips the cost before Core sees an answer.
+    """
+
+    input_tokens: int
+    """Tokens sent to the model, summed over every request of the turn."""
+    cached_tokens: int
+    """The part of ``input_tokens`` the provider served from its prompt cache.
+    0 when the provider does not report it."""
+    output_tokens: int
+    """Tokens the model wrote, summed over every request of the turn."""

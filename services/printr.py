@@ -8,7 +8,7 @@ from logging.handlers import RotatingFileHandler
 from os import path
 from api.commands import LogCommand, ToastCommand
 from api.enums import CommandTag, LogSource, LogType, ToastType
-from api.interface import BenchmarkResult
+from api.interface import BenchmarkResult, TokenUsage
 from services import error_reporting
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
@@ -124,6 +124,7 @@ class Printr(WebSocketUser):
         skill_name: str = "",
         additional_data: dict = None,
         benchmark_result: BenchmarkResult = None,
+        token_usage: TokenUsage = None,
     ):
         if self._connection_manager is None:
             raise ValueError("connection_manager has not been set.")
@@ -161,6 +162,7 @@ class Printr(WebSocketUser):
                     additional_data=additional_data,
                     wingman_name=wingman_name,
                     benchmark_result=benchmark_result,
+                    token_usage=token_usage,
                 )
             )
 
@@ -207,7 +209,7 @@ class Printr(WebSocketUser):
         skill_name: str = "",
         additional_data: dict = None,
         benchmark_result: BenchmarkResult = None,
-        token_usage: tuple[int, int] = None,
+        token_usage: TokenUsage = None,
     ):
         # Build the server (terminal) display string
         server_text = text
@@ -215,7 +217,10 @@ class Printr(WebSocketUser):
         if benchmark_result:
             suffix_parts.append(benchmark_result.formatted_execution_time)
         if token_usage:
-            suffix_parts.append(f"{token_usage[0]} in / {token_usage[1]} out")
+            suffix_parts.append(
+                f"{token_usage.input_tokens} in ({token_usage.cached_tokens} cached)"
+                f" / {token_usage.output_tokens} out"
+            )
         if suffix_parts:
             server_text = f"{text} ({' | '.join(suffix_parts)})"
         # print to server (terminal) with source_name prefix
@@ -244,6 +249,7 @@ class Printr(WebSocketUser):
                 skill_name=skill_name,
                 additional_data=additional_data,
                 benchmark_result=benchmark_result,
+                token_usage=token_usage,
             )
 
     def toast(self, text: str):

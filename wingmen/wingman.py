@@ -24,6 +24,7 @@ from api.interface import (
     SettingsConfig,
     SkillConfig,
     SoundConfig,
+    TokenUsage,
     WingmanConfig,
     WingmanInitializationError,
 )
@@ -504,13 +505,6 @@ class Wingman:
                 actual_response = instant_response or process_result
 
                 if actual_response:
-                    token_usage = None
-                    if self.metrics.last_turn_prompt_tokens or self.metrics.last_turn_completion_tokens:
-                        token_usage = (
-                            self.metrics.last_turn_prompt_tokens,
-                            self.metrics.last_turn_completion_tokens,
-                        )
-                        self.metrics.reset_token_counters()
                     await printr.print_async(
                         f"{actual_response}",
                         color=LogType.POSITIVE,
@@ -518,7 +512,7 @@ class Wingman:
                         source_name=self.name,
                         skill_name=skill.name if skill else "",
                         benchmark_result=benchmark_llm.finish(),
-                        token_usage=token_usage,
+                        token_usage=self.metrics.take_turn_usage(),
                     )
 
             if process_result:
@@ -540,6 +534,7 @@ class Wingman:
         self, transcript: str, benchmark: Benchmark, images: list[tuple[str, str]] = None
     ) -> tuple[str | None, str | None, Skill | None, bool]:
         self.ensure_memory_initialized()
+        self.metrics.start_turn_usage()
 
         await self.add_user_message(transcript, images=images)
 
@@ -589,8 +584,9 @@ class Wingman:
             completion, instant_command_executed is False
         )
 
-        turn_prompt_tokens = usage[0]
-        turn_completion_tokens = usage[1]
+        self.metrics.add_call_usage(usage)
+        turn_prompt_tokens = usage.input_tokens
+        turn_completion_tokens = usage.output_tokens
 
         is_waiting_response_needed, is_summarize_needed = await self.conversation.add_gpt_response(
             response_message, tool_calls
@@ -665,8 +661,9 @@ class Wingman:
                 response_message, tool_calls, usage = await self._process_completion(
                     completion
                 )
-                turn_prompt_tokens = usage[0]
-                turn_completion_tokens += usage[1]
+                self.metrics.add_call_usage(usage)
+                turn_prompt_tokens = usage.input_tokens
+                turn_completion_tokens += usage.output_tokens
 
                 is_waiting_response_needed, is_summarize_needed = (
                     await self.conversation.add_gpt_response(response_message, tool_calls)
@@ -780,16 +777,19 @@ class Wingman:
                 response_message.tool_calls, self.command_executor.get_command
             )
 
-        prompt_tokens = 0
-        completion_tokens = 0
+        usage = TokenUsage(input_tokens=0, cached_tokens=0, output_tokens=0)
         if completion.usage:
-            prompt_tokens = completion.usage.prompt_tokens or 0
-            completion_tokens = completion.usage.completion_tokens or 0
+            details = getattr(completion.usage, "prompt_tokens_details", None)
+            usage = TokenUsage(
+                input_tokens=completion.usage.prompt_tokens or 0,
+                cached_tokens=(details.cached_tokens or 0) if details else 0,
+                output_tokens=completion.usage.completion_tokens or 0,
+            )
 
         return (
             response_message,
             response_message.tool_calls,
-            (prompt_tokens, completion_tokens),
+            usage,
         )
 
     # ───────────────── Tool calls ───────────────── #

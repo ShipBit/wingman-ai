@@ -38,6 +38,11 @@ block would not load at all. It is still added here rather than left to the
 repair that fills a stale settings.yaml from the template on load: the repair
 is a safety net for files that skipped a migration, and a value the user is
 meant to own belongs in the chain where the log says it was set.
+
+`settings.yaml` also gains `show_token_count`, off. It decides whether the
+client shows token counts on Wingman messages and in the status bar; those
+counts are now what the provider reported for the whole turn, not an estimate
+of the message text.
 """
 
 import os
@@ -116,7 +121,15 @@ class Migration323To324(BaseMigration):
         return old
 
     def migrate_settings(self, old: dict) -> dict:
-        """Add the System One block, on, unless the user already has one."""
+        """Add the token count switch, off, and the System One block, on,
+        unless the user already has them."""
+        if "show_token_count" not in old:
+            # Off: the counts on each message were an estimate of the message
+            # text alone, which read like a cost and was not one. The real
+            # counts are there for whoever wants them, behind a switch.
+            old["show_token_count"] = False
+            self.log("- show_token_count: off — token counts are hidden unless switched on")
+
         block = old.get("system_one")
         if isinstance(block, dict):
             # Written by the load-time repair before this ran. Whatever it

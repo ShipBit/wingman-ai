@@ -266,7 +266,14 @@ def custom_openapi():
                     }
 
                 cls_schema_dict.setdefault("required", []).append(field_name)
-        openapi_schema["components"]["schemas"][cls.__name__] = cls_schema_dict
+        # Models a command nests (TokenUsage in LogCommand) arrive as $defs.
+        # The refs already point at components/schemas, so they have to live
+        # there; a model only ever used by a command is in no REST route and
+        # would otherwise be a dangling ref that breaks the client generator.
+        schemas = openapi_schema["components"]["schemas"]
+        for def_name, def_schema in cls_schema_dict.pop("$defs", {}).items():
+            schemas.setdefault(def_name, def_schema)
+        schemas[cls.__name__] = cls_schema_dict
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
