@@ -3017,19 +3017,24 @@ class WingmanCore(WebSocketUser):
         )
         try:
             elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
-            models = elevenlabs.get_available_models()
 
-            convert = lambda model: ElevenlabsModel(
-                name=model.name,
-                model_id=model.modelID,
-                description=model.description,
-                max_characters=model.maxCharacters,
-                cost_factor=model.costFactor,
-                supported_languages=model.supportedLanguages,
-                metadata=model.metadata,
-            )
-            result = [convert(model) for model in models]
-            return result
+            # maxCharacters asks ElevenLabs for the subscription tier, and the
+            # lookups wait for each other, so all of it runs off the event loop.
+            def load_models():
+                return [
+                    ElevenlabsModel(
+                        name=model.name,
+                        model_id=model.modelID,
+                        description=model.description,
+                        max_characters=model.maxCharacters,
+                        cost_factor=model.costFactor,
+                        supported_languages=model.supportedLanguages,
+                        metadata=model.metadata,
+                    )
+                    for model in elevenlabs.get_available_models()
+                ]
+
+            return await asyncio.to_thread(load_models)
         except Exception as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
             return []
