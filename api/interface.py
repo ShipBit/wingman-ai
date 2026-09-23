@@ -192,9 +192,6 @@ class PocketTTSSettings(BaseModel):
     custom_model: Optional[str] = None
     """A YAML config from the Pocket TTS models folder to load instead of the
     built-in model. None loads the built-in model for `spoken_language`."""
-    quantize: bool
-    """int8 weights. Off by default: with our torch 2.8, torchao has no native
-    kernels and the quantized model runs 5x slower than the plain one."""
     host: str
     port: int
 

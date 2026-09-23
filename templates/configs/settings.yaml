@@ -87,8 +87,6 @@ pocket_tts:
   # A YAML config from the Pocket TTS models folder, used instead of the
   # built-in model for spoken_language.
   custom_model: null
-  # int8 weights. Slower than the plain model with the torch Wingman ships.
-  quantize: false
   host: "localhost"
   port: 5002
 llama_cpp:

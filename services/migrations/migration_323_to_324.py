@@ -65,11 +65,13 @@ the client asks again whoever picked "multilingual" in it.
 `stt.parakeet.model_variant` is removed too: Parakeet is always v3. v2 only
 transcribed English and was only marginally better at it.
 
-`pocket_tts.quantize` is switched off. With the torch Wingman ships, torchao
-has no native kernels, and measured 2026-09-23 on an M2 Pro the quantized
-model made audio only 1.05x faster than real time instead of 5.6x. The text
-prompt at every sentence boundary then took up to 1.9 s, and playback ran dry
-at the first one - the click a few seconds into every longer answer.
+`pocket_tts.quantize` is removed: Pocket TTS is never quantized any more.
+With the torch Wingman ships, torchao has no native kernels, and measured
+2026-09-23 on an M2 Pro the quantized model made audio only 1.05x faster than
+real time instead of 5.6x. The text prompt at every sentence boundary then
+took up to 1.9 s, and playback ran dry at the first one - the click a few
+seconds into every longer answer. On torch 2.11 with the kernels it was still
+slower than the plain model (5.9x against 6.9x), so there is nothing to offer.
 """
 
 import os
@@ -208,9 +210,8 @@ class Migration323To324(BaseMigration):
                 + (f", custom_model '{model}'" if is_custom else "")
                 + f"; the model now follows spoken_language ({spoken})"
             )
-        if pocket.get("quantize"):
-            pocket["quantize"] = False
-            self.log("- pocket_tts.quantize: off — the quantized model was 5x slower and clicked")
+        if pocket.pop("quantize", None):
+            self.log("- pocket_tts.quantize removed: the quantized model was 5x slower and clicked")
 
         if stt.pop("languages", None) is not None:
             self.log("- removed stt.languages (now follows spoken_language)")

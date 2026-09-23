@@ -38,6 +38,19 @@ if TYPE_CHECKING:
     from api.interface import WingmanConfig
 
 
+def _library_version() -> str:
+    """The installed pocket-tts, as the UI shows it next to the model."""
+    try:
+        from importlib.metadata import version
+
+        return version("pocket-tts")
+    except Exception:
+        return "unknown"
+
+
+POCKET_TTS_VERSION = _library_version()
+
+
 
 # Label == id so the exact pocket-tts model name is visible in the UI and
 # matches the tag baked into generated ``<voice>.<id>.safetensors`` caches.
@@ -98,7 +111,6 @@ class PocketTTS:
             settings = PocketTTSSettings(
                 enable=False,
                 quality=PocketTtsQuality.STANDARD,
-                quantize=False,
                 host="localhost",
                 port=5002,
             )
@@ -209,7 +221,6 @@ class PocketTTS:
                 not old.enable
                 or not old.run_locally
                 or old_model_id != self.model_id
-                or old.quantize != settings.quantize
             )
             if needs_reload:
                 def _reload():
@@ -254,34 +265,25 @@ class PocketTTS:
         try:
             model_id = self.model_id
 
-            # int8 quantization compounds error across layers; on 24L variants
-            # it audibly degrades cloned voices. Force it off for 24L regardless
-            # of the user's stored setting.
-            quantize = self.settings.quantize
-            if quantize and model_id.endswith("_24l"):
-                self.printr.print(
-                    f"PocketTTS: disabling quantization for 24L model '{model_id}' to avoid voice cloning artifacts.",
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
-                quantize = False
+            # Never quantized. Measured 2026-09-23 on an M2 Pro, German model:
+            # int8 ran at 1.2x real time on our torch 2.8 (torchao without
+            # native kernels) and still only 5.9x against 6.9x unquantized on
+            # torch 2.11 with them. It also degraded cloned voices on 24L.
 
             if self._is_custom_model(model_id):
                 model_path = os.path.join(self.models_dir, model_id)
                 self.printr.print(
-                    f"Loading PocketTTS custom model: {model_path} (quantize={quantize})...",
+                    f"Loading PocketTTS custom model: {model_path}...",
                     color=LogType.INFO,
                     server_only=True,
                 )
-                self.model = TTSModel.load_model(
-                    config=model_path, quantize=quantize
-                )
+                self.model = TTSModel.load_model(config=model_path)
             elif use_r2_mirror():
                 # Redirect the gated voice-cloning weights to our R2 mirror so users
                 # without an HF token can clone voices (see providers/pocket_tts_r2.py).
                 config_path = build_r2_config(model_id, self.models_dir)
                 self.printr.print(
-                    f"Loading PocketTTS model: {model_id} from R2 mirror (quantize={quantize})...",
+                    f"Loading PocketTTS model: {model_id} from R2 mirror...",
                     color=LogType.INFO,
                     server_only=True,
                 )
@@ -305,17 +307,15 @@ class PocketTTS:
                     )
                 self.model = TTSModel.load_model(
                     config=config_path,
-                    quantize=quantize,
                 )
             else:
                 self.printr.print(
-                    f"Loading PocketTTS model: {model_id} from HuggingFace (quantize={quantize})...",
+                    f"Loading PocketTTS model: {model_id} from HuggingFace...",
                     color=LogType.INFO,
                     server_only=True,
                 )
                 self.model = TTSModel.load_model(
                     language=model_id,
-                    quantize=quantize,
                 )
 
             self.printr.print(
@@ -371,10 +371,10 @@ class PocketTTS:
             "is_loading": self._loading,
             "model_loaded": self.model is not None,
             "model": self.model_id,
+            "version": POCKET_TTS_VERSION,
             # Whether "high" loads a bigger model for this language than
             # "standard"; French and English have only one size.
             "has_high_quality": pocket_tts_has_high_quality(self.spoken_language),
-            "quantize": self.settings.quantize,
             "precompute_running": self._precompute_running,
             "precompute_current": self._precompute_current,
             "precompute_total": self._precompute_total,
