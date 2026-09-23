@@ -53,7 +53,7 @@ REASONING_OUTPUT_TOKENS = 1024
 the output budget with the answer, so a 256-token reservation (fine for plain
 output) gets eaten by thinking and truncates the answer. Reserve more headroom.
 
-This is an absolute target — a 2B model's think block is roughly constant in
+This is an absolute target — a small model's think block is roughly constant in
 size regardless of context window — but ``_output_reservation`` caps it at half
 the usable context so a small ``n_ctx`` still leaves room for input. Validated
 against the real model in the internal eval suite; retune there if needed.

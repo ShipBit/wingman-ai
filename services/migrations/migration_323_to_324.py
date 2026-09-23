@@ -43,6 +43,13 @@ meant to own belongs in the chain where the log says it was set.
 client shows token counts on Wingman messages and in the status bar; those
 counts are now what the provider reported for the whole turn, not an estimate
 of the message text.
+
+`settings.yaml` also gains `filler_responses`, on. While a slow tool runs and
+the Wingman has said nothing yet, the support model writes one short line in
+the user's language and the Wingman speaks it. It replaces the per-Wingman
+`features.use_generic_instant_responses`, which is removed from defaults and
+every Wingman: that switch was forced off in 2.0 and had no toggle since, and
+the phrases it made were English whatever the user spoke (issue #391).
 """
 
 import os
@@ -93,8 +100,19 @@ class Migration323To324(BaseMigration):
                         self._descriptions[name] = text
         return self._descriptions
 
+    def _drop_generic_instant_responses(self, old: dict) -> None:
+        features = old.get("features")
+        if isinstance(features, dict) and "use_generic_instant_responses" in features:
+            del features["use_generic_instant_responses"]
+            self.log("- removed features.use_generic_instant_responses (now settings.filler_responses)")
+
+    def migrate_defaults(self, old: dict) -> dict:
+        self._drop_generic_instant_responses(old)
+        return old
+
     def migrate_wingman(self, old: dict) -> dict:
         """Fill in the descriptions for commands that came from a template."""
+        self._drop_generic_instant_responses(old)
         commands = old.get("commands")
         if not isinstance(commands, list):
             return old
@@ -129,6 +147,10 @@ class Migration323To324(BaseMigration):
             # counts are there for whoever wants them, behind a switch.
             old["show_token_count"] = False
             self.log("- show_token_count: off — token counts are hidden unless switched on")
+
+        if "filler_responses" not in old:
+            old["filler_responses"] = True
+            self.log("- filler_responses: on — a short line in your language while a slow tool runs")
 
         block = old.get("system_one")
         if isinstance(block, dict):

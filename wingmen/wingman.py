@@ -5,6 +5,7 @@ into a single class that delegates to extracted services and provider
 interfaces for STT, TTS, and LLM.
 """
 
+import json
 import time
 import asyncio
 import traceback
@@ -58,7 +59,7 @@ from services.capability_registry import CapabilityRegistry
 from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.turn_metrics import TurnMetrics
-from services.instant_response_generator import InstantResponseGenerator
+from services.filler_response import FillerLine, FillerResponder
 from services.jev_gate import JevGate
 from skills.skill_base import Skill
 
@@ -184,12 +185,13 @@ class Wingman:
         # --- Image generation (lazy) ---
         self._image_subscription = None
 
-        # --- Instant response generator ---
-        self.instant_response_generator = InstantResponseGenerator(
-            wingman_name=name,
-            llm_call_fn=self.actual_llm_call,
-            get_context_fn=self.get_context,
+        # --- Filler line while a turn with tools runs (settings.filler_responses) ---
+        self.filler = FillerResponder(
+            settings=self.settings,
+            get_local_ai=lambda: self.local_ai_service,
+            speak=self._speak_filler,
         )
+        self._turn_filler: FillerLine | None = None
 
         # --- Conversation state ---
         self.last_gpt_call = None
@@ -307,22 +309,6 @@ class Wingman:
         return errors
 
     # ──────────────────────────────── Lifecycle ─────────────────────────────────── #
-
-    async def prepare(self):
-        try:
-            if self.config.features.use_generic_instant_responses:
-                printr.print(
-                    "Generating AI instant responses...",
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
-                self.threaded_execution(self.instant_response_generator.generate)
-        except Exception as e:
-            await printr.print_async(
-                f"Error while preparing wingman '{self.name}': {str(e)}",
-                color=LogType.ERROR,
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def unload(self):
         # Wait for any background memory extraction tasks to finish
@@ -490,11 +476,17 @@ class Wingman:
                 )
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
-                process_result, instant_response, skill, interrupt = (
-                    await self._get_response_for_transcript(
-                        transcript=transcript, benchmark=benchmark_llm, images=images
+                try:
+                    process_result, instant_response, skill, interrupt = (
+                        await self._get_response_for_transcript(
+                            transcript=transcript, benchmark=benchmark_llm, images=images
+                        )
                     )
-                )
+                finally:
+                    # The answer is ready: a filler line that is not out yet
+                    # is dropped; one that was spoken must not be cut off.
+                    if self._stop_turn_filler():
+                        interrupt = False
                 # Every path out of the turn passes here, including the ones
                 # that end early on a command. Skills add their own decisions
                 # to the same list on the way, so this is the whole layer.
@@ -594,29 +586,27 @@ class Wingman:
         interrupt = True
 
         while tool_calls:
-            if is_waiting_response_needed:
-                message = None
-                if response_message.content:
-                    message = response_message.content
-                else:
-                    filler = self.instant_response_generator.get_random_filler()
-                    if filler:
-                        message = filler
-                        is_summarize_needed = True
-                if message:
-                    self.threaded_execution(self.play_to_user, message, not interrupt)
-                    await printr.print_async(
-                        f"{message}",
-                        color=LogType.POSITIVE,
-                        source=LogSource.WINGMAN,
-                        source_name=self.name,
-                        skill_name="",
-                    )
+            if is_waiting_response_needed and response_message.content:
+                if self._stop_turn_filler():
                     interrupt = False
-                else:
-                    is_summarize_needed = True
+                message = response_message.content
+                self.threaded_execution(self.play_to_user, message, not interrupt)
+                await printr.print_async(
+                    f"{message}",
+                    color=LogType.POSITIVE,
+                    source=LogSource.WINGMAN,
+                    source_name=self.name,
+                    skill_name="",
+                )
+                interrupt = False
             else:
                 is_summarize_needed = True
+
+            # Nothing said yet in this turn: fill the wait until the answer is
+            # ready. It runs across rounds — activating a capability, the tool,
+            # the model writing the answer — and is stopped by the caller.
+            if interrupt and self._turn_filler is None:
+                self._turn_filler = await self._start_filler(transcript, tool_calls)
 
             tool_start = time.perf_counter()
             instant_response, skill, iteration_timings = await self._handle_tool_calls(
@@ -810,6 +800,60 @@ class Wingman:
             update_tool_response_fn=self.conversation.update_tool_response,
             add_tool_response_fn=self.conversation.add_tool_response,
             pending_tool_calls=self.conversation.pending_tool_calls,
+        )
+
+    async def _start_filler(self, transcript: str, tool_calls) -> FillerLine | None:
+        """Start the filler line for the rest of this turn, if it applies.
+
+        Immediate when a tool's skill asks for a waiting response; otherwise
+        only once the turn has gone on for ``FILLER_DELAY_S``.
+        """
+        names = []
+        immediate = False
+        for tc in tool_calls:
+            name = tc.function.name if tc.function else None
+            if not name:
+                continue
+            if name.startswith("activate_"):
+                # "activate mcp server" tells the model nothing; what is being
+                # activated does ("wingman_starhead").
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except (TypeError, ValueError):
+                    args = {}
+                name = (
+                    args.get("capability_name") or args.get("server_name")
+                    or args.get("skill_name") or name
+                )
+            names.append(name)
+            skill = self.tool_skills.get(tc.function.name)
+            if skill and await skill.is_waiting_response_needed(tc.function.name):
+                immediate = True
+        if not names:
+            return None
+        return self.filler.start(
+            request=transcript,
+            tool_names=names,
+            immediate=immediate,
+            name=self.name,
+            backstory=self.config.prompts.backstory or "",
+        )
+
+    def _stop_turn_filler(self) -> bool:
+        """Stop this turn's filler line. True if it was spoken."""
+        line, self._turn_filler = self._turn_filler, None
+        return self.filler.stop(line)
+
+    def _speak_filler(self, line: str) -> None:
+        """Runs on the filler's thread: speech gets its own thread, the message
+        is handed to the main loop by ``printr.print``."""
+        self.threaded_execution(self.play_to_user, line, False)
+        printr.print(
+            line,
+            color=LogType.FILLER,
+            source=LogSource.WINGMAN,
+            source_name=self.name,
+            wingman_name=self.name,
         )
 
     async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:

@@ -1579,7 +1579,7 @@ self.wingman.memory.available    # Persistent memory is available (requires loca
 
 ### The Local Model
 
-The local model is a small LLM (e.g., Qwen 3.5 2B) that runs on the user's machine. Use it for text processing tasks like extraction, classification, summarization, or reformatting. It's fast, free, and private — no API calls leave the machine.
+The local model is Wingman's support model: a small, cheap LLM for text processing tasks like extraction, classification, summarization, or reformatting. By default it runs in the Wingman cloud; users can also run it on their own machine (Qwen 3.5 4B) or on their own llama.cpp server. Your skill calls it the same way in every case.
 
 ```python
 async def generate(text: str, *, system: str = "", preset=None,
@@ -1608,11 +1608,11 @@ if text:
     data = json.loads(text)
 ```
 
-> **Important:** The local model has a limited context window (user-configurable, default 4096 tokens). If your input is too large, the model silently loses data beyond its context limit. For potentially large inputs, use `summarize()` instead.
+> **Important:** When the model runs locally, its context window is small (user-configurable, default 4096 tokens). If your input is too large, the model silently loses data beyond its context limit. For potentially large inputs, use `summarize()` instead.
 
 #### Prompt Writing Guidelines for Small Models
 
-The local model is a 2B-parameter model with limited instruction-following ability. Prompts that work well with large cloud models (GPT-4, Claude) will often fail here. Follow these rules when writing `system` strings:
+The support model is a small model with limited instruction-following ability, and your prompt has to work on the weakest variant a user may run. Prompts that work well with large models (GPT-4, Claude) will often fail here. Follow these rules when writing `system` strings:
 
 - **Be direct and literal.** Use short, imperative sentences. Avoid nuance, hedging, or nested clauses.
 - **Use labeled sections** (`Backstory:`, `Input:`, `Rules:`) instead of prose paragraphs. The model parses structured prompts more reliably.

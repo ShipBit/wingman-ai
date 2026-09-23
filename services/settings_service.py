@@ -322,6 +322,7 @@ class SettingsService:
         self.config_manager.settings_config.debug_mode = settings.debug_mode
         self.config_manager.settings_config.streamer_mode = settings.streamer_mode
         self.config_manager.settings_config.show_token_count = settings.show_token_count
+        self.config_manager.settings_config.filler_responses = settings.filler_responses
 
         # cancel TTS ("shut up") bindings
         self.config_manager.settings_config.cancel_tts_key = settings.cancel_tts_key

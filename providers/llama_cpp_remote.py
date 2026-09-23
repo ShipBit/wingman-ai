@@ -39,7 +39,7 @@ class LlamaCppRemote:
         """Query a llama.cpp server's ``/props`` endpoint for its context window.
 
         Returns the server's ``n_ctx`` so Wingman can size its budgets to the
-        remote model (which may be far larger than the bundled 2B baseline).
+        remote model (which may be far larger than the bundled 4B default).
         Returns None if the server is unreachable, isn't a llama.cpp server, or
         doesn't expose the field. ``host`` is expected to include the scheme
         (e.g. ``http://127.0.0.1``), matching the support_remote_host setting.

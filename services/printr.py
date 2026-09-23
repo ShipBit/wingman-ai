@@ -125,6 +125,7 @@ class Printr(WebSocketUser):
         additional_data: dict = None,
         benchmark_result: BenchmarkResult = None,
         token_usage: TokenUsage = None,
+        wingman_name: str = None,
     ):
         if self._connection_manager is None:
             raise ValueError("connection_manager has not been set.")
@@ -134,8 +135,10 @@ class Printr(WebSocketUser):
                 command=ToastCommand(text=text, toast_type=toast_type)
             )
         else:
-            wingman_name = None
-            current_frame = inspect.currentframe()
+            # Found on the call stack unless the caller says. A message sent
+            # from a worker thread is run on the main loop, where no Wingman
+            # is on the stack, and the client drops it from the Wingman's view.
+            current_frame = inspect.currentframe() if wingman_name is None else None
             if current_frame is not None:
                 while current_frame:
                     # Check if the caller is a method of a class
@@ -176,6 +179,7 @@ class Printr(WebSocketUser):
         server_only=False,
         command_tag: CommandTag = None,
         additional_data: dict = None,
+        wingman_name: str = None,
     ):
         # print to server (terminal) with source_name prefix
         self.print_colored(
@@ -194,6 +198,7 @@ class Printr(WebSocketUser):
                     source_name=source_name,
                     command_tag=command_tag,
                     additional_data=additional_data,
+                    wingman_name=wingman_name,
                 )
             )
 

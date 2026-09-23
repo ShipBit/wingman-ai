@@ -632,7 +632,6 @@ class FeaturesConfig(BaseModel):
     tts_provider: TtsProvider
     conversation_provider: ConversationProvider
     image_generation_provider: ImageGenerationProvider
-    use_generic_instant_responses: bool
     condense_conversation: bool
     """Enable automatic conversation condensation using the local support model.
     When enabled, older messages are automatically summarized when the conversation
@@ -1520,6 +1519,9 @@ class SettingsConfig(BaseModel):
     """Show token counts on Wingman messages and in the conversation status
     bar. Off by default: most users do not know what a token is, and the
     number means nothing to them."""
+    filler_responses: bool
+    """Speak a short line, written by the support model in the user's language,
+    while a slow tool runs and the Wingman has not said anything yet."""
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None

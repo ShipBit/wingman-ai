@@ -21,10 +21,10 @@ one of two ways:
    thrown away and the text is cut at a line boundary instead.
 
 A note at the end says how much is missing and tells the model to ask the tool
-for less. The local 2B model with its 4096-token window never fits a text that
-is over an 8000-token cap, so local users get the cut there too. That is
-intended: chunking 50k tokens through a 2B model takes minutes and drops facts
-along the way.
+for less. A local model with the default 4096-token window never fits a text
+that is over an 8000-token cap, so local users get the cut there too. That is
+intended: chunking 50k tokens through a small local model takes minutes and
+drops facts along the way.
 """
 
 import asyncio
@@ -132,7 +132,7 @@ class ToolResponseLimiter:
         max_summary = min(SUMMARY_MAX_TOKENS, max(1, reject_at - 1))
 
         if original_tokens > budget.max_input_tokens:
-            # Local model with a small window: a chunked pass through a 2B model
+            # Local model with a small window: a chunked pass through a small model
             # is slow and lossy, the cut is the better deal. Cloud: 128k in one
             # call is the ceiling we are willing to pay for, cut down to it.
             if budget.max_input_tokens < cap:
