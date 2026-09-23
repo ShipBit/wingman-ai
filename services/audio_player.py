@@ -3,7 +3,7 @@ import inspect
 import io
 import wave
 from os import path
-from threading import Thread
+from threading import Lock, Thread
 from typing import Callable
 import numpy as np
 import soundfile as sf
@@ -441,6 +441,12 @@ class AudioPlayer:
         otherwise runs dry at its first pause and the speakers click.
         """
         buffer = bytearray()
+        # The loop below appends while PortAudio's thread takes from the front.
+        # Without the lock, and with the front taken by rebinding the name
+        # (buffer = buffer[n:]), a block appended between the copy and the
+        # assignment was lost: measured 2026-09-23, 43-171 ms missing in 5 of
+        # 6 Pocket TTS previews - the short break mid-sentence.
+        buffer_lock = Lock()
         stream_finished = False
         data_received = False
         playing = prebuffer_ms <= 0
@@ -487,26 +493,28 @@ class AudioPlayer:
             return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal buffer, stream_finished, data_received, mixed_pos, playing
+            nonlocal stream_finished, data_received, mixed_pos, playing
             # Silence first, always. The stream starts before the voice
             # provider has delivered its first chunk, and PortAudio hands
             # the callback a buffer that still holds the previous playback:
             # left as it is, that plays as a burst of noise.
             outdata[:] = bytes(len(outdata))
-            if data_received and len(buffer) == 0:
-                stream_finished = True
-                return
-            if not playing:
-                if not data_received and len(buffer) < prebuffer_bytes:
+            num_elements = frames * channels
+            byte_size = np.dtype(dtype).itemsize
+            with buffer_lock:
+                if data_received and len(buffer) == 0:
+                    stream_finished = True
                     return
-                playing = True
+                if not playing:
+                    if not data_received and len(buffer) < prebuffer_bytes:
+                        return
+                    playing = True
+                # Taken out in place, so an append can never land in a copy.
+                taken = bytes(buffer[: num_elements * byte_size])
+                del buffer[: num_elements * byte_size]
 
-            if len(buffer) > 0:
-                num_elements = frames * channels
-                byte_size = np.dtype(dtype).itemsize
-                data_chunk = np.frombuffer(
-                    buffer[: num_elements * byte_size], dtype=dtype
-                ).astype(np.float32)
+            if taken:
+                data_chunk = np.frombuffer(taken, dtype=dtype).astype(np.float32)
 
                 if len(data_chunk) < num_elements:
                     data_chunk = np.pad(
@@ -530,7 +538,6 @@ class AudioPlayer:
                 data_chunk = data_chunk * config.volume
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
-                buffer = buffer[num_elements * byte_size :]
 
         device_rate = self.output_rate(sample_rate)
         converters = [RateConverter(sample_rate, device_rate) for _ in range(channels)]
@@ -615,7 +622,9 @@ class AudioPlayer:
                 # Listeners on the event (the client, an ESP32) get the audio
                 # as the provider made it; the speakers get it at their rate.
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
-                buffer.extend(to_device_rate(data_in_numpy).astype(dtype).tobytes())
+                converted = to_device_rate(data_in_numpy).astype(dtype).tobytes()
+                with buffer_lock:
+                    buffer.extend(converted)
                 await self.stream_event.publish("audio", processed_buffer)
                 filled_size = await fill(audio_buffer)
 
