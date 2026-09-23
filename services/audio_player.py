@@ -493,7 +493,7 @@ class AudioPlayer:
             return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal stream_finished, data_received, mixed_pos, playing
+            nonlocal stream_finished, data_received, playing
             # Silence first, always. The stream starts before the voice
             # provider has delivered its first chunk, and PortAudio hands
             # the callback a buffer that still holds the previous playback:
@@ -526,17 +526,11 @@ class AudioPlayer:
 
                 data_chunk = data_chunk[: frames * channels]
 
-                if mix_layer_file:
-                    mix_chunk = get_mixed_chunk(len(data_chunk))
-                    # Convert gain boost from dB to amplitude factor
-                    amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
-                    data_chunk = (
-                        data_chunk + mix_chunk[: len(data_chunk)] * amplitude_factor
-                    )
-
-                data_chunk = data_chunk.flatten()
-                data_chunk = data_chunk * config.volume
-                data_chunk_bytes = data_chunk.astype(dtype).tobytes()
+                # Already mixed and at the playback volume: the loop below
+                # does both before it fills the buffer. Doing them here again
+                # played the radio noise twice and the volume squared (0.5
+                # came out as 0.25), measured 2026-09-23.
+                data_chunk_bytes = data_chunk.flatten().astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
 
         device_rate = self.output_rate(sample_rate)
