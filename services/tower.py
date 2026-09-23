@@ -171,7 +171,6 @@ class Tower:
             ]
 
             if not fatal_errors:
-                await wingman.prepare()
                 self.wingmen.append(wingman)
 
         return wingman

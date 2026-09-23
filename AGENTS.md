@@ -25,9 +25,13 @@ All output goes through the `Printr` singleton (`services/printr.py`). The two m
 
 If you use `printr.print()` without `server_only=True`, it sends to the client synchronously via `ensure_async()` — prefer the explicit async version when you want client visibility.
 
-### LogType.LOCALMODEL — local support/embedding model messages
+### LogType.LOCALMODEL — support model status messages
 
-Use `LogType.LOCALMODEL` for any message originating from the local support model or embedding model (greetings, condensation status, etc.). The client renders these with a distinct dashed-border style and a label ("Generated locally — not part of the conversation with your AI provider") to distinguish them from conversation messages with the main AI provider.
+Use `LogType.LOCALMODEL` for status messages about support model work (condensation, tool response summaries, etc.), no matter whether the support model runs in the cloud, locally or on a remote server. The client renders these with a distinct style and the label "Support Model - not part of the conversation with your Wingman" to set them apart from the conversation with the main AI provider. The name is historical: the support model used to be local only.
+
+### LogType.FILLER — the line spoken while a slow tool runs
+
+`services/filler_response.py` has the support model write one short line ("Bin dran...") in the user's language while a tool runs, and the Wingman speaks it. It is printed with `LogType.FILLER` so the client can show it as a Wingman message in its own style. It never enters the conversation history. The switch is `settings.filler_responses`.
 
 ### LogType.MEMORY — persistent memory operations
 
@@ -43,7 +47,7 @@ await printr.print_async(
 
 ## Writing Prompts for the Support Model
 
-The local support model is a small 2B-parameter LLM (llama.cpp). It does not follow instructions as reliably as cloud models. When writing or editing prompt templates in `prompts/` or `system_prompt` strings for `local_ai_service.support()`, follow these rules:
+The support model is a small, cheap model. By default it runs in our cloud (`llama_cpp.mode: cloud`); users can also run Qwen3.5-4B locally or point Wingman at their own llama.cpp server. The same prompt has to work on all of them, so write for the weakest one: it follows instructions less reliably than the main conversation model. When writing or editing prompt templates in `prompts/` or `system_prompt` strings for `local_ai_service.support()`, follow these rules:
 
 **Use prompt templates with `{variables}`, not hard-coded strings.** Prompt files live in `prompts/*.md` and use Python `str.format()` placeholders (e.g., `{name}`, `{backstory}`, `{comm_context}`). The calling code fills them in via `.format(name=..., backstory=...)`. Never hard-code values that should come from config or runtime — always use a `{variable}` and pass it in from the caller.
 
@@ -59,9 +63,9 @@ See also: [skills/README.md — Prompt Writing Guidelines](skills/README.md#prom
 
 ## Sampling Parameters — Temperature and Top P
 
-The support model is a small 2B model — sampling parameters matter more than on large models. Global defaults are tuned for summarization (0.3 / 1.0). **Override for creative tasks or output will be flat.**
+Sampling parameters matter more on small models than on large ones. The global defaults are 1.0 / 1.0 (`DEFAULT_TEMPERATURE` / `DEFAULT_TOP_P` in `services/local_ai_service.py`). **Pick a preset per task** — extraction needs `PRECISE`, or it drops and duplicates facts.
 
-All `support()` calls accept optional `temperature` and `top_p` overrides. In skills, use `SamplingPreset` from `services/skill_local_ai.py` (`PRECISE`, `BALANCED`, `CREATIVE`, `ADVENTUROUS`) or pass raw values. Manual values override presets. See `SamplingPreset` docstring for values.
+All `support()` calls accept optional `temperature` and `top_p` overrides. In skills, use `SamplingPreset` from `services/skill_local_ai.py` (`PRECISE`, `BALANCED`, `CREATIVE`) or pass raw values. Manual values override presets. See `SamplingPreset` docstring for values.
 
 ## Config Properties — interface.py
 

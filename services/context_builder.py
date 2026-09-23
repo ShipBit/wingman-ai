@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
+LANGUAGE_NAMES = {
+    "en": "English", "de": "German", "fr": "French",
+    "es": "Spanish", "it": "Italian", "pt": "Portuguese",
+}
+"""``settings.spoken_language`` codes the prompts spell out by name."""
+
 
 class ContextBuilder:
     def __init__(
@@ -161,11 +167,7 @@ class ContextBuilder:
         if spoken == "multilingual":
             language_instruction = "- Respond in whatever language the user speaks to you"
         else:
-            lang_names = {
-                "en": "English", "de": "German", "fr": "French",
-                "es": "Spanish", "it": "Italian", "pt": "Portuguese",
-            }
-            language_instruction = f"- Always respond in {lang_names.get(spoken, spoken)}"
+            language_instruction = f"- Always respond in {LANGUAGE_NAMES.get(spoken, spoken)}"
 
         context = self._config.prompts.system_prompt.format(
             backstory=backstory,

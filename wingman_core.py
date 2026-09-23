@@ -3192,6 +3192,10 @@ class WingmanCore(WebSocketUser):
             "production_preset": "Creative",
             "example_message": "Generate your greeting.",
         },
+        "filler-response": {
+            "production_preset": "Balanced",
+            "example_message": 'User request: "Hola Em, ¿puedes comprobarme si ha cambiado el precio del hierro?"',
+        },
         # enhance-backstory: uses the conversation LLM, not the support model — not listed here
         "radio-chatter": {
             "production_preset": None,  # uses main LLM, not support model
