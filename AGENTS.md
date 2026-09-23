@@ -4,7 +4,7 @@
 
 When work is approved, create a PR in both repos. If you didn't change anything in one repo, just remove that worktree.
 
-- **Core**: Ask if there is a GitHub issue to link the PR to. If not, create one and link it.
+- **Core**: If the work belongs to a GitHub issue, link it (`Closes #123`). A PR without one is fine.
 - **Client**: Closed source, no issue tracking — just create the PR.
 
 ## Logging — Never use bare `print()`

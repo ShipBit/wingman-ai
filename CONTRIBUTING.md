@@ -11,7 +11,7 @@ Thanks for your interest in contributing! This document explains how to submit c
 
 ## Pull Request Rules
 
-- **Every PR must be linked to a GitHub issue.** Reference it in the PR description using `Closes #123`, `Fixes #123`, or `Resolves #123`. PRs without a linked issue cannot be merged.
+- **Link an issue if there is one.** Reference it in the PR description using `Closes #123`, `Fixes #123`, or `Resolves #123`.
 - **Target the `develop` branch.** Do not open PRs against `main`.
 - **Rebase onto `develop`** before requesting a review. We require linear history — merge commits are not allowed.
 - **All commits are squash-merged.** Your PR title and description become the final commit message, so make them clear and descriptive.
@@ -19,7 +19,7 @@ Thanks for your interest in contributing! This document explains how to submit c
 
 ## Reporting Bugs
 
-Please use the [Bug Report](https://github.com/ShipBit/wingman-ai/issues/new?template=bug_report.yml) issue template. You will need to provide:
+Open an [issue](https://github.com/ShipBit/wingman-ai/issues/new). It helps us most if you include:
 
 - Your Wingman AI version
 - Your `Wingman.yaml` configuration file
@@ -33,7 +33,7 @@ All of these files can be found in your `%APPDATA%/ShipBit/WingmanAI/` directory
 
 ## Feature Requests
 
-Use the [Feature Request](https://github.com/ShipBit/wingman-ai/issues/new?template=feature_request.yml) issue template. Describe what you'd like to see and why it would be useful.
+Open an [issue](https://github.com/ShipBit/wingman-ai/issues/new). Describe what you'd like to see and why it would be useful.
 
 ## Major Features
 
