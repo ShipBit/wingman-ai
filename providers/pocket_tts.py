@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import torch
 import torchaudio
-from pocket_tts import TTSModel, export_model_state
+from pocket_tts import TTSModel
 from safetensors import safe_open
+from safetensors.torch import load_file, save_file
 from pocket_tts.utils.utils import get_predefined_voice
 from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider
 from api.interface import (
@@ -557,8 +558,7 @@ class PocketTTS:
                 if os.path.exists(p):
                     if ext == f".{active_tag}.safetensors":
                         stale = self._audio_newer_than(base, p) or (
-                            not self._cloned_by_current_library(p)
-                            and self._audio_for(base)
+                            not self._clone_is_current(p) and self._audio_for(base)
                         )
                         if stale:
                             return os.path.abspath(stale)
@@ -591,24 +591,46 @@ class PocketTTS:
                 return base + ext
         return None
 
-    @staticmethod
-    def _cloned_by_current_library(path: str) -> bool:
-        """Whether a cloned voice state was written by pocket-tts 3.x.
+    # Written into the header of every voice file Wingman makes. A clone is
+    # tied to the pocket-tts that computed it (3.1.0's tanh GELU changed clones
+    # of the same recording by ~1.5%, measured 2026-09-23), a built-in voice
+    # to the upstream revision it was downloaded from. When either no longer
+    # matches the installed library, the file is made again: re-cloned from
+    # its recording, or re-downloaded. Files without the entry come from
+    # Wingman versions before 3.2.4 and count as outdated.
+    _CLONED_BY = "wingman.cloned_by"
+    _DOWNLOADED_FROM = "wingman.downloaded_from"
 
-        3.x computes slightly different states from the same recording (tanh
-        GELU in the backbone, #278): measured 2026-09-23, clones made with
-        2.1.0 differ from 3.1.0's by about 1.5% on average. They still load,
-        so nothing fails; they are just not the voice 3.x would make. 3.x also
-        writes a ``pad`` entry per attention layer that 2.x did not, which is
-        what tells the two apart. Only for voices cloned from audio: the
-        built-in embeddings are downloaded as Kyutai ships them, without it.
-        """
+    @staticmethod
+    def _voice_file_metadata(path: str) -> dict:
         try:
             with safe_open(path, "pt") as f:
-                return any(key.endswith("/pad") for key in f.keys())
+                return f.metadata() or {}
         except Exception:
-            # Unreadable: let the regular load report it and re-clone.
+            return {}
+
+    @classmethod
+    def _clone_is_current(cls, path: str) -> bool:
+        """Whether a cloned voice was computed by the installed pocket-tts."""
+        if POCKET_TTS_VERSION == "unknown":
+            # Without a version to compare, re-cloning on every start would be
+            # the only safe answer; keeping what is there is the sane one.
             return True
+        return cls._voice_file_metadata(path).get(cls._CLONED_BY) == POCKET_TTS_VERSION
+
+    @classmethod
+    def _save_voice_state(cls, state: dict, path: str, metadata: dict) -> None:
+        """Write a voice state the way pocket-tts' export_model_state does
+        (``module/key`` tensors), plus our metadata. Atomic: a crash mid-write
+        leaves the old file, never half a new one."""
+        tensors = {
+            f"{module}/{key}": value
+            for module, module_state in state.items()
+            for key, value in module_state.items()
+        }
+        tmp = path + ".tmp"
+        save_file(tensors, tmp, metadata=metadata)
+        os.replace(tmp, path)
 
     @staticmethod
     def _changed_at(path: str) -> float:
@@ -656,7 +678,9 @@ class PocketTTS:
             directory, f"{stem}.{active_tag}.safetensors"
         )
         try:
-            export_model_state(state, safetensors_path)
+            self._save_voice_state(
+                state, safetensors_path, {self._CLONED_BY: POCKET_TTS_VERSION}
+            )
             self.printr.print(
                 f"Saved cloned voice state to {safetensors_path}",
                 color=LogType.INFO,
@@ -714,24 +738,21 @@ class PocketTTS:
         or when the download fails.
         """
         dest = self._builtin_voice_cache_path(voice_id)
-        if os.path.exists(dest) and os.path.getsize(dest) > 0:
-            return dest
-
         active_tag = self._active_model_tag()
         if active_tag not in {m["id"] for m in BUILTIN_MODELS}:
             raise ValueError(
                 f"Built-in voice '{voice_id}' is not available for custom model "
                 f"config '{active_tag}'. Use a cloned/custom voice instead."
             )
+        # The library's own pinned hf:// URI, revision included: a pocket-tts
+        # bump that moves the embeddings makes the file on disk outdated.
+        source = get_predefined_voice(language=active_tag, name=voice_id)
+        if self._builtin_is_current(dest, source):
+            return dest
 
-        # Derive the URL from the library's own pinned hf:// URI so a future
-        # pocket-tts bump can never make us download embeddings from a revision
-        # the installed library doesn't expect.
-        url = hf_uri_to_https_url(
-            get_predefined_voice(language=active_tag, name=voice_id)
-        )
+        url = hf_uri_to_https_url(source)
         with self._builtin_voice_download_lock:
-            if os.path.exists(dest) and os.path.getsize(dest) > 0:
+            if self._builtin_is_current(dest, source):
                 return dest
             self.printr.print(
                 f"Downloading built-in PocketTTS voice '{voice_id}' for model '{active_tag}'...",
@@ -745,7 +766,19 @@ class PocketTTS:
                     msg, color=LogType.INFO, server_only=True
                 ),
             )
+            # Record where it came from, so the next pocket-tts can tell.
+            tensors = load_file(dest)
+            tmp = dest + ".tmp"
+            save_file(tensors, tmp, metadata={self._DOWNLOADED_FROM: source})
+            os.replace(tmp, dest)
+            self.voice_cache.pop(os.path.abspath(dest), None)
         return dest
+
+    @classmethod
+    def _builtin_is_current(cls, path: str, source: str) -> bool:
+        if not (os.path.exists(path) and os.path.getsize(path) > 0):
+            return False
+        return cls._voice_file_metadata(path).get(cls._DOWNLOADED_FROM) == source
 
     def preload_voice_states(
         self,
@@ -815,13 +848,17 @@ class PocketTTS:
                 server_only=True,
             )
 
-    def list_custom_voices_needing_precompute(self) -> list[str]:
+    def list_custom_voices_needing_precompute(self, only_stale: bool = False) -> list[str]:
         """Return custom voice stems whose tagged safetensor for the active
         model does not exist yet, or is older than the voice's audio file —
         these are the ones that would actually be cloned by a precompute pass.
 
         Excludes built-in voices — their embeddings are downloaded ready-made
         (see _ensure_builtin_voice), never cloned from audio.
+
+        ``only_stale`` skips voices never cloned for this model and returns
+        only clones that exist but are outdated (a newer recording, or made by
+        another pocket-tts).
         """
         if not self.voices_dir or not os.path.isdir(self.voices_dir):
             return []
@@ -840,10 +877,12 @@ class PocketTTS:
                 tagged = os.path.join(
                     self.voices_dir, f"{stem}.{active_tag}.safetensors"
                 )
-                if (
-                    not os.path.exists(tagged)
-                    or self._changed_at(f) > os.path.getmtime(tagged)
-                    or not self._cloned_by_current_library(tagged)
+                if not os.path.exists(tagged):
+                    if not only_stale:
+                        needs.append(stem)
+                elif (
+                    self._changed_at(f) > os.path.getmtime(tagged)
+                    or not self._clone_is_current(tagged)
                 ):
                     needs.append(stem)
         return needs
@@ -851,16 +890,18 @@ class PocketTTS:
     def precompute_custom_voices(
         self,
         progress_cb: Optional[Callable[[int, int, str], None]] = None,
+        only_stale: bool = False,
     ) -> dict:
         """Generate + persist `.<active_model>.safetensors` for every custom
-        voice that doesn't yet have one. Built-in voices are skipped.
+        voice that doesn't yet have a current one (see
+        list_custom_voices_needing_precompute). Built-in voices are skipped.
 
         Returns ``{"total": N, "succeeded": int, "failed": int}``.
         """
         if not self.settings.run_locally or not self.model:
             return {"total": 0, "succeeded": 0, "failed": 0}
 
-        targets = self.list_custom_voices_needing_precompute()
+        targets = self.list_custom_voices_needing_precompute(only_stale=only_stale)
         total = len(targets)
         self._precompute_running = True
         self._precompute_current = 0

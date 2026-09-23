@@ -2387,16 +2387,21 @@ class WingmanCore(WebSocketUser):
         next answer needs them. When the load replaced another model - the user
         picked a new spoken language or quality - every other custom voice is
         cloned for it in the background, so switching a Wingman to one of them
-        later does not stall its first answer. Not on the first load after
-        start: those voices were prepared when the model was chosen.
+        later does not stall its first answer. On any other load, including the
+        first after start, only the clones that exist but are outdated: this is
+        what re-clones a user's voices after a Wingman update brought a
+        pocket-tts that computes them differently.
         """
         await self._preload_pocket_tts_voices(
             state_message_prefix="Preloading voices",
             restore_ready_state=True,
         )
-        if not self.pocket_tts.last_load_switched_model:
-            return
-        result = await self.precompute_pocket_tts_voices()
+        # A new model: every custom voice. The same model: only clones that
+        # exist but are outdated - after a Wingman update brought another
+        # pocket-tts, or a recording was replaced.
+        result = await self._start_precompute(
+            only_stale=not self.pocket_tts.last_load_switched_model
+        )
         if result.get("started"):
             await self.printr.print_async(
                 f"Pocket TTS: preparing {result['total']} custom voice(s) for the "
@@ -2430,9 +2435,12 @@ class WingmanCore(WebSocketUser):
     # POST /pocket_tts/precompute_voices
     async def precompute_pocket_tts_voices(self) -> dict:
         """Kick off a background precompute pass over all custom voices
-        missing a ``.<active_model>.safetensors`` cache. Returns immediately;
-        progress is surfaced via ``GET /pocket_tts/status``.
+        missing a current ``.<active_model>.safetensors`` cache. Returns
+        immediately; progress is surfaced via ``GET /pocket_tts/status``.
         """
+        return await self._start_precompute(only_stale=False)
+
+    async def _start_precompute(self, only_stale: bool) -> dict:
         if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
             return {"started": False, "reason": "pocket_tts unavailable", "total": 0}
         if not self.pocket_tts.model:
@@ -2444,7 +2452,9 @@ class WingmanCore(WebSocketUser):
                 "total": self.pocket_tts._precompute_total,
             }
 
-        targets = self.pocket_tts.list_custom_voices_needing_precompute()
+        targets = self.pocket_tts.list_custom_voices_needing_precompute(
+            only_stale=only_stale
+        )
         if not targets:
             return {"started": False, "reason": "nothing to do", "total": 0}
 
@@ -2452,7 +2462,9 @@ class WingmanCore(WebSocketUser):
         # Fire-and-forget: run on the default executor so the HTTP call returns
         # immediately. The method manages its own _precompute_* state for the
         # status poller.
-        loop.run_in_executor(None, self.pocket_tts.precompute_custom_voices)
+        loop.run_in_executor(
+            None, lambda: self.pocket_tts.precompute_custom_voices(only_stale=only_stale)
+        )
         return {"started": True, "total": len(targets)}
 
     # POST /pocket_tts/start
