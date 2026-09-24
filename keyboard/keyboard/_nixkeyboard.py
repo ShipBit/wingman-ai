@@ -70,13 +70,14 @@ def build_tables():
     }
     keycode_template = r'^keycode\s+(\d+)\s+=(.*?)$'
     try:
-        dump = check_output(['dumpkeys', '--keys-only'], universal_newlines=True)
-    except CalledProcessError as e:
-        if e.returncode == 1:
-            raise ValueError('Failed to run dumpkeys to get key names. Check if your user is part of the "tty" group, and if not, add it with "sudo usermod -a -G tty USER".')
-        else:
-            raise
-
+        dump = check_output(['dumpkeys', '--keys-only'], universal_newlines=True, stderr=PIPE)
+    except (CalledProcessError, OSError) as e:
+        # dumpkeys reads the keymap of a Linux text console. A desktop session
+        # (Wayland above all) has none, so it fails there even for users in the
+        # "tty" group, and some distros do not install it at all.
+        print('Keyboard: dumpkeys failed ({}), using the built-in US key names.'.format(e))
+        register_fallback_tables()
+        return
 
     for str_scan_code, str_names in re.findall(keycode_template, dump, re.MULTILINE):
         scan_code = int(str_scan_code)
@@ -107,13 +108,63 @@ def build_tables():
         register_key((127, ()), 'menu')
 
     synonyms_template = r'^(\S+)\s+for (.+)$'
-    dump = check_output(['dumpkeys', '--long-info'], universal_newlines=True)
+    try:
+        dump = check_output(['dumpkeys', '--long-info'], universal_newlines=True, stderr=PIPE)
+    except (CalledProcessError, OSError):
+        return
     for synonym_str, original_str in re.findall(synonyms_template, dump, re.MULTILINE):
         synonym, _ = cleanup_key(synonym_str)
         original, _ = cleanup_key(original_str)
         if synonym != original:
             from_name[original].extend(from_name[synonym])
             from_name[synonym].extend(from_name[original])
+
+# Key names by evdev key code, for when dumpkeys cannot run. The codes are the
+# kernel's (linux/input-event-codes.h), the same on every distro and the same
+# numbers listen() reads from /dev/input. The names follow a US layout: a code
+# is a physical key, so on a German keyboard code 21 ("y") is the key labelled
+# Z. Hotkeys work either way, only keys that differ between layouts carry the
+# US name. Entries: code -> (plain, with shift).
+FALLBACK_KEYS = {
+    1: ('esc',), 14: ('backspace',), 15: ('tab',), 28: ('enter',), 57: ('space',),
+    29: ('ctrl',), 97: ('ctrl',), 42: ('shift',), 54: ('shift',),
+    56: ('alt',), 100: ('alt gr',), 125: ('windows',), 126: ('windows',), 127: ('menu',),
+    58: ('caps lock',), 69: ('num lock',), 70: ('scroll lock',),
+    99: ('print screen',), 119: ('pause',),
+    102: ('home',), 103: ('up',), 104: ('page up',), 105: ('left',), 106: ('right',),
+    107: ('end',), 108: ('down',), 109: ('page down',), 110: ('insert',), 111: ('delete',),
+    113: ('volume mute',), 114: ('volume down',), 115: ('volume up',),
+    163: ('next track',), 164: ('play/pause media',), 165: ('previous track',), 166: ('stop media',),
+    2: ('1', '!'), 3: ('2', '@'), 4: ('3', '#'), 5: ('4', '$'), 6: ('5', '%'),
+    7: ('6', '^'), 8: ('7', '&'), 9: ('8', '*'), 10: ('9', '('), 11: ('0', ')'),
+    12: ('-', '_'), 13: ('=', '+'), 26: ('[', '{'), 27: (']', '}'), 39: (';', ':'),
+    40: ("'", '"'), 41: ('`', '~'), 43: ('\\', '|'), 51: (',', '<'), 52: ('.', '>'),
+    53: ('/', '?'), 86: ('<', '>'),
+    16: ('q', 'Q'), 17: ('w', 'W'), 18: ('e', 'E'), 19: ('r', 'R'), 20: ('t', 'T'),
+    21: ('y', 'Y'), 22: ('u', 'U'), 23: ('i', 'I'), 24: ('o', 'O'), 25: ('p', 'P'),
+    30: ('a', 'A'), 31: ('s', 'S'), 32: ('d', 'D'), 33: ('f', 'F'), 34: ('g', 'G'),
+    35: ('h', 'H'), 36: ('j', 'J'), 37: ('k', 'K'), 38: ('l', 'L'),
+    44: ('z', 'Z'), 45: ('x', 'X'), 46: ('c', 'C'), 47: ('v', 'V'), 48: ('b', 'B'),
+    49: ('n', 'N'), 50: ('m', 'M'),
+}
+FALLBACK_KEYS.update({58 + i: ('f{}'.format(i),) for i in range(1, 11)})
+FALLBACK_KEYS.update({87: ('f11',), 88: ('f12',)})
+FALLBACK_KEYS.update({182 + i: ('f{}'.format(12 + i),) for i in range(1, 13)})
+# Keypad, registered as "7" and as "keypad 7" like dumpkeys' KP_ names are.
+FALLBACK_KEYPAD = {
+    71: '7', 72: '8', 73: '9', 75: '4', 76: '5', 77: '6', 79: '1', 80: '2', 81: '3',
+    82: '0', 83: '.', 55: '*', 74: '-', 78: '+', 98: '/', 96: 'enter',
+}
+
+def register_fallback_tables():
+    for scan_code, names in FALLBACK_KEYS.items():
+        register_key((scan_code, ()), normalize_name(names[0]))
+        if len(names) > 1:
+            register_key((scan_code, ('shift',)), normalize_name(names[1]))
+    for scan_code, name in FALLBACK_KEYPAD.items():
+        keypad_scan_codes.add(scan_code)
+        register_key((scan_code, ()), normalize_name(name))
+        register_key((scan_code, ()), 'keypad ' + normalize_name(name))
 
 device = None
 init_error = None
