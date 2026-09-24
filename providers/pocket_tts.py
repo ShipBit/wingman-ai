@@ -37,7 +37,12 @@ from api.interface import (
     VoiceInfo,
 )
 from providers.interfaces import TtsInterface, tts_provider
-from providers.pocket_tts_chunks import MAX_TOKENS, faded_edges, pieces_for_speech
+from providers.pocket_tts_chunks import (
+    MAX_TOKENS,
+    faded_edges,
+    frames_after_eos,
+    pieces_for_speech,
+)
 from providers.pocket_tts_voices import (
     install_bundled_voices,
     load_bundled_voices,
@@ -1272,7 +1277,15 @@ class PocketTTS:
             pieces = [text]
         for piece in pieces:
             yield from faded_edges(
-                self.model.generate_audio_stream(voice_state, piece), self.model.sample_rate
+                self.model.generate_audio_stream(
+                    voice_state,
+                    piece,
+                    # Its own limit is lower (50) and would cut the piece again.
+                    max_tokens=MAX_TOKENS,
+                    frames_after_eos=self.model.model_recommended_frames_after_eos
+                    or frames_after_eos(piece),
+                ),
+                self.model.sample_rate,
             )
 
     # Audio the speakers hold back before they start. Covers a slow first

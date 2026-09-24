@@ -1,23 +1,45 @@
 """Text for Pocket TTS in pieces the model can speak cleanly.
 
 The model is trained on short prompts; pocket-tts splits longer text at
-sentence ends and, for a sentence over 50 tokens, at commas. A long sentence
+sentence ends and, for a sentence over the limit, at commas. A long sentence
 without commas stays one piece: a German answer with its numbers spelled out
 ("zwölftausendfünfhundert ...") reached 69 and 74 tokens in one sentence,
 measured 2026-09-23, and long pieces are a known source of skipped words and
-artifacts. What is still too long after pocket-tts's own split is cut here, in
-front of a conjunction nearest the middle, else at the word nearest the
-middle, until every piece fits.
+artifacts. What is still too long after pocket-tts's own split is cut here
+into as few pieces as fit, in front of a conjunction or after a comma where
+one is near.
 """
 
+import math
 from typing import Callable, Iterable, Iterator
 
 import torch
 
 from api.enums import SpokenLanguage
 
-MAX_TOKENS = 50
-"""pocket-tts's own limit per piece (MAX_TOKEN_PER_CHUNK)."""
+MAX_TOKENS = 65
+"""Longest piece. pocket-tts uses 50; the German model speaks up to about 65
+tokens as cleanly (word error rate 2.3% at 46 and 59 tokens, 5.0% at 75) and
+then starts skipping whole clauses (13% at 86, 34% at 117; measured
+2026-09-24 with Juergen, Tabea and Rolf). Every piece starts afresh, so a
+join inside a sentence can be heard; the longer limit keeps most sentences
+in one piece."""
+
+EXTRA_FRAMES_AFTER_EOS = 2
+"""Frames (80 ms each) the model keeps generating after it signals the end
+of a piece, on top of pocket-tts' own guess. With the guess alone, 4 of 40
+German pieces stopped while the last syllable was still sounding, heard as
+a word cut off at the join; with 2 more frames, 1 of 40, and more frames did
+not help further (measured 2026-09-24 with Juergen, Tabea, Rolf, Eponine)."""
+
+
+def frames_after_eos(piece: str) -> int:
+    """pocket-tts' guess for ``piece`` (3 frames for up to four words, else
+    1, plus 2; see prepare_text_prompt and generate_audio_stream), plus
+    EXTRA_FRAMES_AFTER_EOS."""
+    guess = 3 if len(piece.split()) <= 4 else 1
+    return guess + 2 + EXTRA_FRAMES_AFTER_EOS
+
 
 FADE_SECONDS = 0.01
 """Fade at the start and end of every piece. Each piece starts from a fresh
@@ -41,30 +63,36 @@ _CONJUNCTIONS = {
 def split_long(
     piece: str, count_tokens: Callable[[str], int], language: SpokenLanguage
 ) -> list[str]:
-    """``piece`` as it is when it fits, else cut in two and each half again.
+    """``piece`` as it is when it fits, else in as few pieces as fit, each
+    about as long as the others. A cut goes in front of a conjunction or
+    after a comma when one is near, else between words.
 
     A cut in the middle of a sentence ends with a comma: pocket-tts appends a
     period to a piece ending in a letter, and the voice would drop as if the
     sentence were over.
     """
-    if count_tokens(piece) <= MAX_TOKENS:
+    total = count_tokens(piece)
+    if total <= MAX_TOKENS:
         return [piece]
     words = piece.split(" ")
     if len(words) < 2:
         return [piece]
 
-    middle = len(words) / 2
+    target = len(words) / math.ceil(total / MAX_TOKENS)
     conjunctions = _CONJUNCTIONS.get(language, set())
-    candidates = [i for i in range(1, len(words)) if words[i].lower().strip(",.") in conjunctions]
-    if not candidates:
-        candidates = list(range(1, len(words)))
-    cut = min(candidates, key=lambda i: abs(i - middle))
+
+    def natural(i: int) -> bool:
+        return words[i].lower().strip(",.") in conjunctions or words[i - 1].endswith(",")
+
+    fitting = [i for i in range(1, len(words)) if count_tokens(" ".join(words[:i])) <= MAX_TOKENS]
+    # A natural cut up to a third of a piece away beats an exact one.
+    cut = min(fitting or [1], key=lambda i: abs(i - target) - (target / 3 if natural(i) else 0))
 
     first = " ".join(words[:cut]).rstrip()
     if first and first[-1].isalnum():
         first += ","
-    second = " ".join(words[cut:])
-    return split_long(first, count_tokens, language) + split_long(second, count_tokens, language)
+    rest = " ".join(words[cut:])
+    return [first] + split_long(rest, count_tokens, language)
 
 
 def pieces_for_speech(
@@ -76,9 +104,23 @@ def pieces_for_speech(
     """pocket-tts's own split, then every piece still over the limit cut at
     word boundaries."""
     pieces: list[str] = []
-    for piece in split_sentences(text):
+    for piece in _rejoin_clauses(split_sentences(text)):
         pieces.extend(split_long(piece, count_tokens, language))
     return pieces
+
+
+def _rejoin_clauses(pieces: list[str]) -> list[str]:
+    """pocket-tts cuts a sentence over its limit at every comma, which can
+    leave four pieces where three would fit. Joins inside a sentence are the
+    ones that can be heard, so a sentence is put back together here and
+    split_long cuts it into as few pieces as fit."""
+    out: list[str] = []
+    for piece in pieces:
+        if out and not out[-1].rstrip().endswith((".", "!", "?", "…")):
+            out[-1] = f"{out[-1].rstrip()} {piece.lstrip()}"
+        else:
+            out.append(piece)
+    return out
 
 
 def faded_edges(chunks: Iterable[torch.Tensor], sample_rate: int) -> Iterator[torch.Tensor]:
