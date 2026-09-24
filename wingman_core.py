@@ -2444,16 +2444,16 @@ class WingmanCore(WebSocketUser):
         future.add_done_callback(_log_preload_failure)
 
     async def _after_pocket_tts_reload(self) -> None:
-        """Get the voices ready for the model that was just loaded.
+        """Get the voices ready for the model that was just loaded, under the
+        loading indicator, so a voice the user picks later speaks at once.
 
-        The voices the Wingmen use come first, with the loading indicator: the
-        next answer needs them. When the load replaced another model - the user
-        picked a new spoken language or quality - every other custom voice is
-        cloned for it in the background, so switching a Wingman to one of them
-        later does not stall its first answer. On any other load, including the
-        first after start, only the clones that exist but are outdated: this is
-        what re-clones a user's voices after a Wingman update brought a
-        pocket-tts that computes them differently.
+        The voices the Wingmen use come first. Then the clones the model
+        still lacks, with their progress in the indicator: every custom voice
+        when the load replaced another model (a new spoken language or
+        quality) or Wingman brought new recordings; on any other load only
+        clones that exist but are outdated, after a Wingman update brought a
+        pocket-tts that computes them differently. Each clone is made once
+        per model: 49 shipped voices took 26 s on an M2 Pro (2026-09-24).
         """
         # Recordings Wingman ships for the spoken language (see
         # providers/pocket_tts_voices.py): new ones are cloned right away, and
@@ -2462,22 +2462,46 @@ class WingmanCore(WebSocketUser):
             self.pocket_tts.install_bundled_voices()
             or self.pocket_tts.bundled_voices_needing_clone()
         )
+        only_stale = not (self.pocket_tts.last_load_switched_model or installed)
         await self._preload_pocket_tts_voices(
             state_message_prefix="Preloading voices",
-            restore_ready_state=True,
+            restore_ready_state=False,
         )
-        # A new model or new recordings: every custom voice. The same model:
-        # only clones that exist but are outdated - after a Wingman update
-        # brought another pocket-tts, or a recording was replaced.
-        result = await self._start_precompute(
-            only_stale=not (self.pocket_tts.last_load_switched_model or installed)
-        )
-        if result.get("started"):
-            await self.printr.print_async(
-                f"Pocket TTS: preparing {result['total']} custom voice(s) for the "
-                f"'{self.pocket_tts.model_id}' model in the background.",
-                color=LogType.INFO,
+        try:
+            await self._precompute_with_indicator(only_stale)
+        finally:
+            await self.set_core_state(CoreState.READY)
+
+    async def _precompute_with_indicator(self, only_stale: bool) -> None:
+        """Clone what the active model lacks, showing "Preparing voices
+        (12/49)" and the progress in the loading indicator."""
+        pocket = self.pocket_tts
+        if not pocket.settings.enable or not pocket.settings.run_locally or not pocket.model:
+            return
+        if pocket._precompute_running:
+            return
+        total = len(pocket.list_custom_voices_needing_precompute(only_stale=only_stale))
+        if not total:
+            return
+        loop = asyncio.get_running_loop()
+
+        def progress(current: int, total: int, _voice: str) -> None:
+            asyncio.run_coroutine_threadsafe(
+                self.set_core_state(
+                    CoreState.LOADING_CONFIG,
+                    message=f"Preparing voices ({current}/{total})",
+                    progress=(current - 1) / total,
+                ),
+                loop,
             )
+
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG, message=f"Preparing voices (0/{total})", progress=0.0
+        )
+        await loop.run_in_executor(
+            None,
+            lambda: pocket.precompute_custom_voices(progress_cb=progress, only_stale=only_stale),
+        )
 
     # POST /pocket_tts/preload_voice
     async def preload_pocket_tts_voice(self, voice: str) -> PocketTTSPreloadResult:
