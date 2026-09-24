@@ -15,6 +15,7 @@ from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
 from services.config_service import ConfigService
+from services.wingman_default_voices import apply_default_voices
 from services.printr import Printr
 from services.pub_sub import PubSub
 
@@ -253,6 +254,14 @@ class SettingsService:
                 server_only=True,
                 color=LogType.INFO,
             )
+            # Shipped Wingmen still on a default voice follow the language.
+            changed = apply_default_voices(
+                self.config_manager,
+                self.config_manager.app_root_path,
+                settings.spoken_language.value,
+            )
+            if changed and self.config_service.tower:
+                await self.config_service.load_config()
 
         # Local AI (llama.cpp)
         if self.local_ai_service:

@@ -1,0 +1,12 @@
+# Pocket TTS voice of each shipped Wingman per spoken language (see
+# services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
+# "legacy" is the voice its template had up to 3.2.3, so a Wingman still on
+# it counts as untouched and moves to the voice of its language.
+# Chosen by ear on 2026-09-24.
+ATC	legacy	azelma
+ATC	de	de-julia
+ATC	en	anna
+Computer	legacy	fantine
+Computer	de	de-ibrahim
+Computer	en	mary
+Clippy	legacy	alba

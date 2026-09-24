@@ -101,6 +101,7 @@ class ConfigManager:
         self.log_source_name = "ConfigManager"
         self.printr = Printr()
 
+        self.app_root_path = app_root_path
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
         self.config_dir = get_writable_dir(CONFIGS_DIR)
         self.skills_dir = get_writable_dir(SKILLS_DIR)
