@@ -92,7 +92,7 @@ pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.
 pip install -r requirements.txt
 ```
 
-GPU speech recognition (Parakeet) does not use torch. It runs on `onnxruntime-gpu` with the CUDA 12 packages from `requirements.txt`.
+GPU speech recognition (Parakeet) does not use torch. It runs on `onnxruntime-gpu` with the CUDA 13 packages from `requirements.txt`.
 
 ## Setup Visual Studio Code
 
