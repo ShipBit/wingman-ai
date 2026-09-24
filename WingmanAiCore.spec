@@ -298,6 +298,20 @@ if missing_migration_modules:
         "that cannot migrate user configs."
     )
 
+# Linux: leave the audio stack to the system. Our libasound.so.2 comes from the
+# Ubuntu build machine and looks for its plugins in Ubuntu's directory, so on
+# Fedora, Arch and others it never finds the PipeWire/Pulse plugin and offers
+# only raw hw: devices; USB headsets were missing. PortAudio and JACK link
+# against it. sounddevice finds PortAudio through ldconfig, which never saw our
+# copy anyway: without a system PortAudio Core did not start at all. The
+# vendored copies inside pygame.libs etc. carry a hash in their name and stay.
+if sys.platform.startswith('linux'):
+    SYSTEM_AUDIO_LIBS = ('libasound.so', 'libportaudio.so', 'libjack.so')
+    a.binaries = [
+        entry for entry in a.binaries
+        if not os.path.basename(entry[0]).startswith(SYSTEM_AUDIO_LIBS)
+    ]
+
 # ============================================================================
 # PACKAGING
 # ============================================================================

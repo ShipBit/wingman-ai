@@ -158,6 +158,13 @@ class AudioPlayer:
         sd.sleep(int(len(audio) / sample_rate * 1000))
 
     async def stop_playback(self):
+        # The cancel hotkey calls this whether or not anything plays, and a held
+        # key repeats its key-down about 30 times a second. Reporting "finished"
+        # for nothing flooded the log and the client with "Playback finished ()".
+        was_playing = (
+            self.is_playing or self.stream is not None or self.raw_stream is not None
+        )
+
         if self.stream is not None:
             self.stream.stop()
             self.stream = None
@@ -167,7 +174,8 @@ class AudioPlayer:
             self.raw_stream = None
 
         self.is_playing = False
-        await self.notify_playback_finished(self.wingman_name)
+        if was_playing:
+            await self.notify_playback_finished(self.wingman_name)
 
     async def pause_playback(self):
         if self.stream is not None:

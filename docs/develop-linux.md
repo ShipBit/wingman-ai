@@ -83,15 +83,16 @@ The release version of Wingman AI bundles model files and binaries that are too 
 
 Copying these is optional — the app will download what it needs on first launch, but this avoids timeouts.
 
-## CUDA GPU acceleration (optional)
+## torch: CPU build (recommended)
 
-If you have an NVIDIA GPU and want GPU-accelerated speech recognition, install the CUDA-enabled PyTorch builds:
+On Linux, torch from PyPI is the CUDA build and pulls in about 4 GB of NVIDIA libraries. Wingman only needs torch for Pocket TTS, which runs on the CPU. The release build installs the CPU wheel before the requirements, and you can do the same:
 
 ```bash
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
 ```
 
-This replaces the CPU-only torch that `requirements.txt` installs. FasterWhisper and PocketTTS will automatically use the GPU when CUDA is available.
+GPU speech recognition (Parakeet) does not use torch. It runs on `onnxruntime-gpu` with the CUDA 13 packages from `requirements.txt`.
 
 ## Setup Visual Studio Code
 

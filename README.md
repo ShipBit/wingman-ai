@@ -206,6 +206,19 @@ If that doesn't work for some reason, try starting `Wingman AI Core.exe` manuall
 
 Wingman runs well on MacOS. While we don't offer a precompiled package for it, you can [run it from source](#develop-with-wingman-ai). Note that the TTS provider XVASynth is Windows-only and therefore not supported on MacOS.
 
+### Linux
+
+- Download the AppImage (x86_64) from [wingman-ai.com](https://www.wingman-ai.com), make it executable (`chmod +x WingmanAI_*.AppImage`) and start it.
+- It needs a distribution from 2024 or newer (glibc 2.39): Ubuntu 24.04, Fedora 40, Debian 13, current Arch, CachyOS, Nobara or newer.
+- Install PortAudio and the PipeWire ALSA plugin. Wingman uses the system's audio libraries, so your headset and the PipeWire/Pulse devices show up:
+  - Fedora, Nobara: `sudo dnf install portaudio pipewire-alsa`
+  - Ubuntu, Debian: `sudo apt install libportaudio2 pipewire-alsa libfuse2t64`
+  - Arch, CachyOS: `sudo pacman -S portaudio pipewire-alsa`
+- For hotkeys and push-to-talk, add yourself to the `input` group, then log out and back in: `sudo usermod -aG input $USER`. This works on X11 and Wayland.
+- Not available on Linux: the HUD overlay and XVASynth.
+
+If Wingman does not start, run the AppImage from a terminal. Core's messages, such as a missing PortAudio, are printed there.
+
 ## Who are these Wingmen?
 
 Our default Wingmen serve as examples and starting points for your own Wingmen, and you can easily reconfigure them using the client. You can also add your own Wingmen very easily.
@@ -291,6 +304,7 @@ Please follow our guides to setup your dev environment:
 
 - [Windows development](docs/develop-windows.md)
 - [MacOS development](docs/develop-macos.md)
+- [Linux development](docs/develop-linux.md)
 
 ### Creating Custom Skills
 
