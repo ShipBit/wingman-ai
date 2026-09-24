@@ -50,6 +50,38 @@ if getattr(sys, "frozen", False):
             + os.environ.get("PATH", "")
         )
 
+    # The PyInstaller bootloader put _internal in front of LD_LIBRARY_PATH and
+    # kept the old value in LD_LIBRARY_PATH_ORIG. The loader of this process
+    # read the variable at startup, so changing it now only affects programs
+    # Core starts: MCP servers, llama-server, xdg-open. Those must load the
+    # system's libraries, not our copies of libstdc++, OpenSSL or GLib.
+    if platform.system() == "Linux":
+        if "LD_LIBRARY_PATH_ORIG" in os.environ:
+            os.environ["LD_LIBRARY_PATH"] = os.environ.pop("LD_LIBRARY_PATH_ORIG")
+        else:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+
+# sounddevice loads PortAudio when it is imported. A Linux system without it
+# used to die on that import in wingman_core with a traceback the client never
+# showed; the user only saw "Backend startup timed out". Say what is missing.
+if platform.system() == "Linux":
+    try:
+        import sounddevice  # noqa: F401
+    except OSError as portaudio_error:
+        from api.enums import LogType
+        from services.printr import Printr
+
+        Printr().print(
+            f"PortAudio is missing ({portaudio_error}). Wingman needs it for the "
+            "microphone and for speech output. Install it with your package manager "
+            "and start Wingman again: 'sudo dnf install portaudio' (Fedora), "
+            "'sudo apt install libportaudio2' (Ubuntu, Debian), "
+            "'sudo pacman -S portaudio' (Arch).",
+            color=LogType.ERROR,
+            server_only=True,
+        )
+        sys.exit(1)
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse

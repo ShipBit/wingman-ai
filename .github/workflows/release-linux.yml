@@ -43,7 +43,13 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           python -m pip install --upgrade pip
+          # torch from PyPI is the CUDA build on Linux and drags in about 4 GB
+          # of NVIDIA libraries plus triton. Pocket TTS runs on the CPU, as it
+          # does with the CPU wheel Windows gets from PyPI. Installed first, so
+          # requirements.txt finds torch==2.8.0 satisfied by 2.8.0+cpu.
+          pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
+          python -c "import torch; assert torch.version.cuda is None, 'CUDA torch got installed: ' + torch.__version__; print('torch', torch.__version__)"
 
       - name: Build with PyInstaller
         run: |
