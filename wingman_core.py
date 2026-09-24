@@ -239,13 +239,6 @@ class WingmanCore(WebSocketUser):
             response_model=list[PronunciationRule],
             tags=tags,
         )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/tts/pronunciation/preview",
-            endpoint=self.preview_pronunciation,
-            response_model=str,
-            tags=tags,
-        )
         # The microphone test in Settings: hold, speak, release, read the text.
         self.router.add_api_route(
             methods=["POST"],
@@ -2008,17 +2001,6 @@ class WingmanCore(WebSocketUser):
             PronunciationRule(written=r.written, spoken=r.spoken)
             for r in speech_text.preset_rules_for(self.app_root_path, preset_id, language)
         ]
-
-    # POST /tts/pronunciation/preview
-    async def preview_pronunciation(self, text: str = Body(..., embed=True)) -> str:
-        """What a voice would be handed for ``text`` with the current rules."""
-        settings = self.settings_service.settings
-        return speech_text.prepare_for_speech(
-            text,
-            settings.spoken_language,
-            settings.pronunciation.rules,
-            settings.pronunciation.presets,
-        )
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 
