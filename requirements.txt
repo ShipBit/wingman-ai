@@ -61,8 +61,8 @@ tiktoken>=0.9.0
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
 onnx-asr>=0.3.3
 # Built against CUDA 13 since 1.27, see the NVIDIA packages above. At least
-# 1.30 (tested): 1.27 and 1.28 are CUDA 13 builds whose preload_dlls() still looks
-# in the CUDA 12 folders and misses nvidia/cu13, so Parakeet would stay on the CPU.
+# 1.30 (tested): 1.27 is a CUDA 13 build whose preload_dlls() still looks in the
+# CUDA 12 folders and misses nvidia/cu13, so Parakeet would stay on the CPU.
 onnxruntime-gpu>=1.30,<2.0; sys_platform == 'win32' or sys_platform == 'linux'
 onnxruntime>=1.19.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
