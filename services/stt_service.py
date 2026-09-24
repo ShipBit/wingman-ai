@@ -148,7 +148,11 @@ class SttService:
             )
             result = subscription.transcribe(
                 filename=filename,
-                languages=[transcription_tag(self.settings_service.settings.spoken_language)],
+                languages=[
+                    tag
+                    for tag in [transcription_tag(self.settings_service.settings.spoken_language)]
+                    if tag
+                ],
             )
             return result.text if result else None
 

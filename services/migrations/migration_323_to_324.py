@@ -202,6 +202,9 @@ class Migration323To324(BaseMigration):
             spoken = model_language or "en"
             self.log(f"- spoken_language: {spoken} (was '{old.get('spoken_language')}')")
         old["spoken_language"] = spoken
+        if "other_language" not in old:
+            # Only set with spoken_language "other", added in 3.2.4.
+            old["other_language"] = None
 
         if "quality" not in pocket:
             # french_24l is the only French model, so it is not a choice.

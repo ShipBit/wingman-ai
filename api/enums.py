@@ -148,6 +148,11 @@ class SpokenLanguage(Enum):
     the transcription and speech language hints - is derived from it (see
     services/spoken_language.py), so no combination can be set that does not
     work together.
+
+    OTHER is any other language, named in settings.other_language. Wingman
+    then passes no language to speech recognition, names it to the
+    conversation model and speaks through a provider that has voices for it
+    (services/other_language.py).
     """
 
     EN = "en"
@@ -156,6 +161,7 @@ class SpokenLanguage(Enum):
     ES = "es"
     IT = "it"
     PT = "pt"
+    OTHER = "other"
 
 
 class PocketTtsQuality(Enum):

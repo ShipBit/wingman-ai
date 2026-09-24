@@ -159,7 +159,8 @@ class ContextBuilder:
                 pass  # Don't let memory failures break conversation
 
         language_instruction = (
-            f"- Always respond in {language_name(self._settings.spoken_language)}"
+            f"- Always respond in "
+            f"{language_name(self._settings.spoken_language, self._settings.other_language)}"
         )
 
         context = self._config.prompts.system_prompt.format(

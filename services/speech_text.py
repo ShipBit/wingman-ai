@@ -222,6 +222,9 @@ def _speak_segment(
 ) -> str:
     code = language.value
     segment = _apply_rules(segment, rules)
+    if language == SpokenLanguage.OTHER:
+        # No tables for it: the user's own rules, nothing else.
+        return segment
     if _app_root:
         segment = _apply_rules(segment, _abbreviations(_app_root, code))
         units = _units(_app_root, code)

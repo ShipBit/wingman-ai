@@ -56,6 +56,9 @@ from api.interface import (
     SoundConfig,
     PresetOverride,
     PronunciationPreset,
+    OtherLanguageOption,
+    OtherLanguageReport,
+    OtherLanguageSetting,
     PronunciationRule,
     SttTestResult,
     SubscriptionRoutes,
@@ -74,6 +77,7 @@ from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
+from services import other_language
 from services.file import (
     get_writable_dir,
     get_audio_library_dir,
@@ -237,6 +241,28 @@ class WingmanCore(WebSocketUser):
             path="/tts/pronunciation/presets/{preset_id}",
             endpoint=self.get_pronunciation_preset,
             response_model=list[PronunciationRule],
+            tags=tags,
+        )
+        # A language beyond the six Wingman supports end to end.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/spoken_language/others",
+            endpoint=self.get_other_languages,
+            response_model=list[OtherLanguageOption],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/spoken_language/resolve",
+            endpoint=self.resolve_other_language,
+            response_model=Optional[OtherLanguageSetting],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/spoken_language/other",
+            endpoint=self.set_other_language,
+            response_model=OtherLanguageReport,
             tags=tags,
         )
         # The microphone test in Settings: hold, speak, release, read the text.
@@ -2001,6 +2027,92 @@ class WingmanCore(WebSocketUser):
             PronunciationRule(written=r.written, spoken=r.spoken)
             for r in speech_text.preset_rules_for(self.app_root_path, preset_id, language)
         ]
+
+    # ───────────────── Other spoken languages ───────────────── #
+
+    # GET /spoken_language/others
+    async def get_other_languages(self) -> list[OtherLanguageOption]:
+        return other_language.options()
+
+    # POST /spoken_language/resolve
+    async def resolve_other_language(
+        self, text: str = Body(..., embed=True)
+    ) -> Optional[OtherLanguageSetting]:
+        """The language ``text`` names: from the list, else the support
+        model gives its name and code. None when it names no language."""
+
+        async def ask(system_prompt: str, user: str) -> Optional[str]:
+            if not self.local_ai_service or not self.local_ai_service.is_ready():
+                return None
+            from services.skill_local_ai import SamplingPreset
+
+            result = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.local_ai_service.support(
+                    user, system_prompt=system_prompt, preset=SamplingPreset.PRECISE, max_output_tokens=80
+                ),
+            )
+            return result.text if result else None
+
+        return await other_language.resolve(text, ask)
+
+    # POST /spoken_language/other
+    async def set_other_language(self, language: OtherLanguageSetting) -> OtherLanguageReport:
+        """Speak ``language``: set it, and move the Wingmen that speak through
+        Pocket TTS to Inworld when it has voices for it. Returns what works
+        and what was changed."""
+        settings = self.settings_service.settings.model_copy(deep=True)
+        was_other = settings.spoken_language == SpokenLanguage.OTHER
+        settings.spoken_language = SpokenLanguage.OTHER
+        settings.other_language = language
+        if was_other:
+            # Another language than before: its voices are not the right ones.
+            other_language.restore_wingmen(self.config_manager)
+        await self.settings_service.save_settings(settings)
+
+        voices, provider = await self._inworld_voices_for(language.code)
+        switched = []
+        if voices and provider:
+            defaults = self.config_manager.load_defaults_config(silent_on_error=True)
+            default_tts = defaults.features.tts_provider.value if defaults else "pocket_tts"
+            switched = other_language.switch_wingmen(
+                self.config_manager, default_tts, language, provider, voices
+            )
+            if switched and self.config_service.tower:
+                await self.config_service.load_config()
+        stt = self.settings_service.settings.stt
+        stt_provider = stt.provider.value if stt.provider.value != "parakeet" else (
+            "parakeet" if stt.parakeet.run_locally else "parakeet_remote"
+        )
+        return other_language.report(
+            language, stt_provider, bool(voices), provider if switched else None, switched
+        )
+
+    async def _inworld_voices_for(self, code: Optional[str]):
+        """Inworld voices for ``code`` and the provider to reach them through:
+        the subscription when signed in, else the user's own Inworld key."""
+        if not code:
+            return [], None
+        try:
+            if self.is_client_logged_in:
+                from providers.wingman_subscription import WingmanSubscription
+
+                subscription = WingmanSubscription(
+                    wingman_name="system", settings=self.settings_service.settings.wingman_pro
+                )
+                voices = await asyncio.get_running_loop().run_in_executor(
+                    None, subscription.get_available_inworld_voices
+                )
+                return other_language.inworld_speaks(voices, code), "wingman_pro"
+            key = SecretKeeper().secrets.get("inworld")
+            if key:
+                from providers.inworld import Inworld
+
+                voices = await Inworld(api_key=key, wingman_name="").get_available_voices()
+                return other_language.inworld_speaks(voices, code), "inworld"
+        except Exception as e:
+            self.printr.print(f"Could not list Inworld voices: {e}", server_only=True)
+        return [], None
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 

@@ -65,12 +65,12 @@ BACKSTORY_TOKENS = 300
 REQUEST_TOKENS = 200
 
 
-def language_rule(spoken_language: SpokenLanguage) -> str:
+def language_rule(spoken_language: SpokenLanguage, other=None) -> str:
     """The prompt line that picks the language, same as the system prompt."""
-    return f"Write in {language_name(spoken_language)}."
+    return f"Write in {language_name(spoken_language, other)}."
 
 
-def build_user_message(request: str, spoken_language: SpokenLanguage) -> str:
+def build_user_message(request: str, spoken_language: SpokenLanguage, other=None) -> str:
     """The request, followed by a cue that repeats the language right before
     the answer — where a small model still pays attention to it.
 
@@ -80,7 +80,7 @@ def build_user_message(request: str, spoken_language: SpokenLanguage) -> str:
     either way."""
     return (
         f'User request: "{truncate_to_tokens(request, REQUEST_TOKENS)}"\n\n'
-        f"Your line, in {language_name(spoken_language)}:"
+        f"Your line, in {language_name(spoken_language, other)}:"
     )
 
 
@@ -90,14 +90,18 @@ def tool_label(tool_names: list[str]) -> str:
 
 
 def build_system_prompt(
-    name: str, backstory: str, tool_names: list[str], spoken_language: SpokenLanguage
+    name: str,
+    backstory: str,
+    tool_names: list[str],
+    spoken_language: SpokenLanguage,
+    other=None,
 ) -> str:
     return get_prompt("filler-response").format(
         name=name,
         backstory=truncate_to_tokens(backstory or "", BACKSTORY_TOKENS).strip()
         or "A helpful assistant.",
         tool_label=tool_label(tool_names),
-        language_rule=language_rule(spoken_language),
+        language_rule=language_rule(spoken_language, other),
     )
 
 
@@ -172,8 +176,9 @@ class FillerResponder:
             printr.print("Filler: skipped, the support model is not ready.", server_only=True)
             return None
         spoken_language = self._settings.spoken_language
-        system_prompt = build_system_prompt(name, backstory, tool_names, spoken_language)
-        user_message = build_user_message(request, spoken_language)
+        other = self._settings.other_language
+        system_prompt = build_system_prompt(name, backstory, tool_names, spoken_language, other)
+        user_message = build_user_message(request, spoken_language, other)
         printr.print(
             f"Filler: started for {tool_label(tool_names)!r}"
             f" ({'now' if immediate else f'after {FILLER_DELAY_S:g} s'}).",

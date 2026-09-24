@@ -310,7 +310,8 @@ class VoiceService:
         )
 
     def _inworld_language(self) -> str:
-        return inworld_language(self.config_manager.settings_config.spoken_language)
+        settings = self.config_manager.settings_config
+        return inworld_language(settings.spoken_language, settings.other_language)
 
     # POST /play/inworld
     async def play_inworld(

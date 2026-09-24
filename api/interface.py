@@ -1529,6 +1529,18 @@ class SystemOneSettings(BaseModel):
     their Wingman, that is all it ever does."""
 
 
+class OtherLanguageSetting(BaseModel):
+    """A language beyond the six Wingman supports end to end."""
+
+    code: Optional[str] = None
+    """ISO 639 code, e.g. "nl"; None when the language has none (Klingon
+    has "tlh", a made-up one has nothing)."""
+    name: str
+    """The language's name in itself, e.g. "Nederlands"."""
+    english_name: str
+    """Its English name, e.g. "Dutch", for the conversation model."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1557,6 +1569,41 @@ class SettingsConfig(BaseModel):
     spoken_language: SpokenLanguage
     """The one language the user and their Wingmen speak. Every
     language-specific provider setting is derived from it."""
+    other_language: Optional[OtherLanguageSetting] = None
+    """The language when `spoken_language` is OTHER; None otherwise. The
+    default keeps a settings.yaml from before 3.2.4 loadable even where the
+    migration did not run (a missing required field stopped Core in 3.2.2)."""
+
+
+class OtherLanguageOption(BaseModel):
+    """One entry of the searchable list of other languages."""
+
+    code: str
+    native: str
+    en: str
+    de: str
+    fr: str
+    es: str
+    aliases: list[str]
+    """Other names people use ("Holländisch"), for the search."""
+    parakeet: bool
+    """Parakeet transcribes it."""
+
+
+class OtherLanguageReport(BaseModel):
+    """What works and what Wingman changed after an other language was set."""
+
+    language: OtherLanguageSetting
+    stt_provider: str
+    """"parakeet", "parakeet_remote" or "wingman_pro"."""
+    stt_supported: bool
+    """Parakeet transcribes the language (the subscription detects any)."""
+    inworld_supported: bool
+    """Inworld has voices for the language."""
+    tts_provider: Optional[str] = None
+    """The provider the Wingmen were switched to; None when none fits."""
+    switched_wingmen: list[str] = []
+    """"config/wingman" of each Wingman moved to `tts_provider`."""
 
 
 class SubscriptionModel(BaseModel):

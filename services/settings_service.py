@@ -3,7 +3,7 @@ from os import path
 from typing import Awaitable, Callable, Optional
 from fastapi import APIRouter
 import sounddevice as sd
-from api.enums import LogType, SttProvider, ToastType
+from api.enums import LogType, SpokenLanguage, SttProvider, ToastType
 from api.interface import (
     AudioSettings,
     AudioDeviceSettings,
@@ -14,6 +14,7 @@ from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
+from services import other_language
 from services.config_service import ConfigService
 from services.wingman_default_voices import apply_default_voices
 from services.printr import Printr
@@ -243,6 +244,7 @@ class SettingsService:
         # The spoken language picks the Pocket TTS model, so a new language
         # reloads it like a new quality does.
         self.config_manager.settings_config.spoken_language = settings.spoken_language
+        self.config_manager.settings_config.other_language = settings.other_language
         self.pocket_tts.update_settings(
             settings=settings.pocket_tts, spoken_language=settings.spoken_language
         )
@@ -254,13 +256,21 @@ class SettingsService:
                 server_only=True,
                 color=LogType.INFO,
             )
+            # Back from another language: the Wingmen it moved to Inworld
+            # speak through Pocket TTS again (services/other_language.py).
+            restored = []
+            if (
+                old.spoken_language == SpokenLanguage.OTHER
+                and settings.spoken_language != SpokenLanguage.OTHER
+            ):
+                restored = other_language.restore_wingmen(self.config_manager)
             # Shipped Wingmen still on a default voice follow the language.
             changed = apply_default_voices(
                 self.config_manager,
                 self.config_manager.app_root_path,
                 settings.spoken_language.value,
             )
-            if changed and self.config_service.tower:
+            if (changed or restored) and self.config_service.tower:
                 await self.config_service.load_config()
 
         # Local AI (llama.cpp)

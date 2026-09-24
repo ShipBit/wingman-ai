@@ -410,7 +410,9 @@ class WingmanSubscriptionTts(TtsInterface):
             sound_config=sound_config,
             audio_player=audio_player,
             wingman_name=wingman_name,
-            language=inworld_language(self._settings.spoken_language),
+            language=inworld_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
         )
 
 @llm_provider(ConversationProvider.WINGMAN_PRO)

@@ -121,9 +121,11 @@ system_one:
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
   commands: true
-# The one language you and your Wingmen speak: en, de, fr, es, it or pt.
+# The one language you and your Wingmen speak: en, de, fr, es, it or pt,
+# or "other" with the language in other_language (code, name, english_name).
 # Answer language, voice model and speech recognition all follow it.
 spoken_language: en
+other_language: null
 hud_server:
   enabled: false
   host: "127.0.0.1"

@@ -6,11 +6,17 @@ follow from it here, so the providers can never be set to languages that do
 not match. Parakeet needs nothing: v3 detects the language itself. Until 3.2.4 each had its own setting, and the
 default combination ("multilingual" with the English Pocket TTS model) read
 German answers with an English voice.
+
+With SpokenLanguage.OTHER the language is one of the rest, in
+settings.other_language: no hint goes to transcription (it detects the
+language), Inworld gets its code, prompts its name, and Pocket TTS keeps the
+English model since it has none for it.
 """
 
 from typing import Optional
 
 from api.enums import PocketTtsQuality, SpokenLanguage
+from api.interface import OtherLanguageSetting
 
 LANGUAGE_NAMES = {
     SpokenLanguage.EN: "English",
@@ -72,7 +78,13 @@ TRANSCRIPTION_TAGS = {
 Inworld and the primary subtag to OpenAI."""
 
 
-def language_name(language: SpokenLanguage) -> str:
+def language_name(
+    language: SpokenLanguage, other: Optional[OtherLanguageSetting] = None
+) -> str:
+    """The language as prompts spell it out: "German", or for an other
+    language its English name ("Dutch")."""
+    if language == SpokenLanguage.OTHER:
+        return other.english_name if other else "the language the user speaks"
     return LANGUAGE_NAMES[language]
 
 
@@ -85,20 +97,32 @@ def pocket_tts_model(
     otherwise the built-in model for the language in the chosen size."""
     if custom_model:
         return custom_model
-    return POCKET_TTS_MODELS[language][quality]
+    return POCKET_TTS_MODELS[_pocket_language(language)][quality]
 
 
 def pocket_tts_has_high_quality(language: SpokenLanguage) -> bool:
     """Whether HIGH loads a different model than STANDARD for this language."""
-    models = POCKET_TTS_MODELS[language]
+    models = POCKET_TTS_MODELS[_pocket_language(language)]
     return models[PocketTtsQuality.HIGH] != models[PocketTtsQuality.STANDARD]
 
 
-def transcription_tag(language: SpokenLanguage) -> str:
-    return TRANSCRIPTION_TAGS[language]
+def _pocket_language(language: SpokenLanguage) -> SpokenLanguage:
+    # Pocket TTS has no model for an other language; the English one loads,
+    # and the user is told to pick a provider that speaks it.
+    return SpokenLanguage.EN if language == SpokenLanguage.OTHER else language
 
 
-def inworld_language(language: SpokenLanguage) -> str:
+def transcription_tag(language: SpokenLanguage) -> Optional[str]:
+    """None for an other language: transcription detects it itself."""
+    return TRANSCRIPTION_TAGS.get(language)
+
+
+def inworld_language(
+    language: SpokenLanguage, other: Optional[OtherLanguageSetting] = None
+) -> Optional[str]:
     """Inworld takes a BCP-47 tag and uses the voice's localized prompt for it
-    when there is one. The primary subtag keeps the voice's own accent."""
+    when there is one. The primary subtag keeps the voice's own accent. For an
+    other language its code, None when it has none."""
+    if language == SpokenLanguage.OTHER:
+        return other.code if other else None
     return language.value
