@@ -689,9 +689,8 @@ async def async_main(host: str, port: int, sidecar: bool):
                 if platform.system() == "Linux":
                     msg = (
                         "Push-to-talk unavailable: keyboard access denied.\n"
-                        "Run these commands, then log out and back in:\n"
-                        "sudo usermod -a -G input $USER\n"
-                        "sudo usermod -a -G tty $USER"
+                        "Run this command, then log out and back in:\n"
+                        "sudo usermod -a -G input $USER"
                     )
                 elif platform.system() == "Darwin":
                     msg = (
