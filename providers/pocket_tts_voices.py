@@ -94,6 +94,10 @@ def install_bundled_voices(app_root: Optional[str], voices_dir: str, language: s
     - copied before, then deleted by the user: left deleted
     - copied before and unchanged, but Wingman ships a new recording: replaced
     - a file of the user's own under the same name: never touched
+
+    The text file next to each voice follows the same rules: written with
+    the voice, replaced when Wingman ships a new description and the user
+    has not edited it, left alone once they have.
     """
     voices = [v for v in load_bundled_voices(app_root) if v.language == language]
     if not voices:
@@ -102,6 +106,7 @@ def install_bundled_voices(app_root: Optional[str], voices_dir: str, language: s
     record_path = os.path.join(voices_dir, RECORD_FILE)
     record = _read_record(record_path)
     copied = []
+    changed = False
     for voice in voices:
         source = os.path.join(app_root, VOICES_DIR, voice.file)
         dest = os.path.join(voices_dir, voice.file)
@@ -115,13 +120,24 @@ def install_bundled_voices(app_root: Optional[str], voices_dir: str, language: s
         shutil.copyfile(source, dest)
         record[voice.file] = wanted
         copied.append(voice.id)
+        changed = True
     for voice in voices:
-        # Written once: after that the file is the user's to edit.
-        sidecar = os.path.join(voices_dir, voice.id + ".txt")
-        if record.get(voice.file) and not os.path.exists(sidecar):
-            if os.path.exists(os.path.join(voices_dir, voice.file)):
-                write_voice_details(sidecar, voice)
-    if copied:
+        if not record.get(voice.file) or not os.path.exists(os.path.join(voices_dir, voice.file)):
+            continue  # not ours, or the user deleted the voice
+        key = voice.id + ".txt"
+        sidecar = os.path.join(voices_dir, key)
+        text = voice_details_text(voice)
+        if os.path.exists(sidecar):
+            current = _sha256(sidecar)
+            ours = record.get(key) == current if key in record else _written_by_us(sidecar, voice)
+            if not ours or current == _sha256_text(text):
+                continue  # edited by the user, or already current
+        elif key in record:
+            continue  # the user deleted it
+        _write_text(sidecar, text)
+        record[key] = _sha256_text(text)
+        changed = True
+    if changed:
         tmp = record_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(record, f, indent=2, sort_keys=True)
@@ -172,10 +188,34 @@ def read_voice_details(path: str) -> VoiceDetails:
     return details
 
 
-def write_voice_details(path: str, voice: BundledVoice) -> None:
+def voice_details_text(voice: BundledVoice) -> str:
     lines = [voice.description] if voice.description else []
     lines += [f"gender: {voice.gender.lower()}", f"name: {voice.name}"]
+    return "\n".join(lines) + "\n"
+
+
+def write_voice_details(path: str, voice: BundledVoice) -> None:
+    _write_text(path, voice_details_text(voice))
+
+
+def _write_text(path: str, text: str) -> None:
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
     os.replace(tmp, path)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _written_by_us(path: str, voice: BundledVoice) -> bool:
+    """Whether a text file from before Wingman noted its checksum is still
+    as written: our "gender:" and "name:" lines under a single line."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+    except (OSError, UnicodeDecodeError):
+        return False
+    tail = [f"gender: {voice.gender.lower()}", f"name: {voice.name}", ""]
+    return lines[-3:] == tail and len(lines) <= 4
