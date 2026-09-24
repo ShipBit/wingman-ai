@@ -1989,16 +1989,24 @@ class WingmanCore(WebSocketUser):
 
     # GET /tts/pronunciation/presets
     async def get_pronunciation_presets(self) -> list[PronunciationPreset]:
+        # Counted as they apply to the spoken language: a term with a German
+        # and an English spelling is one term.
+        language = self.settings_service.settings.spoken_language
         return [
-            PronunciationPreset(id=pid, name=name, count=count)
-            for pid, name, count in speech_text.list_presets(self.app_root_path)
+            PronunciationPreset(
+                id=pid,
+                name=name,
+                count=len(speech_text.preset_rules_for(self.app_root_path, pid, language)),
+            )
+            for pid, name, _count in speech_text.list_presets(self.app_root_path)
         ]
 
     # GET /tts/pronunciation/presets/{preset_id}
     async def get_pronunciation_preset(self, preset_id: str) -> list[PronunciationRule]:
+        language = self.settings_service.settings.spoken_language
         return [
             PronunciationRule(written=r.written, spoken=r.spoken)
-            for r in speech_text.load_preset(self.app_root_path, preset_id)
+            for r in speech_text.preset_rules_for(self.app_root_path, preset_id, language)
         ]
 
     # POST /tts/pronunciation/preview

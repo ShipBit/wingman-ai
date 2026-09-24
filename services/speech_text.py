@@ -131,6 +131,16 @@ def load_preset(app_root: str, preset_id: str) -> tuple[Rule, ...]:
     return tuple(rules)
 
 
+def preset_rules_for(app_root: str, preset_id: str, language: SpokenLanguage) -> list[Rule]:
+    """The rules of a bundled list that apply to ``language``, one per
+    written form, the way they are used: the first matching line wins."""
+    rules: dict[str, Rule] = {}
+    for rule in load_preset(app_root, preset_id):
+        if rule.languages is None or language.value in rule.languages:
+            rules.setdefault(rule.written, rule)
+    return list(rules.values())
+
+
 # ───────────────────────── rewriting ───────────────────────── #
 
 # Markup the providers read themselves: <break time="1s"/>, [laughs].
