@@ -125,11 +125,14 @@ def restore_wingmen(config_manager) -> list[str]:
     user has changed their provider or voice since."""
     record_path = os.path.join(config_manager.config_dir, RECORD_FILE)
     record = _read(record_path)
-    restored = []
+    restored, retry = [], {}
     for path, done in record.items():
+        if not os.path.exists(path):
+            continue
         try:
             config = config_manager.read_config(path) or {}
         except Exception:
+            retry[path] = done
             continue
         features = config.get("features") or {}
         if features.get("tts_provider") != done["provider"]:
@@ -140,8 +143,12 @@ def restore_wingmen(config_manager) -> list[str]:
         config["features"] = features
         if config_manager.write_config(path, config):
             restored.append(path)
+        else:
+            retry[path] = done
+    # Wingmen that could not be read or written are tried again next time.
     if os.path.exists(record_path):
         os.remove(record_path)
+    _write(record_path, retry)
     return restored
 
 

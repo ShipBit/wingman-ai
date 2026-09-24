@@ -925,6 +925,14 @@ class WingmanCore(WebSocketUser):
         # Capture the main loop so background workers can schedule coroutines.
         self._main_loop = asyncio.get_running_loop()
 
+        # Parakeet and Pocket TTS were built before the migration replaced the
+        # settings object, so they still hold the pre-migration values (a
+        # German user upgrading from 3.2.3 would get the English model).
+        settings = self.settings_service.settings
+        self.parakeet.settings = settings.stt.parakeet
+        self.pocket_tts.settings = settings.pocket_tts
+        self.pocket_tts.spoken_language = settings.spoken_language
+
         # 1. Detect hardware
         await self.set_core_state(
             CoreState.LOADING_CONFIG,
@@ -2063,6 +2071,18 @@ class WingmanCore(WebSocketUser):
         Pocket TTS to Inworld when it has voices for it. Returns what works
         and what was changed."""
         settings = self.settings_service.settings.model_copy(deep=True)
+        stt = self.settings_service.settings.stt
+        stt_provider = stt.provider.value if stt.provider.value != "parakeet" else (
+            "parakeet" if stt.parakeet.run_locally else "parakeet_remote"
+        )
+        if language.code in {l.value for l in SpokenLanguage if l != SpokenLanguage.OTHER}:
+            # "Deutsch" typed as another language: it is one Wingman speaks
+            # end to end, with Pocket TTS and no switch to Inworld. Saving
+            # restores switched Wingmen and gives the defaults their voice.
+            settings.spoken_language = SpokenLanguage(language.code)
+            settings.other_language = None
+            await self.settings_service.save_settings(settings)
+            return other_language.report(language, stt_provider, True, None, [])
         was_other = settings.spoken_language == SpokenLanguage.OTHER
         settings.spoken_language = SpokenLanguage.OTHER
         settings.other_language = language
@@ -2081,10 +2101,6 @@ class WingmanCore(WebSocketUser):
             )
             if switched and self.config_service.tower:
                 await self.config_service.load_config()
-        stt = self.settings_service.settings.stt
-        stt_provider = stt.provider.value if stt.provider.value != "parakeet" else (
-            "parakeet" if stt.parakeet.run_locally else "parakeet_remote"
-        )
         return other_language.report(
             language, stt_provider, bool(voices), provider if switched else None, switched
         )
