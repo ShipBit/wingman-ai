@@ -3,6 +3,13 @@ audio: {}
 streamer_mode: false
 show_token_count: false
 filler_responses: true
+# How the text is rewritten before a voice reads it: abbreviations, units and
+# numbers are spelled out in the spoken language. Your own rules win; presets
+# are bundled lists per game (templates/pronunciation).
+pronunciation:
+  rules: []
+  presets:
+    - star_citizen
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
 stt:
@@ -10,11 +17,6 @@ stt:
   # on a server of yours) or wingman_pro (the subscription's cloud service).
   # One choice for every wingman and for both ways of talking.
   provider: parakeet
-  # Languages the cloud provider may auto-detect. Parakeet has its own
-  # language field.
-  languages:
-    - en-US
-    - de-DE
   # Special words no speech model knows; every transcript is corrected
   # against them. The Settings page can fill this from your configuration.
   vocabulary: []
@@ -24,7 +26,6 @@ stt:
   preset_overrides: {}
   parakeet:
     run_locally: true
-    model_variant: v3
     execution_provider: cpu
     # Only read when run_locally is off: the Parakeet server of yours.
     # Empty until you fill it in.
@@ -87,8 +88,12 @@ xvasynth:
 pocket_tts:
   enable: true
   run_locally: true
-  model: "english_2026-04"
-  quantize: true
+  # standard (6 layers) or high (24 layers). The model itself follows
+  # spoken_language.
+  quality: standard
+  # A YAML config from the Pocket TTS models folder, used instead of the
+  # built-in model for spoken_language.
+  custom_model: null
   host: "localhost"
   port: 5002
 llama_cpp:
@@ -116,7 +121,11 @@ system_one:
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
   commands: true
-spoken_language: "multilingual"
+# The one language you and your Wingmen speak: en, de, fr, es, it or pt,
+# or "other" with the language in other_language (code, name, english_name).
+# Answer language, voice model and speech recognition all follow it.
+spoken_language: en
+other_language: null
 hud_server:
   enabled: false
   host: "127.0.0.1"

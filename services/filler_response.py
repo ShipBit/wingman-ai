@@ -35,10 +35,11 @@ import time
 import traceback
 from typing import TYPE_CHECKING, Callable, Optional
 
-from services.context_builder import LANGUAGE_NAMES
+from api.enums import SpokenLanguage
 from services.file import get_prompt
 from services.printr import Printr
 from services.skill_local_ai import SamplingPreset
+from services.spoken_language import language_name
 from services.token_utils import truncate_to_tokens
 
 if TYPE_CHECKING:
@@ -64,24 +65,12 @@ BACKSTORY_TOKENS = 300
 REQUEST_TOKENS = 200
 
 
-def _language_name(spoken_language: str) -> Optional[str]:
-    if not spoken_language or spoken_language == "multilingual":
-        return None
-    return LANGUAGE_NAMES.get(spoken_language, spoken_language)
+def language_rule(spoken_language: SpokenLanguage, other=None) -> str:
+    """The prompt line that picks the language, same as the system prompt."""
+    return f"Write in {language_name(spoken_language, other)}."
 
 
-def language_rule(spoken_language: str) -> str:
-    """The prompt line that picks the language, same logic as the system prompt."""
-    language = _language_name(spoken_language)
-    if language:
-        return f"Write in {language}."
-    return (
-        "Write in the SAME language as the user's request. These instructions "
-        "are in English; that does not mean your line is."
-    )
-
-
-def build_user_message(request: str, spoken_language: str) -> str:
+def build_user_message(request: str, spoken_language: SpokenLanguage, other=None) -> str:
     """The request, followed by a cue that repeats the language right before
     the answer — where a small model still pays attention to it.
 
@@ -89,10 +78,9 @@ def build_user_message(request: str, spoken_language: str) -> str:
     with the rule in the system prompt alone, local Qwen3.5-4B wrote 4 of 24
     lines in English; with this cue 0 of 32. The cloud model got 24 of 24 right
     either way."""
-    language = _language_name(spoken_language) or "the same language as the request"
     return (
         f'User request: "{truncate_to_tokens(request, REQUEST_TOKENS)}"\n\n'
-        f"Your line, in {language}:"
+        f"Your line, in {language_name(spoken_language, other)}:"
     )
 
 
@@ -102,14 +90,18 @@ def tool_label(tool_names: list[str]) -> str:
 
 
 def build_system_prompt(
-    name: str, backstory: str, tool_names: list[str], spoken_language: str
+    name: str,
+    backstory: str,
+    tool_names: list[str],
+    spoken_language: SpokenLanguage,
+    other=None,
 ) -> str:
     return get_prompt("filler-response").format(
         name=name,
         backstory=truncate_to_tokens(backstory or "", BACKSTORY_TOKENS).strip()
         or "A helpful assistant.",
         tool_label=tool_label(tool_names),
-        language_rule=language_rule(spoken_language),
+        language_rule=language_rule(spoken_language, other),
     )
 
 
@@ -183,9 +175,10 @@ class FillerResponder:
         if not local_ai or not local_ai.is_ready():
             printr.print("Filler: skipped, the support model is not ready.", server_only=True)
             return None
-        spoken_language = getattr(self._settings, "spoken_language", "multilingual")
-        system_prompt = build_system_prompt(name, backstory, tool_names, spoken_language)
-        user_message = build_user_message(request, spoken_language)
+        spoken_language = self._settings.spoken_language
+        other = self._settings.other_language
+        system_prompt = build_system_prompt(name, backstory, tool_names, spoken_language, other)
+        user_message = build_user_message(request, spoken_language, other)
         printr.print(
             f"Filler: started for {tool_label(tool_names)!r}"
             f" ({'now' if immediate else f'after {FILLER_DELAY_S:g} s'}).",

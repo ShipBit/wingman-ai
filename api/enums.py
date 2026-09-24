@@ -139,6 +139,43 @@ class SttProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
 
 
+class SpokenLanguage(Enum):
+    """The one language the user and their Wingmen speak.
+
+    Only languages every voice provider handles: Parakeet v3 transcribes them,
+    Pocket TTS has a model for each, Inworld speaks them at its highest tier.
+    Everything language-specific - the answer language, the Pocket TTS model,
+    the transcription and speech language hints - is derived from it (see
+    services/spoken_language.py), so no combination can be set that does not
+    work together.
+
+    OTHER is any other language, named in settings.other_language. Wingman
+    then passes no language to speech recognition, names it to the
+    conversation model and speaks through a provider that has voices for it
+    (services/other_language.py).
+    """
+
+    EN = "en"
+    DE = "de"
+    FR = "fr"
+    ES = "es"
+    IT = "it"
+    PT = "pt"
+    OTHER = "other"
+
+
+class PocketTtsQuality(Enum):
+    """Which size of the Pocket TTS model for the spoken language is loaded.
+
+    STANDARD is the 6-layer model, about 6x faster than real time on a laptop
+    CPU. HIGH is the 24-layer model: better voices, about 2x real time. A
+    language with only one size uses it for both.
+    """
+
+    STANDARD = "standard"
+    HIGH = "high"
+
+
 class LocalAiMode(Enum):
     """Where the support model runs.
 
@@ -298,6 +335,14 @@ class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
 
 
+class SpokenLanguageEnumModel(BaseEnumModel):
+    spoken_language: SpokenLanguage
+
+
+class PocketTtsQualityEnumModel(BaseEnumModel):
+    pocket_tts_quality: PocketTtsQuality
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -320,6 +365,8 @@ ENUM_TYPES = {
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
     "LocalAiMode": LocalAiModeEnumModel,
+    "SpokenLanguage": SpokenLanguageEnumModel,
+    "PocketTtsQuality": PocketTtsQualityEnumModel,
     # Add new enums here as key-value pairs
 }
 

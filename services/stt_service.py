@@ -17,6 +17,7 @@ from api.enums import LogType, SttProvider
 from services.audio.vocabulary import Vocabulary, apply_override, load_preset
 from services.jev_gate import JevGate
 from services.printr import Printr
+from services.spoken_language import transcription_tag
 
 if TYPE_CHECKING:
     from providers.parakeet import Parakeet
@@ -146,7 +147,12 @@ class SttService:
                 settings=self.settings_service.settings.wingman_pro,
             )
             result = subscription.transcribe(
-                filename=filename, languages=stt.languages
+                filename=filename,
+                languages=[
+                    tag
+                    for tag in [transcription_tag(self.settings_service.settings.spoken_language)]
+                    if tag
+                ],
             )
             return result.text if result else None
 

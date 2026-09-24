@@ -19,9 +19,10 @@ from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.spoken_language import inworld_language
 
 if TYPE_CHECKING:
-    from api.interface import WingmanConfig
+    from api.interface import SettingsConfig, WingmanConfig
 
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "inworld.mp3"
@@ -54,6 +55,7 @@ class Inworld:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        language: Optional[str] = None,
     ):  # Prepare audio config - override encoding for streaming
         # Convert snake_case keys to camelCase for the API
         audio_config = {
@@ -76,6 +78,10 @@ class Inworld:
             "audioConfig": audio_config,
             "temperature": config.temperature,
         }
+        # Without it Inworld guesses the language from the text and keeps the
+        # voice's original prompt; with it, a localized prompt when there is one.
+        if language:
+            payload["language"] = language
 
         response = requests.request(
             "POST",
@@ -286,9 +292,15 @@ class Inworld:
 
 @tts_provider(TtsProvider.INWORLD)
 class InworldTts(TtsInterface):
-    def __init__(self, inworld_instance: "Inworld", config: "WingmanConfig"):
+    def __init__(
+        self,
+        inworld_instance: "Inworld",
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+    ):
         self._inworld = inworld_instance
         self._config = config
+        self._settings = settings
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         await self._inworld.play_audio(
@@ -297,4 +309,7 @@ class InworldTts(TtsInterface):
             sound_config=sound_config,
             audio_player=audio_player,
             wingman_name=wingman_name,
+            language=inworld_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
         )

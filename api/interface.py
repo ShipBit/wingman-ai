@@ -6,6 +6,8 @@ from api.enums import (
     CoreState,
     ImageGenerationProvider,
     LocalAiMode,
+    PocketTtsQuality,
+    SpokenLanguage,
     McpAuthType,
     McpTransportType,
     CustomPropertyType,
@@ -142,6 +144,8 @@ class VoiceInfo(BaseModel):
     locale: Optional[str] = None
     languages: Optional[list[str]] = None
     provider: Optional[str] = None
+    description: Optional[str] = None
+    """A short line on how the voice sounds, e.g. "ruhig, gemächlich"."""
 
 
 # from sounddevice lib
@@ -184,8 +188,12 @@ class XVASynthSettings(BaseModel):
 class PocketTTSSettings(BaseModel):
     enable: bool
     run_locally: bool = True
-    model: str = "english"
-    quantize: bool = True
+    quality: PocketTtsQuality
+    """Size of the model for `spoken_language`. The model itself follows the
+    language and is not a setting of its own (services/spoken_language.py)."""
+    custom_model: Optional[str] = None
+    """A YAML config from the Pocket TTS models folder to load instead of the
+    built-in model. None loads the built-in model for `spoken_language`."""
     host: str
     port: int
 
@@ -198,12 +206,9 @@ class PocketTTSPreloadResult(BaseModel):
 
 class ParakeetSettings(BaseModel):
     run_locally: bool = True
-    model_variant: str
-    """v2 (English) or v3 (Multilingual, 25 languages)"""
     execution_provider: str
-    """cpu, directml, coreml, or cuda"""
-    language: Optional[str] = None
-    """Transcription language. Empty means auto-detect."""
+    """cpu, directml (Windows, any GPU) or cuda (NVIDIA). Picked on the first
+    start: cuda when nvidia-smi finds a GPU, else cpu."""
     host: str = ""
     """Where a Parakeet server runs when `run_locally` is off. Empty until
     the user fills it in; nothing is contacted before that."""
@@ -564,6 +569,32 @@ class VoiceActivationSettings(BaseModel):
     "okay stop please" works with "okay stop" and "stop please" listed."""
 
 
+class PronunciationRule(BaseModel):
+    """How to say something the voice gets wrong: "aUEC" -> "Alpha U E C"."""
+
+    written: str
+    spoken: str
+    """Digits are fine: they are read in the spoken language afterwards."""
+
+
+class PronunciationSettings(BaseModel):
+    """How the text handed to the voice is rewritten, for every TTS provider
+    (services/speech_text.py). The chat keeps what the Wingman wrote."""
+
+    rules: list[PronunciationRule]
+    """The user's own rules. They win over every bundled one."""
+    presets: list[str]
+    """Bundled lists switched on, by id ("star_citizen")."""
+
+
+class PronunciationPreset(BaseModel):
+    """A bundled pronunciation list, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
 class VocabularyPreset(BaseModel):
     """A bundled word list for the speech correction, one per game."""
 
@@ -600,11 +631,6 @@ class SttSettings(BaseModel):
     talking (record key and voice activation)."""
 
     provider: SttProvider
-
-    languages: list[str]
-    """Languages the cloud transcription may auto-detect, as BCP-47 tags such as
-    en-US. Used by the Wingman backend; the local providers have their own
-    language settings."""
 
     vocabulary: list[str] = []
     """Special words no speech model knows: place names, ship names, people.
@@ -1503,6 +1529,18 @@ class SystemOneSettings(BaseModel):
     their Wingman, that is all it ever does."""
 
 
+class OtherLanguageSetting(BaseModel):
+    """A language beyond the six Wingman supports end to end."""
+
+    code: Optional[str] = None
+    """ISO 639 code, e.g. "nl"; None when the language has none (Klingon
+    has "tlh", a made-up one has nothing)."""
+    name: str
+    """The language's name in itself, e.g. "Nederlands"."""
+    english_name: str
+    """Its English name, e.g. "Dutch", for the conversation model."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1522,12 +1560,50 @@ class SettingsConfig(BaseModel):
     filler_responses: bool
     """Speak a short line, written by the support model in the user's language,
     while a slow tool runs and the Wingman has not said anything yet."""
+    pronunciation: PronunciationSettings
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
-    spoken_language: str = "multilingual"
+    spoken_language: SpokenLanguage
+    """The one language the user and their Wingmen speak. Every
+    language-specific provider setting is derived from it."""
+    other_language: Optional[OtherLanguageSetting] = None
+    """The language when `spoken_language` is OTHER; None otherwise. The
+    default keeps a settings.yaml from before 3.2.4 loadable even where the
+    migration did not run (a missing required field stopped Core in 3.2.2)."""
+
+
+class OtherLanguageOption(BaseModel):
+    """One entry of the searchable list of other languages."""
+
+    code: str
+    native: str
+    en: str
+    de: str
+    fr: str
+    es: str
+    aliases: list[str]
+    """Other names people use ("Holländisch"), for the search."""
+    parakeet: bool
+    """Parakeet transcribes it."""
+
+
+class OtherLanguageReport(BaseModel):
+    """What works and what Wingman changed after an other language was set."""
+
+    language: OtherLanguageSetting
+    stt_provider: str
+    """"parakeet", "parakeet_remote" or "wingman_pro"."""
+    stt_supported: bool
+    """Parakeet transcribes the language (the subscription detects any)."""
+    inworld_supported: bool
+    """Inworld has voices for the language."""
+    tts_provider: Optional[str] = None
+    """The provider the Wingmen were switched to; None when none fits."""
+    switched_wingmen: list[str] = []
+    """"config/wingman" of each Wingman moved to `tts_provider`."""
 
 
 class SubscriptionModel(BaseModel):

@@ -101,6 +101,7 @@ class ConfigManager:
         self.log_source_name = "ConfigManager"
         self.printr = Printr()
 
+        self.app_root_path = app_root_path
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
         self.config_dir = get_writable_dir(CONFIGS_DIR)
         self.skills_dir = get_writable_dir(SKILLS_DIR)
@@ -437,6 +438,13 @@ class ConfigManager:
             # Skip ALL skills directories - both top-level and within migration folders
             # e.g., "skills/...", "migration/1_8_0/skills/...", etc.
             if "skills" in path_parts:
+                continue
+            # Read straight from the bundle, never from a copy here: voice
+            # recordings (PocketTTS copies them into the custom voices folder,
+            # providers/pocket_tts_voices.py) and the pronunciation lists
+            # (services/speech_text.py). A copy per Wingman version would only
+            # take up space.
+            if path_parts[0] in ("pocket_tts", "pronunciation"):
                 continue
 
             # A wingman config template directory, e.g. "configs/Star Citizen"

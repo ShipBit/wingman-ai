@@ -44,6 +44,7 @@ from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.secret_keeper import SecretKeeper
+from services import speech_text
 from services.printr import Printr
 from services.audio_library import AudioLibrary
 from services.conversation_manager import ConversationManager
@@ -1030,9 +1031,6 @@ class Wingman:
             sound_config = self.config.sound
 
         text, contains_links, contains_code_blocks = cleanup_text(text)
-        # The listen controller compares short interruptions against this so
-        # the wingman saying "stop" does not stop itself.
-        self.audio_player.speaking_text = text
 
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
@@ -1048,6 +1046,23 @@ class Wingman:
                         LogType.INFO,
                     )
                     text = changed_text
+
+        # Written the way it is spoken: "Cptn." -> "Captain", "10 km" ->
+        # "zehn Kilometer", the user's own rules. Only what the voice reads;
+        # the chat already shows the answer as the Wingman wrote it.
+        pronunciation = self.settings.pronunciation
+        text = speech_text.prepare_for_speech(
+            text,
+            self.settings.spoken_language,
+            pronunciation.rules,
+            pronunciation.presets,
+            reads_numbers=self.config.features.tts_provider
+            in speech_text.VOICES_THAT_READ_NUMBERS,
+        )
+        # The listen controller compares short interruptions against this so
+        # the wingman saying "stop" does not stop itself - so it is what the
+        # speakers say, not what the chat shows.
+        self.audio_player.speaking_text = text
 
         if sound_config.volume == 0.0:
             printr.print(

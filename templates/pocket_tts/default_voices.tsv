@@ -1,0 +1,27 @@
+# Pocket TTS voice of each shipped Wingman per spoken language (see
+# services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
+# "legacy" is the voice its template had up to 3.2.3, so a Wingman still on
+# it counts as untouched and moves to the voice of its language.
+# de and en chosen by ear on 2026-09-24. fr, es, it and pt picked to match:
+# ATC a clear, brisk woman, Computer a clear, calm man, Clippy the liveliest woman.
+ATC	legacy	azelma
+ATC	de	de-julia
+ATC	en	en-jenny
+Computer	legacy	fantine
+Computer	de	de-ibrahim
+Computer	en	mary
+Clippy	legacy	alba
+Clippy	de	de-sven
+Clippy	en	en-ciufi
+ATC	fr	fr-noemie
+Computer	fr	fr-didier
+Clippy	fr	fr-sabine
+ATC	es	es-dolores
+Computer	es	es-paulino
+Clippy	es	es-lucia
+ATC	it	it-angelica
+Computer	it	it-paolo
+Clippy	it	it-allie
+ATC	pt	pt-carina
+Computer	pt	pt-jose
+Clippy	pt	pt-monica

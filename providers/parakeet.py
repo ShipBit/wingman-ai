@@ -1,7 +1,10 @@
 import gc
 import platform
 import threading
+import time
 from typing import Optional
+
+import numpy as np
 
 import requests
 
@@ -15,20 +18,19 @@ from api.interface import (
 from services.printr import Printr
 
 
+# No CoreML: on a Mac Parakeet runs on the CPU. Measured 2026-09-23 on an M2
+# Pro with onnxruntime 1.22, CoreML took 219 ms per sentence against 128 ms on
+# the CPU and 3 s longer to load (older versions crashed on the model's
+# external data files). Configs that still say "coreml" get the CPU.
 EXECUTION_PROVIDER_MAP = {
     "cpu": ["CPUExecutionProvider"],
     "directml": ["DmlExecutionProvider", "CPUExecutionProvider"],
-    "coreml": ["CoreMLExecutionProvider", "CPUExecutionProvider"],
     "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
 }
 
-MODEL_VARIANT_MAP = {
-    "v2": "nemo-parakeet-tdt-0.6b-v2",
-    "v3": "nemo-parakeet-tdt-0.6b-v3",
-}
-
-# CoreML is excluded for TDT models — they use external data files that CoreML can't handle
-COREML_EXCLUDED_PROVIDERS = ["CoreMLExecutionProvider"]
+# v3 only. v2 transcribes English alone and was only marginally better at it;
+# with one spoken language per user it was a setting that could only break.
+PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
 
 class Parakeet:
@@ -60,19 +62,10 @@ class Parakeet:
         try:
             import onnx_asr
 
-            model_name = MODEL_VARIANT_MAP.get(
-                self.settings.model_variant, "nemo-parakeet-tdt-0.6b-v3"
-            )
+            model_name = PARAKEET_MODEL
             providers = EXECUTION_PROVIDER_MAP.get(
                 self.settings.execution_provider, ["CPUExecutionProvider"]
             )
-
-            # Exclude CoreML for TDT models — crashes with external data files
-            providers = [
-                p for p in providers if p not in COREML_EXCLUDED_PROVIDERS
-            ]
-            if not providers:
-                providers = ["CPUExecutionProvider"]
 
             # Filter requested providers against what ONNX Runtime actually has
             # available, so we know up front whether CUDA will really be used.
@@ -111,6 +104,7 @@ class Parakeet:
                 server_only=True,
                 color=LogType.POSITIVE,
             )
+            self._warm_up()
         except ImportError:
             self.printr.toast_error(
                 "Parakeet requires 'onnx-asr' and 'onnxruntime'. Install with: pip install onnx-asr onnxruntime"
@@ -118,6 +112,32 @@ class Parakeet:
         except Exception as e:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
+            )
+
+    def _warm_up(self):
+        """Run one recognition on a second of faint noise and throw it away.
+
+        ONNX Runtime sets up its kernels on the first run: measured 2026-09-23
+        on an M2 Pro, the first real sentence took 696 ms and every later one
+        140 ms. Paid here, during loading, the user's first sentence is as fast
+        as the rest. The noise stands in for speech; the encoder is where the
+        time goes, and it does the same work either way.
+        """
+        try:
+            noise = (np.random.default_rng(0).standard_normal(16000) * 0.003).astype(
+                np.float32
+            )
+            started = time.monotonic()
+            self.model.recognize(noise, sample_rate=16000)
+            self.printr.print(
+                f"Parakeet warmed up in {(time.monotonic() - started) * 1000:.0f} ms.",
+                server_only=True,
+            )
+        except Exception as e:
+            self.printr.print(
+                f"Parakeet warm-up failed, the first sentence will be slower: {e}",
+                color=LogType.WARNING,
+                server_only=True,
             )
 
     def unload(self):
@@ -152,13 +172,9 @@ class Parakeet:
             return None
 
         try:
-            # Empty/None = auto-detect (only consumed by Whisper/Canary models;
-            # Parakeet TDT silently ignores the kwarg).
-            effective_language = (self.settings.language or "").strip() or None
-            if effective_language:
-                text = self.model.recognize(filename, language=effective_language)
-            else:
-                text = self.model.recognize(filename)
+            # No language hint: Parakeet TDT detects the language itself and
+            # ignores the argument.
+            text = self.model.recognize(filename)
 
             if isinstance(text, list):
                 text = " ".join(text)

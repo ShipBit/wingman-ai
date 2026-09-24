@@ -24,9 +24,10 @@ from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.spoken_language import inworld_language
 
 if TYPE_CHECKING:
-    from api.interface import WingmanConfig
+    from api.interface import SettingsConfig, WingmanConfig
 
 
 class WingmanSubscription:
@@ -182,6 +183,7 @@ class WingmanSubscription:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        language: Optional[str] = None,
     ):
         data = {
             "provider": "inworld",
@@ -191,6 +193,8 @@ class WingmanSubscription:
             "model_id": config.model_id,
             "temperature": config.temperature,
         }
+        if language:
+            data["language"] = language
         if config.audio_config is not None:
             data["audio_config"] = config.audio_config.model_dump()
 
@@ -386,9 +390,15 @@ class WingmanSubscription:
 
 @tts_provider(TtsProvider.WINGMAN_PRO)
 class WingmanSubscriptionTts(TtsInterface):
-    def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
+    def __init__(
+        self,
+        ws_instance: "WingmanSubscription",
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+    ):
         self._ws = ws_instance
         self._config = config
+        self._settings = settings
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         # One provider, so nothing to dispatch on. `wingman_pro.tts_provider`
@@ -400,6 +410,9 @@ class WingmanSubscriptionTts(TtsInterface):
             sound_config=sound_config,
             audio_player=audio_player,
             wingman_name=wingman_name,
+            language=inworld_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
         )
 
 @llm_provider(ConversationProvider.WINGMAN_PRO)

@@ -1,5 +1,7 @@
 import asyncio
-from typing import TYPE_CHECKING, Callable, Optional
+import threading
+import time
+from typing import TYPE_CHECKING, Any, Callable, Optional
 import requests
 from threading import Event
 import numpy as np
@@ -17,10 +19,64 @@ if TYPE_CHECKING:
     from api.interface import WingmanConfig
 
 
+# The client asks for models, voices and subscription data at the same time, and
+# elevenlabslib turns that into a burst: every Model.maxCharacters and every
+# get_available_voices() fetches /v1/user/subscription again. ElevenLabs answers
+# the burst with 429. So all account lookups (not TTS) go through one lock, keep a
+# gap between requests and reuse answers for a short while.
+_LOOKUP_LOCK = threading.RLock()
+_LOOKUP_GAP_SECONDS = 0.3
+_LOOKUP_CACHE_SECONDS = 60.0
+_lookup_cache: dict[tuple[str, str], tuple[float, Any]] = {}
+_last_lookup_at = 0.0
+
+
+def _throttled_lookup(api_key: str, name: str, fetch: Callable[[], Any]) -> Any:
+    global _last_lookup_at
+    key = (api_key, name)
+    # Holding the lock during the fetch makes concurrent callers wait for the
+    # first one and then take its cached answer instead of asking again.
+    with _LOOKUP_LOCK:
+        cached = _lookup_cache.get(key)
+        if cached and time.monotonic() - cached[0] < _LOOKUP_CACHE_SECONDS:
+            return cached[1]
+
+        wait = _last_lookup_at + _LOOKUP_GAP_SECONDS - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            result = fetch()
+        finally:
+            _last_lookup_at = time.monotonic()
+        _lookup_cache[key] = (time.monotonic(), result)
+        return result
+
+
+class _ThrottledUser(User):
+    """elevenlabslib's User with the account lookups routed through the throttle.
+    Model and Voice objects call back into their linked User, so the overrides
+    also cover the lookups the library makes internally."""
+
+    def get_subscription_data(self) -> dict:
+        return _throttled_lookup(
+            self.xi_api_key, "subscription", super().get_subscription_data
+        )
+
+    def get_models(self):
+        return _throttled_lookup(self.xi_api_key, "models", super().get_models)
+
+    def get_available_voices(self, show_legacy: bool = True):
+        return _throttled_lookup(
+            self.xi_api_key,
+            f"voices:{show_legacy}",
+            lambda: super(_ThrottledUser, self).get_available_voices(show_legacy),
+        )
+
+
 class ElevenLabs:
     def __init__(self, api_key: str, wingman_name: str):
         self.wingman_name = wingman_name
-        self.user = User(api_key)
+        self.user = _ThrottledUser(api_key)
         self.printr = Printr()
         self.api_key = api_key
 
@@ -434,6 +490,9 @@ class ElevenLabs:
 
         # Wait for the result to be ready
         await result_ready.wait()
+        # The effect used up characters: the Audio Library reloads the count next.
+        with _LOOKUP_LOCK:
+            _lookup_cache.pop((self.api_key, "subscription"), None)
         return audio
 
     def get_available_voices(self):

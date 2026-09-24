@@ -50,6 +50,33 @@ the user's language and the Wingman speaks it. It replaces the per-Wingman
 `features.use_generic_instant_responses`, which is removed from defaults and
 every Wingman: that switch was forced off in 2.0 and had no toggle since, and
 the phrases it made were English whatever the user spoke (issue #391).
+
+`settings.yaml` also gets one language for everything. `spoken_language` is
+now one of en, de, fr, es, it, pt - the languages Parakeet v3, Pocket TTS and
+Inworld all speak - and "multilingual" is gone. It was the default, and it
+loaded the English Pocket TTS model: a German answer was read by an English
+voice. The Pocket TTS model, the transcription hint and the Inworld language
+are derived from `spoken_language` now, so `pocket_tts.model`,
+`stt.languages` and `stt.parakeet.language` are removed; `pocket_tts` keeps
+the size the user picked as `quality` and a custom YAML config as
+`custom_model`. The language of a "multilingual" file is taken from what the
+user had set up: the Pocket TTS model if it was not English, else English -
+the client asks again whoever picked "multilingual" in it.
+`stt.parakeet.model_variant` is removed too: Parakeet is always v3. v2 only
+transcribed English and was only marginally better at it.
+
+`pocket_tts.quantize` is removed: Pocket TTS is never quantized any more.
+With the torch Wingman ships, torchao has no native kernels, and measured
+2026-09-23 on an M2 Pro the quantized model made audio only 1.05x faster than
+real time instead of 5.6x. The text prompt at every sentence boundary then
+took up to 1.9 s, and playback ran dry at the first one - the click a few
+seconds into every longer answer. On torch 2.11 with the kernels it was still
+slower than the plain model (5.9x against 6.9x), so there is nothing to offer.
+
+`settings.yaml` also gains `pronunciation`: the user's own rules for how a
+voice says what the chat shows ("aUEC" -> "Alpha U E C"), and the bundled lists
+switched on, Star Citizen by default. Abbreviations, units and numbers of the
+spoken language are spelled out for every TTS provider (services/speech_text.py).
 """
 
 import os
@@ -58,6 +85,25 @@ from os import path
 import yaml
 
 from services.migrations.base_migration import BaseMigration
+
+
+SPOKEN_LANGUAGES = ("en", "de", "fr", "es", "it", "pt")
+
+POCKET_TTS_MODEL_LANGUAGES = {
+    "english": "en",
+    "english_2026-01": "en",
+    "english_2026-04": "en",
+    "german": "de",
+    "german_24l": "de",
+    "french_24l": "fr",
+    "spanish": "es",
+    "spanish_24l": "es",
+    "italian": "it",
+    "italian_24l": "it",
+    "portuguese": "pt",
+    "portuguese_24l": "pt",
+}
+"""Pocket TTS model IDs up to 3.2.3 and the language each one speaks."""
 
 
 class Migration323To324(BaseMigration):
@@ -138,9 +184,79 @@ class Migration323To324(BaseMigration):
             )
         return old
 
+    def _one_language(self, old: dict) -> None:
+        """Replace the per-provider language settings by `spoken_language`."""
+        pocket = old.get("pocket_tts") if isinstance(old.get("pocket_tts"), dict) else {}
+        stt = old.get("stt") if isinstance(old.get("stt"), dict) else {}
+        parakeet = stt.get("parakeet") if isinstance(stt.get("parakeet"), dict) else {}
+
+        model = str(pocket.pop("model", "") or "")
+        is_custom = model.lower().endswith((".yaml", ".yml"))
+        model_language = POCKET_TTS_MODEL_LANGUAGES.get(model)
+
+        spoken = old.get("spoken_language")
+        if spoken not in SPOKEN_LANGUAGES:
+            # "multilingual" read everything with the model's voice; a model
+            # the user switched away from English says which language they
+            # meant. The English default says nothing, so English it is.
+            spoken = model_language or "en"
+            self.log(f"- spoken_language: {spoken} (was '{old.get('spoken_language')}')")
+        old["spoken_language"] = spoken
+        if "other_language" not in old:
+            # Only set with spoken_language "other", added in 3.2.4.
+            old["other_language"] = None
+
+        if "quality" not in pocket:
+            # french_24l is the only French model, so it is not a choice.
+            high = model.endswith("_24l") and model != "french_24l"
+            pocket["quality"] = "high" if high else "standard"
+        if "custom_model" not in pocket:
+            pocket["custom_model"] = model if is_custom else None
+        if model:
+            self.log(
+                f"- pocket_tts: model '{model}' becomes quality '{pocket['quality']}'"
+                + (f", custom_model '{model}'" if is_custom else "")
+                + f"; the model now follows spoken_language ({spoken})"
+            )
+        if pocket.pop("quantize", None):
+            self.log("- pocket_tts.quantize removed: the quantized model was 5x slower and clicked")
+
+        if stt.pop("languages", None) is not None:
+            self.log("- removed stt.languages (now follows spoken_language)")
+        if "language" in parakeet:
+            del parakeet["language"]
+            self.log("- removed stt.parakeet.language (Parakeet detects the language itself)")
+        if parakeet.get("execution_provider") == "coreml":
+            # Never used: Core dropped CoreML when loading, and it is slower
+            # than the CPU on Apple Silicon anyway.
+            parakeet["execution_provider"] = "cpu"
+            self.log("- stt.parakeet.execution_provider: cpu (CoreML is slower on a Mac and was never used)")
+        variant = parakeet.pop("model_variant", None)
+        if variant == "v2":
+            self.log(
+                "- stt.parakeet.model_variant removed: Parakeet is always v3 now, "
+                "v2 only transcribed English. v3 is downloaded on the next start; "
+                "the v2 files in models/parakeet can be deleted."
+            )
+        elif variant is not None:
+            self.log("- stt.parakeet.model_variant removed: Parakeet is always v3 now")
+
+        if pocket:
+            old["pocket_tts"] = pocket
+
     def migrate_settings(self, old: dict) -> dict:
         """Add the token count switch, off, and the System One block, on,
-        unless the user already has them."""
+        unless the user already has them. Replace the per-provider language
+        settings by the one `spoken_language`."""
+        self._one_language(old)
+
+        if "pronunciation" not in old:
+            # The Star Citizen list on, like the speech vocabulary's: most
+            # users play it, and "aUEC" read as a word is the first thing
+            # they would notice.
+            old["pronunciation"] = {"rules": [], "presets": ["star_citizen"]}
+            self.log("- pronunciation: added, with the Star Citizen list on")
+
         if "show_token_count" not in old:
             # Off: the counts on each message were an estimate of the message
             # text alone, which read like a cost and was not one. The real

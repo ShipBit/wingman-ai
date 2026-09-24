@@ -1,0 +1,150 @@
+# Recordings of native speakers Wingman clones as Pocket TTS voices (see
+# providers/pocket_tts_voices.py). 8 to 13 seconds each, 24 kHz mono, cut at
+# pauses from the source and picked by how well their clones speak their
+# language (UTMOS, Parakeet word error rate; 2026-09-24). Credited in README.md too.
+# file	name	language	gender	credit	description
+de-felix.flac	Felix	de	Male	Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-schimmelreiter-by-theodor-storm/	hell, ausgewogen
+de-markus.flac	Markus	de	Male	Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain: https://librivox.org/die-verwandlung-von-franz-kafka/	mittlere Lage, weich
+de-rainer.flac	Rainer	de	Male	Rainer, reading Die Leiden des jungen Werther (Goethe) for LibriVox, public domain: https://librivox.org/die-leiden-des-jungen-werthers-by-johann-wolfgang-von-goethe/	tief, ausgewogen
+de-stefan.flac	Stefan	de	Male	Stefan Schmelz, reading Kleider machen Leute (Gottfried Keller) for LibriVox, public domain: https://librivox.org/kleider-machen-leute-by-gottfried-keller/	sehr tief, zügig
+de-thorsten.flac	Thorsten	de	Male	Thorsten Müller, Thorsten-Voice dataset (TV-2022.10-Neutral), CC0 1.0: https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full	mittlere Lage, ausgewogen
+de-franziska.flac	Franziska	de	Female	Franziska Nelson, reading Der kleine Häwelmann (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-kleine-haewelmann-by-theodor-storm/	hell, klar
+de-gesine.flac	Gesine	de	Female	Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain: https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/	mittlere Lage, gemächlich
+de-hokuspokus.flac	Hokuspokus	de	Female	Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain: https://librivox.org/der-golem-by-gustav-meyrink/	tief, sehr lebhaft
+de-stephanie.flac	Stephanie	de	Female	Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain: https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/	hell, klar, zügig
+de-tabea.flac	Tabea	de	Female	Tabea, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/	hell, gleichmäßig
+de-mara.flac	Mara	de	Female	cathar maiden, reading Adventskalender 2017 for LibriVox, public domain: https://librivox.org/adventskalender-2017-by-various/	mittlere Lage, klar
+de-jessi.flac	Jessi	de	Female	Jessi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	mittlere Lage, gemächlich
+de-gaby.flac	Gaby	de	Female	Gaby, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/	hell, gleichmäßig
+de-kalynda.flac	Kalynda	de	Female	Kalynda, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	hell, weich, gemächlich
+de-wilwarin.flac	Wilwarin	de	Female	wilwarin, reading Sammlung kurzer deutscher Prosa 025 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-025-by-various/	mittlere Lage, ausgewogen
+de-caroline.flac	Caroline	de	Female	Caroline Sophie, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/	tief, sehr lebhaft, gemächlich
+de-claudia.flac	Claudia	de	Female	Claudia Salto, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/	tief, lebhaft, gemächlich
+de-dina.flac	Dina	de	Female	dineNa, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/	tief, weich, gleichmäßig
+de-julia.flac	Julia	de	Female	Julia Niedermaier, reading Sammlung kurzer deutscher Prosa 043 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-043-by-various/	hell, zügig
+de-ekki.flac	Ekki	de	Male	ekyale, reading Sammlung kurzer deutscher Prosa 002 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-002-by-various/	mittlere Lage, klar
+de-christian.flac	Christian	de	Male	Christian Al-Kadi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	sehr tief, weich
+de-karlsson.flac	Karlsson	de	Male	Karlsson, reading Sammlung kurzer deutscher Prosa 039 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-039-by-various/	tief, weich, gemächlich
+de-bruno.flac	Bruno	de	Male	merendo07, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/	sehr tief, klar, zügig
+de-max.flac	Max	de	Male	Max Reichlich, reading Sammlung kurzer deutscher Prosa 054 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-054/	hell, klar, gleichmäßig
+de-rolf.flac	Rolf	de	Male	Rolf Kaiser, reading Sammlung kurzer deutscher Prosa 012 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-012-by-various/	sehr tief, gemächlich
+de-claus.flac	Claus	de	Male	Claus Misfeldt, reading Adventskalender 2024 for LibriVox, public domain: https://librivox.org/adventskalender-2024-by-various/	hell, gemächlich
+de-hans-otto.flac	Hans Otto	de	Male	Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain: https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/	mittlere Lage, lebhaft
+de-haiko.flac	Haiko	de	Male	Haiaiel, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/	tief, lebhaft
+de-sven.flac	Sven	de	Male	schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/	mittlere Lage, ausgewogen
+de-nele.flac	Nele	de	Female	Knubbel, reading Sammlung kurzer deutscher Prosa 030 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-030-by-various/	mittlere Lage, ausgewogen
+de-biggi.flac	Biggi	de	Female	Biggi Kaul, reading Sammlung kurzer deutscher Prosa 009 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various/	hell, klar
+de-marlene.flac	Marlene	de	Female	muede, reading Adventskalender 2011 for LibriVox, public domain: https://librivox.org/adventskalender-2011-by-various/	tief, gemächlich
+de-kristine.flac	Kristine	de	Female	kristine, reading Sammlung kurzer deutscher Prosa 022 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-022-by-various/	mittlere Lage, gleichmäßig
+de-eva.flac	Eva	de	Female	Eva K., reading Sammlung kurzer deutscher Prosa 049 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various-3/	tief, gleichmäßig
+de-lissy.flac	Lissy	de	Female	Lissy Schneider, reading Adventskalender 2019 for LibriVox, public domain: https://librivox.org/adventskalender-2019-by-various/	mittlere Lage, klar, gleichmäßig
+de-ava.flac	Ava	de	Female	Availle, reading Adventskalender 2015 for LibriVox, public domain: https://librivox.org/adventskalender-2015-by-various/	mittlere Lage, ältere Dame, gemächlich
+de-sonja.flac	Sonja	de	Female	Sonja, reading Adventskalender 2009 for LibriVox, public domain: https://librivox.org/adventskalender-2009-by-various/	mittlere Lage, weich
+de-eden.flac	Eden	de	Female	Eden, reading Sammlung kurzer deutscher Prosa 029 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-029-by-various/	hell, klar, gleichmäßig
+de-elisa.flac	Elisa	de	Female	Elisa, reading Sammlung kurzer deutscher Prosa 052 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-052-by-various/	hell, jung, klar, gleichmäßig
+de-wolfgang.flac	Wolfgang	de	Male	Wolfgang, reading Sammlung kurzer deutscher Prosa 019 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-019-by-various/	hell, ausgewogen
+de-ibrahim.flac	Ibrahim	de	Male	A. Ibrahim, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/	hell, klar
+de-johannes.flac	Johannes	de	Male	Johannes Bergmann, reading Sammlung kurzer deutscher Prosa 037 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-037-by-various/	mittlere Lage, lebhaft, zügig
+de-tim.flac	Tim	de	Male	Tim Schöndorfer, reading Sammlung kurzer deutscher Prosa 021 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-021-by-various/	tief, klar
+de-boris.flac	Boris	de	Male	Boris, reading Adventskalender 2018 for LibriVox, public domain: https://librivox.org/adventskalender-2018-by-various/	mittlere Lage, ausgewogen
+de-oliver.flac	Oliver	de	Male	LordOider, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/	tief, weich
+de-malte.flac	Malte	de	Male	mahne, reading Adventskalender 2015 for LibriVox, public domain: https://librivox.org/adventskalender-2015-by-various/	hell, ausgewogen
+de-magnus.flac	Magnus	de	Male	Magnus, reading Sammlung kurzer deutscher Prosa 060 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-060-by-various/	mittlere Lage, weich, gleichmäßig
+de-joachim.flac	Joachim	de	Male	yehoash, reading Sammlung kurzer deutscher Prosa 006 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-006-by-various/	mittlere Lage, sehr lebhaft
+de-fynn.flac	Fynn	de	Male	McFly, reading Sammlung kurzer deutscher Prosa 014 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-014-by-various/	tief, ausgewogen
+en-belinda.flac	Belinda	en	Female	Belinda McReynolds, reading Books and Reading for LibriVox, public domain: https://librivox.org/books-and-reading-by-noah-porter/	deep, clear, brisk
+en-shelly.flac	Shelly	en	Female	ShrimpPhish, reading Black Cat Vol. 05 No. 08 May 1900 for LibriVox, public domain: https://librivox.org/blackcat0508may1900-by-various/	bright, clear, lively
+en-pamela.flac	Pamela	en	Female	Pamela Nagami, reading Renaissance and the Reformation: A Textbook of European History 1494-1610 for LibriVox, public domain: https://librivox.org/the-renaissance-and-the-reformation-by-emmeline-tanner/	deep, lively, unhurried
+en-maryann.flac	MaryAnn	en	Female	MaryAnn, reading How to Pray for LibriVox, public domain: https://librivox.org/how-to-pray-by-reuben-archer-torrey/	deep, balanced
+en-ann.flac	Ann	en	Female	Ann Boulais, reading Lives of the Queens of England Volume 11 for LibriVox, public domain: https://librivox.org/lives-of-the-queens-of-england-volume-11-by-agnes-strickland/	mid-range, clear
+en-dana.flac	Dana	en	Female	dc, reading Circe, Volume I for LibriVox, public domain: https://librivox.org/circe-by-mary-elizabeth-braddon/	mid-range, clear, very lively
+en-cynthia.flac	Cynthia	en	Female	cyndajm, reading Star Hyacinths for LibriVox, public domain: https://librivox.org/the-star-hyacinths-by-james-h-schmitz/	bright, clear, lively
+en-leigh.flac	Leigh	en	Female	mleigh, reading National Geographic Magazine Vol. 12 - 01. January 1901 for LibriVox, public domain: https://librivox.org/the-national-geographic-magazine-vol-12-01-january-1901-by-national-geographic-society/	bright, soft, unhurried
+en-jenny.flac	Jenny	en	Female	jenno, reading Books and Reading for LibriVox, public domain: https://librivox.org/books-and-reading-by-noah-porter/	bright, clear, lively
+en-winnifred.flac	Winnifred	en	Female	Winnifred Assmann, reading Thrill Book Vol. II No. 2, July 15, 1919 for LibriVox, public domain: https://librivox.org/the-thrill-book-vol-ii-no-2-july-15-1919-by-murray-leinster/	deep, soft
+en-edward.flac	Edward	en	Male	E. Sharp, reading Last Words (Real and Traditional) of Distinguished Men and Women for LibriVox, public domain: https://librivox.org/the-last-words-real-and-traditional-of-distinguished-men-and-women-by-frederic-rowland-marvin/	bright, unhurried
+en-atul.flac	Atul	en	Male	Atul Sharma, reading Box Office Murders for LibriVox, public domain: https://librivox.org/the-box-office-murders-by-freeman-wills-crofts/	bright, balanced
+en-aaron.flac	Aaron	en	Male	Aaron Bennett, reading Magnificent Fight: Marines in the Battle for Wake Island for LibriVox, public domain: https://librivox.org/a-magnificent-fight-marines-in-the-battle-for-wake-island-by-robert-james-cressman/	bright, balanced
+en-barry.flac	Barry	en	Male	Barry Eads, reading Wild Bill Hickok, the prince of pistoleers for LibriVox, public domain: https://librivox.org/wild-bill-hickok-the-prince-of-pistoleers-by-frank-j-wilstach/	mid-range, lively
+en-lee.flac	Lee	en	Male	LeeSalter, reading April Morning for LibriVox, public domain: https://librivox.org/april-morning-by-evaleen-stein/	bright, lively, unhurried
+en-tom.flac	Tom	en	Male	Tom Shoesmith, reading Books and Reading for LibriVox, public domain: https://librivox.org/books-and-reading-by-noah-porter/	very deep, brisk
+en-manuel.flac	Manuel	en	Male	mpinedag, reading Great Events by Famous Historians, Volume 15 for LibriVox, public domain: https://librivox.org/the-great-events-by-famous-historians-volume-15-by-charles-f-horne/	very deep, brisk
+en-john.flac	John	en	Male	John, reading Flying Inn (Version 2) for LibriVox, public domain: https://librivox.org/the-flying-inn-version-2-by-g-k-chesterton/	mid-range, clear, lively
+en-barnaby.flac	Barnaby	en	Male	Beeswaxcandle, reading Books and Reading for LibriVox, public domain: https://librivox.org/books-and-reading-by-noah-porter/	bright, brisk
+en-edmund.flac	Edmund	en	Male	Edmund Bloxam, reading Art of Music - Volume 03: Modern Music for LibriVox, public domain: https://librivox.org/the-art-of-music-volume-03-modern-music-by-the-national-society-of-music/	very deep, even, brisk
+fr-nadine.flac	Nadine	fr	Female	Nadine Eckert-Boulet, reading Vampire for LibriVox, public domain: https://librivox.org/la-vampire-by-feval-paul-henry-corentin/	médium, vivante
+fr-mayah.flac	Mayah	fr	Female	Mayah, reading Mystères de Paris - Tome 3 for LibriVox, public domain: https://librivox.org/les-mysteres-de-paris-tome-3-by-eugene-sue/	claire, douce, régulière
+fr-agnes.flac	Agnès	fr	Female	Agnes, reading Lecture, tome 6 for LibriVox, public domain: https://librivox.org/lecture06-by-various/	médium, équilibrée
+fr-claude.flac	Claude	fr	Female	Claude Covo-Farchi, reading Boule de suif for LibriVox, public domain: https://librivox.org/boule-de-suif-by-guy-de-maupassant-0904/	grave, nette, régulière
+fr-noemie.flac	Noémie	fr	Female	Naf, reading Horla for LibriVox, public domain: https://librivox.org/le-horla-by-guy-de-maupassant-1203/	médium, rapide
+fr-anne.flac	Anne	fr	Female	Anne, reading De l'esprit des lois, livres 01-13 for LibriVox, public domain: https://librivox.org/de-lesprit-des-lois-by-charles-louis-de-montesquieu-1004/	médium, douce, rapide
+fr-gillian.flac	Gillian	fr	Female	Gillian Hendrie, reading Introduction à la vie dévote for LibriVox, public domain: https://librivox.org/introduction-a-la-vie-devote-by-saint-francis-de-sales/	grave, régulière
+fr-sabine.flac	Sabine	fr	Female	Saab, reading Misérables - tome 3 for LibriVox, public domain: https://librivox.org/les-miserables-tome-3-by-victor-hugo/	médium, très vivante
+fr-clara.flac	Clara	fr	Female	Kitoune, reading Lecture, tome 4 for LibriVox, public domain: https://librivox.org/lecture-04-by-various/	médium, douce, très vivante
+fr-isabelle.flac	Isabelle	fr	Female	Isabelle Brasme, reading Germinal (French) for LibriVox, public domain: https://librivox.org/germinal-by-emile-zola/	claire, douce, vivante
+fr-michael.flac	Michaël	fr	Male	Michaël Cadilhac, reading Vingt mille lieues sous les mers for LibriVox, public domain: https://librivox.org/20000-lieues-sous-les-mers-by-jules-verne/	médium, rapide
+fr-luc.flac	Luc	fr	Male	Gagnon Courchesne, reading Famille-Sans-Nom for LibriVox, public domain: https://librivox.org/famille-sans-nom-by-jules-verne/	claire, nette, vivante
+fr-pierre.flac	Pierre	fr	Male	pejuga, reading Bible (Fillion) 18: Livre de Job  (Chapitres sélectionnés) for LibriVox, public domain: https://librivox.org/la-bible-fillion-18-livre-de-job-by-louis-claude-fillion-bible/	médium, posée
+fr-faris.flac	Faris	fr	Male	Faris, reading Liaisons dangereuses for LibriVox, public domain: https://librivox.org/les-liaisons-dangereuses-by-choderlos-de-laclos/	claire, nette, très vivante
+fr-bernard.flac	Bernard	fr	Male	Bernard, reading Comédie Humaine: 07 - Scènes de la vie de province tome 3 (8-9-44) for LibriVox, public domain: https://librivox.org/scenes-de-la-vie-de-province-tome-iii-by-honore-de-balzac-1211/	médium, équilibrée
+fr-didier.flac	Didier	fr	Male	Didier, reading Boule de suif for LibriVox, public domain: https://librivox.org/boule-de-suif-by-guy-de-maupassant-0904/	claire, nette, posée
+fr-julien.flac	Julien	fr	Male	Kamisole, reading Laura. Voyages et impressions for LibriVox, public domain: https://librivox.org/laura-voyages-et-impressions-by-george-sand/	claire, douce, régulière
+fr-francois.flac	François	fr	Male	Fao10rk, reading Confidences d'Arsène Lupin for LibriVox, public domain: https://librivox.org/les-confidences-darsene-lupin-by-maurice-leblanc/	claire, vivante
+fr-thomas.flac	Thomas	fr	Male	Thomas Bouissaguet, reading Michel Strogoff for LibriVox, public domain: https://librivox.org/michel-strogoff-by-jules-verne/	grave, rapide
+fr-gilles.flac	Gilles	fr	Male	Gilles G. Le Blanc, reading Misérables - tome 4 for LibriVox, public domain: https://librivox.org/les-miserables-tome-4-by-victor-hugo/	médium, nette, régulière
+es-lucia.flac	Lucía	es	Female	Lu, reading Historia de un Pepe for LibriVox, public domain: https://librivox.org/historia-de-un-pepe-by-jose-milla-y-vidaurre/	tono medio, suave, muy viva
+es-maritza.flac	Maritza	es	Female	Maritza Mateo, reading Marianela for LibriVox, public domain: https://librivox.org/marianela-by-benito-perez-galdos/	tono medio, ágil
+es-dolores.flac	Dolores	es	Female	DreamVoz, reading Novelas Ejemplares for LibriVox, public domain: https://librivox.org/novelas-ejemplares-by-miguel-de-cervantes-saavedra/	brillante, ágil
+es-monica.flac	Mónica	es	Female	Mongope, reading David Copperfield o El sobrino de mi tía (español) for LibriVox, public domain: https://librivox.org/david-copperfield-espanol-by-charles-dickens/	tono medio, nítida
+es-verla.flac	Verla	es	Female	Verla Viera, reading hermandad de los siete reyes for LibriVox, public domain: https://librivox.org/la-hermandad-de-los-siete-reyes-by-l-t-meade/	grave, suave
+es-catalina.flac	Catalina	es	Female	CATIVAS, reading Literatura Americana for LibriVox, public domain: https://librivox.org/literatura-americana-by-antonio-batres-jauregui/	grave, uniforme
+es-enrique.flac	Enrique	es	Male	EnriqueRendon, reading Mis mejores cuentos (novelas breves) for LibriVox, public domain: https://librivox.org/mis-mejores-cuentos-by-carmen-de-burgos/	tono medio, equilibrada
+es-fernando.flac	Fernando	es	Male	Fernando Falcoff, reading Cuentos bretones : cuentos populares de campesinos, pescadores y marineros for LibriVox, public domain: https://librivox.org/cuentos-bretones-cuentos-populares-de-campesinos-pescadores-y-marineros-by-paul-sebillot/	tono medio, suave, viva
+es-paulino.flac	Paulino	es	Male	paulino, reading Don Quijote 1 for LibriVox, public domain: https://librivox.org/don-quijote-vol-1-by-miguel-de-cervantes-saavedra/	brillante, nítida, uniforme
+es-ernesto.flac	Ernesto	es	Male	Epachuko, reading Regenta (Tomo I) for LibriVox, public domain: https://librivox.org/la-regenta-tomo-i-by-leopoldo-garcia-alas/	tono medio, viva
+es-pablo.flac	Pablo	es	Male	Pablocrdz, reading Periquillo Sarniento, tomos III y IV for LibriVox, public domain: https://librivox.org/el-periquillo-sarniento-tomos-iii-y-iv-by-jose-joaquin-fernandez-de-lizardi/	tono medio, nítida, muy viva
+es-antonio.flac	Antonio	es	Male	Antonio Redondo, reading Aprendiz de Conspirador for LibriVox, public domain: https://librivox.org/el-aprendiz-de-conspirador-by-pio-baroja/	brillante, viva, pausada
+es-arturo.flac	Arturo	es	Male	arturo, reading Don Quijote 2 for LibriVox, public domain: https://librivox.org/don-quijote-volume-2-by-miguel-de-cervantes-saavedra/	tono medio, suave
+es-milton.flac	Milton	es	Male	MiltonFMH, reading María for LibriVox, public domain: https://librivox.org/maria-by-jorge-isaacs/	muy grave, suave, uniforme
+es-mario.flac	Mario	es	Male	Marreran, reading casa de vapor for LibriVox, public domain: https://librivox.org/la-casa-de-vapor-by-jules-verne/	brillante, nítida, viva
+pt-leni.flac	Leni	pt	Female	Leni, reading Vida vertiginosa for LibriVox, public domain: https://librivox.org/vida-vertiginosa-by-joao-do-rio/	grave, viva, ágil
+pt-cristina.flac	Cristina	pt	Female	Cristina Luiz, reading Freira no Subterrâneo for LibriVox, public domain: https://librivox.org/a-freira-no-subterraneo/	tom médio, suave
+pt-etel.flac	Etel	pt	Female	Etel Buss, reading Noites de insomnia, offerecidas a quem não póde dormir, volume 2 for LibriVox, public domain: https://librivox.org/noites-de-insomnia-2-by-camilo-castelo-branco/	tom médio, nítida
+pt-carina.flac	Carina	pt	Female	Carina Pereira, reading Contos for LibriVox, public domain: https://librivox.org/contos-by-jose-maria-de-eca-de-queiros/	brilhante, nítida, ágil
+pt-katarina.flac	Katarina	pt	Female	Katarina K. Müller, reading Cidade do Vício for LibriVox, public domain: https://librivox.org/a-cidade-do-vicio-by-fialho-de-almeida/	brilhante, suave, regular
+pt-ana.flac	Ana	pt	Female	Ana Simão, reading Contos Fluminenses e Histórias da Meia-Noite for LibriVox, public domain: https://librivox.org/contos-fluminenses-e-historias-da-meia-noite-by-joaquim-maria-machado-de-assis/	tom médio, nítida, muito viva
+pt-rachel.flac	Rachel	pt	Female	Rachel Moraes, reading Negrinha for LibriVox, public domain: https://librivox.org/negrinha-by-monteiro-lobato/	grave, regular, pausada
+pt-maria.flac	Maria	pt	Female	mariawhite, reading Ancia Eterna for LibriVox, public domain: https://librivox.org/ancia-eterna-by-julia-lopes-de-almeida/	grave, nítida, pausada
+pt-mayah.flac	Mayah	pt	Female	Mayah, reading Dom Casmurro for LibriVox, public domain: https://librivox.org/dom-casmurro-by-machado-de-assis/	brilhante, regular
+pt-monica.flac	Monica	pt	Female	Monica Hinrichs-Mayer, reading Relíquias de Casa Velha for LibriVox, public domain: https://librivox.org/reliquias-de-casa-velha-by-machado-de-assis/	tom médio, muito viva
+pt-rogerio.flac	Rogério	pt	Male	RogerioM, reading Páginas Recolhidas for LibriVox, public domain: https://librivox.org/paginas-recolhidas-by-joaquim-maria-machado-de-assis/	grave, muito viva, pausada
+pt-miguel.flac	Miguel	pt	Male	MickyMe, reading Canaã for LibriVox, public domain: https://librivox.org/canaa-by-jose-pereira-da-graca-aranha/	tom médio, regular, ágil
+pt-pier.flac	Pier	pt	Male	Pier, reading Papéis Avulsos for LibriVox, public domain: https://librivox.org/papeis-avulsos-by-machado-de-assis/	tom médio, suave, viva
+pt-evandro.flac	Evandro	pt	Male	Evandro Cunha, reading Noite na Taverna: contos phantásticos for LibriVox, public domain: https://librivox.org/a-noite-na-taverna-by-alvares-de-azevedo/	brilhante, regular
+pt-lucas.flac	Lucas	pt	Male	Lucas M., reading Coleção LibriVox de Contos Brasileiros 001 for LibriVox, public domain: https://librivox.org/colecao-librivox-de-contos-brasileiros-001/	tom médio, suave, viva
+pt-jose.flac	José	pt	Male	zaaf, reading Lusíadas for LibriVox, public domain: https://librivox.org/os-lusiadas-by-luis-vaz-de-camoes/	brilhante, nítida
+pt-dyefferson.flac	Dyefferson	pt	Male	Dyefferson Azevedo, reading Contos selectos das Mil e uma noites for LibriVox, public domain: https://librivox.org/contos-selectos-das-mil-e-uma-noites/	tom médio, ágil
+pt-paulo.flac	Paulo	pt	Male	Pontedura, reading Contos, volume 2 for LibriVox, public domain: https://librivox.org/contos-volume-2-de-artur-de-azevedo/	brilhante, viva, ágil
+pt-marcos.flac	Marcos	pt	Male	Miramontes, reading Triste Fim de Policarpo Quaresma for LibriVox, public domain: https://librivox.org/triste-fim-de-policarpo-quaresma-by-lima-barreto/	tom médio, suave, ágil
+pt-felipe.flac	Felipe	pt	Male	Felipe Vale da Silva, reading Canaã for LibriVox, public domain: https://librivox.org/canaa-by-jose-pereira-da-graca-aranha/	tom médio, ágil
+it-titta.flac	Titta	it	Female	Titta, reading Novelle per un anno, vol. 06: In Silenzio for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-6-in-silenzio-by-luigi-pirandello/	grave, equilibrata
+it-angelica.flac	Angelica	it	Female	Angelica87, reading Avventure d'Alice nel Paese delle Meraviglie for LibriVox, public domain: https://librivox.org/le-avventure-dalice-nel-paese-delle-meraviglie-by-lewis-carroll/	luminosa, nitida, vivace
+it-petula.flac	Petula	it	Female	Petula, reading Piacevoli Notti, Libro 2 for LibriVox, public domain: https://librivox.org/le-piacevoli-notti-libro-2-by-giovanni-francesco-straparola/	registro medio, nitida, regolare
+it-luisa.flac	Luisa	it	Female	luisamajo, reading Novelle per un anno, vol. 03: La Rallegrata for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-3-la-rallegrata-by-luigi-pirandello/	registro medio, morbida, regolare
+it-marzia.flac	Marzia	it	Female	Marzia Marianera, reading Piacevoli Notti, Libro 1 for LibriVox, public domain: https://librivox.org/le-piacevoli-notti-by-giovanni-francesco-straparola/	registro medio, regolare
+it-annalisa.flac	Annalisa	it	Female	Annalisa Minunni, reading Novelle per un anno, vol. 03: La Rallegrata for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-3-la-rallegrata-by-luigi-pirandello/	grave, pacata
+it-allie.flac	Allie	it	Female	Allie Cingi, reading Novelle per un Anno, vol. 11: La Giara for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-11-la-giara-by-luigi-pirandello/	luminosa, nitida, molto vivace
+it-emilia.flac	Emilia	it	Female	Gioemily, reading Novelle per un Anno, vol. 08: Dal Naso Al Cielo for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-8-dal-naso-al-cielo-by-luigi-pirandello/	luminosa, nitida, pacata
+it-nicoletta.flac	Nicoletta	it	Female	Nicoross, reading Avventure d'Alice nel Paese delle Meraviglie for LibriVox, public domain: https://librivox.org/le-avventure-dalice-nel-paese-delle-meraviglie-by-lewis-carroll/	registro medio, nitida
+it-diana.flac	Diana	it	Female	Diana Majlinger, reading Novelle per un anno, vol. 02: La Vita Nuda for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-2-la-vita-nuda-by-luigi-pirandello/	registro medio, svelta
+it-daniele.flac	Daniele	it	Male	Daniele, reading Piacevoli Notti, Libro 2 for LibriVox, public domain: https://librivox.org/le-piacevoli-notti-libro-2-by-giovanni-francesco-straparola/	registro medio, morbida, vivace
+it-sergio.flac	Sergio	it	Male	Sergio Bersanetti, reading Novelle per un anno, vol. 05: La Mosca for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-5-la-mosca-by-luigi-pirandello/	registro medio, morbida, vivace
+it-paolo.flac	Paolo	it	Male	Paolo Fedi, reading Favole di Jean de La Fontaine: Libro 10 for LibriVox, public domain: https://librivox.org/favole-libro-10-by-jean-de-la-fontaine-pf/	luminosa, regolare
+it-vito.flac	Vito	it	Male	Vito Marangelli, reading Dialogo dei Massimi Sistemi for LibriVox, public domain: https://librivox.org/dialogo-dei-massimi-sistemi-by-galileo-galilei/	grave, svelta
+it-davide.flac	Davide	it	Male	Daniele, reading Vagabondaggio for LibriVox, public domain: https://librivox.org/vagabondaggio-by-giovanni-verga/	luminosa, morbida, regolare
+it-simone.flac	Simone	it	Male	Simosito, reading Vagabondaggio for LibriVox, public domain: https://librivox.org/vagabondaggio-by-giovanni-verga/	registro medio, morbida, svelta
+it-filippo.flac	Filippo	it	Male	Filippo Gioachin, reading Piacevoli Notti, Libro 1 for LibriVox, public domain: https://librivox.org/le-piacevoli-notti-by-giovanni-francesco-straparola/	luminosa, molto vivace
+it-mirko.flac	Mirko	it	Male	Mirko Lamberti, reading Novelle per un anno, vol. 07: Tutt'E Tre for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-7-tutte-tre-by-luigi-pirandello/	grave, molto vivace
+it-lorenzo.flac	Lorenzo	it	Male	Lorenzo, reading Dialogo dei Massimi Sistemi for LibriVox, public domain: https://librivox.org/dialogo-dei-massimi-sistemi-by-galileo-galilei/	luminosa, equilibrata
+it-abraham.flac	Abraham	it	Male	Abraham Zapruder, reading Novelle per un anno, vol. 07: Tutt'E Tre for LibriVox, public domain: https://librivox.org/novelle-per-un-anno-vol-7-tutte-tre-by-luigi-pirandello/	luminosa, vivace
+en-ciufi.flac	Ciufi	en	Female	Ciufi Galeazzi, reading Daughter of the Seine for LibriVox, public domain: https://librivox.org/a-daughter-of-the-seine-by-jeanette-eaton/	bright, very lively, brisk
