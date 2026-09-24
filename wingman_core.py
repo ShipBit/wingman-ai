@@ -30,6 +30,7 @@ from api.enums import (
     LocalAiMode,
     LogSource,
     LogType,
+    SpokenLanguage,
     SttProvider,
     WingmanInitializationErrorType,
 )
