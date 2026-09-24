@@ -6,11 +6,13 @@
 # ATC a clear, brisk woman, Computer a clear, calm man, Clippy the liveliest woman.
 ATC	legacy	azelma
 ATC	de	de-julia
-ATC	en	anna
+ATC	en	en-jenny
 Computer	legacy	fantine
 Computer	de	de-ibrahim
 Computer	en	mary
 Clippy	legacy	alba
+Clippy	de	de-sven
+Clippy	en	en-ciufi
 ATC	fr	fr-noemie
 Computer	fr	fr-didier
 Clippy	fr	fr-sabine

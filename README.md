@@ -48,7 +48,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with extra voices cloned from native speakers: 49 German, 20 English, 20 French, 15 Spanish, 20 Italian and 20 Portuguese)
+  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian and 20 Portuguese)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Azure TTS
@@ -428,6 +428,7 @@ Pocket TTS clones voices from recordings of native speakers. Wingman ships short
 - **John** (en): [John, reading Flying Inn (Version 2) for LibriVox, public domain](https://librivox.org/the-flying-inn-version-2-by-g-k-chesterton/)
 - **Barnaby** (en): [Beeswaxcandle, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
 - **Edmund** (en): [Edmund Bloxam, reading Art of Music - Volume 03: Modern Music for LibriVox, public domain](https://librivox.org/the-art-of-music-volume-03-modern-music-by-the-national-society-of-music/)
+- **Ciufi** (en): [Ciufi Galeazzi, reading Daughter of the Seine for LibriVox, public domain](https://librivox.org/a-daughter-of-the-seine-by-jeanette-eaton/)
 - **Nadine** (fr): [Nadine Eckert-Boulet, reading Vampire for LibriVox, public domain](https://librivox.org/la-vampire-by-feval-paul-henry-corentin/)
 - **Mayah** (fr): [Mayah, reading Mystères de Paris - Tome 3 for LibriVox, public domain](https://librivox.org/les-mysteres-de-paris-tome-3-by-eugene-sue/)
 - **Agnès** (fr): [Agnes, reading Lecture, tome 6 for LibriVox, public domain](https://librivox.org/lecture06-by-various/)
