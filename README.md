@@ -48,7 +48,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 29 extra German voices cloned from native speakers)
+  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 49 extra German voices cloned from native speakers)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Azure TTS
@@ -388,6 +388,26 @@ Pocket TTS clones its German voices from recordings of native speakers. Wingman 
 - **Hans Otto** (de): [Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain](https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/)
 - **Haiko** (de): [Haiaiel, reading Adventskalender 2021 for LibriVox, public domain](https://librivox.org/adventskalender-2021-by-various/)
 - **Sven** (de): [schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/)
+- **Nele** (de): [Knubbel, reading Sammlung kurzer deutscher Prosa 030 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-030-by-various/)
+- **Biggi** (de): [Biggi Kaul, reading Sammlung kurzer deutscher Prosa 009 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various/)
+- **Marlene** (de): [muede, reading Adventskalender 2011 for LibriVox, public domain](https://librivox.org/adventskalender-2011-by-various/)
+- **Kristine** (de): [kristine, reading Sammlung kurzer deutscher Prosa 022 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-022-by-various/)
+- **Eva** (de): [Eva K., reading Sammlung kurzer deutscher Prosa 049 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various-3/)
+- **Lissy** (de): [Lissy Schneider, reading Adventskalender 2019 for LibriVox, public domain](https://librivox.org/adventskalender-2019-by-various/)
+- **Ava** (de): [Availle, reading Adventskalender 2015 for LibriVox, public domain](https://librivox.org/adventskalender-2015-by-various/)
+- **Sonja** (de): [Sonja, reading Adventskalender 2009 for LibriVox, public domain](https://librivox.org/adventskalender-2009-by-various/)
+- **Eden** (de): [Eden, reading Sammlung kurzer deutscher Prosa 029 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-029-by-various/)
+- **Elisa** (de): [Elisa, reading Sammlung kurzer deutscher Prosa 052 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-052-by-various/)
+- **Wolfgang** (de): [Wolfgang, reading Sammlung kurzer deutscher Prosa 019 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-019-by-various/)
+- **Ibrahim** (de): [A. Ibrahim, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/)
+- **Johannes** (de): [Johannes Bergmann, reading Sammlung kurzer deutscher Prosa 037 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-037-by-various/)
+- **Tim** (de): [Tim Schöndorfer, reading Sammlung kurzer deutscher Prosa 021 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-021-by-various/)
+- **Boris** (de): [Boris, reading Adventskalender 2018 for LibriVox, public domain](https://librivox.org/adventskalender-2018-by-various/)
+- **Oliver** (de): [LordOider, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Malte** (de): [mahne, reading Adventskalender 2015 for LibriVox, public domain](https://librivox.org/adventskalender-2015-by-various/)
+- **Magnus** (de): [Magnus, reading Sammlung kurzer deutscher Prosa 060 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-060-by-various/)
+- **Joachim** (de): [yehoash, reading Sammlung kurzer deutscher Prosa 006 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-006-by-various/)
+- **Fynn** (de): [McFly, reading Sammlung kurzer deutscher Prosa 014 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-014-by-various/)
 
 ### Individual persons
 
