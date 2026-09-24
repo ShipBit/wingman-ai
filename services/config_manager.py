@@ -438,6 +438,11 @@ class ConfigManager:
             # e.g., "skills/...", "migration/1_8_0/skills/...", etc.
             if "skills" in path_parts:
                 continue
+            # Voice recordings are read from the bundle and copied into the
+            # custom voices folder by PocketTTS (providers/pocket_tts_voices.py);
+            # a copy per Wingman version would only take up space.
+            if path_parts[0] == "pocket_tts":
+                continue
 
             # A wingman config template directory, e.g. "configs/Star Citizen"
             config_name: Optional[str] = None

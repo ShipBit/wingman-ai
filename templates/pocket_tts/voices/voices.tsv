@@ -2,33 +2,33 @@
 # providers/pocket_tts_voices.py). 8 to 13 seconds each, 24 kHz mono, cut at
 # pauses from the source and picked by how well their clones speak German
 # (UTMOS, Parakeet word error rate; 2026-09-24). Credited in README.md too.
-# file	name	language	gender	credit
-de-felix.flac	Felix	de	Male	Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-schimmelreiter-by-theodor-storm/
-de-markus.flac	Markus	de	Male	Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain: https://librivox.org/die-verwandlung-von-franz-kafka/
-de-rainer.flac	Rainer	de	Male	Rainer, reading Die Leiden des jungen Werther (Goethe) for LibriVox, public domain: https://librivox.org/die-leiden-des-jungen-werthers-by-johann-wolfgang-von-goethe/
-de-stefan.flac	Stefan	de	Male	Stefan Schmelz, reading Kleider machen Leute (Gottfried Keller) for LibriVox, public domain: https://librivox.org/kleider-machen-leute-by-gottfried-keller/
-de-thorsten.flac	Thorsten	de	Male	Thorsten Müller, Thorsten-Voice dataset (TV-2022.10-Neutral), CC0 1.0: https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full
-de-franziska.flac	Franziska	de	Female	Franziska Nelson, reading Der kleine Häwelmann (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-kleine-haewelmann-by-theodor-storm/
-de-gesine.flac	Gesine	de	Female	Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain: https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/
-de-hokuspokus.flac	Hokuspokus	de	Female	Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain: https://librivox.org/der-golem-by-gustav-meyrink/
-de-stephanie.flac	Stephanie	de	Female	Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain: https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/
-de-tabea.flac	Tabea	de	Female	Tabea, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/
-de-mara.flac	Mara	de	Female	cathar maiden, reading Adventskalender 2017 for LibriVox, public domain: https://librivox.org/adventskalender-2017-by-various/
-de-jessi.flac	Jessi	de	Female	Jessi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/
-de-gaby.flac	Gaby	de	Female	Gaby, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/
-de-kalynda.flac	Kalynda	de	Female	Kalynda, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/
-de-wilwarin.flac	Wilwarin	de	Female	wilwarin, reading Sammlung kurzer deutscher Prosa 025 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-025-by-various/
-de-caroline.flac	Caroline	de	Female	Caroline Sophie, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/
-de-claudia.flac	Claudia	de	Female	Claudia Salto, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/
-de-dina.flac	Dina	de	Female	dineNa, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/
-de-julia.flac	Julia	de	Female	Julia Niedermaier, reading Sammlung kurzer deutscher Prosa 043 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-043-by-various/
-de-ekki.flac	Ekki	de	Male	ekyale, reading Sammlung kurzer deutscher Prosa 002 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-002-by-various/
-de-christian.flac	Christian	de	Male	Christian Al-Kadi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/
-de-karlsson.flac	Karlsson	de	Male	Karlsson, reading Sammlung kurzer deutscher Prosa 039 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-039-by-various/
-de-bruno.flac	Bruno	de	Male	merendo07, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/
-de-max.flac	Max	de	Male	Max Reichlich, reading Sammlung kurzer deutscher Prosa 054 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-054/
-de-rolf.flac	Rolf	de	Male	Rolf Kaiser, reading Sammlung kurzer deutscher Prosa 012 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-012-by-various/
-de-claus.flac	Claus	de	Male	Claus Misfeldt, reading Adventskalender 2024 for LibriVox, public domain: https://librivox.org/adventskalender-2024-by-various/
-de-hans-otto.flac	Hans Otto	de	Male	Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain: https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/
-de-haiko.flac	Haiko	de	Male	Haiaiel, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/
-de-sven.flac	Sven	de	Male	schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/
+# file	name	language	gender	credit	description
+de-felix.flac	Felix	de	Male	Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-schimmelreiter-by-theodor-storm/	hell, ausgewogen
+de-markus.flac	Markus	de	Male	Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain: https://librivox.org/die-verwandlung-von-franz-kafka/	mittlere Lage, weich
+de-rainer.flac	Rainer	de	Male	Rainer, reading Die Leiden des jungen Werther (Goethe) for LibriVox, public domain: https://librivox.org/die-leiden-des-jungen-werthers-by-johann-wolfgang-von-goethe/	tief, ausgewogen
+de-stefan.flac	Stefan	de	Male	Stefan Schmelz, reading Kleider machen Leute (Gottfried Keller) for LibriVox, public domain: https://librivox.org/kleider-machen-leute-by-gottfried-keller/	sehr tief, zügig
+de-thorsten.flac	Thorsten	de	Male	Thorsten Müller, Thorsten-Voice dataset (TV-2022.10-Neutral), CC0 1.0: https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full	mittlere Lage, ausgewogen
+de-franziska.flac	Franziska	de	Female	Franziska Nelson, reading Der kleine Häwelmann (Theodor Storm) for LibriVox, public domain: https://librivox.org/der-kleine-haewelmann-by-theodor-storm/	hell, klar
+de-gesine.flac	Gesine	de	Female	Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain: https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/	mittlere Lage, gemächlich
+de-hokuspokus.flac	Hokuspokus	de	Female	Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain: https://librivox.org/der-golem-by-gustav-meyrink/	tief, sehr lebhaft
+de-stephanie.flac	Stephanie	de	Female	Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain: https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/	hell, klar, zügig
+de-tabea.flac	Tabea	de	Female	Tabea, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/	hell, gleichmäßig
+de-mara.flac	Mara	de	Female	cathar maiden, reading Adventskalender 2017 for LibriVox, public domain: https://librivox.org/adventskalender-2017-by-various/	mittlere Lage, klar
+de-jessi.flac	Jessi	de	Female	Jessi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	mittlere Lage, gemächlich
+de-gaby.flac	Gaby	de	Female	Gaby, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/	hell, gleichmäßig
+de-kalynda.flac	Kalynda	de	Female	Kalynda, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	hell, weich, gemächlich
+de-wilwarin.flac	Wilwarin	de	Female	wilwarin, reading Sammlung kurzer deutscher Prosa 025 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-025-by-various/	mittlere Lage, ausgewogen
+de-caroline.flac	Caroline	de	Female	Caroline Sophie, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/	tief, sehr lebhaft, gemächlich
+de-claudia.flac	Claudia	de	Female	Claudia Salto, reading Adventskalender 2016 for LibriVox, public domain: https://librivox.org/adventskalender-2016-by-various/	tief, lebhaft, gemächlich
+de-dina.flac	Dina	de	Female	dineNa, reading Adventskalender 2014 for LibriVox, public domain: https://librivox.org/adventskalender-2014-by-various/	tief, weich, gleichmäßig
+de-julia.flac	Julia	de	Female	Julia Niedermaier, reading Sammlung kurzer deutscher Prosa 043 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-043-by-various/	hell, zügig
+de-ekki.flac	Ekki	de	Male	ekyale, reading Sammlung kurzer deutscher Prosa 002 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-002-by-various/	mittlere Lage, ausgewogen
+de-christian.flac	Christian	de	Male	Christian Al-Kadi, reading Erzählungen for LibriVox, public domain: https://librivox.org/erzahlungen-by-edgar-allan-poe/	sehr tief, weich
+de-karlsson.flac	Karlsson	de	Male	Karlsson, reading Sammlung kurzer deutscher Prosa 039 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-039-by-various/	tief, weich, gemächlich
+de-bruno.flac	Bruno	de	Male	merendo07, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/	sehr tief, klar, zügig
+de-max.flac	Max	de	Male	Max Reichlich, reading Sammlung kurzer deutscher Prosa 054 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-054/	hell, klar, gleichmäßig
+de-rolf.flac	Rolf	de	Male	Rolf Kaiser, reading Sammlung kurzer deutscher Prosa 012 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-012-by-various/	sehr tief, gemächlich
+de-claus.flac	Claus	de	Male	Claus Misfeldt, reading Adventskalender 2024 for LibriVox, public domain: https://librivox.org/adventskalender-2024-by-various/	hell, gemächlich
+de-hans-otto.flac	Hans Otto	de	Male	Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain: https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/	hell, klar, lebhaft
+de-haiko.flac	Haiko	de	Male	Haiaiel, reading Adventskalender 2021 for LibriVox, public domain: https://librivox.org/adventskalender-2021-by-various/	tief, lebhaft
+de-sven.flac	Sven	de	Male	schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain: https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/	mittlere Lage, ausgewogen

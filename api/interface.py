@@ -144,6 +144,8 @@ class VoiceInfo(BaseModel):
     locale: Optional[str] = None
     languages: Optional[list[str]] = None
     provider: Optional[str] = None
+    description: Optional[str] = None
+    """A short line on how the voice sounds, e.g. "ruhig, gemächlich"."""
 
 
 # from sounddevice lib

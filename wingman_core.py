@@ -2448,8 +2448,12 @@ class WingmanCore(WebSocketUser):
         pocket-tts that computes them differently.
         """
         # Recordings Wingman ships for the spoken language (see
-        # providers/pocket_tts_voices.py): new ones are cloned right away.
-        installed = self.pocket_tts.install_bundled_voices()
+        # providers/pocket_tts_voices.py): new ones are cloned right away, and
+        # so are those an earlier start copied but was closed before cloning.
+        installed = (
+            self.pocket_tts.install_bundled_voices()
+            or self.pocket_tts.bundled_voices_needing_clone()
+        )
         await self._preload_pocket_tts_voices(
             state_message_prefix="Preloading voices",
             restore_ready_state=True,

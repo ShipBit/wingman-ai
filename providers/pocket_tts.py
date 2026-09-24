@@ -38,7 +38,11 @@ from api.interface import (
 )
 from providers.interfaces import TtsInterface, tts_provider
 from providers.pocket_tts_chunks import MAX_TOKENS, faded_edges, pieces_for_speech
-from providers.pocket_tts_voices import install_bundled_voices, load_bundled_voices
+from providers.pocket_tts_voices import (
+    install_bundled_voices,
+    load_bundled_voices,
+    read_voice_details,
+)
 from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
@@ -450,6 +454,7 @@ class PocketTTS:
                 id=voice_id,
                 name=voice_id.replace("_", " ").title(),
                 languages=[self._voice_native_language(voice_id)],
+                gender=self._BUILTIN_GENDERS.get(voice_id),
                 provider="pocket_tts",
             )
             for voice_id in builtins
@@ -458,35 +463,39 @@ class PocketTTS:
         # per-language embeddings live in the same directory (see
         # _ensure_builtin_voice) but are already listed as built-ins above.
         # Recordings Wingman shipped for the spoken language go right after
-        # the native built-ins, with their name and language.
+        # the native built-ins, with their name and language. Name, gender
+        # and a line of description come from the text file next to a voice
+        # (see pocket_tts_voices), else from Wingman's list for shipped ones.
         native_count = sum(1 for v in voices if v.languages == [spoken])
         shipped: list[VoiceInfo] = []
         for stem in self._list_voice_stems(self.voices_dir):
             if stem in self._BUILTIN_VOICE_IDS:
                 continue
             bundled = self.bundled_voices.get(stem)
-            if bundled:
-                info = VoiceInfo(
-                    id=stem,
-                    name=bundled.name,
-                    languages=[bundled.language],
-                    gender=next(
-                        (g for g in TtsVoiceGender if g.value.lower() == bundled.gender.lower()),
-                        TtsVoiceGender.UNKNOWN,
-                    ),
-                    provider="custom_voices",
-                )
-                if bundled.language == spoken:
-                    shipped.append(info)
-                    continue
-                voices.append(info)
+            details = read_voice_details(os.path.join(self.voices_dir, stem + ".txt"))
+            gender = details.gender or (bundled.gender if bundled else None)
+            info = VoiceInfo(
+                id=stem,
+                name=details.name or (bundled.name if bundled else f"Local: {stem}"),
+                languages=[bundled.language] if bundled else None,
+                gender=next((g for g in TtsVoiceGender if g.value == gender), None),
+                description=details.description or (bundled.description if bundled else None),
+                provider="custom_voices",
+            )
+            if bundled and bundled.language == spoken:
+                shipped.append(info)
             else:
-                voices.append(
-                    VoiceInfo(id=stem, name=f"Local: {stem}", provider="custom_voices")
-                )
-        voices[native_count:native_count] = sorted(shipped, key=lambda v: v.name)
+                voices.append(info)
+        voices[native_count:native_count] = sorted(shipped, key=lambda v: v.name or "")
 
         return voices
+
+    def bundled_voices_needing_clone(self) -> list[str]:
+        """Shipped voices in the custom voices folder without a current clone
+        for the active model: copied by a start that was closed before it
+        finished cloning them, for one."""
+        missing = self.list_custom_voices_needing_precompute()
+        return [v for v in missing if v in self.bundled_voices]
 
     def install_bundled_voices(self) -> list[str]:
         """Copy the recordings Wingman ships for the spoken language into
@@ -761,6 +770,22 @@ class PocketTTS:
         "lola": "es",
         "giovanni": "it",
         "rafael": "pt",
+    }
+
+    # For the voice picker's gender filter. Measured by pitch on 2026-09-24
+    # and checked against the names; alba, caro_davy and eponine speak low
+    # (122-147 Hz) but are women, marius gave no reading but is Hugo's.
+    _BUILTIN_GENDERS = {
+        **dict.fromkeys(
+            ("alba", "anna", "azelma", "caro_davy", "cosette", "eponine", "estelle",
+             "eve", "fantine", "jane", "lola", "mary", "vera"),
+            TtsVoiceGender.FEMALE,
+        ),
+        **dict.fromkeys(
+            ("bill_boerst", "charles", "george", "giovanni", "javert", "jean", "juergen",
+             "marius", "michael", "paul", "peter_yearsley", "rafael", "stuart_bell"),
+            TtsVoiceGender.MALE,
+        ),
     }
 
     @classmethod
