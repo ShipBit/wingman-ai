@@ -17,17 +17,29 @@ aUEC	Alpha U E C
 # SCU	Ess Ssi Juh	de
 # SCU	S C U
 QT	Quantum
-# Place and ship names German voices read by German rules ("Kruhsahder",
-# "Huhrstohn"). Spellings picked by how often Parakeet heard the English
-# name back from the German model (Juergen, Tabea; 2026-09-24).
+# Place, company and ship names German voices read by German rules
+# ("Kruhsahder", "Huhrstohn"). Spellings chosen by ear from candidates
+# spoken by the German model (2026-09-24); names it already says well enough
+# (Aegis, Drake, Freelancer, Hornet, Prospector, Reclaimer) are not listed.
 Crusader	Kruseider	de
 Hurston	Hörstn	de
-microTech	Maikro-Tek	de
-MicroTech	Maikro-Tek	de
-Microtech	Maikro-Tek	de
+ArcCorp	Ark-Korp	de
+Arccorp	Ark-Korp	de
+microTech	Maikroteck	de
+MicroTech	Maikroteck	de
+Microtech	Maikroteck	de
+Stanton	Stänten	de
+Lorville	Lohr-Will	de
+New Babbage	Nju Bäbbitsch	de
 Orison	Orris'n	de
-Constellation	Konstelläischen	de
-Hornet	Hornett	de
+Pyro	Pai-Ro	de
+Anvil	Änwil	de
+Origin	Orridschin	de
+Cutlass	Kattläss	de
+Carrack	Kärräck	de
+Constellation	Konstel-Läischen	de
+Vanguard	Wänngard	de
+Caterpillar	Kätterpiller	de
 # QD	Quantum Dampener
 # MFD	M F D
 ATC	Ey-Tih-Ssi	de
