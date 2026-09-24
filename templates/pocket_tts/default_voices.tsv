@@ -2,7 +2,8 @@
 # services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
 # "legacy" is the voice its template had up to 3.2.3, so a Wingman still on
 # it counts as untouched and moves to the voice of its language.
-# Chosen by ear on 2026-09-24.
+# de and en chosen by ear on 2026-09-24. fr, es, it and pt picked to match:
+# ATC a clear, brisk woman, Computer a clear, calm man, Clippy the liveliest woman.
 ATC	legacy	azelma
 ATC	de	de-julia
 ATC	en	anna
@@ -10,3 +11,15 @@ Computer	legacy	fantine
 Computer	de	de-ibrahim
 Computer	en	mary
 Clippy	legacy	alba
+ATC	fr	fr-noemie
+Computer	fr	fr-didier
+Clippy	fr	fr-sabine
+ATC	es	es-dolores
+Computer	es	es-paulino
+Clippy	es	es-lucia
+ATC	it	it-angelica
+Computer	it	it-paolo
+Clippy	it	it-allie
+ATC	pt	pt-carina
+Computer	pt	pt-jose
+Clippy	pt	pt-monica
