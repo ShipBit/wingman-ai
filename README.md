@@ -48,7 +48,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 9 extra German voices cloned from native speakers)
+  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 29 extra German voices cloned from native speakers)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Azure TTS
@@ -357,7 +357,7 @@ We would like to thank their creators for their great work and contributions to 
 
 ### Voice recordings
 
-Pocket TTS clones its German voices from recordings of native speakers. Wingman ships short excerpts (about 10 seconds each) in `templates/pocket_tts/voices/`. We thank the readers of [LibriVox](https://librivox.org), who dedicate their recordings to the [public domain](https://librivox.org/pages/public-domain/), and Thorsten Müller for [Thorsten-Voice](https://www.thorsten-voice.de) (CC0 1.0).
+Pocket TTS clones its German voices from recordings of native speakers. Wingman ships short excerpts (about 10 seconds each) in `templates/pocket_tts/voices/`. We thank the readers of [LibriVox](https://librivox.org), who dedicate their recordings to the [public domain](https://librivox.org/pages/public-domain/), and Thorsten Müller for [Thorsten-Voice](https://www.thorsten-voice.de) (CC0 1.0). Where a reader goes by a user name, the voice has a first name of its own; the reader is named next to it.
 
 - **Felix** (de): [Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain](https://librivox.org/der-schimmelreiter-by-theodor-storm/)
 - **Markus** (de): [Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain](https://librivox.org/die-verwandlung-von-franz-kafka/)
@@ -368,6 +368,26 @@ Pocket TTS clones its German voices from recordings of native speakers. Wingman 
 - **Gesine** (de): [Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain](https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/)
 - **Hokuspokus** (de): [Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain](https://librivox.org/der-golem-by-gustav-meyrink/)
 - **Stephanie** (de): [Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain](https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/)
+- **Tabea** (de): [Tabea, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Mara** (de): [cathar maiden, reading Adventskalender 2017 for LibriVox, public domain](https://librivox.org/adventskalender-2017-by-various/)
+- **Jessi** (de): [Jessi, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Gaby** (de): [Gaby, reading Adventskalender 2016 for LibriVox, public domain](https://librivox.org/adventskalender-2016-by-various/)
+- **Kalynda** (de): [Kalynda, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Wilwarin** (de): [wilwarin, reading Sammlung kurzer deutscher Prosa 025 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-025-by-various/)
+- **Caroline** (de): [Caroline Sophie, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/)
+- **Claudia** (de): [Claudia Salto, reading Adventskalender 2016 for LibriVox, public domain](https://librivox.org/adventskalender-2016-by-various/)
+- **Dina** (de): [dineNa, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Julia** (de): [Julia Niedermaier, reading Sammlung kurzer deutscher Prosa 043 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-043-by-various/)
+- **Ekki** (de): [ekyale, reading Sammlung kurzer deutscher Prosa 002 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-002-by-various/)
+- **Christian** (de): [Christian Al-Kadi, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Karlsson** (de): [Karlsson, reading Sammlung kurzer deutscher Prosa 039 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-039-by-various/)
+- **Bruno** (de): [merendo07, reading Adventskalender 2021 for LibriVox, public domain](https://librivox.org/adventskalender-2021-by-various/)
+- **Max** (de): [Max Reichlich, reading Sammlung kurzer deutscher Prosa 054 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-054/)
+- **Rolf** (de): [Rolf Kaiser, reading Sammlung kurzer deutscher Prosa 012 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-012-by-various/)
+- **Claus** (de): [Claus Misfeldt, reading Adventskalender 2024 for LibriVox, public domain](https://librivox.org/adventskalender-2024-by-various/)
+- **Hans Otto** (de): [Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain](https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/)
+- **Haiko** (de): [Haiaiel, reading Adventskalender 2021 for LibriVox, public domain](https://librivox.org/adventskalender-2021-by-various/)
+- **Sven** (de): [schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/)
 
 ### Individual persons
 
