@@ -173,7 +173,8 @@ class PocketTTS:
         self._loaded_model_id: Optional[str] = None
         self.last_load_switched_model = False
         # The model the one-off warm-up generation ran on (see warm_up).
-        self._warmed_model_id: Optional[str] = None
+        # The model instance the one-off warm-up generation ran on (see warm_up).
+        self._warmed_model: Optional[TTSModel] = None
         # Two layers of serialization for v2's explicitly-non-thread-safe TTSModel:
         # - _async_gen_lock: only one coroutine may synthesize at a time. This
         #   singleton outlives any single event loop: push-to-talk interactions
@@ -398,7 +399,7 @@ class PocketTTS:
             torch.cuda.empty_cache()
 
         self.voice_cache.clear()
-        self._warmed_model_id = None
+        self._warmed_model = None
 
         self.printr.print(
             "PocketTTS Model unloaded.", color=LogType.INFO, server_only=True
@@ -498,8 +499,8 @@ class PocketTTS:
     def bundled_voices_needing_clone(self) -> list[str]:
         """Shipped voices in the custom voices folder without a current clone
         for the active model: copied by a start that was closed before it
-        finished cloning them, for one."""
-        missing = self.list_custom_voices_needing_precompute()
+        finished cloning them, for one. Only those of the spoken language."""
+        missing = self.list_custom_voices_needing_precompute(spoken_language_only=True)
         return [v for v in missing if v in self.bundled_voices]
 
     def install_bundled_voices(self) -> list[str]:
@@ -907,18 +908,19 @@ class PocketTTS:
 
         The first generation after a load sets up torch's kernels and caches.
         Done during loading, the first answer the user hears starts as fast
-        as every later one. Once per loaded model; a no-op after that.
+        as every later one. Once per loaded model instance, so also after
+        the same model was loaded again; a no-op after that.
         """
         if not self.settings.run_locally or not self.model:
             return
-        if self._warmed_model_id == self.model_id:
+        if self._warmed_model is self.model:
             return
         try:
             state = self.get_voice_state(voice_id)
             started = time.monotonic()
             with self._model_swap_lock:
                 self.model.generate_audio(state, "Okay.")
-            self._warmed_model_id = self.model_id
+            self._warmed_model = self.model
             self.printr.print(
                 f"PocketTTS warmed up in {(time.monotonic() - started) * 1000:.0f} ms.",
                 server_only=True,
@@ -930,7 +932,21 @@ class PocketTTS:
                 server_only=True,
             )
 
-    def list_custom_voices_needing_precompute(self, only_stale: bool = False) -> list[str]:
+    def warm_up_voice(self, preferred: Optional[str] = None) -> str:
+        """The voice to warm the model up with: ``preferred`` (a voice a
+        Wingman uses), else the built-in native speaker of the spoken
+        language, which every model has an embedding for."""
+        if preferred:
+            return preferred
+        native = next(
+            (v for v, lang in self._NATIVE_VOICES.items() if lang == self.spoken_language.value),
+            None,
+        )
+        return native or "alba"
+
+    def list_custom_voices_needing_precompute(
+        self, only_stale: bool = False, spoken_language_only: bool = False
+    ) -> list[str]:
         """Return custom voice stems whose tagged safetensor for the active
         model does not exist yet, or is older than the voice's audio file —
         these are the ones that would actually be cloned by a precompute pass.
@@ -941,6 +957,11 @@ class PocketTTS:
         ``only_stale`` skips voices never cloned for this model and returns
         only clones that exist but are outdated (a newer recording, or made by
         another pocket-tts).
+
+        ``spoken_language_only`` skips voices Wingman shipped for another
+        language: after switching to English, cloning the 49 German ones
+        took 75 s nobody needs. Picked anyway, such a voice is cloned when
+        first used.
         """
         if not self.voices_dir or not os.path.isdir(self.voices_dir):
             return []
@@ -954,6 +975,9 @@ class PocketTTS:
             for f in sorted(glob.glob(os.path.join(self.voices_dir, pattern))):
                 stem = os.path.splitext(os.path.basename(f))[0]
                 if stem in self._BUILTIN_VOICE_IDS or stem in seen:
+                    continue
+                bundled = self.bundled_voices.get(stem)
+                if spoken_language_only and bundled and bundled.language != self.spoken_language.value:
                     continue
                 seen.add(stem)
                 tagged = os.path.join(
@@ -973,6 +997,7 @@ class PocketTTS:
         self,
         progress_cb: Optional[Callable[[int, int, str], None]] = None,
         only_stale: bool = False,
+        spoken_language_only: bool = False,
     ) -> dict:
         """Generate + persist `.<active_model>.safetensors` for every custom
         voice that doesn't yet have a current one (see
@@ -983,7 +1008,9 @@ class PocketTTS:
         if not self.settings.run_locally or not self.model:
             return {"total": 0, "succeeded": 0, "failed": 0}
 
-        targets = self.list_custom_voices_needing_precompute(only_stale=only_stale)
+        targets = self.list_custom_voices_needing_precompute(
+            only_stale=only_stale, spoken_language_only=spoken_language_only
+        )
         total = len(targets)
         self._precompute_running = True
         self._precompute_current = 0

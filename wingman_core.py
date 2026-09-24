@@ -2379,8 +2379,7 @@ class WingmanCore(WebSocketUser):
             # Inside the loading phase, so the first answer is not the one
             # that pays for the model's first run.
             ready = next((v for v, ok in results.items() if ok), None)
-            if ready:
-                self.pocket_tts.warm_up(ready)
+            self.pocket_tts.warm_up(self.pocket_tts.warm_up_voice(ready))
             return results
 
         loop = asyncio.get_running_loop()
@@ -2450,6 +2449,15 @@ class WingmanCore(WebSocketUser):
             restore_ready_state=False,
         )
         try:
+            # Every newly loaded model gets its warm-up generation, also when
+            # no Wingman uses a Pocket TTS voice to preload (then the one
+            # above did none): the first answer after a language switch
+            # should start as fast as every later one.
+            if self.pocket_tts.model and self.pocket_tts.settings.run_locally:
+                await self.set_core_state(CoreState.LOADING_CONFIG, message="Warming up voice")
+                await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: self.pocket_tts.warm_up(self.pocket_tts.warm_up_voice())
+                )
             await self._precompute_with_indicator(only_stale)
         finally:
             await self.set_core_state(CoreState.READY)
@@ -2462,7 +2470,11 @@ class WingmanCore(WebSocketUser):
             return
         if pocket._precompute_running:
             return
-        total = len(pocket.list_custom_voices_needing_precompute(only_stale=only_stale))
+        total = len(
+            pocket.list_custom_voices_needing_precompute(
+                only_stale=only_stale, spoken_language_only=True
+            )
+        )
         if not total:
             return
         loop = asyncio.get_running_loop()
@@ -2482,7 +2494,9 @@ class WingmanCore(WebSocketUser):
         )
         await loop.run_in_executor(
             None,
-            lambda: pocket.precompute_custom_voices(progress_cb=progress, only_stale=only_stale),
+            lambda: pocket.precompute_custom_voices(
+                progress_cb=progress, only_stale=only_stale, spoken_language_only=True
+            ),
         )
 
     # POST /pocket_tts/preload_voice
