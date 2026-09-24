@@ -7,11 +7,12 @@ This spec file bundles:
 - NVIDIA CUDA libraries for GPU-accelerated speech recognition (Parakeet via onnxruntime-gpu)
 - All required data files and dependencies
 
-NVIDIA CUDA Libraries:
-- nvidia-cublas-cu12: cuBLAS for matrix operations
-- nvidia-cudnn-cu12: cuDNN for deep learning primitives
-- nvidia-cuda-runtime-cu12: CUDA runtime
-- nvidia-cuda-nvrtc-cu12: NVRTC for runtime compilation
+NVIDIA CUDA 13 Libraries (nvidia/cu13/ and nvidia/cudnn/):
+- nvidia-cublas: cuBLAS for matrix operations
+- nvidia-cudnn-cu13: cuDNN for deep learning primitives
+- nvidia-cuda-runtime: CUDA runtime
+- nvidia-cuda-nvrtc: NVRTC for runtime compilation
+- nvidia-cufft, nvidia-curand (Linux): linked by onnxruntime-gpu's CUDA provider
 
 These libraries enable GPU acceleration without requiring users to install CUDA separately.
 """
@@ -78,21 +79,38 @@ if os.path.exists('lib/python3.dll'):
 binaries = []
 
 # Collect NVIDIA CUDA DLLs for GPU support (Windows/Linux only — macOS uses Metal)
-if sys.platform != 'darwin':
-    nvidia_packages = [
-        'nvidia.cublas',
-        'nvidia.cuda_runtime',
-        'nvidia.cudnn',
-        'nvidia.nvrtc',
-        'nvidia.cuda_nvrtc',
-    ]
+#
+# The CUDA 13 wheels are namespace packages without __init__.py, which
+# collect_dynamic_libs does not handle, so walk the folders. Each library keeps
+# its path below site-packages (nvidia/cu13/bin/x86_64/cublas64_13.dll,
+# nvidia/cu13/lib/libcublas.so.13, nvidia/cudnn/...): onnxruntime's
+# preload_dlls() looks for them there, relative to its own package.
+def collect_nvidia_libraries(*folders):
+    import nvidia
 
-    for pkg in nvidia_packages:
-        try:
-            binaries += collect_dynamic_libs(pkg)
-            print(f"Collected DLLs from {pkg}")
-        except Exception as e:
-            print(f"Warning: Could not collect {pkg} DLLs: {e}")
+    found = []
+    for base in nvidia.__path__:
+        site_packages = os.path.dirname(base)
+        for folder in folders:
+            for dirpath, _, files in os.walk(os.path.join(base, folder)):
+                for name in files:
+                    if name.endswith('.dll') or '.so' in name:
+                        found.append(
+                            (os.path.join(dirpath, name), os.path.relpath(dirpath, site_packages))
+                        )
+    return found
+
+
+if sys.platform != 'darwin':
+    nvidia_binaries = collect_nvidia_libraries('cu13', 'cudnn')
+    cublas = 'cublas64_13.dll' if sys.platform == 'win32' else 'libcublas.so.13'
+    if not any(os.path.basename(src) == cublas for src, _ in nvidia_binaries):
+        raise SystemExit(
+            f"{cublas} not found under site-packages/nvidia/cu13 — refusing to ship a "
+            "build whose Parakeet cannot use CUDA."
+        )
+    binaries += nvidia_binaries
+    print(f"Collected {len(nvidia_binaries)} NVIDIA libraries")
 
 # ============================================================================
 # HIDDEN IMPORTS
@@ -182,10 +200,6 @@ hiddenimports = [
 
     # NVIDIA packages (ensure they're included even if DLL collection fails)
     'nvidia',
-    'nvidia.cublas',
-    'nvidia.cuda_runtime',
-    'nvidia.cudnn',
-    'nvidia.cuda_nvrtc',
 
 	# for pocket-tts
 	'engineio.async_drivers.threading',

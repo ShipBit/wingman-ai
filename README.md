@@ -194,7 +194,7 @@ XVASynth is also supported and installable via Steam.
 ### Windows
 
 - Download the installer of the latest version from [wingman-ai.com](https://www.wingman-ai.com).
-- **FasterWhisper with CUDA is now bundled!** If you have a CUDA-compatible NVIDIA GPU, GPU-accelerated speech-to-text will work automatically without additional installation steps.
+- **CUDA is bundled.** With an NVIDIA GPU from the GTX 16xx / RTX 20xx series or newer and driver 580 or newer, local speech recognition (Parakeet) runs on the GPU without extra installation steps. Older GPUs and drivers use the CPU.
 - Install it to a directory of your choice and start the client `Wingman AI.exe`.
   - The client will auto-start `Wingman AI Core.exe` in the background
 

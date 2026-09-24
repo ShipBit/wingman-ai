@@ -49,6 +49,9 @@ jobs:
           .\venv\Scripts\Activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # elevenlabslib pulls in the CPU onnxruntime, which shares its package
+          # directory with onnxruntime-gpu. See the script for why that breaks CUDA.
+          python scripts/ensure_onnxruntime_gpu.py
 
       - name: Build with PyInstaller
         run: |
