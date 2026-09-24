@@ -36,20 +36,34 @@ jaraco-context>=6.0.0
 jaraco-functools>=4.0.0
 
 # NVIDIA CUDA libraries for GPU-accelerated Parakeet (onnxruntime-gpu)
-# These are bundled with PyInstaller to provide zero-config GPU support
-# IMPORTANT: Must stay on CUDA 12.x (12.4-12.8 tested); onnxruntime-gpu 1.19+ links against CUDA 12.
+# These are bundled with PyInstaller to provide zero-config GPU support.
+# CUDA 13, to match onnxruntime-gpu below: from 1.27.0 its CUDA provider links
+# cublas64_13.dll / libcublas.so.13. The CUDA 13 wheels dropped the -cuNN suffix
+# (only cuDNN keeps it) and all install into nvidia/cu13/, which onnxruntime's
+# preload_dlls() knows. The majors must move together: a provider looking for
+# CUDA 13 next to CUDA 12 libraries is still listed as available, fails to load
+# and leaves Parakeet quietly on the CPU; 3.2.3 shipped exactly that.
+# CUDA 13 needs NVIDIA driver 580 or newer and a Turing or newer GPU (GTX 16xx,
+# RTX 20xx and up). Older setups get Parakeet on the CPU.
 # Not available on macOS — CUDA is Windows/Linux only.
-nvidia-cublas-cu12>=12.4.2,<13.0; sys_platform != 'darwin'
-nvidia-cuda-runtime-cu12>=12.4.99,<13.0; sys_platform != 'darwin'
-nvidia-cudnn-cu12>=9.1.0,<10.0; sys_platform != 'darwin'
-nvidia-cuda-nvrtc-cu12>=12.4.99,<13.0; sys_platform != 'darwin'
+nvidia-cublas>=13.0,<14.0; sys_platform != 'darwin'
+nvidia-cuda-runtime>=13.0,<14.0; sys_platform != 'darwin'
+nvidia-cuda-nvrtc>=13.0,<14.0; sys_platform != 'darwin'
+nvidia-cudnn-cu13>=9.13,<10.0; sys_platform != 'darwin'
+# cuFFT is numbered 12 in CUDA 13. The provider needs it on both systems and
+# cuRAND on Linux (libcurand.so.10).
+nvidia-cufft>=12.0,<13.0; sys_platform != 'darwin'
+nvidia-curand>=10.4,<11.0; sys_platform == 'linux'
 
 # Local AI (llama-server binary is auto-downloaded)
 tiktoken>=0.9.0
 
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
 onnx-asr>=0.3.3
-onnxruntime-gpu>=1.19.0; sys_platform == 'win32' or sys_platform == 'linux'
+# Built against CUDA 13 since 1.27, see the NVIDIA packages above. At least
+# 1.30 (tested): 1.27 is a CUDA 13 build whose preload_dlls() still looks in the
+# CUDA 12 folders and misses nvidia/cu13, so Parakeet would stay on the CPU.
+onnxruntime-gpu>=1.30,<2.0; sys_platform == 'win32' or sys_platform == 'linux'
 onnxruntime>=1.19.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 

@@ -34,12 +34,11 @@ faulthandler.enable()
 if getattr(sys, "frozen", False):
     # Running as bundled exe
     _internal_dir = sys._MEIPASS
+    # CUDA 13 puts every toolkit library in nvidia/cu13/bin/x86_64; cuDNN keeps
+    # nvidia/cudnn/bin. Parakeet also preloads them via onnxruntime.
     _nvidia_paths = [
-        path.join(_internal_dir, "nvidia", "cublas", "bin"),
+        path.join(_internal_dir, "nvidia", "cu13", "bin", "x86_64"),
         path.join(_internal_dir, "nvidia", "cudnn", "bin"),
-        path.join(_internal_dir, "nvidia", "cuda_runtime", "bin"),
-        path.join(_internal_dir, "nvidia", "cuda_nvrtc", "bin"),
-        path.join(_internal_dir, "nvidia", "nvrtc", "bin"),
     ]
     # Prepend existing paths that exist
     _existing_nvidia_paths = [p for p in _nvidia_paths if path.isdir(p)]

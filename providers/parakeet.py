@@ -93,17 +93,34 @@ class Parakeet:
                         color=LogType.WARNING,
                     )
 
+            if "CUDAExecutionProvider" in effective_providers:
+                self._preload_cuda_libraries()
+
             load_kwargs = {"providers": effective_providers}
             if model_path:
                 load_kwargs["path"] = model_path
 
             self.model = onnx_asr.load_model(model_name, **load_kwargs)
 
+            # What the sessions actually got. ONNX Runtime drops the CUDA
+            # provider without raising when its libraries fail to load, so the
+            # requested list alone does not say whether the GPU is used.
+            running_on = self._session_providers() or effective_providers
             self.printr.print(
-                f"Parakeet initialized with model '{model_name}' (providers: {effective_providers}).",
+                f"Parakeet initialized with model '{model_name}' (providers: {running_on}).",
                 server_only=True,
                 color=LogType.POSITIVE,
             )
+            if (
+                "CUDAExecutionProvider" in effective_providers
+                and "CUDAExecutionProvider" not in running_on
+            ):
+                self.printr.print(
+                    "Parakeet: the CUDA libraries could not be loaded, running on the CPU. "
+                    "The ONNX Runtime lines above name the file that failed.",
+                    server_only=True,
+                    color=LogType.WARNING,
+                )
             self._warm_up()
         except ImportError:
             self.printr.toast_error(
@@ -113,6 +130,50 @@ class Parakeet:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
             )
+
+    def _preload_cuda_libraries(self):
+        """Load the bundled CUDA and cuDNN libraries before the sessions start.
+
+        They sit in _internal/nvidia/cu13/bin/x86_64 (Windows) or
+        _internal/nvidia/cu13/lib (Linux), cuDNN in nvidia/cudnn, where the
+        loader does not look on its own. onnxruntime's preload_dlls() knows that
+        layout; the PATH entries in main.py only help on Windows, and on Linux
+        nothing found libcublas at all.
+        """
+        try:
+            import onnxruntime as ort
+
+            if hasattr(ort, "preload_dlls"):
+                ort.preload_dlls()
+        except Exception as e:
+            self.printr.print(
+                f"Parakeet: preloading the CUDA libraries failed: {e}",
+                server_only=True,
+                color=LogType.WARNING,
+            )
+
+    def _session_providers(self) -> list[str]:
+        """The providers of the first ONNX Runtime session inside the model.
+
+        onnx_asr keeps its sessions in private attributes (the encoder of the
+        NeMo models is `_encoder`), so search three levels of attributes instead
+        of naming one. Empty when nothing is found.
+        """
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            return []
+
+        pending = [self.model]
+        for _ in range(3):
+            found = []
+            for obj in pending:
+                for value in getattr(obj, "__dict__", {}).values():
+                    if isinstance(value, ort.InferenceSession):
+                        return value.get_providers()
+                    found.append(value)
+            pending = found
+        return []
 
     def _warm_up(self):
         """Run one recognition on a second of faint noise and throw it away.
