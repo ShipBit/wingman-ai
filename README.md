@@ -48,7 +48,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 49 extra German voices cloned from native speakers)
+  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with 49 extra German and 20 extra English voices cloned from native speakers)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Azure TTS
@@ -357,7 +357,7 @@ We would like to thank their creators for their great work and contributions to 
 
 ### Voice recordings
 
-Pocket TTS clones its German voices from recordings of native speakers. Wingman ships short excerpts (about 10 seconds each) in `templates/pocket_tts/voices/`. We thank the readers of [LibriVox](https://librivox.org), who dedicate their recordings to the [public domain](https://librivox.org/pages/public-domain/), and Thorsten Müller for [Thorsten-Voice](https://www.thorsten-voice.de) (CC0 1.0). Where a reader goes by a user name, the voice has a first name of its own; the reader is named next to it.
+Pocket TTS clones voices from recordings of native speakers. Wingman ships short excerpts (about 10 seconds each) in `templates/pocket_tts/voices/`. We thank the readers of [LibriVox](https://librivox.org), who dedicate their recordings to the [public domain](https://librivox.org/pages/public-domain/), and Thorsten Müller for [Thorsten-Voice](https://www.thorsten-voice.de) (CC0 1.0). Where a reader goes by a user name, the voice has a first name of its own. The reader is named next to it.
 
 - **Felix** (de): [Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain](https://librivox.org/der-schimmelreiter-by-theodor-storm/)
 - **Markus** (de): [Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain](https://librivox.org/die-verwandlung-von-franz-kafka/)
@@ -408,6 +408,26 @@ Pocket TTS clones its German voices from recordings of native speakers. Wingman 
 - **Magnus** (de): [Magnus, reading Sammlung kurzer deutscher Prosa 060 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-060-by-various/)
 - **Joachim** (de): [yehoash, reading Sammlung kurzer deutscher Prosa 006 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-006-by-various/)
 - **Fynn** (de): [McFly, reading Sammlung kurzer deutscher Prosa 014 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-014-by-various/)
+- **Belinda** (en): [Belinda McReynolds, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Shelly** (en): [ShrimpPhish, reading Black Cat Vol. 05 No. 08 May 1900 for LibriVox, public domain](https://librivox.org/blackcat0508may1900-by-various/)
+- **Pamela** (en): [Pamela Nagami, reading Renaissance and the Reformation: A Textbook of European History 1494-1610 for LibriVox, public domain](https://librivox.org/the-renaissance-and-the-reformation-by-emmeline-tanner/)
+- **MaryAnn** (en): [MaryAnn, reading How to Pray for LibriVox, public domain](https://librivox.org/how-to-pray-by-reuben-archer-torrey/)
+- **Ann** (en): [Ann Boulais, reading Lives of the Queens of England Volume 11 for LibriVox, public domain](https://librivox.org/lives-of-the-queens-of-england-volume-11-by-agnes-strickland/)
+- **Dana** (en): [dc, reading Circe, Volume I for LibriVox, public domain](https://librivox.org/circe-by-mary-elizabeth-braddon/)
+- **Cynthia** (en): [cyndajm, reading Star Hyacinths for LibriVox, public domain](https://librivox.org/the-star-hyacinths-by-james-h-schmitz/)
+- **Leigh** (en): [mleigh, reading National Geographic Magazine Vol. 12 - 01. January 1901 for LibriVox, public domain](https://librivox.org/the-national-geographic-magazine-vol-12-01-january-1901-by-national-geographic-society/)
+- **Jenny** (en): [jenno, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Winnifred** (en): [Winnifred Assmann, reading Thrill Book Vol. II No. 2, July 15, 1919 for LibriVox, public domain](https://librivox.org/the-thrill-book-vol-ii-no-2-july-15-1919-by-murray-leinster/)
+- **Edward** (en): [E. Sharp, reading Last Words (Real and Traditional) of Distinguished Men and Women for LibriVox, public domain](https://librivox.org/the-last-words-real-and-traditional-of-distinguished-men-and-women-by-frederic-rowland-marvin/)
+- **Atul** (en): [Atul Sharma, reading Box Office Murders for LibriVox, public domain](https://librivox.org/the-box-office-murders-by-freeman-wills-crofts/)
+- **Aaron** (en): [Aaron Bennett, reading Magnificent Fight: Marines in the Battle for Wake Island for LibriVox, public domain](https://librivox.org/a-magnificent-fight-marines-in-the-battle-for-wake-island-by-robert-james-cressman/)
+- **Barry** (en): [Barry Eads, reading Wild Bill Hickok, the prince of pistoleers for LibriVox, public domain](https://librivox.org/wild-bill-hickok-the-prince-of-pistoleers-by-frank-j-wilstach/)
+- **Lee** (en): [LeeSalter, reading April Morning for LibriVox, public domain](https://librivox.org/april-morning-by-evaleen-stein/)
+- **Tom** (en): [Tom Shoesmith, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Manuel** (en): [mpinedag, reading Great Events by Famous Historians, Volume 15 for LibriVox, public domain](https://librivox.org/the-great-events-by-famous-historians-volume-15-by-charles-f-horne/)
+- **John** (en): [John, reading Flying Inn (Version 2) for LibriVox, public domain](https://librivox.org/the-flying-inn-version-2-by-g-k-chesterton/)
+- **Barnaby** (en): [Beeswaxcandle, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Edmund** (en): [Edmund Bloxam, reading Art of Music - Volume 03: Modern Music for LibriVox, public domain](https://librivox.org/the-art-of-music-volume-03-modern-music-by-the-national-society-of-music/)
 
 ### Individual persons
 
