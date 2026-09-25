@@ -3,6 +3,7 @@ import ctypes
 import gc
 import os
 import platform
+import socket
 import subprocess
 import time
 from typing import NamedTuple, Optional
@@ -87,9 +88,25 @@ def _assign_process_to_job(job, process: subprocess.Popen):
         kernel32.AssignProcessToJobObject(job, handle)
         kernel32.CloseHandle(handle)
 
-# Fixed ports for managed llama-server instances (offset from remote defaults)
+# Preferred ports for managed llama-server instances (offset from remote defaults)
 MANAGED_SUPPORT_PORT = 49172
 MANAGED_EMBED_PORT = 49173
+
+
+def _free_port(preferred: int) -> int:
+    """The preferred port, or one the OS picks when another program holds it.
+
+    Ports above 49152 are the OS's ephemeral range; other apps (Tailscale on
+    macOS, for one) can hold them, and llama-server would then fail to start.
+    """
+    for port in (preferred, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return sock.getsockname()[1]
+    return preferred
 
 
 class SupportResult(NamedTuple):
@@ -351,26 +368,27 @@ class LlamaCppProvider:
         backend = self.model_manager._get_active_backend()
         gpu_label = "metal" if platform.system() == "Darwin" else backend
         model_name = os.path.basename(model_path)
+        port = _free_port(MANAGED_SUPPORT_PORT)
         printr.print(
             f"Starting support server: {model_name} "
             f"(n_ctx={n_ctx}, n_threads={n_threads}, gpu={gpu_label}, "
-            f"reasoning=per-call, port={MANAGED_SUPPORT_PORT})",
+            f"reasoning=per-call, port={port})",
             color=LogType.INFO,
             server_only=True,
         )
 
         self._support_process = self._start_server(
             model_path=model_path,
-            port=MANAGED_SUPPORT_PORT,
+            port=port,
             n_ctx=n_ctx,
             reasoning_budget=rb,
         )
         if self._support_process is None:
             return False
 
-        if self._wait_for_server(MANAGED_SUPPORT_PORT, self._support_process):
+        if self._wait_for_server(port, self._support_process):
             self._support_client = OpenAI(
-                base_url=f"http://127.0.0.1:{MANAGED_SUPPORT_PORT}/v1",
+                base_url=f"http://127.0.0.1:{port}/v1",
                 api_key="not-needed",
             )
             printr.print(
@@ -412,25 +430,26 @@ class LlamaCppProvider:
         backend = self.model_manager._get_active_backend()
         gpu_label = "metal" if platform.system() == "Darwin" else backend
         model_name = os.path.basename(model_path)
+        port = _free_port(MANAGED_EMBED_PORT)
         printr.print(
             f"Starting embed server: {model_name} "
-            f"(n_ctx=2048, n_threads={n_threads}, gpu={gpu_label}, port={MANAGED_EMBED_PORT})",
+            f"(n_ctx=2048, n_threads={n_threads}, gpu={gpu_label}, port={port})",
             color=LogType.INFO,
             server_only=True,
         )
 
         self._embed_process = self._start_server(
             model_path=model_path,
-            port=MANAGED_EMBED_PORT,
+            port=port,
             embedding=True,
             n_ctx=2048,
         )
         if self._embed_process is None:
             return False
 
-        if self._wait_for_server(MANAGED_EMBED_PORT, self._embed_process):
+        if self._wait_for_server(port, self._embed_process):
             self._embed_client = OpenAI(
-                base_url=f"http://127.0.0.1:{MANAGED_EMBED_PORT}/v1",
+                base_url=f"http://127.0.0.1:{port}/v1",
                 api_key="not-needed",
             )
             printr.print(
