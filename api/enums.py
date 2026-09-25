@@ -214,6 +214,32 @@ class ImageGenerationProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
 
 
+class ImageStyle(Enum):
+    """Art style presets for generated images. services/image_generation.py
+    holds the text each one adds to the prompt. NONE adds nothing."""
+
+    NONE = "none"
+    CINEMATIC = "cinematic"
+    PHOTO = "photo"
+    ANIME = "anime"
+    GHIBLI = "ghibli"
+    PIXAR = "pixar"
+    CARTOON = "cartoon"
+    COMIC = "comic"
+    OIL_PAINTING = "oil_painting"
+    PIXEL_ART = "pixel_art"
+    SYNTHWAVE = "synthwave"
+    RETRO_SCIFI = "retro_scifi"
+    CLAYMATION = "claymation"
+    SKETCH = "sketch"
+
+
+class ImageAspect(Enum):
+    SQUARE = "square"
+    PORTRAIT = "portrait"
+    LANDSCAPE = "landscape"
+
+
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
@@ -316,6 +342,14 @@ class ImageGenerationProviderEnumModel(BaseEnumModel):
     image_generation_provider: ImageGenerationProvider
 
 
+class ImageStyleEnumModel(BaseEnumModel):
+    image_style: ImageStyle
+
+
+class ImageAspectEnumModel(BaseEnumModel):
+    image_aspect: ImageAspect
+
+
 class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
 
@@ -368,6 +402,8 @@ ENUM_TYPES = {
     "LocalAiMode": LocalAiModeEnumModel,
     "SpokenLanguage": SpokenLanguageEnumModel,
     "PocketTtsQuality": PocketTtsQualityEnumModel,
+    "ImageStyle": ImageStyleEnumModel,
+    "ImageAspect": ImageAspectEnumModel,
     # Add new enums here as key-value pairs
 }
 

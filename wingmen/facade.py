@@ -423,9 +423,40 @@ class SkillAi:
         summarization prefer ctx.local_ai.summarize() (free, local)."""
         return await self.generate(text, system=system or "Summarize the following concisely.")
 
-    async def generate_image(self, prompt: str) -> str:
-        """Generate an image from a prompt; returns the generated file path/URL."""
-        return await self._wingman.generate_image(prompt)
+    async def generate_image(
+        self,
+        prompt: str,
+        *,
+        aspect: str = "square",
+        reference_images: Optional[list[str]] = None,
+    ) -> str:
+        """Generate an image from a prompt; returns the image as data URL or URL, "" on failure.
+        aspect: "square", "portrait" or "landscape".
+        reference_images: up to 4 data URLs the model builds on ("the same character, but ...").
+        Shrink them first with services.image_generation.reference_data_url."""
+        from api.enums import ImageAspect
+
+        return await self._wingman.generate_image(
+            prompt, aspect=ImageAspect(aspect), reference_images=reference_images
+        )
+
+    def recent_user_images(self) -> tuple[str, ...]:
+        """The images the user attached to their most recent message that had any,
+        as data URLs. Empty if the conversation has none."""
+        for message in reversed(self._wingman.messages):
+            if not isinstance(message, dict) or message.get("role") != "user":
+                continue
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            urls = tuple(
+                part["image_url"]["url"]
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "image_url"
+            )
+            if urls:
+                return urls
+        return ()
 
 
 def _text_or_empty(resp) -> str:
