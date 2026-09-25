@@ -57,8 +57,11 @@ POCKET_TTS_MODELS: dict[SpokenLanguage, dict[PocketTtsQuality, str]] = {
         PocketTtsQuality.STANDARD: "portuguese",
         PocketTtsQuality.HIGH: "portuguese_24l",
     },
+    # dutch (6L) loses parts of sentences: 13 of 36 test sentences came out
+    # complete, 29 of 36 cut at their commas; dutch_24l spoke all 36
+    # (6 voices, 3 sentences, 2 seeds, measured 2026-09-25).
     SpokenLanguage.NL: {
-        PocketTtsQuality.STANDARD: "dutch",
+        PocketTtsQuality.STANDARD: "dutch_24l",
         PocketTtsQuality.HIGH: "dutch_24l",
     },
 }
