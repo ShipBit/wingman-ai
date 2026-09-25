@@ -42,6 +42,7 @@ from providers.pocket_tts_chunks import (
     faded_edges,
     frames_after_eos,
     pieces_for_speech,
+    CLAUSE_MODELS,
 )
 from providers.pocket_tts_voices import (
     install_bundled_voices,
@@ -1298,6 +1299,7 @@ class PocketTTS:
                 ),
                 count_tokens=lambda t: len(tokenizer(t)[0]),
                 language=self.spoken_language,
+                by_clause=self.model_id in CLAUSE_MODELS,
             )
         except Exception as e:
             # A later pocket-tts moving these internals must not cost speech.

@@ -11,6 +11,7 @@ one is near.
 """
 
 import math
+import re
 from typing import Callable, Iterable, Iterator
 
 import torch
@@ -31,6 +32,17 @@ of a piece, on top of pocket-tts' own guess. With the guess alone, 4 of 40
 German pieces stopped while the last syllable was still sounding, heard as
 a word cut off at the join; with 2 more frames, 1 of 40, and more frames did
 not help further (measured 2026-09-24 with Juergen, Tabea, Rolf, Eponine)."""
+
+
+CLAUSE_MODELS = frozenset({"german"})
+"""Models that get every clause as a piece of its own. The German 6-layer
+model of pocket-tts 3.3 takes the pause after a comma for the end: whole
+sentences with a comma came out complete 12 of 36 times, the same
+sentences cut at their commas 35 of 36 (6 voices, 3 sentences, 2 seeds,
+measured 2026-09-25). german_24l and the other languages finish them."""
+
+MIN_CLAUSE_WORDS = 3
+"""A clause shorter than this ("Ja,") stays with the next one."""
 
 
 def frames_after_eos(piece: str) -> int:
@@ -101,13 +113,38 @@ def pieces_for_speech(
     split_sentences: Callable[[str], list[str]],
     count_tokens: Callable[[str], int],
     language: SpokenLanguage,
+    by_clause: bool = False,
 ) -> list[str]:
     """pocket-tts's own split, then every piece still over the limit cut at
-    word boundaries."""
+    word boundaries. With ``by_clause`` every clause is a piece
+    (CLAUSE_MODELS)."""
     pieces: list[str] = []
     for piece in _rejoin_clauses(split_sentences(text)):
-        pieces.extend(split_long(piece, count_tokens, language))
+        for part in split_clauses(piece) if by_clause else [piece]:
+            pieces.extend(split_long(part, count_tokens, language))
     return pieces
+
+
+def split_clauses(sentence: str) -> list[str]:
+    """``sentence`` cut after every comma, a clause under MIN_CLAUSE_WORDS
+    words kept with the next. Numbers like "2,5" have no space after the
+    comma and stay whole."""
+    parts = [p for p in re.split(r"(?<=,)\s+", sentence.strip()) if p]
+    out: list[str] = []
+    carry = ""
+    for part in parts:
+        part = f"{carry} {part}".strip() if carry else part
+        if len(part.split()) < MIN_CLAUSE_WORDS and part is not parts[-1]:
+            carry = part
+            continue
+        carry = ""
+        out.append(part)
+    if carry:
+        out.append(carry)
+    if len(out) > 1 and len(out[-1].split()) < MIN_CLAUSE_WORDS:
+        last = out.pop()
+        out[-1] = f"{out[-1]} {last}"
+    return out
 
 
 def _rejoin_clauses(pieces: list[str]) -> list[str]:
