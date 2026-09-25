@@ -46,7 +46,7 @@ custom_properties:
     property_type: string
     required: false
     value: C:\Program Files (x86)\Steam\steamapps\common\Euro Truck Simulator 2
-  - hint: The backstory used for automatic dispatcher personality if active. Changed data is placed directly after this backstory for the LLM to generate its response. If you want the dispatcher to speak im a different language include that instruction here.
+  - hint: The backstory used for automatic dispatcher personality if active. Changed data is placed directly after this backstory for the LLM to generate its response. The dispatcher speaks the language you set in Wingman's settings. If you want another language for the dispatcher, include that instruction here.
     id: dispatcher_backstory
     name: Dispatcher Backstory
     property_type: textarea

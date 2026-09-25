@@ -300,6 +300,7 @@ class ATSTelemetry(Skill):
                     {backstory}
                     Acting in character at all times, react to the following changed information.
                     {units_phrase}
+                    Speak {self.wingman.language.name}, unless the backstory above asks for another language.
                 """
         response = await self.wingman.ai.generate(
             user_content, system=system_content, auto_shorten=True
@@ -1024,7 +1025,7 @@ class ATSTelemetry(Skill):
             )
 
         # Request data from openstreetmap nominatum api for reverse geocoding
-        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language=en&extratags=1"
+        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language={self.wingman.language.code or 'en'}&extratags=1"
         headers = {"User-Agent": f"ats_telemetry_skill {self.wingman.name}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:

@@ -300,6 +300,7 @@ class RadioChatter(Skill):
         system = get_prompt("radio-chatter").format(
             count_participants=count_participants,
             count_messages=count_message,
+            language=self.wingman.language.name,
         )
         # auto_shorten so a large radio prompt is truncated to the cap rather than
         # raising (which, in this background thread, would silently kill the loop).

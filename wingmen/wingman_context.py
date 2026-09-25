@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings, SkillSystemOne,
+        SkillSettings, SkillSystemOne, SpokenLanguageInfo,
     )
     from wingmen.wingman import Wingman
 
@@ -104,6 +104,23 @@ class WingmanContext:
         default Wingman AI avatar if the user hasn't set a custom one. None if
         unavailable (e.g. in tests)."""
         return self.__wingman.get_avatar_path()
+
+    @property
+    def language(self) -> "SpokenLanguageInfo":
+        """The language the user speaks, read fresh from the settings each time
+        so a change in the client applies without reloading the skill."""
+        from api.enums import SpokenLanguage
+        from services.spoken_language import language_name
+        from wingmen.facade import SpokenLanguageInfo
+
+        settings = self.__wingman.settings
+        other = settings.other_language
+        is_other = settings.spoken_language == SpokenLanguage.OTHER
+        return SpokenLanguageInfo(
+            code=(other.code if other else None) if is_other else settings.spoken_language.value,
+            name=language_name(settings.spoken_language, other),
+            is_other=is_other,
+        )
 
     @property
     def settings(self) -> "SkillSettings":

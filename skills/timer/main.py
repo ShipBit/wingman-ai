@@ -348,7 +348,7 @@ class Timer(Skill):
                     Create a small summary of what was executed.
                     Dont mention it was a function call, go by the meaning.
                     For example dont say command 'LandingGearUp' was executed, say 'Landing gear retracted'.
-                    The summary language must be in the same language as the previous user message.
+                    Write the summary in {self.wingman.language.name}.
                     The function response:
                     ```
                     {response}

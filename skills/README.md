@@ -1384,6 +1384,7 @@ The reference below lists every member, one line each. Gotchas (cap, interrupt, 
 | `.name` | This wingman's name (`str`). |
 | `.avatar_path` | **Read-only** local file path to this wingman's avatar image (PNG, `str`). Falls back to the default Wingman AI avatar if the user hasn't set a custom one; `None` if unavailable. |
 | `.config` | **Read-only** live view of the wingman config. Reads pass through to live values; any write raises `FacadeError`. Change things through a capability (`tts.set_voice`, `commands.*`, `audio.set_output_device`). |
+| `.language` | The language the user speaks, read fresh on every access. `.name` is the English name for prompts (`"German"`, `"Dutch"`), `.code` the ISO 639 code (`"de"`; `None` for an other language that has none), `.is_other` is True for a language beyond the seven Wingman supports end to end. Put `.name` into every `ai.generate` / `local_ai` prompt whose output the user hears or reads: those calls do not get the Wingman's system prompt, so nothing else tells the model the language. |
 | `.settings` | **Read-only** view of app settings. Writing raises `FacadeError`; change devices via `audio.set_output_device(...)`. |
 | `.run_in_thread(fn, *args)` | Run a blocking callable off the event loop (args spread **positionally**). If `fn` is a coroutine function it's run in a fresh event loop. |
 
@@ -1620,6 +1621,7 @@ The support model is a small model with limited instruction-following ability, a
 - **Say "IN CHARACTER" explicitly** when the model must rephrase instructions in its persona's voice. Otherwise it will dump template text verbatim (e.g., outputting "The user talks to you by holding the home key" instead of weaving it into a natural sentence).
 - **Constrain what it may NOT do.** Small models are prone to confabulation — add explicit "Do NOT add anything not in [source]" rules.
 - **Keep prompts short.** Every token of system prompt reduces the budget available for input and output. Aim for under 200 tokens.
+- **Name the language** when the user hears or reads the output: `f"Write in {self.wingman.language.name}."`. Put it last, right before the output starts — small models forget a language rule at the top of the prompt.
 
 ### Summarizing Large Text
 
@@ -2010,6 +2012,7 @@ self.wingman.audio.is_playing          # Is the wingman speaking?
 ```python
 self.wingman.settings.debug_mode       # Is debug mode enabled?
 self.wingman.settings.audio.output     # Output device config
+self.wingman.language.name             # "German": say it in side-call prompts the user hears
 ```
 
 **Utilities:**
