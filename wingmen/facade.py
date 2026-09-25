@@ -35,6 +35,25 @@ class ToolResult:
     label: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class SpokenLanguageInfo:
+    """The language the user and their Wingmen speak (ctx.language).
+
+    Skills that let a model write something the user hears or reads — a side-call
+    via ctx.ai.generate, the support model — put `name` into that prompt:
+    ``f"Write in {ctx.language.name}."``. Those calls do not get the Wingman's
+    system prompt, so nothing else tells the model the language.
+    """
+    code: Optional[str]
+    """ISO 639 code: "en", "de", ... or the code of an other language ("nl");
+    None for an other language that has none."""
+    name: str
+    """The English name, the way prompts spell it: "German", "Dutch"."""
+    is_other: bool
+    """True when the user picked a language beyond the seven Wingman supports
+    end to end (settings.other_language)."""
+
+
 @dataclass
 class ToolDescriptor:
     """Describes one callable function available to the wingman (skill tool, MCP tool,

@@ -101,7 +101,13 @@ Before implementing, estimate the token cost of your skill:
 
 4. **Always implement `unload()`** to clean up resources (unsubscribe events, close connections, cancel tasks).
 
-5. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
+5. **Name the user's language in every prompt whose output the user hears or reads.** `self.wingman.ai.generate()` and `self.wingman.local_ai.*` do not get the Wingman's system prompt, so the model does not know the language unless you say it:
+   ```python
+   system = f"... Write in {self.wingman.language.name}."   # "German", "Dutch", ...
+   ```
+   Internal calls (yes/no checks, JSON extraction, matching) don't need it. If a user-written prompt may ask for another language on purpose (English radio chatter for a German user), add "unless the scenario asks for another language".
+
+6. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
 
 ## Required Files
 
@@ -252,6 +258,9 @@ await self.wingman.audio.set_output_device(device_id)   # switch output device i
 self.wingman.commands.get(name) / .all() / await .save()  # read/edit/persist commands
 self.wingman.tools.has(name) / await .invoke(name, args)  # discover + invoke tools/commands -> ToolResult
 self.wingman.tools.source(name) / .all() / .servers()   # tool origin + enumerate callable functions / MCP servers
+
+# LANGUAGE — the one language the user and their Wingmen speak (read fresh, it can change):
+self.wingman.language.name / .code / .is_other          # "German" / "de" / False — put .name into side-call prompts
 
 # CONVERSATION:
 self.wingman.conversation.history() / .summary          # read the live conversation

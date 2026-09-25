@@ -363,7 +363,7 @@ class Msfs2020Control(Skill):
             )
 
         # Request data from openstreetmap nominatum api for reverse geocoding
-        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language=en&extratags=1"
+        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language={self.wingman.language.code or 'en'}&extratags=1"
         headers = {"User-Agent": f"msfs2020control_skill wingmanai {self.wingman.name}"}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
@@ -390,6 +390,7 @@ class Msfs2020Control(Skill):
         user_content = f"{on_ground_statement}  Information about the location: {data}"
         system_content = f"""
                     {backstory}
+                    Speak {self.wingman.language.name}, unless the backstory above asks for another language.
                 """
         if self.settings.debug_mode:
             self.log.info(
