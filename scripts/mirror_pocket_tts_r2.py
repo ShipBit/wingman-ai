@@ -32,7 +32,7 @@ PREREQUISITES (what YOU need before running)
 
 USAGE
     python scripts/mirror_pocket_tts_r2.py                 # mirror all builtin languages
-    python scripts/mirror_pocket_tts_r2.py english_2026-04 german_24l   # only these
+    python scripts/mirror_pocket_tts_r2.py english_2026-09 german_24l   # only these
     python scripts/mirror_pocket_tts_r2.py --force         # re-upload even if present
     python scripts/mirror_pocket_tts_r2.py --dry-run       # show what would happen
 """
@@ -58,9 +58,11 @@ from providers.pocket_tts_r2 import (  # noqa: E402
 # Keep in sync with BUILTIN_MODELS in providers/pocket_tts.py. Hardcoded here so the
 # mirror script doesn't have to import the heavyweight provider (torch/torchaudio).
 BUILTIN_LANGUAGES = [
-    "english_2026-04",
+    "english_2026-09",
+    "english_2026-09_24l",
     "german",
     "german_24l",
+    "french",
     "french_24l",
     "spanish",
     "spanish_24l",
@@ -68,6 +70,8 @@ BUILTIN_LANGUAGES = [
     "italian_24l",
     "portuguese",
     "portuguese_24l",
+    "dutch",
+    "dutch_24l",
 ]
 
 R2_BUCKET = os.environ.get("R2_BUCKET", "wingman-releases")

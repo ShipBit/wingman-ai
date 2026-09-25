@@ -244,7 +244,7 @@ class WingmanCore(WebSocketUser):
             response_model=list[PronunciationRule],
             tags=tags,
         )
-        # A language beyond the six Wingman supports end to end.
+        # A language beyond the seven Wingman supports end to end.
         self.router.add_api_route(
             methods=["GET"],
             path="/spoken_language/others",

@@ -68,7 +68,7 @@ onnxruntime>=1.19.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 
 # Pocket-TTS
-pocket-tts==3.1.0
+pocket-tts==3.3.0
 num2words==0.5.14 # numbers spelled out before Pocket TTS reads them (services/spoken_numbers.py)
 torch==2.8.0 # don't upgrade!
 torchaudio==2.8.0 # don't upgrade!

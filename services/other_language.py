@@ -1,4 +1,4 @@
-"""Setting a language beyond the six Wingman supports end to end.
+"""Setting a language beyond the seven Wingman supports end to end.
 
 Three steps, each as far as the providers allow:
 
@@ -12,7 +12,7 @@ Three steps, each as far as the providers allow:
 3. Switch. Wingmen on Pocket TTS, which has no model for such a language,
    move to Inworld through the subscription or the user's own key, with a
    voice in that language. What was switched is noted, and switching back
-   to one of the six languages restores it.
+   to one of the seven languages restores it.
 """
 
 import json
@@ -199,3 +199,27 @@ def _write(path: str, data: dict) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     os.replace(tmp, path)
+
+
+def promote_to_supported(config_manager) -> Optional[str]:
+    """An other language Wingman has since learned (Dutch in 3.2.4) becomes
+    the spoken language itself: Pocket TTS gets its model, and the Wingmen
+    moved to Inworld for it go back to Pocket TTS. Runs at start, before
+    anything reads the spoken language. Returns the code it switched to."""
+    from api.enums import SpokenLanguage
+
+    settings = config_manager.settings_config
+    code = settings.other_language.code if settings.other_language else None
+    if settings.spoken_language != SpokenLanguage.OTHER or not code:
+        return None
+    try:
+        language = SpokenLanguage(code)
+    except ValueError:
+        return None
+    if language == SpokenLanguage.OTHER:
+        return None
+    settings.spoken_language = language
+    settings.other_language = None
+    config_manager.save_settings_config()
+    restore_wingmen(config_manager)
+    return code

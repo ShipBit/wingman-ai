@@ -22,9 +22,9 @@ except ImportError:  # before 3.1.0 it lived in tts_model
 try:
     # Private in pocket-tts; the list of built-in voices it has embeddings for.
     from pocket_tts.utils.utils import _ORIGINS_OF_PREDEFINED_VOICES as _PREDEFINED
-except ImportError:  # renamed in a later release: the 3.1.0 set
+except ImportError:  # renamed in a later release: the 3.3.0 set
     _PREDEFINED = dict.fromkeys(
-        "alba anna azelma bill_boerst caro_davy charles cosette eponine estelle "
+        "alba anna azelma bill_boerst caro_davy charles cosette daan eponine estelle "
         "eve fantine george giovanni jane javert jean juergen lola marius mary "
         "michael paul peter_yearsley rafael stuart_bell vera".split()
     )
@@ -91,9 +91,11 @@ the library's 0.7. Measured 2026-09-23, German model, 3 voices x 5 sentences x
 # Makes it obvious when a model family changes (e.g. english_2026-04 -> _06)
 # and cached clones need regenerating.
 BUILTIN_MODELS = [
-    {"id": "english_2026-04", "label": "english_2026-04", "quality": "6L"},
+    {"id": "english_2026-09",     "label": "english_2026-09",     "quality": "6L"},
+    {"id": "english_2026-09_24l", "label": "english_2026-09_24l", "quality": "24L"},
     {"id": "german",          "label": "german",          "quality": "6L"},
     {"id": "german_24l",      "label": "german_24l",      "quality": "24L"},
+    {"id": "french",          "label": "french",          "quality": "6L"},
     {"id": "french_24l",      "label": "french_24l",      "quality": "24L"},
     {"id": "spanish",         "label": "spanish",         "quality": "6L"},
     {"id": "spanish_24l",     "label": "spanish_24l",     "quality": "24L"},
@@ -101,6 +103,8 @@ BUILTIN_MODELS = [
     {"id": "italian_24l",     "label": "italian_24l",     "quality": "24L"},
     {"id": "portuguese",      "label": "portuguese",      "quality": "6L"},
     {"id": "portuguese_24l",  "label": "portuguese_24l",  "quality": "24L"},
+    {"id": "dutch",           "label": "dutch",           "quality": "6L"},
+    {"id": "dutch_24l",       "label": "dutch_24l",       "quality": "24L"},
 ]
 
 
@@ -776,6 +780,7 @@ class PocketTTS:
         "lola": "es",
         "giovanni": "it",
         "rafael": "pt",
+        "daan": "nl",
     }
 
     # For the voice picker's gender filter. Measured by pitch on 2026-09-24
@@ -788,7 +793,7 @@ class PocketTTS:
             TtsVoiceGender.FEMALE,
         ),
         **dict.fromkeys(
-            ("bill_boerst", "charles", "george", "giovanni", "javert", "jean", "juergen",
+            ("bill_boerst", "charles", "daan", "george", "giovanni", "javert", "jean", "juergen",
              "marius", "michael", "paul", "peter_yearsley", "rafael", "stuart_bell"),
             TtsVoiceGender.MALE,
         ),

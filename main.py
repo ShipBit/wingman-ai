@@ -123,6 +123,7 @@ app_root_path = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__
 # Set the bundled skills directory for ModuleManager
 from services.module_manager import set_bundled_skills_dir
 from services.wingman_default_voices import apply_default_voices
+from services import other_language
 
 bundled_skills_path = path.join(app_root_path, "skills")
 set_bundled_skills_dir(bundled_skills_path)
@@ -643,6 +644,11 @@ async def async_main(host: str, port: int, sidecar: bool):
         # Set MIGRATING state before migrations
         await core.set_core_state(CoreState.MIGRATING, message="Migrating configurations...")
         await core.config_service.migrate_configs(system_manager)
+
+        # Dutch set as another language before Wingman spoke it: now it does.
+        promoted = other_language.promote_to_supported(core.config_manager)
+        if promoted:
+            printr.print(f"Spoken language is now {promoted}.", server_only=True)
 
         # Shipped Wingmen still on a default voice get the one recorded in
         # the spoken language (also on the first start and after an update).

@@ -25,6 +25,7 @@ _NUM2WORDS_LANG = {
     SpokenLanguage.ES: "es",
     SpokenLanguage.IT: "it",
     SpokenLanguage.PT: "pt_BR",
+    SpokenLanguage.NL: "nl",
 }
 
 # Written ourselves: num2words drops the decimals in Italian ("2.5" -> "due").
@@ -35,6 +36,7 @@ _DECIMAL_WORD = {
     SpokenLanguage.ES: "coma",
     SpokenLanguage.IT: "virgola",
     SpokenLanguage.PT: "vírgula",
+    SpokenLanguage.NL: "komma",
 }
 
 _PERCENT_WORD = {
@@ -44,6 +46,7 @@ _PERCENT_WORD = {
     SpokenLanguage.ES: "por ciento",
     SpokenLanguage.IT: "per cento",
     SpokenLanguage.PT: "por cento",
+    SpokenLanguage.NL: "procent",
 }
 
 _RANGE_WORD = {
@@ -53,7 +56,10 @@ _RANGE_WORD = {
     SpokenLanguage.ES: "a",
     SpokenLanguage.IT: "a",
     SpokenLanguage.PT: "a",
+    SpokenLanguage.NL: "tot",
 }
+
+_MINUS_WORD = {SpokenLanguage.FR: "moins", SpokenLanguage.NL: "min"}
 
 _GERMAN_MONTHS = (
     "Januar|Jänner|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember"
@@ -119,7 +125,7 @@ def _number(sign: str, body: str, language: SpokenLanguage) -> str | None:
         digits = " ".join(_words(num2words(int(d), lang=lang)) for d in decimals)
         words = f"{words} {_DECIMAL_WORD[language]} {digits}"
     if sign:
-        words = f"minus {words}" if language != SpokenLanguage.FR else f"moins {words}"
+        words = f"{_MINUS_WORD.get(language, 'minus')} {words}"
     return words
 
 
@@ -157,6 +163,8 @@ def _time(hours: int, minutes: int, language: SpokenLanguage) -> str:
     m = _words(num2words(minutes, lang=lang))
     if language == SpokenLanguage.DE:
         return f"{h} Uhr" if minutes == 0 else f"{h} Uhr {m}"
+    if language == SpokenLanguage.NL:
+        return f"{h} uur" if minutes == 0 else f"{h} uur {m}"
     if language == SpokenLanguage.EN:
         return f"{h} o'clock" if minutes == 0 else f"{h} {m if minutes >= 10 else 'oh ' + m}"
     return f"{h} {m}" if minutes else h

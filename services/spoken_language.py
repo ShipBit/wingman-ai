@@ -25,24 +25,24 @@ LANGUAGE_NAMES = {
     SpokenLanguage.ES: "Spanish",
     SpokenLanguage.IT: "Italian",
     SpokenLanguage.PT: "Portuguese",
+    SpokenLanguage.NL: "Dutch",
 }
 """The name prompts spell the language out with."""
 
 POCKET_TTS_MODELS: dict[SpokenLanguage, dict[PocketTtsQuality, str]] = {
-    # english_2026-04_24l exists since pocket-tts 3.0, but its voice-cloning
-    # weights are not on our R2 mirror yet; without them no custom voice
-    # could be cloned. Run scripts/mirror_pocket_tts_r2.py for it first.
+    # A model's voice-cloning weights have to be on our R2 mirror before it
+    # goes in here (scripts/mirror_pocket_tts_r2.py), or no custom voice
+    # could be cloned with it.
     SpokenLanguage.EN: {
-        PocketTtsQuality.STANDARD: "english_2026-04",
-        PocketTtsQuality.HIGH: "english_2026-04",
+        PocketTtsQuality.STANDARD: "english_2026-09",
+        PocketTtsQuality.HIGH: "english_2026-09_24l",
     },
     SpokenLanguage.DE: {
         PocketTtsQuality.STANDARD: "german",
         PocketTtsQuality.HIGH: "german_24l",
     },
-    # French only comes as a 24-layer model.
     SpokenLanguage.FR: {
-        PocketTtsQuality.STANDARD: "french_24l",
+        PocketTtsQuality.STANDARD: "french",
         PocketTtsQuality.HIGH: "french_24l",
     },
     SpokenLanguage.ES: {
@@ -56,6 +56,10 @@ POCKET_TTS_MODELS: dict[SpokenLanguage, dict[PocketTtsQuality, str]] = {
     SpokenLanguage.PT: {
         PocketTtsQuality.STANDARD: "portuguese",
         PocketTtsQuality.HIGH: "portuguese_24l",
+    },
+    SpokenLanguage.NL: {
+        PocketTtsQuality.STANDARD: "dutch",
+        PocketTtsQuality.HIGH: "dutch_24l",
     },
 }
 
@@ -73,6 +77,7 @@ TRANSCRIPTION_TAGS = {
     SpokenLanguage.ES: "es-ES",
     SpokenLanguage.IT: "it-IT",
     SpokenLanguage.PT: "pt-BR",
+    SpokenLanguage.NL: "nl-NL",
 }
 """BCP-47 hint for the cloud transcription. The backend passes the full tag to
 Inworld and the primary subtag to OpenAI."""

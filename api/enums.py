@@ -161,6 +161,7 @@ class SpokenLanguage(Enum):
     ES = "es"
     IT = "it"
     PT = "pt"
+    NL = "nl"
     OTHER = "other"
 
 

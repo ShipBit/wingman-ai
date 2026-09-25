@@ -1,4 +1,4 @@
-"""Languages a user can speak beyond the six Wingman supports end to end.
+"""Languages a user can speak beyond the seven Wingman supports end to end.
 
 With one of these, Wingman passes no language to speech recognition (Parakeet
 and the subscription detect it themselves), tells the conversation model the
@@ -31,7 +31,6 @@ PARAKEET_LANGUAGES = frozenset(
 OTHER_LANGUAGES: tuple[OtherLanguage, ...] = tuple(
     OtherLanguage(*row)
     for row in (
-        ("nl", "Nederlands", "Dutch", "Niederländisch", "Néerlandais", "Neerlandés"),
         ("pl", "Polski", "Polish", "Polnisch", "Polonais", "Polaco"),
         ("ru", "Русский", "Russian", "Russisch", "Russe", "Ruso"),
         ("uk", "Українська", "Ukrainian", "Ukrainisch", "Ukrainien", "Ucraniano"),
@@ -92,7 +91,6 @@ OTHER_LANGUAGES: tuple[OtherLanguage, ...] = tuple(
 BY_CODE = {language.code: language for language in OTHER_LANGUAGES}
 
 ALIASES: dict[str, tuple[str, ...]] = {
-    "nl": ("Holländisch", "Hollandish", "Hollandais", "Holandés", "Vlaams", "Flämisch", "Flemish", "Flamand", "Flamenco"),
     "fa": ("Farsi",),
     "nb": ("Bokmål", "Norsk bokmål", "Nynorsk"),
     "fil": ("Tagalog",),

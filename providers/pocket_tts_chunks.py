@@ -57,6 +57,7 @@ _CONJUNCTIONS = {
     SpokenLanguage.ES: {"y", "que", "o", "pero", "porque", "cuando", "mientras", "donde"},
     SpokenLanguage.IT: {"e", "che", "o", "ma", "perché", "quando", "mentre", "dove"},
     SpokenLanguage.PT: {"e", "que", "ou", "mas", "porque", "quando", "enquanto", "onde"},
+    SpokenLanguage.NL: {"en", "dat", "of", "maar", "omdat", "als", "wanneer", "terwijl", "waar", "want"},
 }
 
 
