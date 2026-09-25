@@ -97,6 +97,7 @@ from services.config_manager import ConfigManager, ConfigValidationError
 from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
 from services import error_reporting
+from services.avatar_studio import variant_file
 from services.file import get_generated_images_dir
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -562,6 +563,18 @@ async def get_generated_image(filename: str):
     ):
         raise HTTPException(status_code=404, detail="Image not found")
 
+    return FileResponse(file_path)
+
+
+@app.get(
+    "/avatar-images/{wingman_name}/{filename}", tags=["main"], include_in_schema=False
+)
+async def get_avatar_image(wingman_name: str, filename: str):
+    """Serve one avatar studio variant. Same reason as /generated-images: the
+    client renders it with a plain <img src> and draws it onto a canvas."""
+    file_path = variant_file(wingman_name, filename)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(file_path)
 
 

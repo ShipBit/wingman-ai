@@ -5,6 +5,7 @@ from api.enums import (
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
+    ImageStyle,
     LocalAiMode,
     PocketTtsQuality,
     SpokenLanguage,
@@ -1654,3 +1655,35 @@ class TokenUsage(BaseModel):
     0 when the provider does not report it."""
     output_tokens: int
     """Tokens the model wrote, summed over every request of the turn."""
+
+
+class AvatarGenerationRequest(BaseModel):
+    """One new avatar variant from the avatar studio."""
+
+    wingman_name: str
+    style: ImageStyle
+    """The art style preset. Core adds its text and the avatar framing."""
+    wishes: str
+    """What the user wants, in any language. May be empty: then the backstory
+    alone decides. With a reference it says what should change."""
+    prompt: Optional[str] = None
+    """The character description to use as is. None lets the wingman's model
+    write it from backstory and wishes."""
+    reference: Optional[str] = None
+    """File name of an earlier variant, or an uploaded image as data URL. The
+    new image keeps its character. None generates from scratch."""
+
+
+class AvatarVariant(BaseModel):
+    """A generated avatar, kept on disk until the user deletes it."""
+
+    file_name: str
+    url: str
+    """Path on Core that serves the image, relative to Core's base URL."""
+    path: str
+    """Absolute file path, for "show in folder"."""
+    prompt: str
+    """The character description the image was made from, without style and framing."""
+    style: ImageStyle
+    created: float
+    """Unix timestamp."""
