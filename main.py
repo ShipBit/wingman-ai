@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import atexit
 import faulthandler
+import logging
 import html
 from enum import Enum
 from os import path
@@ -82,7 +83,7 @@ if platform.system() == "Linux":
         sys.exit(1)
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
@@ -481,6 +482,40 @@ async def start_secrets(secrets: dict[str, Any]):
     await secret_keeper.post_secrets(secrets)
     core.startup_errors = []
     await core.config_service.load_config()
+
+
+_exit_task: asyncio.Task | None = None
+
+
+@app.post("/shutdown", tags=["main"], include_in_schema=False)
+async def shutdown_and_exit(request: Request):
+    """Shut Core down cleanly and end the process.
+
+    The client calls this before it installs an update and restarts. Killing
+    Core instead leaves llama-server, Pocket TTS and xVASynth running: they hold
+    their ports and GPU memory against the Core that starts next, and on Windows
+    the installer cannot replace their files. Core listens on every interface
+    as a sidecar, so only the machine it runs on may ask.
+    """
+    global _exit_task
+    if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(status_code=403)
+
+    async def _shutdown_then_exit():
+        # Let the response go out before the server goes away.
+        await asyncio.sleep(0.2)
+        printr.print(
+            "Shutdown requested by the client.", color=LogType.SYSTEM, server_only=True
+        )
+        try:
+            await shutdown()
+        finally:
+            logging.shutdown()
+            # The atexit handler would run shutdown() a second time.
+            os._exit(0)
+
+    if _exit_task is None:
+        _exit_task = asyncio.create_task(_shutdown_then_exit())
 
 
 @app.get("/ping", tags=["main"], response_model=CoreStatusResponse)
