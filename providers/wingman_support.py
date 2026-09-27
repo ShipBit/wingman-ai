@@ -153,7 +153,7 @@ class WingmanSupport:
             except Exception:
                 pass
             printr.toast_error(
-                (message or "The monthly allowance is used up.")
+                (message or "The allowance is used up.")
                 + " Memory and summaries pause until it resets, or switch the "
                 "support model to Local in Settings."
             )

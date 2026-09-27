@@ -70,7 +70,9 @@ class WingmanSubscription:
         )
 
     def send_quota_error(self, response: requests.Response):
-        """The monthly allowance is used up.
+        """The allowance of the account's current window is used up. Each
+        account's window starts on its own day of the month, so the date comes
+        from the backend.
 
         The backend's own sentence is preferred: it knows the plan, and what a
         free account should hear ("a subscription lifts the limit") is not what a
@@ -87,9 +89,9 @@ class WingmanSubscription:
 
         if not message:
             message = (
-                f"Your Wingman allowance for this month is used up. It resets on {resets_at}."
+                f"Your Wingman allowance is used up. It resets on {resets_at}."
                 if resets_at
-                else "Your Wingman allowance for this month is used up."
+                else "Your Wingman allowance is used up."
             )
 
         self.printr.print(text=message, color=LogType.ERROR)
