@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from api.enums import LocalAiMode, LogType, LogSource
+from services.conversation_manager import KEEP_TOOL_TURNS
 from services.file import get_prompt
 from services.printr import Printr
 from services.token_utils import count_tokens, truncate_to_tokens
@@ -91,11 +92,16 @@ def condense_chunk_header(part: int, total: int) -> str:
 _MIN_CONDENSE_GAIN = 4_000
 
 
-def find_cutoff(messages: list, keep_tokens: int, role_of, tokens_of) -> int:
+def find_cutoff(
+    messages: list, keep_tokens: int, role_of, tokens_of, min_turns: int = 1
+) -> int:
     """The index from which the history may be summarised.
 
     Keeps the most recent turns that fit in ``keep_tokens`` — always at least
-    the latest one, however big it is. A turn starts at a user message, so the
+    the latest ``min_turns``, however big they are. The automatic run passes
+    ``KEEP_TOOL_TURNS``: the conversation manager promises that tool output of
+    that many turns stays complete, and a summary of a price table is exactly
+    the loss that promise is there to prevent. A turn starts at a user message, so the
     cut lands on a user message, and a tool group — ``assistant`` with
     ``tool_calls``, then the ``tool`` replies — always sits complete between two
     user messages. It cannot be torn apart.
@@ -119,14 +125,14 @@ def find_cutoff(messages: list, keep_tokens: int, role_of, tokens_of) -> int:
     """
     cutoff = 0
     kept_tokens = 0
-    latest_turn_kept = False
+    turns_kept = 0
     for i in range(len(messages) - 1, -1, -1):
         kept_tokens += tokens_of(messages[i])
         if role_of(messages[i]) != "user":
             continue
-        if not latest_turn_kept or kept_tokens <= keep_tokens:
+        if turns_kept < max(1, min_turns) or kept_tokens <= keep_tokens:
             cutoff = i
-            latest_turn_kept = True
+            turns_kept += 1
             continue
         break
 
@@ -253,6 +259,7 @@ class ConversationCondenser:
             self.keep_tokens(local_ai_service),
             self._conversation.get_message_role,
             self._tokens_of,
+            min_turns=KEEP_TOOL_TURNS,
         )
         gain = sum(self._tokens_of(m) for m in self._conversation.messages[:cutoff])
         if gain < _MIN_CONDENSE_GAIN and not message_trigger:
@@ -387,6 +394,7 @@ class ConversationCondenser:
                 keep_tokens,
                 self._conversation.get_message_role,
                 self._tokens_of,
+                min_turns=1 if force else KEEP_TOOL_TURNS,
             )
 
             if cutoff_index <= 0:

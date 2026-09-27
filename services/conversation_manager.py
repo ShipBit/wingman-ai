@@ -23,12 +23,12 @@ if TYPE_CHECKING:
 printr = Printr()
 
 # How long tool output stays in the history, counted in user messages that have
-# arrived since the tool ran. The output of the last _KEEP_TURNS turns is never
+# arrived since the tool ran. The output of the last KEEP_TOOL_TURNS turns is never
 # touched: the pilot asks "which of those is cheapest?" or "put one more stop
 # into the table" a few messages later, and the model needs the real data for
 # that, not a guess. Older output may stay too, as long as it adds up to no more
 # than _OLD_BUDGET tokens and is no older than _MAX_AGE turns.
-_KEEP_TURNS = 4
+KEEP_TOOL_TURNS = 4
 _OLD_BUDGET = 12_000
 _MAX_AGE = 10
 
@@ -220,14 +220,14 @@ class ConversationManager:
         A skill can hand back an 8,000-token price table. The model needs it for
         more than the one answer: a few messages later the pilot asks for one
         more stop on the trading route, or wants the overlay table back the way
-        it was. So the output of the last ``_KEEP_TURNS`` user turns always stays
+        it was. So the output of the last ``KEEP_TOOL_TURNS`` user turns always stays
         complete. Only after that is it replaced by a one-line placeholder that
         names the size and the tool.
 
         Clearing happens in batches, not one turn at a time. Older output stays
         until it adds up to more than ``_OLD_BUDGET`` tokens or one response is
         more than ``_MAX_AGE`` turns old; then everything older than
-        ``_KEEP_TURNS`` goes in one pass. Rewriting a message invalidates the
+        ``KEEP_TOOL_TURNS`` goes in one pass. Rewriting a message invalidates the
         provider's prompt cache from that message on, so clearing one response
         per turn would break the cache every turn. A batch breaks it once every
         few turns and keeps more data around in between.
@@ -262,7 +262,7 @@ class ConversationManager:
             if _CLEARED_NOTE_RE.match(content):
                 continue
             age = len(user_indices) - bisect_right(user_indices, index)
-            if age < _KEEP_TURNS:
+            if age < KEEP_TOOL_TURNS:
                 continue
             tokens = count_tokens(content)
             old.append((index, tokens))
@@ -300,10 +300,10 @@ class ConversationManager:
                 )
             else:
                 summary = (
-                    f"Tool responses older than {_KEEP_TURNS} turns were removed "
+                    f"Tool responses older than {KEEP_TOOL_TURNS} turns were removed "
                     f"from the history.\n"
                     f"~{total_tokens_saved:,} tokens saved.\n\n"
-                    f"The tool data of the last {_KEEP_TURNS} turns stays complete. "
+                    f"The tool data of the last {KEEP_TOOL_TURNS} turns stays complete. "
                     f"Older data is removed once it piles up, to keep the "
                     f"conversation context efficient."
                 )
