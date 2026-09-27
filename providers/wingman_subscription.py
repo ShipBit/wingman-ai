@@ -1,3 +1,4 @@
+import asyncio
 from typing import TYPE_CHECKING, Optional
 import openai
 import requests
@@ -286,11 +287,22 @@ class WingmanSubscription:
     async def generate_image(
         self,
         text: str,
+        aspect: str = "square",
+        images: Optional[list[str]] = None,
     ):
+        """`images` are reference pictures as small JPEG data URLs (see
+        services/image_generation.reference_data_url). With them the backend
+        edits instead of generating from scratch."""
         data = {
             "prompt": text,
+            "aspect": aspect,
         }
-        response = requests.post(
+        if images:
+            data["images"] = images
+        # An image takes 7 to 15 seconds. In a thread, so Core keeps talking to
+        # the client and listening meanwhile.
+        response = await asyncio.to_thread(
+            requests.post,
             url=f"{self.settings.base_url}/api/v1/images/generations",
             headers=self._get_headers(),
             json=data,

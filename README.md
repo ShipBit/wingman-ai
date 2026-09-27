@@ -72,7 +72,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Typing Assistant**: Types text into any application
   - **Audio Device Changer**: Switch input/output devices
   - **API Request**: Make HTTP requests to external services
-  - **Image Generation**: AI-powered image creation
+  - **Image Generation**: Creates images in 13 style presets, in square, portrait or landscape, and can build on an earlier image or one you attach ("the same character, but ...")
   - **Timer**: Set timers and alarms
   - **Quick Commands**: Fast command execution shortcuts
   - **Radio Chatter**: Atmospheric radio effects
@@ -274,7 +274,7 @@ Use these naming conventions to create different configurations for different ga
   - `_[name]` (underscore): marks the default configuration that is launched on start, e.g. `_Star Citizen`.
 - Inside of a configuration directory, you can create different `wingmen` by adding `[name].yaml` files. Do not use special characters.
   - `.[name].yaml` (dot): marks the Wingman as "hidden" and skips it in the UI and on start, e.g. `.Computer.yaml`.
-  - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`.
+  - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`. The client's avatar studio paints one from the backstory in a style of your choice and keeps every variant in `generated_files/AvatarStudio/[wingman name]/`.
 
 There are a couple of other files and directories in the config directory that you can use to configure Wingman AI.
 

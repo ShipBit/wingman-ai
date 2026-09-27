@@ -32,6 +32,7 @@ from api.interface import (
 from api.enums import (
     CommandTag,
     ConversationProvider,
+    ImageAspect,
     ImageGenerationProvider,
     LogSource,
     LogType,
@@ -1103,7 +1104,14 @@ class Wingman:
 
     # ───────────────── Image generation ───────────────── #
 
-    async def generate_image(self, text: str) -> str:
+    async def generate_image(
+        self,
+        text: str,
+        aspect: ImageAspect = ImageAspect.SQUARE,
+        reference_images: Optional[list[str]] = None,
+    ) -> str:
+        """Returns the image as data URL or URL, "" on failure.
+        `reference_images` are data URLs, already shrunk for the backend."""
         if (
             self.config.features.image_generation_provider
             != ImageGenerationProvider.WINGMAN_PRO
@@ -1116,7 +1124,9 @@ class Wingman:
                 self._image_subscription = WingmanSubscription(
                     wingman_name=self.name, settings=self.settings.wingman_pro
                 )
-            return await self._image_subscription.generate_image(text)
+            return await self._image_subscription.generate_image(
+                text, aspect=aspect.value, images=reference_images
+            )
         except Exception as e:
             await printr.print_async(
                 f"Error during image generation: {str(e)}", color=LogType.ERROR

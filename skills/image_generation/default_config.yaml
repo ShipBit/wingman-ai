@@ -8,12 +8,13 @@ tags:
   - Image
   - Internet
 description:
-  en: Use Wingman AI to generate images based on your input.
-  de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren.
+  en: Generate images in one of 13 styles, or change an earlier image or one you attach.
+  de: Erzeugt Bilder in einem von 13 Stilen oder ändert ein früheres oder angehängtes Bild.
 discovery_keywords:
   - create image
   - generate picture
-  - DALL-E
+  - edit image
+  - change picture
   - draw
   - make image
   - AI art

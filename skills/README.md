@@ -1397,7 +1397,8 @@ Single-turn side-calls on the user's main model. Results are NOT added to the co
 | `await .generate(prompt="", *, system=None, data=None, image=None, messages=None, auto_shorten=False)` | Single-turn generation. Returns the response **`str`** (`""` if empty, never `None`). **Capped:** when condensation is on, combined input is limited (Wingman Pro: fixed 8,000 tokens; own provider: `features.skill_max_input_tokens`, default 16,000) — over the cap raises `FacadeError` (or truncates the prompt/data path if `auto_shorten=True`). Pass `messages=` (a prebuilt OpenAI-style list) to send your own turns directly — then `prompt`/`system`/`data`/`image` are ignored and it can't auto-shorten. |
 | `await .converse(user_message)` | Conversation-aware reply using the wingman's system prompt + live history, subject to normal condensation. Appends both turns to the conversation. |
 | `await .summarize(text, *, system=None)` | Summarize via the main **cloud** model (capped like `generate`). For bulk/cheap work prefer `local_ai.summarize`. |
-| `await .generate_image(prompt)` | Generate an image; returns the file path/URL (`str`). |
+| `await .generate_image(prompt, *, aspect="square", reference_images=None)` | Generate an image; returns it as data URL or URL (`str`, `""` on failure). `aspect`: `square`, `portrait` or `landscape`. `reference_images`: up to 4 data URLs the model builds on ("the same character, but …"); shrink them first with `services.image_generation.reference_data_url`. |
+| `.recent_user_images()` | The images the user attached to their most recent message that had any, as data URLs (`tuple`, empty if none). |
 
 ### `self.wingman.local_ai` — free local model
 

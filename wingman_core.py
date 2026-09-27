@@ -37,6 +37,8 @@ from api.enums import (
 from api.interface import (
     AudioDevice,
     AudioFile,
+    AvatarGenerationRequest,
+    AvatarVariant,
     BenchmarkResult,
     ChangelogEntry,
     CommandJoystickConfig,
@@ -89,6 +91,7 @@ from services.file import (
     get_prompt,
 )
 from services.model_downloader import ModelDownloader
+from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
 from services.local_ai_service import LocalAiService
@@ -322,6 +325,26 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/generate-image",
             endpoint=self.generate_image,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/avatar-variants",
+            endpoint=self.get_avatar_variants,
+            response_model=list[AvatarVariant],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/avatar-variants",
+            endpoint=self.generate_avatar_variant,
+            response_model=AvatarVariant,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/avatar-variants",
+            endpoint=self.delete_avatar_variant,
             tags=tags,
         )
         self.router.add_api_route(
@@ -2315,6 +2338,31 @@ class WingmanCore(WebSocketUser):
                 return await wingman.generate_image(text=text)
 
         return None
+
+    # GET /avatar-variants
+    async def get_avatar_variants(self, wingman_name: str) -> list[AvatarVariant]:
+        return avatar_studio.list_variants(wingman_name)
+
+    # POST /avatar-variants
+    async def generate_avatar_variant(
+        self, request: AvatarGenerationRequest
+    ) -> AvatarVariant:
+        wingman = (
+            self.tower.get_wingman_by_name(request.wingman_name) if self.tower else None
+        )
+        if not isinstance(wingman, OpenAiWingman):
+            raise HTTPException(
+                status_code=404,
+                detail="This wingman is not loaded. Enable it and try again.",
+            )
+        try:
+            return await avatar_studio.generate_variant(wingman, request)
+        except avatar_studio.AvatarStudioError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    # DELETE /avatar-variants
+    async def delete_avatar_variant(self, wingman_name: str, file_name: str):
+        avatar_studio.delete_variant(wingman_name, file_name)
 
     # POST /send-text-to-wingman
     async def send_text_to_wingman(

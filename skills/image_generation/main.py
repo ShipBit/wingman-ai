@@ -1,35 +1,44 @@
-from os import listdir, path, remove
-import base64
-import datetime
-import re
-import requests
-from typing import TYPE_CHECKING
+from os import path
+from typing import TYPE_CHECKING, Literal, Optional
 from urllib.parse import quote
-from api.enums import LogSource, LogType
+from api.enums import ImageStyle, LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.image_generation import (
+    MAX_REFERENCE_IMAGES,
+    compose_prompt,
+    list_images,
+    prune_images,
+    reference_data_url,
+    reference_from_data_url,
+    safe_file_in,
+    store_image,
+)
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
-DATA_URL_PATTERN = re.compile(
-    r"^data:(?P<mime>image/[a-zA-Z0-9.+-]+);base64,(?P<data>.+)$", re.DOTALL
-)
-
-# Characters Windows refuses in file names
-FILENAME_UNSAFE_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-MIME_EXTENSIONS = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/webp": "webp",
-    "image/gif": "gif",
-}
-
 # How many images stay on disk when the user did not ask to keep them. They have
-# to outlive the chat message that shows them, so this is not 1.
+# to outlive the chat message that shows them, so this is not 1. They are also
+# what "last" and file names in reference_images point to.
 UNSAVED_IMAGE_LIMIT = 25
+
+Style = Literal[
+    "none",
+    "cinematic",
+    "photo",
+    "anime",
+    "ghibli",
+    "pixar",
+    "cartoon",
+    "comic",
+    "oil_painting",
+    "pixel_art",
+    "synthwave",
+    "retro_scifi",
+    "claymation",
+    "sketch",
+]
 
 
 class ImageGeneration(Skill):
@@ -57,126 +66,99 @@ class ImageGeneration(Skill):
 
     @tool(
         name="generate_image",
-        description="""Generates an image using the configured image provider based on a text description.
-
-        WHEN TO USE:
-        - User requests image creation: 'Generate an image of...', 'Create a picture of...'
-        - User wants visual content created from a description
-        - Any request for AI-generated artwork or illustrations
-
-        Produces high-quality, detailed images matching user specifications.""",
+        description="""Creates an image and shows it in the chat.
+style: if the user named a style or said any style is fine, call right away. Only if they said nothing about style, ask first and suggest 3 fitting styles.
+prompt: ALWAYS English, even when the user speaks another language. 1-4 plain sentences: main subject and action, concrete visual details, setting, lighting, composition. Text that must appear goes in "double quotes". No keyword lists, no "no X" phrases, no style words.
+reference_images: to change or build on an image. ["last"] is the previous generated image, ["attached"] the images the user attached, or file names from earlier results. Then describe the whole result, starting with what stays the same.""",
         wait_response=True,
     )
-    async def generate_image(self, prompt: str) -> str:
-        """
-        Args:
-            prompt: The image generation prompt describing what to create.
-        """
+    async def generate_image(
+        self,
+        prompt: str,
+        style: Style = "none",
+        aspect: Literal["square", "portrait", "landscape"] = "square",
+        reference_images: Optional[list[str]] = None,
+    ) -> str:
+        full_prompt = compose_prompt(prompt, ImageStyle(style))
         if self.settings.debug_mode:
-            self.log.info(f"Generate image with prompt: {prompt}.")
+            self.log.info(f"Generate image with prompt: {full_prompt}")
 
-        image = await self.wingman.ai.generate_image(prompt)
+        references = self._resolve_references(reference_images or [])
+        if isinstance(references, str):
+            return references
 
-        function_response = "Unable to generate an image. Please try another provider."
+        image = await self.wingman.ai.generate_image(
+            full_prompt, aspect=aspect, reference_images=references or None
+        )
 
-        if image:
-            function_response = "Here is an image based on your prompt."
+        if not image:
+            await self._show("")
+            return "Unable to generate an image. Please try again later."
 
-            # The client fetches the image over HTTP and only gets a short path
-            # here. Sending the provider's data URL instead would push megabytes
-            # of base64 through the WebSocket.
-            image_path = self._store_image(image, prompt)
-            image_url = (
-                f"/generated-images/{quote(path.basename(image_path))}"
-                if image_path
-                else image
-            )
-
-            await self.printr.print_async(
-                "",
-                color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman.name,
-                skill_name=self.name,
-                additional_data={"image_url": image_url},
-            )
-
-            if image_path and self._get_save_images():
-                function_response += f" The image has also been stored to {image_path}."
-                if self.settings.debug_mode:
-                    self.log.info(f"Image displayed and saved at {image_path}.")
-            else:
-                self._prune_images()
-        else:
-            await self.printr.print_async(
-                "",
-                color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman.name,
-                skill_name=self.name,
-                additional_data={"image_url": ""},
-            )
-
-        return function_response
-
-    def _store_image(self, image: str, prompt: str) -> str:
-        """Write the generated image into the skill's generated files directory.
-
-        Providers either return an http(s) URL or an inline data URL - both are
-        handled. Returns the path, or an empty string if the image could not be
-        stored; the caller then falls back to handing the client the raw image."""
+        # The client fetches the image over HTTP and only gets a short path
+        # here. Sending the provider's data URL instead would push megabytes
+        # of base64 through the WebSocket.
         try:
-            data_url = DATA_URL_PATTERN.match(image)
-
-            if data_url:
-                extension = MIME_EXTENSIONS.get(data_url.group("mime").lower(), "png")
-                content = base64.b64decode(data_url.group("data"))
-            else:
-                response = requests.get(image, timeout=30)
-                if response.status_code != 200:
-                    return ""
-                mime = response.headers.get("content-type", "")
-                extension = MIME_EXTENSIONS.get(
-                    mime.split(";")[0].strip().lower(), "png"
-                )
-                content = response.content
-
-            name = FILENAME_UNSAFE_PATTERN.sub("_", prompt[:40]).strip() or "image"
-            stem = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{name}"
-            image_path = path.join(self.image_path, f"{stem}.{extension}")
-            # The timestamp only resolves to seconds - two images from the same
-            # second must not overwrite each other, the client links to the file.
-            counter = 1
-            while path.exists(image_path):
-                image_path = path.join(self.image_path, f"{stem}_{counter}.{extension}")
-                counter += 1
-
-            with open(image_path, "wb") as file:
-                file.write(content)
-
-            return image_path
+            image_path = store_image(image, self.image_path, prompt)
         except Exception as e:
             self.log.warning(f"Unable to store the generated image: {e}")
-            return ""
+            await self._show(image)
+            return "Here is the image. It could not be saved, so it cannot be used as a reference later."
 
-    def _prune_images(self) -> None:
-        """Keep only the newest UNSAVED_IMAGE_LIMIT images.
+        await self._show(f"/generated-images/{quote(path.basename(image_path))}")
 
-        Every image goes to disk so the client can fetch it. When the user did
-        not switch 'Keep generated images' on, the directory must not grow
+        response = f"Here is the image, file name {path.basename(image_path)}."
+        if self._get_save_images():
+            response += f" Stored at {image_path}."
+        else:
+            self._prune()
+        return response
+
+    def _resolve_references(self, names: list[str]) -> list[str] | str:
+        """Data URLs for the reference names the model passed, or an error
+        message for the model when one cannot be found."""
+        references: list[str] = []
+        for name in names:
+            name = name.strip()
+            if not name:
+                continue
+            if name == "attached":
+                attached = self.wingman.ai.recent_user_images()
+                if not attached:
+                    return "The user has not attached an image. Ask them to attach one, or generate without reference."
+                references.extend(reference_from_data_url(url) for url in attached)
+            elif name == "last":
+                images = list_images(self.image_path)
+                if not images:
+                    return "There is no earlier generated image. Generate without reference."
+                references.append(self._load(images[0]))
+            else:
+                file_path = safe_file_in(self.image_path, name)
+                if not file_path:
+                    return f'There is no generated image called {name}. Use "last" or a file name from an earlier result.'
+                references.append(self._load(file_path))
+        return references[:MAX_REFERENCE_IMAGES]
+
+    @staticmethod
+    def _load(file_path: str) -> str:
+        with open(file_path, "rb") as file:
+            return reference_data_url(file.read())
+
+    async def _show(self, image_url: str) -> None:
+        await self.printr.print_async(
+            "",
+            color=LogType.INFO,
+            source=LogSource.WINGMAN,
+            source_name=self.wingman.name,
+            skill_name=self.name,
+            additional_data={"image_url": image_url},
+        )
+
+    def _prune(self) -> None:
+        """Every image goes to disk so the client can fetch it. When the user
+        did not switch 'Keep generated images' on, the directory must not grow
         without bound."""
         try:
-            files = [
-                entry
-                for entry in (
-                    path.join(self.image_path, name)
-                    for name in listdir(self.image_path)
-                )
-                if path.isfile(entry)
-            ]
-            files.sort(key=path.getmtime, reverse=True)
-
-            for stale in files[UNSAVED_IMAGE_LIMIT:]:
-                remove(stale)
+            prune_images(self.image_path, UNSAVED_IMAGE_LIMIT)
         except Exception as e:
             self.log.warning(f"Unable to clean up old generated images: {e}")
