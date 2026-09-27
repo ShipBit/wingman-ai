@@ -4,6 +4,7 @@ import json
 import random
 import re
 import uuid
+from bisect import bisect_right
 from typing import TYPE_CHECKING, Callable, Mapping, Optional
 
 from openai.types.chat import (
@@ -14,32 +15,24 @@ from openai.types.chat import (
 
 from api.enums import ConversationProvider, LogType
 from services.printr import Printr
-from services.token_utils import count_tokens, truncate_to_tokens
+from services.token_utils import count_tokens
 
 if TYPE_CHECKING:
     from api.interface import CommandConfig, SettingsConfig, WingmanConfig
 
 printr = Printr()
 
-# The note appended to a trimmed tool response, and the pattern that reads it
-# back. Trimming parses its own note so it can tell two cases apart: this message
-# is already at or below the limit we want (skip it, rewriting it would only
-# break the cache), or it was trimmed to a larger limit and now has to come down
-# further. The recorded original size survives every later pass, so the note
-# keeps saying how big the response really was.
-_TRIM_NOTE = (
-    "\n\n[...trimmed from ~{original} to ~{limit} tokens for conversation "
-    "history. Full response was processed.]"
-)
-_TRIM_NOTE_RE = re.compile(
-    r"\n\n\[\.\.\.trimmed from ~(\d+) to ~(\d+) tokens for conversation "
-    r"history\. Full response was processed\.\]$"
-)
+# How long tool output stays in the history, counted in user messages that have
+# arrived since the tool ran. The output of the last _KEEP_TURNS turns is never
+# touched: the pilot asks "which of those is cheapest?" or "put one more stop
+# into the table" a few messages later, and the model needs the real data for
+# that, not a guess. Older output may stay too, as long as it adds up to no more
+# than _OLD_BUDGET tokens and is no older than _MAX_AGE turns.
+_KEEP_TURNS = 4
+_OLD_BUDGET = 12_000
+_MAX_AGE = 10
 
-# The third and last step: two turns on, the response is gone and only this
-# placeholder is left. The assistant's answer in the same turn already carries
-# what the pilot was told; the first 500 tokens of a price table added nothing
-# to that but cost, twelve turns deep, more than the whole rest of the history.
+# What is left of a response once it is cleared.
 _CLEARED_NOTE = (
     "[Tool output removed from history (~{original} tokens{tool}). "
     "Call the tool again if it is needed.]"
@@ -200,20 +193,6 @@ class ConversationManager:
 
         return False
 
-    def _last_user_index(self) -> int:
-        """Index of the most recent user message, or -1 if there is none."""
-        for i in range(len(self.messages) - 1, -1, -1):
-            if self.get_message_role(self.messages[i]) == "user":
-                return i
-        return -1
-
-    def _user_index_before(self, index: int) -> int:
-        """Index of the last user message before ``index``, or -1."""
-        for i in range(index - 1, -1, -1):
-            if self.get_message_role(self.messages[i]) == "user":
-                return i
-        return -1
-
     def _tool_call_names(self) -> dict[str, str]:
         """``tool_call_id`` → function name, from the assistant messages."""
         names: dict[str, str] = {}
@@ -235,83 +214,73 @@ class ConversationManager:
                     names[call_id] = name
         return names
 
-    async def trim_tool_responses(
-        self,
-        max_tokens: int = 500,
-        fresh_max_tokens: int = 4000,
-        is_condensing: bool = False,
-    ):
-        """Shrink bulk tool output that the conversation has moved past.
+    async def trim_tool_responses(self, is_condensing: bool = False):
+        """Clear tool output the conversation has moved well past.
 
-        A skill can hand back a 78,000-token table. The model needs it once, to
-        answer; after that it sits in the history and every later turn pays for
-        it again.
+        A skill can hand back an 8,000-token price table. The model needs it for
+        more than the one answer: a few messages later the pilot asks for one
+        more stop on the trading route, or wants the overlay table back the way
+        it was. So the output of the last ``_KEEP_TURNS`` user turns always stays
+        complete. Only after that is it replaced by a one-line placeholder that
+        names the size and the tool.
 
-        Tool responses from the current turn keep up to ``fresh_max_tokens``.
-        They are the ones the pilot is still talking about: asked "what is at
-        Lorville?" and then "which of those is cheapest?", the follow-up needs
-        the table, not the first 500 tokens of it. Once the next user message
-        arrives the response drops to ``max_tokens``. One more user message and
-        it is replaced by a one-line placeholder that names the size and the
-        tool — the same thing coding agents do with old tool results before
-        they summarise anything.
+        Clearing happens in batches, not one turn at a time. Older output stays
+        until it adds up to more than ``_OLD_BUDGET`` tokens or one response is
+        more than ``_MAX_AGE`` turns old; then everything older than
+        ``_KEEP_TURNS`` goes in one pass. Rewriting a message invalidates the
+        provider's prompt cache from that message on, so clearing one response
+        per turn would break the cache every turn. A batch breaks it once every
+        few turns and keeps more data around in between.
 
-        The staged delay is nearly free for prompt caching. Rewriting a message
-        invalidates the provider's cache from that point on, so what it costs
-        is whatever comes *after* it — here, one or two turns. Trimming a
-        message near the front of the history would be the expensive case.
-
-        A response already trimmed to this limit or a smaller one is left alone.
-        Without that check every call re-trimmed it: the note adds about 20
-        tokens, which puts the message back over the limit, so it was truncated
-        and re-noted on each of the four calls per turn until it converged. Each
-        rewrite broke the cache prefix for no gain.
+        With ``condense_conversation`` off nothing is cleared: the user turned
+        off the automatic shortening of the history, and this is part of it.
+        Single responses are still capped when they come in
+        (``skill_max_input_tokens``), which is a separate setting.
 
         Args:
-            max_tokens: Cap for tool responses older than the current turn.
-            fresh_max_tokens: Cap for tool responses from the current turn.
             is_condensing: Whether condensation is currently running (suppresses
                 broadcast to avoid interfering with its own cycle).
         """
-        total_tokens_saved = 0
-        fresh_from = self._last_user_index()
-        previous_from = self._user_index_before(fresh_from)
-        tool_names = self._tool_call_names()
+        features = getattr(self._config, "features", None)
+        if features is not None and not features.condense_conversation:
+            return
 
+        user_indices = [
+            i for i, m in enumerate(self.messages) if self.get_message_role(m) == "user"
+        ]
+        old: list[tuple[int, int]] = []  # (message index, tokens)
+        old_tokens = 0
+        oldest_age = 0
         for index, msg in enumerate(self.messages):
             if self.get_message_role(msg) != "tool":
+                continue
+            if msg.get("tool_call_id") in self.pending_tool_calls:
                 continue
             content = msg.get("content", "")
             if not content or not isinstance(content, str):
                 continue
             if _CLEARED_NOTE_RE.match(content):
                 continue
-
-            note = _TRIM_NOTE_RE.search(content)
-            if previous_from >= 0 and index < previous_from:
-                # Two turns on: placeholder only.
-                token_count = count_tokens(content)
-                original = int(note.group(1)) if note else token_count
-                name = tool_names.get(msg.get("tool_call_id")) or msg.get("name")
-                msg["content"] = _CLEARED_NOTE.format(
-                    original=original, tool=f" from {name}" if name else ""
-                )
-                total_tokens_saved += max(0, token_count - count_tokens(msg["content"]))
+            age = len(user_indices) - bisect_right(user_indices, index)
+            if age < _KEEP_TURNS:
                 continue
+            tokens = count_tokens(content)
+            old.append((index, tokens))
+            old_tokens += tokens
+            oldest_age = max(oldest_age, age)
 
-            limit = fresh_max_tokens if index > fresh_from >= 0 else max_tokens
-            if note and int(note.group(2)) <= limit:
-                continue
+        if not old or (old_tokens <= _OLD_BUDGET and oldest_age <= _MAX_AGE):
+            return
 
-            token_count = count_tokens(content)
-            if token_count <= limit:
-                continue
-
-            total_tokens_saved += token_count - limit
-            original = int(note.group(1)) if note else token_count
-            msg["content"] = truncate_to_tokens(content, limit) + _TRIM_NOTE.format(
-                original=original, limit=limit
+        tool_names = self._tool_call_names()
+        total_tokens_saved = 0
+        for index, tokens in old:
+            msg = self.messages[index]
+            name = tool_names.get(msg.get("tool_call_id")) or msg.get("name")
+            msg["content"] = _CLEARED_NOTE.format(
+                original=tokens, tool=f" from {name}" if name else ""
             )
+            total_tokens_saved += max(0, tokens - count_tokens(msg["content"]))
 
         # Notify the client when significant trimming occurs so the UI can
         # show a "Show history" indicator explaining the token drop.
@@ -327,14 +296,15 @@ class ConversationManager:
             if self.conversation_summary:
                 summary = (
                     f"{self.conversation_summary}\n\n---\n\n"
-                    f"[Latest turn: tool responses trimmed — ~{total_tokens_saved:,} tokens saved]"
+                    f"[Older tool responses removed — ~{total_tokens_saved:,} tokens saved]"
                 )
             else:
                 summary = (
-                    f"Tool responses were automatically trimmed after LLM processing.\n"
+                    f"Tool responses older than {_KEEP_TURNS} turns were removed "
+                    f"from the history.\n"
                     f"~{total_tokens_saved:,} tokens saved.\n\n"
-                    f"The LLM had full access to the complete data when generating "
-                    f"its response. Responses are trimmed afterwards to keep the "
+                    f"The tool data of the last {_KEEP_TURNS} turns stays complete. "
+                    f"Older data is removed once it piles up, to keep the "
                     f"conversation context efficient."
                 )
 
