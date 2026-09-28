@@ -21,10 +21,12 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
-# What is left of a tool response once it is cleared. Said plainly because the
-# model tends to answer from memory instead of calling the tool again: with the
-# old wording ("call the tool again if it is needed") it invented prices and
-# stock after its data was cleared (evals/FINDINGS-context-budget-2026-09-28.md).
+# What is left of a tool response once it is cleared. The wording does not make
+# the model call the tool again: measured with this text and with the old one
+# ("call the tool again if it is needed"), gpt-4.1-mini answered from memory and
+# invented prices and stock either way, and re-called the tool not once
+# (evals/FINDINGS-context-budget-2026-09-28.md). What protects the answers is
+# clearing rarely, which is why the history limit is generous.
 _CLEARED_NOTE = (
     "[Tool output removed from history (~{original} tokens{tool}). Its numbers "
     "and details are no longer here: call the tool again before stating any of them.]"
