@@ -1161,6 +1161,106 @@ class SkillUi:
         return True
 
 
+# One HUD connection for all Wingmen, and the groups already made sure of.
+_hud_clients: dict = {}
+_hud_groups: set = set()
+
+
+class SkillHud:
+    """The HUD overlay (`self.wingman.hud`), drawn by Core's HUD server.
+
+    The server runs on Windows only, and only when the user switched it on in
+    the settings. Every call checks that: when the HUD is off or unreachable,
+    nothing happens and the call returns False. Everything lands in this
+    Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+    """
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    @property
+    def available(self) -> bool:
+        """The user switched the HUD on and this is Windows."""
+        import platform
+
+        hud = getattr(self._wingman.settings, "hud_server", None)
+        return bool(hud and hud.enabled) and platform.system() == "Windows"
+
+    @property
+    def _group(self) -> str:
+        import re
+
+        return re.sub(r"[^a-zA-Z0-9_-]", "_", self._wingman.name)
+
+    async def _client(self, element):
+        if not self.available:
+            return None
+        from hud_server.http_client import HudHttpClient
+        from hud_server.validation import validate_hud_settings
+
+        settings = validate_hud_settings(self._wingman.settings.hud_server)
+        base_url = f"http://{settings['host']}:{settings['port']}"
+        client = _hud_clients.get(base_url)
+        if client is None:
+            client = _hud_clients[base_url] = HudHttpClient(base_url=base_url)
+        if not client.connected and not await client.connect(timeout=1.0):
+            return None
+        key = (base_url, self._group, element)
+        if key not in _hud_groups:
+            # Creates the group if it is missing, keeps its look if it exists.
+            if await client.create_group(self._group, element) is None:
+                return None
+            _hud_groups.add(key)
+        return client
+
+    @staticmethod
+    def _done(client, result) -> bool:
+        if result is None:
+            # A restarted server has forgotten its groups; make them again next time.
+            _hud_groups.difference_update({k for k in _hud_groups if k[0] == client.base_url})
+        return result is not None
+
+    async def show_message(
+        self, title: str, text: str, *, duration: float = 10.0, color: Optional[str] = None
+    ) -> bool:
+        """Show a message in this Wingman's message window. Markdown; `color`
+        is a hex accent like "#00aaff"."""
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.MESSAGE)
+        if client is None:
+            return False
+        icon = self._wingman.get_avatar_path() if title == self._wingman.name else None
+        result = await client.show_message(
+            self._group, WindowType.MESSAGE, title, text,
+            color=color, duration=duration, title_icon=icon,
+        )
+        return self._done(client, result)
+
+    async def add_info(
+        self, title: str, text: str = "", *, color: Optional[str] = None,
+        duration: Optional[float] = None,
+    ) -> bool:
+        """Put an item on this Wingman's info panel; the same title replaces it."""
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.PERSISTENT)
+        if client is None:
+            return False
+        result = await client.add_item(
+            self._group, WindowType.PERSISTENT, title, text, color=color, duration=duration
+        )
+        return self._done(client, result)
+
+    async def remove_info(self, title: str) -> bool:
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.PERSISTENT)
+        if client is None:
+            return False
+        return self._done(client, await client.remove_item(self._group, WindowType.PERSISTENT, title))
+
+
 class SkillScGameLog:
     """Star Citizen's Game.log, read live by Core (`self.wingman.sc_gamelog`).
 

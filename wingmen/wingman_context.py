@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings, SkillSystemOne, SkillScGameLog, SkillUi, SpokenLanguageInfo,
+        SkillSettings, SkillSystemOne, SkillScGameLog, SkillUi, SkillHud, SpokenLanguageInfo,
     )
     from wingmen.wingman import Wingman
 
@@ -66,6 +66,7 @@ class WingmanContext:
         self.__system_one = None
         self.__sc_gamelog = None
         self.__ui = None
+        self.__hud = None
         self.__secrets = None
         self.__skills = None
         self.__settings = None
@@ -216,6 +217,14 @@ class WingmanContext:
             from wingmen.facade import SkillUi
             self.__ui = SkillUi(self.__wingman)
         return self.__ui
+
+    @property
+    def hud(self) -> "SkillHud":
+        """The HUD overlay; every call checks that the user has it on."""
+        if self.__hud is None:
+            from wingmen.facade import SkillHud
+            self.__hud = SkillHud(self.__wingman)
+        return self.__hud
 
     @property
     def sc_gamelog(self) -> "SkillScGameLog":

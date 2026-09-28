@@ -1510,6 +1510,23 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | --- | --- |
 | `await .show_dialog(title, text, *, image=None, once=None)` | Open a dialog in the client. `text` is Markdown (sanitized, links open in the browser), `image` a data URL shown under it. With `once="MySkill.welcome"` it appears a single time ever and later calls return `False`. If no client is connected yet, it appears as soon as one is. |
 
+### `self.wingman.hud` — the HUD overlay
+
+Core's HUD server draws the overlay, on Windows only and only when the user
+switched it on in the settings. Every call checks that: when the HUD is off or
+unreachable, nothing happens and the call returns `False`. Everything lands in
+this Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — the HUD is switched on and this is Windows. |
+| `await .show_message(title, text, *, duration=10.0, color=None)` | A message in this Wingman's message window. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |
+| `await .add_info(title, text="", *, color=None, duration=None)` | An item on this Wingman's info panel. The same title replaces it. |
+| `await .remove_info(title)` | Take an item off the info panel. |
+
+The HUD skill already shows every line that goes into the conversation. Show a
+line yourself only when it does not go there, or it appears twice.
+
 ### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
 
 Core reads the Game.log of every Star Citizen environment (LIVE, PTU, ...) in

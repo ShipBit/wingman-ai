@@ -10,8 +10,8 @@ events through `self.wingman.sc_gamelog`:
 
 Which events are worth a word, and how often, decides the policy Mallachi wrote
 for the SC Log Reader skill (notifications.py). The line itself comes from the
-support model, in character and in the user's language, and is shown, spoken
-and kept in the conversation.
+support model, in character and in the user's language, and is shown in the
+chat and the HUD, spoken and kept in the conversation.
 """
 
 import asyncio
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
+HUD_SKILL = "HUD"
 BACKSTORY_CHARS = 1200
 REACTION_CHARS = 300
 
@@ -65,6 +66,9 @@ class ScGameEvents(Skill):
 
     def _remember(self) -> bool:
         return bool(self.retrieve_custom_property_value("remember_reactions", []))
+
+    def _show_in_hud(self) -> bool:
+        return bool(self.retrieve_custom_property_value("show_in_hud", []))
 
     # --- lifecycle --------------------------------------------------------------
 
@@ -129,6 +133,10 @@ class ScGameEvents(Skill):
         await self.wingman.conversation.show(line, skill_name=self.config.display_name)
         if self._remember():
             await self.wingman.conversation.add_assistant(line)
+        # The HUD skill already shows every line that goes into the history.
+        hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
+        if self._show_in_hud() and not hud_skill_shows_it:
+            await self.wingman.hud.show_message(self.wingman.name, line, duration=15)
         await self.wingman.tts.speak(line, interrupt=False)
 
     async def _phrase(self, reports: list[str]) -> str:

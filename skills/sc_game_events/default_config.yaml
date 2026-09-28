@@ -65,6 +65,12 @@ custom_properties:
     property_type: number
     required: false
     value: 10
+  - id: show_in_hud
+    name: Show reactions in the HUD
+    hint: Also show what the Wingman says about the game in the HUD overlay, if the HUD is switched on in the settings.
+    property_type: boolean
+    required: false
+    value: true
   - id: remember_reactions
     name: Remember reactions
     hint: Keep what the Wingman said about the game in the conversation, so it can refer back to it.

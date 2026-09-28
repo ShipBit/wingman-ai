@@ -283,6 +283,8 @@ resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-mod
 
 # CLIENT UI:
 await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
+await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .remove_info(title)
+#   Returns False when the HUD is off (Windows only, switch in the settings); nothing to check yourself.
 
 # STAR CITIZEN — Core reads the Game.log live (the user can switch it off):
 self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
