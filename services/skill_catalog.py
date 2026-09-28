@@ -35,6 +35,14 @@ _VERDICT_TO_OUTCOME = {
 }
 
 
+# Custom skills whose job Core took over. They would run next to Core and do
+# everything twice, so they never load, whatever version is installed.
+REPLACED_BY_CORE = {
+    "sc_log_reader": "replaced by Core's Star Citizen log reader",
+    "sc_log_reader_2": "replaced by Core's Star Citizen log reader",
+}
+
+
 def _id_hash(folder: str) -> str:
     return hashlib.sha256(folder.encode("utf-8")).hexdigest()[:12]
 
@@ -87,6 +95,10 @@ class SkillCatalog:
     def _evaluate(self, folder: str, config_path: str, is_custom: bool) -> SkillCatalogEntry:
         origin = "custom" if is_custom else "bundled"
         h = _id_hash(folder)
+
+        if is_custom and folder in REPLACED_BY_CORE:
+            return SkillCatalogEntry(folder, None, None, origin, None,
+                                     SkillVerdict.INVALID, REPLACED_BY_CORE[folder], h)
 
         raw = ModuleManager.read_config(config_path)
         if not raw:

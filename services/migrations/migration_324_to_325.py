@@ -19,10 +19,24 @@ from defaults and every Wingman:
 `features.condense_conversation` stays, the one switch left.
 
 Core now reads Star Citizen's Game.log itself (services/sc_gamelog), which
-the SC Log Reader skill used to do. Its switch and the game folder go into
-settings.yaml as `sc_gamelog`, on and at the default install path.
+the community SC Log Reader skill did before, installed as a custom skill in
+custom_skills/sc_log_reader. That skill goes:
+
+- Its folder moves out of custom_skills to custom_skills_replaced, so it can
+  never run next to Core's reader and announce everything twice.
+- Every Wingman loses its entry and its name in `discoverable_skills`.
+- The game folder from its settings becomes `sc_gamelog.game_path`.
+- A Wingman that had spoken reactions switched on gets the bundled Star
+  Citizen Events skill instead, with the categories the old switches had on.
+  2.x called that switch `proactive_notifications`, 0.5 `react_game_events`.
 """
 
+import os
+import re
+import shutil
+from os import path
+
+from services.file import get_custom_skills_dir, get_users_dir
 from services.migrations.base_migration import BaseMigration
 
 _REMOVED_FEATURES = (
@@ -31,6 +45,94 @@ _REMOVED_FEATURES = (
     "condense_keep_recent_tokens",
     "condense_max_messages",
 )
+
+
+DEFAULT_GAME_PATH = "C:\\Program Files\\Roberts Space Industries\\StarCitizen"
+_ENVIRONMENTS = {"LIVE", "PTU", "EPTU", "HOTFIX", "TECH-PREVIEW"}
+_OLD_READER_MODULES = {"skills.sc_log_reader.main", "skills.sc_log_reader_2.main"}
+_OLD_READER_NAMES = {"SC_LogReader", "SCLogReader", "SCLogReader2"}
+_OLD_READER_FOLDERS = ("sc_log_reader", "sc_log_reader_2")
+_NEW_SKILL = "ScGameEvents"
+_NEW_SKILL_MODULE = "skills.sc_game_events.main"
+
+# The old skill's `notify_<kind>` switches by the category they belong to now.
+# 0.5 also had one master per category, named `notify_<category>`.
+_OLD_SWITCHES = {
+    "health": (
+        "bleeding", "emergency_services", "incapacitated", "injury", "med_bed_heal",
+    ),
+    "location": (
+        "location_arrived", "location_change", "location_departed", "location_updates",
+        "qt_arrived", "qt_calibration_complete_group", "quantum_calibration_complete",
+        "quantum_calibration_started", "quantum_route_set",
+    ),
+    "mission": (
+        "contract_available", "contract_shared", "mission_accepted", "mission_complete",
+        "mission_failed", "mission_objective_new", "mission_withdrawn",
+        "objective_complete", "objective_new", "objective_withdrawn",
+    ),
+    "money": (
+        "blueprint_received", "cargo_transfer", "commodity_buy", "commodity_sell",
+        "fined", "money_sent", "refinery_complete", "refinery_submitted",
+        "reward_earned", "shop_buy", "shop_sell", "transaction_complete",
+    ),
+    "safety": (
+        "armistice_zone", "crimestat_increased", "entered_monitored_space",
+        "exited_monitored_space", "jurisdiction_change", "monitored_space",
+        "monitored_space_availability", "monitored_space_down",
+        "monitored_space_restored", "restricted_area", "zone_entered_armistice",
+        "zone_left_armistice",
+    ),
+    "session": (
+        "incoming_call", "join_pu", "journal_entry", "party_invite", "party_left",
+        "party_member_joined", "party_membership", "session_start", "user_login",
+    ),
+    "ship": (
+        "fatal_collision", "fuel_low", "hangar_access", "hangar_queue", "hangar_ready",
+        "insurance_claim", "insurance_claim_complete", "ship_boarding", "ship_entered",
+        "ship_exited", "vehicle_impounded",
+    ),
+}
+
+
+def _star_citizen_folder(value) -> str | None:
+    """The StarCitizen folder from what users typed: the folder itself, an
+    environment inside it, or the Game.log."""
+    text = str(value or "").strip().strip('"').rstrip("\\/")
+    if not text:
+        return None
+    parts = re.split(r"[\\/]", text)
+    if parts[-1].lower() == "game.log":
+        parts = parts[:-1]
+    if parts and parts[-1].upper() in _ENVIRONMENTS:
+        parts = parts[:-1]
+    return ("\\" if "\\" in text else "/").join(parts) or None
+
+
+def _old_reader_entries(wingman: dict) -> list[dict]:
+    return [
+        entry
+        for entry in wingman.get("skills") or []
+        if isinstance(entry, dict) and entry.get("module") in _OLD_READER_MODULES
+    ]
+
+
+def _values(entry: dict) -> dict:
+    return {
+        prop["id"]: prop.get("value")
+        for prop in entry.get("custom_properties") or []
+        if isinstance(prop, dict) and "id" in prop
+    }
+
+
+def _categories(values: dict) -> dict[str, bool]:
+    """A category is on when its master was not switched off and at least one
+    of its switches was left on. Switches never touched were on."""
+    return {
+        category: values.get(f"notify_{category}", True) is not False
+        and any(values.get(f"notify_{kind}", True) is not False for kind in kinds)
+        for category, kinds in _OLD_SWITCHES.items()
+    }
 
 
 class Migration324To325(BaseMigration):
@@ -52,15 +154,79 @@ class Migration324To325(BaseMigration):
         self._drop_fixed_limits(old)
         return old
 
-    def migrate_wingman(self, old: dict) -> dict:
-        self._drop_fixed_limits(old)
+    def migrate_settings(self, old: dict) -> dict:
+        # settings.yaml is migrated before the Wingmen, so read their old files.
+        if "sc_gamelog" not in old:
+            game_path = self._old_game_path() or DEFAULT_GAME_PATH
+            old["sc_gamelog"] = {"enabled": True, "game_path": game_path}
+            self.log(f"- added sc_gamelog, reading {game_path}")
+        self._retire_old_reader()
         return old
 
-    def migrate_settings(self, old: dict) -> dict:
-        if "sc_gamelog" not in old:
-            old["sc_gamelog"] = {
-                "enabled": True,
-                "game_path": "C:\\Program Files\\Roberts Space Industries\\StarCitizen",
-            }
-            self.log("- added sc_gamelog (Core reads the Star Citizen Game.log)")
+    def migrate_wingman(self, old: dict) -> dict:
+        self._drop_fixed_limits(old)
+        self._replace_old_reader(old)
         return old
+
+    def _old_game_path(self) -> str | None:
+        configs = path.join(get_users_dir(), self.old_version, "configs")
+        for root, _dirs, files in os.walk(configs):
+            for filename in sorted(files):
+                if not filename.endswith(".yaml") or filename.endswith("template.yaml"):
+                    continue
+                try:
+                    wingman = self.config_manager.read_config(path.join(root, filename))
+                except Exception:
+                    continue
+                if not isinstance(wingman, dict):
+                    continue
+                for entry in _old_reader_entries(wingman):
+                    folder = _star_citizen_folder(_values(entry).get("sc_game_path"))
+                    if folder:
+                        return folder
+        return None
+
+    def _retire_old_reader(self) -> None:
+        custom_skills = get_custom_skills_dir()
+        for folder in _OLD_READER_FOLDERS:
+            source = path.join(custom_skills, folder)
+            if not path.isdir(source):
+                continue
+            target = path.join(path.dirname(custom_skills), "custom_skills_replaced", folder)
+            if path.exists(target):
+                shutil.rmtree(target)
+            os.makedirs(path.dirname(target), exist_ok=True)
+            shutil.move(source, target)
+            self.log(f"- moved the SC Log Reader skill to {target}; Core reads the log now")
+
+    def _replace_old_reader(self, wingman: dict) -> None:
+        entries = _old_reader_entries(wingman)
+        names = wingman.get("discoverable_skills") or []
+        enabled = any(name in _OLD_READER_NAMES for name in names)
+        if not entries and not enabled:
+            return
+        if entries:
+            wingman["skills"] = [e for e in wingman["skills"] if e not in entries]
+        wingman["discoverable_skills"] = [n for n in names if n not in _OLD_READER_NAMES]
+        self.log("- removed the SC Log Reader skill (Core reads the Star Citizen log now)")
+
+        values = _values(entries[0]) if entries else {}
+        reacting = values.get("react_game_events", values.get("proactive_notifications", False))
+        if not enabled or reacting is not True:
+            return
+        categories = _categories(values)
+        wingman["skills"] = [
+            e for e in wingman.get("skills") or [] if e.get("module") != _NEW_SKILL_MODULE
+        ] + [
+            {
+                "module": _NEW_SKILL_MODULE,
+                "custom_properties": [
+                    {"id": f"react_{category}", "value": on}
+                    for category, on in categories.items()
+                ],
+            }
+        ]
+        if _NEW_SKILL not in wingman["discoverable_skills"]:
+            wingman["discoverable_skills"].append(_NEW_SKILL)
+        switched_on = ", ".join(c for c, on in categories.items() if on) or "none"
+        self.log(f"- added Star Citizen Events for its spoken reactions ({switched_on})")
