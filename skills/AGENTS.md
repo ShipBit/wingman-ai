@@ -281,6 +281,9 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
 resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
 
+# CLIENT UI:
+await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
+
 # STAR CITIZEN — Core reads the Game.log live (the user can switch it off):
 self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()

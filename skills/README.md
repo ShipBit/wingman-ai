@@ -1504,6 +1504,12 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | `.active()` | Tuple of `{name, display_name}` for every loaded skill. |
 | `.has(name)` | `bool` — is a skill with this name loaded? (symmetric with `tools.has`). |
 
+### `self.wingman.ui` — show something in the client
+
+| Member | Description |
+| --- | --- |
+| `await .show_dialog(title, text, *, image=None, once=None)` | Open a dialog in the client. `text` is Markdown (sanitized, links open in the browser), `image` a data URL shown under it. With `once="MySkill.welcome"` it appears a single time ever and later calls return `False`. If no client is connected yet, it appears as soon as one is. |
+
 ### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
 
 Core reads the Game.log of every Star Citizen environment (LIVE, PTU, ...) in

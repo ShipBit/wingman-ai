@@ -1131,6 +1131,36 @@ class SkillSettings:
 
 
 
+class SkillUi:
+    """Show something in the client (`self.wingman.ui`)."""
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    async def show_dialog(
+        self, title: str, text: str, *, image: Optional[str] = None, once: Optional[str] = None
+    ) -> bool:
+        """Open a dialog in the client. `text` is Markdown; links open in the
+        browser. `image` is a data URL shown under it. With `once` (prefix it
+        with your skill name, e.g. "MySkill.welcome") the dialog is shown a
+        single time ever and later calls return False. If no client is
+        connected yet, it appears as soon as one is."""
+        from api.commands import SkillDialogCommand
+        from services import skill_dialogs
+        from services.connection_manager import ConnectionManager
+
+        if once and skill_dialogs.was_shown(once):
+            return False
+        await ConnectionManager().broadcast(
+            SkillDialogCommand(
+                wingman_name=self._wingman.name, title=title, text=text, image=image
+            )
+        )
+        if once:
+            skill_dialogs.mark_shown(once)
+        return True
+
+
 class SkillScGameLog:
     """Star Citizen's Game.log, read live by Core (`self.wingman.sc_gamelog`).
 

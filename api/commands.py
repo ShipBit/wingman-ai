@@ -144,6 +144,18 @@ class McpOAuthStateChangedCommand(WebSocketCommandModel):
     """Why it failed, when it did."""
 
 
+class SkillDialogCommand(WebSocketCommandModel):
+    """A skill asks the client to show a dialog (`self.wingman.ui.show_dialog`)."""
+
+    command: Literal["skill_dialog"] = "skill_dialog"
+    wingman_name: str
+    title: str
+    text: str
+    """Markdown. The client sanitizes it and opens links in the browser."""
+    image: Optional[str] = None
+    """A data URL, shown under the text."""
+
+
 class ScGameLogStateChangedCommand(WebSocketCommandModel):
     """Sent when the Star Citizen log reader starts, stops, finds a Game.log
     or gets new rules, and when the rules cannot be updated."""
