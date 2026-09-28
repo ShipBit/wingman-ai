@@ -67,10 +67,10 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > now: wrap the call in `try/except FacadeError` (cap errors won't fix themselves on retry —
 > shorten instead) and treat an empty string as the "no answer, retry" case.
 
-> **`ai.generate` is capped.** When conversation condensation is on, the combined input
-> (system + prompt + data, plus a flat estimate per image) is limited (Wingman Pro: a fixed
-> 8,000 tokens; own provider: `features.skill_max_input_tokens`, default 16,000). Over the cap
-> it raises `FacadeError`, or truncates if you pass `auto_shorten=True`. For bulk text, reduce
+> **`ai.generate` is capped.** The combined input (system + prompt + data, plus a flat
+> estimate per image) is limited like a tool response: 32,000 tokens, or a quarter of a smaller
+> main model's window. Over the cap it raises `FacadeError`, or truncates if you pass
+> `auto_shorten=True`. For bulk text, reduce
 > it first with the much cheaper `self.wingman.local_ai.summarize(...)`.
 
 #### Memory (now its own namespace)

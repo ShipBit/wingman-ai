@@ -72,6 +72,14 @@ class ToolResponseCompressor:
             )
             if not summary:
                 summary = truncate_to_tokens(response_text, 500)
+                await printr.print_async(
+                    f"Summarizing failed, kept only the first ~500 of "
+                    f"~{original_tokens:,} tokens.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=wingman_name,
+                    source=LogSource.WINGMAN,
+                )
 
             if capped:
                 remaining = total_chunks - summarize_count
@@ -198,6 +206,12 @@ class ToolResponseCompressor:
                 current_batch_parts = []
                 current_batch_tokens = 0
             if chunk_tokens > data_budget:
+                printr.print(
+                    f"Summarizing: a chunk of ~{chunk_tokens:,} tokens was cut to "
+                    f"~{data_budget:,} to fit the support model.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
                 chunk = truncate_to_tokens(chunk, data_budget)
                 chunk_tokens = count_tokens(chunk)
             current_batch_parts.append(chunk)
@@ -228,8 +242,20 @@ class ToolResponseCompressor:
                 )
                 if result and result.text:
                     batch_summaries.append(result.text)
-            except Exception:
-                pass
+                else:
+                    printr.print(
+                        f"Summarizing: part {i + 1}/{len(batches)} came back empty "
+                        f"and is missing from the summary.",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+            except Exception as error:
+                printr.print(
+                    f"Summarizing: part {i + 1}/{len(batches)} failed ({error}) "
+                    f"and is missing from the summary.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
 
         if not batch_summaries:
             return None
@@ -248,6 +274,12 @@ class ToolResponseCompressor:
         # Safety: truncate if merge input exceeds budget
         merge_tokens = count_tokens(merge_prompt)
         if merge_tokens > budget.max_input_tokens:
+            printr.print(
+                f"Summarizing: the partial summaries (~{merge_tokens:,} tokens) were "
+                f"cut to ~{budget.max_input_tokens - 100:,} to merge them in one call.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             combined = truncate_to_tokens(
                 combined, budget.max_input_tokens - 100
             )

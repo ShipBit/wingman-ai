@@ -378,6 +378,12 @@ class SkillLocalAI:
 
             # Too large for sync — truncate and mark as truncated
             truncated_text = truncate_to_tokens(text, budget.max_input_tokens)
+            printr.print(
+                f"A skill's summarize() input was cut from ~{text_tokens:,} to "
+                f"~{budget.max_input_tokens:,} tokens to fit the support model.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             result = self.generate_sync(
                 truncated_text, system_prompt=instruction,
                 preset=preset, temperature=temperature, top_p=top_p,

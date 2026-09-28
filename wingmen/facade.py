@@ -264,24 +264,9 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
     return None
 
 
-# Wingman Pro pays per-use on our dime, so it gets a fixed, lower side-call cap that
-# users cannot raise. Own-provider users use config.features.skill_max_input_tokens.
-WINGMAN_PRO_MAX_INPUT_TOKENS = 8000
 # Flat per-image token estimate — we must NOT count the raw base64 string (it would be
 # enormous and falsely trip the cap). Mirrors a high-detail image's real token cost.
 IMAGE_TOKEN_ESTIMATE = 1000
-
-
-def skill_input_cap(config: Any) -> int:
-    """Max input tokens skill-originated content (a ctx.ai.generate side-call OR a
-    tool/MCP response) may feed the main model. Wingman Pro is hardcoded lower (we pay);
-    own providers use config.features.skill_max_input_tokens."""
-    from api.enums import ConversationProvider
-
-    features = config.features
-    if features.conversation_provider == ConversationProvider.WINGMAN_PRO:
-        return WINGMAN_PRO_MAX_INPUT_TOKENS
-    return getattr(features, "skill_max_input_tokens", 16000)
 
 
 def _count_message_tokens(messages: list) -> int:
@@ -318,7 +303,20 @@ class SkillAi:
         self._wingman = wingman
 
     def _max_input_tokens(self) -> int:
-        return skill_input_cap(self._wingman.config)
+        """The same cap as for a tool response: 32,000 tokens, or a quarter of a
+        smaller main model's window (services/context_budget.py)."""
+        return self._wingman.context_budget.tool_cap
+
+    async def _call(self, messages: list):
+        from services.context_budget import ContextOverflowError
+
+        try:
+            return await self._wingman.actual_llm_call(messages)
+        except ContextOverflowError as error:
+            raise FacadeError(
+                f"The main model refused this request as too long for its context "
+                f"window: {error}. Send less."
+            ) from error
 
     async def generate(
         self,
@@ -335,53 +333,55 @@ class SkillAi:
         ``prompt`` is the instruction; ``data`` is an optional larger payload appended
         to it; ``image`` is an optional data-URL for vision. Pass ``messages`` (a prebuilt
         OpenAI-style message list) to send your own turns directly — it is sent as-is and
-        ``prompt``/``system``/``data``/``image`` are ignored. When conversation
-        condensation is enabled the combined input is capped (see class docstring):
-        over the cap raises :class:`FacadeError`, or (for the prompt/data path) truncates
-        if ``auto_shorten``. The ``messages`` path can't be auto-shortened — it raises.
+        ``prompt``/``system``/``data``/``image`` are ignored. The combined input is
+        capped like a tool response (32,000 tokens, less on a small model): over the
+        cap raises :class:`FacadeError`, or (for the prompt/data path) truncates if
+        ``auto_shorten``. The ``messages`` path can't be auto-shortened — it raises.
         """
         from services.token_utils import count_tokens, truncate_to_tokens
 
-        features = self._wingman.config.features
-
         # Prebuilt message-list path: send the skill's own turns directly (still capped).
         if messages is not None:
-            if features.condense_conversation:
-                cap = self._max_input_tokens()
-                total = _count_message_tokens(messages)
-                if total > cap:
-                    raise FacadeError(
-                        f"Skill tried to send ~{total} tokens to the main model, but the "
-                        f"limit is {cap}. Reduce the messages or pre-summarize them cheaply "
-                        f"with self.local_ai.summarize(...). (A structured message list can't "
-                        f"be auto-shortened — trim it yourself. On your own AI provider you can "
-                        f"raise features.skill_max_input_tokens or turn off condensation; on "
-                        f"Wingman Pro the limit is fixed.)"
-                    )
-            completion = await self._wingman.actual_llm_call(messages)
+            cap = self._max_input_tokens()
+            total = _count_message_tokens(messages)
+            if total > cap:
+                raise FacadeError(
+                    f"Skill tried to send ~{total} tokens to the main model, but the "
+                    f"limit is {cap}. Reduce the messages or pre-summarize them cheaply "
+                    f"with self.local_ai.summarize(...). (A structured message list can't "
+                    f"be auto-shortened — trim it yourself.)"
+                )
+            completion = await self._call(messages)
             if completion and completion.choices:
                 return completion.choices[0].message.content or ""
             return ""
 
         user_text = prompt if not data else f"{prompt}\n\n{data}"
 
-        if features.condense_conversation:
-            cap = self._max_input_tokens()
-            system_tokens = count_tokens(system) if system else 0
-            image_tokens = IMAGE_TOKEN_ESTIMATE if image else 0
-            total = system_tokens + count_tokens(user_text) + image_tokens
-            if total > cap:
-                if auto_shorten:
-                    budget = max(0, cap - system_tokens - image_tokens)
-                    user_text = truncate_to_tokens(user_text, budget)
-                else:
-                    raise FacadeError(
-                        f"Skill tried to send ~{total} tokens to the main model, but the "
-                        f"limit is {cap}. Reduce the input or pre-summarize it cheaply with "
-                        f"self.local_ai.summarize(...). (On your own AI provider you can raise "
-                        f"features.skill_max_input_tokens or turn off conversation condensation; "
-                        f"on Wingman Pro the limit is fixed.)"
-                    )
+        cap = self._max_input_tokens()
+        system_tokens = count_tokens(system) if system else 0
+        image_tokens = IMAGE_TOKEN_ESTIMATE if image else 0
+        total = system_tokens + count_tokens(user_text) + image_tokens
+        if total > cap:
+            if auto_shorten:
+                budget = max(0, cap - system_tokens - image_tokens)
+                user_text = truncate_to_tokens(user_text, budget)
+                from api.enums import LogSource, LogType
+                from services.printr import Printr
+
+                await Printr().print_async(
+                    f"A skill's request to the AI was ~{total:,} tokens, above the "
+                    f"limit of {cap:,}. Its input was cut to fit (auto_shorten).",
+                    color=LogType.WARNING,
+                    source=LogSource.WINGMAN,
+                    source_name=self._wingman.name,
+                )
+            else:
+                raise FacadeError(
+                    f"Skill tried to send ~{total} tokens to the main model, but the "
+                    f"limit is {cap}. Reduce the input or pre-summarize it cheaply with "
+                    f"self.local_ai.summarize(...)."
+                )
 
         messages: list = []
         if system:
@@ -399,7 +399,7 @@ class SkillAi:
         else:
             messages.append({"role": "user", "content": user_text})
 
-        completion = await self._wingman.actual_llm_call(messages)
+        completion = await self._call(messages)
         if completion and completion.choices:
             return completion.choices[0].message.content or ""
         return ""
@@ -410,7 +410,7 @@ class SkillAi:
         side work that should NOT join the conversation."""
         await self._wingman.add_user_message(user_message)
         messages = list(self._wingman.conversation.messages)
-        completion = await self._wingman.actual_llm_call(messages)
+        completion = await self._call(messages)
         text = ""
         if completion and completion.choices:
             text = completion.choices[0].message.content or ""

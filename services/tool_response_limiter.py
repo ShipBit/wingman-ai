@@ -1,33 +1,26 @@
 """One cap for every tool response, however it was produced.
 
 A skill, an MCP server or a command handler can hand back any amount of text.
-The main model is what that text costs — on Wingman Pro it costs us, on an own
-key it costs the user — so the cap is about the main model, not about the
-support model. Under the cap a response passes through untouched. Over it the
-user gets a warning in the client and the response is brought under the cap in
-one of two ways:
+The main model is what that text costs, and it has a window it cannot exceed,
+so the cap comes from the main model (``ContextBudget.tool_cap``: 32,000 tokens,
+or a quarter of a smaller model's window). Under the cap a response passes
+through untouched. Over it the user gets a warning and the response is cut:
 
-1. **Cut structurally** when the response is JSON. Whole list entries or whole
-   keys are kept, so what is left is still valid JSON, and the order is the
-   skill's own — a skill that sorts by price or relevance has already put the
-   best entries first. Measured 2026-09-15 on gemini-2.5-flash-lite: asked to
-   condense a 170-row price table, the model copied the first rows until the
-   budget ran out, ten seconds and 0.3 cent for what a cut does for free.
-2. **Summarised** by the support model when the response is text (a page, a
-   log, a document) and a support model is configured, allowed, and fits it in
-   one call. The summary is capped at ``SUMMARY_MAX_TOKENS``; a paid call that
-   hands back something not much smaller than a plain cut would be money for
-   nothing, so anything at or above ``SUMMARY_REJECT_RATIO`` of the cap is
-   thrown away and the text is cut at a line boundary instead.
+- **JSON** by whole list entries or whole keys, so what is left is still valid
+  JSON in the skill's own order — a skill that sorts by price or relevance has
+  already put the best entries first.
+- **Text** at a line boundary.
 
 A note at the end says how much is missing and tells the model to ask the tool
-for less. A local model with the default 4096-token window never fits a text
-that is over an 8000-token cap, so local users get the cut there too. That is
-intended: chunking 50k tokens through a small local model takes minutes and
-drops facts along the way.
+for less.
+
+There is no summary. Measured 2026-09-28 on 62,000 tokens of real prose with
+three facts in it: the support model's summary kept none of them and made the
+pilot wait 25 seconds; a cut at 32,000 kept two
+(evals/FINDINGS-context-budget-2026-09-28.md). On JSON a summary had already
+lost to the cut on 2026-09-15.
 """
 
-import asyncio
 import json
 from typing import Optional
 
@@ -37,19 +30,6 @@ from services.token_utils import count_tokens, truncate_to_tokens
 
 printr = Printr()
 
-SUMMARY_MAX_TOKENS = 4000
-"""Output ceiling for the summary: half the Pro cap. A page or a search result
-keeps its useful middle at this size; at 2,000 too much of it went missing.
-The extra 2,000 tokens cost about 0.1 cent per call on the support model and
-the same again on a mini-class chat model, once — the trimming after the turn
-brings every response down to 500 and then 25 tokens regardless."""
-
-SUMMARY_REJECT_RATIO = 0.75
-"""A summary at or above this share of the cap is thrown away: it would not
-have saved enough over a plain cut to justify the call."""
-
-SUMMARY_PROMPT_NAME = "support-tool-response"
-
 _ADVICE = (
     "If this comes from a custom skill or an MCP server, ask its author to "
     "return less data or to paginate."
@@ -57,10 +37,7 @@ _ADVICE = (
 
 
 class ToolResponseLimiter:
-    """Brings an oversized tool response under ``cap`` tokens.
-
-    Stateless apart from the printr; one instance per wingman is fine.
-    """
+    """Brings an oversized tool response under ``cap`` tokens."""
 
     async def limit(
         self,
@@ -68,15 +45,9 @@ class ToolResponseLimiter:
         cap: int,
         tool_name: str = "",
         wingman_name: str = "",
-        local_ai_service=None,
     ) -> str:
-        """Return ``response_text`` unchanged when it fits, otherwise a version
-        under ``cap`` tokens.
-
-        ``local_ai_service`` is the support model to summarise with. Pass
-        ``None`` when summarisation is switched off or no support model is
-        ready; the response is then cut instead.
-        """
+        """Return ``response_text`` unchanged when it fits, otherwise cut to
+        ``cap`` tokens with a note on what is missing."""
         original_tokens = count_tokens(response_text)
         if original_tokens <= cap:
             return response_text
@@ -89,13 +60,6 @@ class ToolResponseLimiter:
             source=LogSource.WINGMAN,
             source_name=wingman_name,
         )
-
-        if local_ai_service is not None and not is_structured(response_text):
-            summary = await self._summarize(
-                response_text, original_tokens, cap, local_ai_service, wingman_name
-            )
-            if summary is not None:
-                return summary
 
         cut_text, kept, total, kind = structural_cut(response_text, cap)
         cut_tokens = count_tokens(cut_text)
@@ -110,105 +74,6 @@ class ToolResponseLimiter:
             source_name=wingman_name,
         )
         return cut_text + _cut_note(original_tokens, cap, kept, total, kind)
-
-    # ── summarisation ────────────────────────────────────────────
-
-    async def _summarize(
-        self,
-        response_text: str,
-        original_tokens: int,
-        cap: int,
-        local_ai_service,
-        wingman_name: str,
-    ) -> Optional[str]:
-        """One support call, or ``None`` when that is not possible or the
-        result is not worth keeping."""
-        from services.file import get_prompt
-        from services.skill_local_ai import SamplingPreset
-
-        system_prompt = get_prompt(SUMMARY_PROMPT_NAME)
-        budget = local_ai_service.get_token_budget(system_prompt)
-        reject_at = int(cap * SUMMARY_REJECT_RATIO)
-        max_summary = min(SUMMARY_MAX_TOKENS, max(1, reject_at - 1))
-
-        if original_tokens > budget.max_input_tokens:
-            # Local model with a small window: a chunked pass through a small model
-            # is slow and lossy, the cut is the better deal. Cloud: 128k in one
-            # call is the ceiling we are willing to pay for, cut down to it.
-            if budget.max_input_tokens < cap:
-                await printr.print_async(
-                    f"Support model window (~{budget.max_input_tokens:,} tokens) is "
-                    f"too small to summarize this response in one call. Cutting instead.",
-                    color=LogType.LOCALMODEL,
-                    source=LogSource.WINGMAN,
-                    source_name=wingman_name,
-                )
-                return None
-            response_text, _, _, _ = structural_cut(response_text, budget.max_input_tokens)
-
-        await printr.print_async(
-            f"Summarizing the response with the support model "
-            f"(at most ~{max_summary:,} tokens)...",
-            color=LogType.LOCALMODEL,
-            source=LogSource.WINGMAN,
-            source_name=wingman_name,
-        )
-
-        user_prompt = (
-            f"TOKEN BUDGET FOR YOUR ANSWER: {max_summary}\n\n"
-            f"DATA:\n{response_text}\n\n---\n"
-            f"Condense the data above into at most {max_summary} tokens."
-        )
-        loop = asyncio.get_event_loop()
-        try:
-            result = await loop.run_in_executor(
-                None,
-                lambda: local_ai_service.support(
-                    text=user_prompt,
-                    system_prompt=system_prompt,
-                    preset=SamplingPreset.PRECISE,
-                    max_output_tokens=max_summary,
-                ),
-            )
-        except Exception as error:
-            printr.print(
-                f"[ToolResponseLimiter] support call failed: {error}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            return None
-
-        summary = (result.text or "").strip() if result else ""
-        if not summary:
-            await printr.print_async(
-                "Support model returned nothing. Cutting instead.",
-                color=LogType.LOCALMODEL,
-                source=LogSource.WINGMAN,
-                source_name=wingman_name,
-            )
-            return None
-
-        summary_tokens = count_tokens(summary)
-        if summary_tokens >= reject_at:
-            await printr.print_async(
-                f"Summary is not small enough (~{summary_tokens:,} tokens). Cutting instead.",
-                color=LogType.LOCALMODEL,
-                source=LogSource.WINGMAN,
-                source_name=wingman_name,
-            )
-            return None
-
-        await printr.print_async(
-            f"Tool response summarized (~{original_tokens:,} → ~{summary_tokens:,} tokens).",
-            color=LogType.LOCALMODEL,
-            source=LogSource.WINGMAN,
-            source_name=wingman_name,
-        )
-        return (
-            f"[SUMMARY OF A TOOL RESPONSE — the original had ~{original_tokens:,} "
-            f"tokens and was condensed by a support model. Ask for a narrower "
-            f"query if a detail is missing.]\n{summary}"
-        )
 
 
 # ── structural cut ───────────────────────────────────────────────

@@ -240,11 +240,12 @@ class ProviderFactory:
             openrouter = OpenAi(
                 api_key=api_key, base_url=self._config.openrouter.endpoint
             )
-            supports_tools = await self._check_openrouter_tool_support(api_key)
+            supports_tools, context_window = await self._check_openrouter_endpoints(api_key)
             return OpenRouterLlm(
                 openai_instance=openrouter,
                 config=self._config,
                 supports_tools=supports_tools,
+                context_window=context_window,
             )
         elif llm_enum == ConversationProvider.LOCAL_LLM:
             from providers.open_ai import OpenAi, LocalLlm
@@ -287,8 +288,13 @@ class ProviderFactory:
             return XAiLlm(xai_instance=xai, config=self._config)
         return None
 
-    async def _check_openrouter_tool_support(self, api_key: str) -> bool:
-        """Whether any OpenRouter endpoint of the configured model takes tools.
+    async def _check_openrouter_endpoints(self, api_key: str) -> tuple[bool, int | None]:
+        """Whether any OpenRouter endpoint of the configured model takes tools,
+        and the smallest context window among those that can serve the request.
+
+        The window sizes what the wingman sends (services/context_budget.py).
+        OpenRouter may route to any of the endpoints, so the smallest one is the
+        one that has to fit.
 
         OpenRouter routes a request with tools to an endpoint that supports
         them, so one is enough. A model without any gets its tools stripped,
@@ -301,7 +307,7 @@ class ProviderFactory:
 
         model = self._config.openrouter.conversation_model
         if not model:
-            return False
+            return False, None
 
         def _fetch():
             return requests.get(
@@ -320,7 +326,7 @@ class ProviderFactory:
                 color=LogType.WARNING,
                 server_only=True,
             )
-            return True
+            return True, None
 
         supports_tools = any(
             "tools" in (endpoint.get("supported_parameters") or [])
@@ -332,4 +338,10 @@ class ProviderFactory:
                 color=LogType.WARNING,
                 server_only=True,
             )
-        return supports_tools
+        usable = [
+            endpoint
+            for endpoint in endpoints
+            if not supports_tools or "tools" in (endpoint.get("supported_parameters") or [])
+        ]
+        windows = [int(e["context_length"]) for e in usable if e.get("context_length")]
+        return supports_tools, (min(windows) if windows else None)

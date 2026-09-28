@@ -9,6 +9,7 @@ from api.enums import LogType
 from services.benchmark import Benchmark
 from services.printr import Printr
 from services.tool_response_limiter import ToolResponseLimiter
+from services.context_budget import DEFAULT_WINDOW, ContextBudget
 
 if TYPE_CHECKING:
     from api.interface import CommandConfig, WingmanConfig, SettingsConfig
@@ -33,11 +34,15 @@ class ToolExecutor:
         config: "WingmanConfig",
         settings: "SettingsConfig",
         wingman_name: str,
+        budget_fn: Callable[[], "ContextBudget"] | None = None,
     ):
         self._config = config
         self._settings = settings
         self._wingman_name = wingman_name
         self._tool_response_limiter = ToolResponseLimiter()
+        self._budget_fn = budget_fn
+        """The wingman's ContextBudget, asked per call: the model's window can
+        change (config update, a learned overflow)."""
 
     # ------------------------------------------------------------------
     # fix_tool_calls  (was _fix_tool_calls)
@@ -110,7 +115,6 @@ class ToolExecutor:
         get_command_fn: Callable[[str], "CommandConfig | None"],
         execute_command_fn: Callable[["CommandConfig", bool], Awaitable[tuple]],
         play_to_user_fn: Callable[[str], Awaitable[None]],
-        local_ai_service,
         settings_service=None,
         update_tool_response_fn: Callable[[str, str], Awaitable[bool]],
         add_tool_response_fn: Callable,
@@ -128,7 +132,6 @@ class ToolExecutor:
             get_command_fn: Callback to get a Command by name.
             execute_command_fn: Callback to execute a Command.
             play_to_user_fn: Callback to play audio response.
-            local_ai_service: For tool response compression.
             update_tool_response_fn: Callback to update an existing tool
                 response in conversation history.
             add_tool_response_fn: Callback to add a new tool response to
@@ -182,24 +185,15 @@ class ToolExecutor:
                 if tool_label:
                     tool_timings.append((tool_label, tool_time_ms))
 
-                # Never feed an oversized tool/MCP response to the (paid) main model.
-                # Same cap as ctx.ai.generate, always on. Over the cap the response is
-                # summarized by the support model when the user allows it, cut otherwise.
-                from wingmen.facade import skill_input_cap
-
-                summarizer = (
-                    local_ai_service
-                    if self._config.features.compress_tool_responses
-                    and local_ai_service
-                    and local_ai_service.is_ready()
-                    else None
-                )
+                # Never feed an oversized tool/MCP response to the main model.
+                # Same cap as ai.generate, always on, cut rather than summarized
+                # (see services/tool_response_limiter.py).
+                budget = self._budget_fn() if self._budget_fn else ContextBudget(DEFAULT_WINDOW)
                 limited = await self._tool_response_limiter.limit(
                     response_text=str(function_response),
-                    cap=skill_input_cap(self._config),
+                    cap=budget.tool_cap,
                     tool_name=function_name,
                     wingman_name=self._wingman_name,
-                    local_ai_service=summarizer,
                 )
                 if limited != str(function_response):
                     function_response = limited

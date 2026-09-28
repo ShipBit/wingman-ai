@@ -4,7 +4,6 @@ import json
 import random
 import re
 import uuid
-from bisect import bisect_right
 from typing import TYPE_CHECKING, Callable, Mapping, Optional
 
 from openai.types.chat import (
@@ -13,7 +12,7 @@ from openai.types.chat import (
     ParsedFunction,
 )
 
-from api.enums import ConversationProvider, LogType
+from api.enums import ConversationProvider, LogSource, LogType
 from services.printr import Printr
 from services.token_utils import count_tokens
 
@@ -22,25 +21,17 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
-# How long tool output stays in the history, counted in user messages that have
-# arrived since the tool ran. The output of the last KEEP_TOOL_TURNS turns is never
-# touched: the pilot asks "which of those is cheapest?" or "put one more stop
-# into the table" a few messages later, and the model needs the real data for
-# that, not a guess. Older output may stay too, as long as it adds up to no more
-# than _OLD_BUDGET tokens and is no older than _MAX_AGE turns.
-KEEP_TOOL_TURNS = 4
-_OLD_BUDGET = 12_000
-_MAX_AGE = 10
-
-# What is left of a response once it is cleared.
+# What is left of a tool response once it is cleared. The wording does not make
+# the model call the tool again: measured with this text and with the old one
+# ("call the tool again if it is needed"), gpt-4.1-mini answered from memory and
+# invented prices and stock either way, and re-called the tool not once
+# (evals/FINDINGS-context-budget-2026-09-28.md). What protects the answers is
+# clearing rarely, which is why the history limit is generous.
 _CLEARED_NOTE = (
-    "[Tool output removed from history (~{original} tokens{tool}). "
-    "Call the tool again if it is needed.]"
+    "[Tool output removed from history (~{original} tokens{tool}). Its numbers "
+    "and details are no longer here: call the tool again before stating any of them.]"
 )
-_CLEARED_NOTE_RE = re.compile(
-    r"^\[Tool output removed from history \(~(\d+) tokens[^)]*\)\. "
-    r"Call the tool again if it is needed\.\]$"
-)
+_CLEARED_NOTE_RE = re.compile(r"^\[Tool output removed from history \(~(\d+) tokens")
 
 
 class ConversationManager:
@@ -193,6 +184,50 @@ class ConversationManager:
 
         return False
 
+    @staticmethod
+    def message_chars(msg) -> int:
+        """How long a message is as JSON — the unit the Wingman Pro backend
+        measures a request in. Assistant replies are kept as the SDK's objects,
+        the rest as dicts."""
+        if isinstance(msg, Mapping):
+            return len(json.dumps(msg, ensure_ascii=False, default=str))
+        dump = getattr(msg, "model_dump_json", None)
+        if dump:
+            return len(dump(exclude_none=True))
+        return len(str(msg))
+
+    def drop_oldest_turns(self, to_free: int, size_of: Callable | None = None) -> int:
+        """Remove whole turns from the front until ``to_free`` is gone, measured
+        by ``size_of`` (default: characters of JSON, see ``message_chars``).
+
+        The last resort when a request would be too big to send: without
+        condensation nothing else shortens the history. A turn starts at a user message, so a tool call
+        and its responses always go together. The latest turn is never touched,
+        even if that frees less than asked — it holds the question being answered.
+
+        Returns how many messages were removed.
+        """
+        if to_free <= 0:
+            return 0
+        size_of = size_of or self.message_chars
+        user_indices = [
+            i for i, m in enumerate(self.messages) if self.get_message_role(m) == "user"
+        ]
+        if len(user_indices) < 2:
+            return 0
+
+        cut = 0
+        freed = 0
+        start = 0
+        for next_turn in user_indices[1:]:
+            freed += sum(size_of(m) for m in self.messages[start:next_turn])
+            cut = start = next_turn
+            if freed >= to_free:
+                break
+
+        del self.messages[:cut]
+        return cut
+
     def _tool_call_names(self) -> dict[str, str]:
         """``tool_call_id`` → function name, from the assistant messages."""
         names: dict[str, str] = {}
@@ -214,108 +249,75 @@ class ConversationManager:
                     names[call_id] = name
         return names
 
-    async def trim_tool_responses(self, is_condensing: bool = False):
-        """Clear tool output the conversation has moved well past.
+    async def clear_tool_responses(self, before: int, is_condensing: bool = False) -> int:
+        """Replace the tool responses before message ``before`` with a one-line
+        placeholder that names the size and the tool. Returns the tokens freed.
 
-        A skill can hand back an 8,000-token price table. The model needs it for
-        more than the one answer: a few messages later the pilot asks for one
-        more stop on the trading route, or wants the overlay table back the way
-        it was. So the output of the last ``KEEP_TOOL_TURNS`` user turns always stays
-        complete. Only after that is it replaced by a one-line placeholder that
-        names the size and the tool.
-
-        Clearing happens in batches, not one turn at a time. Older output stays
-        until it adds up to more than ``_OLD_BUDGET`` tokens or one response is
-        more than ``_MAX_AGE`` turns old; then everything older than
-        ``KEEP_TOOL_TURNS`` goes in one pass. Rewriting a message invalidates the
-        provider's prompt cache from that message on, so clearing one response
-        per turn would break the cache every turn. A batch breaks it once every
-        few turns and keeps more data around in between.
-
-        With ``condense_conversation`` off nothing is cleared: the user turned
-        off the automatic shortening of the history, and this is part of it.
-        Single responses are still capped when they come in
-        (``skill_max_input_tokens``), which is a separate setting.
+        The first step when the history passes its limit (``ContextBudget``):
+        it frees the most for the least — no model call, and the tool call with
+        its arguments stays, so a HUD table the Wingman wrote is still there.
+        Only if this is not enough does the condenser summarize. Below the limit
+        nothing is cleared: a price from twenty turns ago is still exact.
 
         Args:
-            is_condensing: Whether condensation is currently running (suppresses
-                broadcast to avoid interfering with its own cycle).
+            before: Index of the first message to keep as it is.
+            is_condensing: Whether condensation is running (suppresses the
+                client broadcast, which would interfere with its own cycle).
         """
-        features = getattr(self._config, "features", None)
-        if features is not None and not features.condense_conversation:
-            return
-
-        user_indices = [
-            i for i, m in enumerate(self.messages) if self.get_message_role(m) == "user"
-        ]
-        old: list[tuple[int, int]] = []  # (message index, tokens)
-        old_tokens = 0
-        oldest_age = 0
-        for index, msg in enumerate(self.messages):
+        tool_names = self._tool_call_names()
+        freed = 0
+        cleared: dict[str, int] = {}
+        for msg in self.messages[:before]:
             if self.get_message_role(msg) != "tool":
                 continue
             if msg.get("tool_call_id") in self.pending_tool_calls:
                 continue
             content = msg.get("content", "")
-            if not content or not isinstance(content, str):
-                continue
-            if _CLEARED_NOTE_RE.match(content):
-                continue
-            age = len(user_indices) - bisect_right(user_indices, index)
-            if age < KEEP_TOOL_TURNS:
+            if not content or not isinstance(content, str) or _CLEARED_NOTE_RE.match(content):
                 continue
             tokens = count_tokens(content)
-            old.append((index, tokens))
-            old_tokens += tokens
-            oldest_age = max(oldest_age, age)
-
-        if not old or (old_tokens <= _OLD_BUDGET and oldest_age <= _MAX_AGE):
-            return
-
-        tool_names = self._tool_call_names()
-        total_tokens_saved = 0
-        for index, tokens in old:
-            msg = self.messages[index]
             name = tool_names.get(msg.get("tool_call_id")) or msg.get("name")
             msg["content"] = _CLEARED_NOTE.format(
                 original=tokens, tool=f" from {name}" if name else ""
             )
-            total_tokens_saved += max(0, tokens - count_tokens(msg["content"]))
+            freed += max(0, tokens - count_tokens(msg["content"]))
+            cleared[name or "unknown tool"] = cleared.get(name or "unknown tool", 0) + 1
 
-        # Notify the client when significant trimming occurs so the UI can
-        # show a "Show history" indicator explaining the token drop.
-        # Skip if condensation is already running to avoid interfering with
-        # its own started/finished broadcast cycle.
-        if (
-            total_tokens_saved > 1000
-            and printr._connection_manager
-            and not is_condensing
-        ):
+        if not cleared:
+            return 0
+
+        # Every clearing is logged, whatever its size: the model loses data here,
+        # and "why did it forget the price?" has to be answerable from the log.
+        tools = ", ".join(
+            f"{name} ×{count}" if count > 1 else name for name, count in cleared.items()
+        )
+        await printr.print_async(
+            f"The conversation passed its size limit. Removed {sum(cleared.values())} "
+            f"older tool responses from the history (~{freed:,} tokens): {tools}.",
+            color=LogType.INFO,
+            source=LogSource.WINGMAN,
+            source_name=self._wingman_name,
+        )
+
+        # The client shows a "Show history" card for a drop like this. Skipped
+        # while condensation runs: it sends its own started/finished pair.
+        if freed > 1000 and printr._connection_manager and not is_condensing:
             from api.commands import ConversationCondensationCommand
 
-            if self.conversation_summary:
-                summary = (
-                    f"{self.conversation_summary}\n\n---\n\n"
-                    f"[Older tool responses removed — ~{total_tokens_saved:,} tokens saved]"
-                )
-            else:
-                summary = (
-                    f"Tool responses older than {KEEP_TOOL_TURNS} turns were removed "
-                    f"from the history.\n"
-                    f"~{total_tokens_saved:,} tokens saved.\n\n"
-                    f"The tool data of the last {KEEP_TOOL_TURNS} turns stays complete. "
-                    f"Older data is removed once it piles up, to keep the "
-                    f"conversation context efficient."
-                )
-
+            note = f"[Older tool responses removed — ~{freed:,} tokens saved]"
             await printr._connection_manager.broadcast(
                 ConversationCondensationCommand(
                     wingman_name=self._wingman_name,
                     status="finished",
-                    estimated_tokens_saved=total_tokens_saved,
-                    summary_text=summary,
+                    estimated_tokens_saved=freed,
+                    summary_text=(
+                        f"{self.conversation_summary}\n\n---\n\n{note}"
+                        if self.conversation_summary
+                        else note
+                    ),
                 )
             )
+        return freed
 
     # ------------------------------------------------------------------
     # User / assistant message management
@@ -460,7 +462,7 @@ class ConversationManager:
 
     def estimate_tokens(self) -> int:
         """Estimate the total token count of the current conversation history."""
-        return sum(count_tokens(self._message_text_content(m)) for m in self.messages)
+        return sum(count_tokens(self.message_text(m)) for m in self.messages)
 
     # ------------------------------------------------------------------
     # Reset
@@ -505,7 +507,8 @@ class ConversationManager:
     # Text extraction / conversion helpers
     # ------------------------------------------------------------------
 
-    def _extract_text_content(self, content) -> str:
+    @staticmethod
+    def _extract_text_content(content) -> str:
         """Extract text from message content, handling both string and multimodal list formats."""
         if isinstance(content, str):
             return content
@@ -519,6 +522,29 @@ class ConversationManager:
                     parts.append(part)
             return " ".join(parts)
         return ""
+
+    @staticmethod
+    def message_text(msg) -> str:
+        """The text a message puts into a request: its content and, for a tool
+        call, the arguments. A HUD table the model wrote lives in the arguments
+        of its ``hud_add_info`` call, so leaving them out undercounts exactly
+        the messages that grow."""
+        if isinstance(msg, Mapping):
+            content, calls = msg.get("content", ""), msg.get("tool_calls")
+        else:
+            content, calls = getattr(msg, "content", ""), getattr(msg, "tool_calls", None)
+        text = ConversationManager._extract_text_content(content) or ""
+        for call in calls or []:
+            function = (
+                call.get("function") if isinstance(call, Mapping) else getattr(call, "function", None)
+            )
+            arguments = (
+                function.get("arguments") if isinstance(function, Mapping)
+                else getattr(function, "arguments", None)
+            )
+            if arguments:
+                text += "\n" + str(arguments)
+        return text
 
     def _message_text_content(self, msg) -> str:
         """Extract text content from a message for token estimation."""

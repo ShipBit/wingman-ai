@@ -274,8 +274,8 @@ await self.wingman.memory.remember(c) / .recall(q) / .context(q) / .update(id, c
 
 # MAIN AI — two clearly-different calls (both replace the removed raw LLM call):
 text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., messages=..., auto_shorten=False)
-#   single-turn side-call, NOT added to the conversation; returns a str (""). Input is CAPPED when
-#   conversation condensation is on (Wingman Pro hardcoded; own providers config.features.skill_max_input_tokens).
+#   single-turn side-call, NOT added to the conversation; returns a str (""). Input is CAPPED like a
+#   tool response: 32,000 tokens, or a quarter of a smaller main model's window (services/context_budget.py).
 #   Over the cap -> FacadeError (or truncates if auto_shorten=True). Images are charged a flat
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
