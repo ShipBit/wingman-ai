@@ -681,7 +681,7 @@ class FeaturesConfig(BaseModel):
     """Max tokens skill-originated content may feed the main model at once: a
     ctx.ai.generate side-call, or a single tool/MCP response. The side-call cap is
     only enforced while ``condense_conversation`` is enabled; the tool-response cap is
-    always on. Wingman Pro hardcodes a lower limit (8000) that users cannot change."""
+    always on. Wingman Pro uses a fixed limit (16000) that users cannot change."""
 
 
 class AudioFile(BaseModel):

@@ -38,11 +38,11 @@ from services.token_utils import count_tokens, truncate_to_tokens
 printr = Printr()
 
 SUMMARY_MAX_TOKENS = 4000
-"""Output ceiling for the summary: half the Pro cap. A page or a search result
-keeps its useful middle at this size; at 2,000 too much of it went missing.
-The extra 2,000 tokens cost about 0.1 cent per call on the support model and
-the same again on a mini-class chat model, once — the trimming after the turn
-brings every response down to 500 and then 25 tokens regardless."""
+"""Output ceiling for the summary. A page or a search result keeps its useful
+middle at this size; at 2,000 too much of it went missing. The extra 2,000
+tokens cost about 0.1 cent per call on the support model. The summary stays in
+the history for a few turns (see ``KEEP_TOOL_TURNS`` in conversation_manager),
+so a bigger one is paid for again on every call until it is cleared."""
 
 SUMMARY_REJECT_RATIO = 0.75
 """A summary at or above this share of the cap is thrown away: it would not

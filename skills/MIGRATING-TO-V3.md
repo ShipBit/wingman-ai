@@ -69,7 +69,7 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 
 > **`ai.generate` is capped.** When conversation condensation is on, the combined input
 > (system + prompt + data, plus a flat estimate per image) is limited (Wingman Pro: a fixed
-> 8,000 tokens; own provider: `features.skill_max_input_tokens`, default 16,000). Over the cap
+> 16,000 tokens; own provider: `features.skill_max_input_tokens`, default 16,000). Over the cap
 > it raises `FacadeError`, or truncates if you pass `auto_shorten=True`. For bulk text, reduce
 > it first with the much cheaper `self.wingman.local_ai.summarize(...)`.
 

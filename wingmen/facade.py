@@ -264,9 +264,11 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
     return None
 
 
-# Wingman Pro pays per-use on our dime, so it gets a fixed, lower side-call cap that
-# users cannot raise. Own-provider users use config.features.skill_max_input_tokens.
-WINGMAN_PRO_MAX_INPUT_TOKENS = 8000
+# The subscription gets a fixed cap users cannot raise: the backend refuses a request
+# over 400 KB, and one oversized tool response kept for four turns would get there.
+# Same value as the own-provider default (config.features.skill_max_input_tokens);
+# it was 8000 while we paid per use, before each account had its own allowance.
+WINGMAN_PRO_MAX_INPUT_TOKENS = 16000
 # Flat per-image token estimate — we must NOT count the raw base64 string (it would be
 # enormous and falsely trip the cap). Mirrors a high-detail image's real token cost.
 IMAGE_TOKEN_ESTIMATE = 1000
@@ -274,8 +276,8 @@ IMAGE_TOKEN_ESTIMATE = 1000
 
 def skill_input_cap(config: Any) -> int:
     """Max input tokens skill-originated content (a ctx.ai.generate side-call OR a
-    tool/MCP response) may feed the main model. Wingman Pro is hardcoded lower (we pay);
-    own providers use config.features.skill_max_input_tokens."""
+    tool/MCP response) may feed the main model. Wingman Pro is fixed; own providers
+    use config.features.skill_max_input_tokens."""
     from api.enums import ConversationProvider
 
     features = config.features
