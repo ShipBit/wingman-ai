@@ -1,0 +1,73 @@
+module: skills.sc_game_events.main
+name: ScGameEvents
+api_version: 3
+display_name: Star Citizen Events
+author: ShipBit, Mallachi
+auto_activate: true
+tags:
+  - Star Citizen
+  - Game Integration
+description:
+  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, injuries and trades, and knows where you are and which missions you have. Needs the Star Citizen log in the settings.
+  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Verletzungen und Handel, und weiß, wo du bist und welche Missionen du hast. Braucht das Star Citizen Log in den Einstellungen.
+discovery_keywords:
+  - star citizen
+  - game events
+  - mission
+  - location
+  - where am i
+custom_properties:
+  - id: react_mission
+    name: React to missions
+    hint: Contracts accepted, completed, failed and new objectives.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_safety
+    name: React to zones and safety
+    hint: Armistice zones, monitored space, restricted areas, CrimeStat.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_health
+    name: React to health
+    hint: Injuries, bleeding, medical treatment.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_ship
+    name: React to ship and hangar
+    hint: Boarding, hangar ready, low fuel, impounds.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_money
+    name: React to trades and rewards
+    hint: Rewards, fines, purchases and sales.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_location
+    name: React to travel
+    hint: Arrivals, departures and quantum travel. Can be frequent.
+    property_type: boolean
+    required: false
+    value: false
+  - id: react_session
+    name: React to session and social
+    hint: Login, party invites, calls, journal entries.
+    property_type: boolean
+    required: false
+    value: false
+  - id: max_unanswered
+    name: Reactions until you speak again
+    hint: The Wingman stops reacting after this many reactions until you say or type something.
+    property_type: number
+    required: false
+    value: 10
+  - id: remember_reactions
+    name: Remember reactions
+    hint: Keep what the Wingman said about the game in the conversation, so it can refer back to it.
+    property_type: boolean
+    required: false
+    value: true

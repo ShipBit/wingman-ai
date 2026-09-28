@@ -264,7 +264,7 @@ self.wingman.language.name / .code / .is_other          # "German" / "de" / Fals
 
 # CONVERSATION:
 self.wingman.conversation.history() / .summary          # read the live conversation
-await self.wingman.conversation.add_user(c) / .add_assistant(c) / .reset()
+await self.wingman.conversation.add_user(c) / .add_assistant(c) / .show(text) / .reset()
 await self.wingman.conversation.summarize()             # summarize the live convo (free, local)
 
 # SECRETS / MEMORY:
@@ -405,3 +405,4 @@ Pass `reasoning=True` to make the local model *think* before answering — bette
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
 | [uexcorp](uexcorp/) | Tool | Game integration, domain tags |
+| [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions |

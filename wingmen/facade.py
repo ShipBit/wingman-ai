@@ -1043,6 +1043,21 @@ class SkillConversation:
     async def add_assistant(self, content: str) -> None:
         await self._wingman.conversation.add_assistant_message(content)
 
+    async def show(self, text: str, *, skill_name: str = "") -> None:
+        """Show a line in the chat as said by this Wingman, like one of its
+        answers. Only the display: pair it with tts.speak to say it and with
+        add_assistant to put it into the history."""
+        from api.enums import LogSource, LogType
+        from services.printr import Printr
+
+        await Printr().print_async(
+            text,
+            color=LogType.POSITIVE,
+            source=LogSource.WINGMAN,
+            source_name=self._wingman.name,
+            skill_name=skill_name,
+        )
+
     async def reset(self) -> None:
         await self._wingman.reset_conversation_history()
 

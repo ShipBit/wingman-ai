@@ -1473,6 +1473,7 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.summary` | The condenser's running summary (`str`). |
 | `await .add_user(content)` | Append a user turn. |
 | `await .add_assistant(content)` | Append an assistant turn. |
+| `await .show(text, *, skill_name="")` | Show a line in the chat as said by this Wingman. Display only: pair it with `tts.speak` and `add_assistant` as needed. |
 | `await .summarize()` | Summarize the live conversation via the **free local** model (`""` if unavailable). |
 | `await .reset()` | Reset the conversation history. |
 
@@ -1539,6 +1540,10 @@ async def unload(self) -> None:
     self._sub.unsubscribe()
     await super().unload()
 ```
+
+The bundled [sc_game_events](sc_game_events/) skill is the full example: it
+reacts to events in character, keeps quiet about the history, limits how often
+it speaks, and answers questions about the state with one small tool.
 
 Each subscription has its own queue: a slow callback only delays itself, and an
 exception is logged without stopping delivery. Events from the log's history at
