@@ -13,7 +13,7 @@ from openai.types.chat import (
     ParsedFunction,
 )
 
-from api.enums import ConversationProvider, LogType
+from api.enums import ConversationProvider, LogSource, LogType
 from services.printr import Printr
 from services.token_utils import count_tokens
 
@@ -317,6 +317,7 @@ class ConversationManager:
 
         tool_names = self._tool_call_names()
         total_tokens_saved = 0
+        cleared_tools: dict[str, int] = {}
         for index, tokens in old:
             msg = self.messages[index]
             name = tool_names.get(msg.get("tool_call_id")) or msg.get("name")
@@ -324,6 +325,22 @@ class ConversationManager:
                 original=tokens, tool=f" from {name}" if name else ""
             )
             total_tokens_saved += max(0, tokens - count_tokens(msg["content"]))
+            cleared_tools[name or "unknown tool"] = cleared_tools.get(name or "unknown tool", 0) + 1
+
+        # Every clearing is logged, whatever its size: the model loses data here,
+        # and "why did it forget the price?" has to be answerable from the log.
+        tools = ", ".join(
+            f"{name} ×{count}" if count > 1 else name
+            for name, count in cleared_tools.items()
+        )
+        await printr.print_async(
+            f"Removed {len(old)} tool responses older than {KEEP_TOOL_TURNS} turns "
+            f"from the history (~{total_tokens_saved:,} tokens): {tools}. The tool "
+            f"data of the last {KEEP_TOOL_TURNS} turns stays complete.",
+            color=LogType.INFO,
+            source=LogSource.WINGMAN,
+            source_name=self._wingman_name,
+        )
 
         # Notify the client when significant trimming occurs so the UI can
         # show a "Show history" indicator explaining the token drop.

@@ -667,9 +667,11 @@ class ConversationCondenser:
                         f"{CONDENSE_SUFFIX}"
                     )
                 await printr.print_async(
-                    f"Chunk {i + 1}/{len(chunks)} exceeded context budget, truncated to fit.",
+                    f"Part {i + 1}/{len(chunks)} of the conversation was too long for the "
+                    f"support model and was cut from ~{chunk_text_tokens:,} to "
+                    f"~{max(0, safe_text_tokens):,} tokens before summarizing. The cut "
+                    f"part is not in the summary.",
                     color=LogType.WARNING,
-                    server_only=True,
                     source_name=self._wingman_name,
                     source=LogSource.WINGMAN,
                 )
@@ -692,11 +694,11 @@ class ConversationCondenser:
 
                 if result.truncated:
                     await printr.print_async(
-                        f"Chunk {i + 1}/{len(chunks)} output truncated "
-                        f"(prompt={result.prompt_tokens}, "
-                        f"completion={result.completion_tokens}).",
+                        f"The summary of part {i + 1}/{len(chunks)} hit the support "
+                        f"model's output limit and ends early "
+                        f"(~{result.completion_tokens:,} tokens written from "
+                        f"~{result.prompt_tokens:,} read).",
                         color=LogType.WARNING,
-                        server_only=True,
                         source_name=self._wingman_name,
                         source=LogSource.WINGMAN,
                     )
@@ -718,7 +720,8 @@ class ConversationCondenser:
 
         # Safety: truncate combined summaries if they exceed budget
         if count_tokens(merge_prompt) > budget.max_input_tokens:
-            overhead = count_tokens(merge_prompt) - count_tokens(combined)
+            combined_tokens = count_tokens(combined)
+            overhead = count_tokens(merge_prompt) - combined_tokens
             safe_combined = budget.max_input_tokens - overhead
             if safe_combined > 0:
                 combined = truncate_to_tokens(combined, safe_combined)
@@ -728,9 +731,10 @@ class ConversationCondenser:
                     f"{CONDENSE_MERGE_SUFFIX}"
                 )
             await printr.print_async(
-                f"Merge input exceeded context budget, truncated to fit.",
+                f"The partial summaries were too long to merge in one call and were "
+                f"cut from ~{combined_tokens:,} to ~{max(0, safe_combined):,} tokens. "
+                f"The cut part is not in the summary.",
                 color=LogType.WARNING,
-                server_only=True,
                 source_name=self._wingman_name,
                 source=LogSource.WINGMAN,
             )

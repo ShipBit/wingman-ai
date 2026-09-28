@@ -376,6 +376,16 @@ class SkillAi:
                 if auto_shorten:
                     budget = max(0, cap - system_tokens - image_tokens)
                     user_text = truncate_to_tokens(user_text, budget)
+                    from api.enums import LogSource, LogType
+                    from services.printr import Printr
+
+                    await Printr().print_async(
+                        f"A skill's request to the AI was ~{total:,} tokens, above the "
+                        f"limit of {cap:,}. Its input was cut to fit (auto_shorten).",
+                        color=LogType.WARNING,
+                        source=LogSource.WINGMAN,
+                        source_name=self._wingman.name,
+                    )
                 else:
                     raise FacadeError(
                         f"Skill tried to send ~{total} tokens to the main model, but the "

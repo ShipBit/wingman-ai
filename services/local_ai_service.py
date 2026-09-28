@@ -262,8 +262,17 @@ class LocalAiService:
         # more output (and truncate input more aggressively) on thinking calls.
         min_output = _output_reservation(bool(reasoning), safe_ctx)
         max_input = safe_ctx - system_tokens - min_output
-        if count_tokens(text) > max_input:
+        text_tokens = count_tokens(text)
+        if text_tokens > max_input:
             text = truncate_to_tokens(text, max(0, max_input))
+            # The caller loses the end of its input without knowing, so the log
+            # has to say it. Server only: support calls run in the background.
+            printr.print(
+                f"Support model input cut from ~{text_tokens:,} to ~{max(0, max_input):,} "
+                f"tokens to fit its context window.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
         input_tokens = system_tokens + count_tokens(text)
         max_tokens = max(min_output, safe_ctx - input_tokens)
         if self.settings.mode == LocalAiMode.CLOUD:

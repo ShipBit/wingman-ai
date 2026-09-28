@@ -145,6 +145,14 @@ class ToolResponseLimiter:
                 )
                 return None
             response_text, _, _, _ = structural_cut(response_text, budget.max_input_tokens)
+            await printr.print_async(
+                f"The response (~{original_tokens:,} tokens) is larger than the support "
+                f"model reads in one call. Only its first ~{count_tokens(response_text):,} "
+                f"tokens are summarized.",
+                color=LogType.LOCALMODEL,
+                source=LogSource.WINGMAN,
+                source_name=wingman_name,
+            )
 
         await printr.print_async(
             f"Summarizing the response with the support model "
