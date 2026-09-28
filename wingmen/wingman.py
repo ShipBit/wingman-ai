@@ -70,6 +70,12 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
+SUBSCRIPTION_MAX_REQUEST_CHARS = 320_000
+"""80% of the backend's ``MAX_MESSAGES_BYTES`` (400,000 characters of JSON, about
+100,000 tokens). The margin covers what is counted differently here and there:
+the backend measures ``JSON.stringify`` of what it receives, this measures the
+messages before the OpenAI client serializes them."""
+
 
 class Wingman:
     """Unified Wingman class.
@@ -741,6 +747,7 @@ class Wingman:
 
         messages = self.conversation.messages.copy()
         await self.add_context(messages)
+        messages = await self._fit_subscription_request(messages)
 
         completion = await self.actual_llm_call(messages, tools)
 
@@ -751,6 +758,41 @@ class Wingman:
             return None
 
         return completion
+
+    async def _fit_subscription_request(self, messages: list) -> list:
+        """Keep a Wingman Pro request under the backend's size limit.
+
+        The backend refuses a conversation over 400 KB of JSON ("The conversation
+        is too large"), and from then on every turn would fail the same way. With
+        condensation on that is never reached: it starts at 40,000 tokens. With it
+        off nothing shortens the history, so here the oldest turns go once the
+        request passes ``SUBSCRIPTION_MAX_REQUEST_CHARS``. Own providers are left
+        alone: their limit is the model's context window, which we do not know.
+        """
+        if (
+            self.config.features.conversation_provider
+            != ConversationProvider.WINGMAN_PRO
+        ):
+            return messages
+
+        size = sum(ConversationManager.message_chars(m) for m in messages)
+        excess = size - SUBSCRIPTION_MAX_REQUEST_CHARS
+        if excess <= 0:
+            return messages
+
+        removed = self.conversation.drop_oldest_turns(excess)
+        if not removed:
+            return messages
+
+        await printr.print_async(
+            f"The conversation reached the size limit of the Wingman subscription. "
+            f"The {removed} oldest messages were removed from the history.",
+            color=LogType.WARNING,
+            source_name=self.name,
+        )
+        messages = self.conversation.messages.copy()
+        await self.add_context(messages)
+        return messages
 
     async def _process_completion(
         self, completion: ChatCompletion, allow_tool_calls: bool = True

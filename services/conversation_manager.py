@@ -193,6 +193,49 @@ class ConversationManager:
 
         return False
 
+    @staticmethod
+    def message_chars(msg) -> int:
+        """How long a message is as JSON — the unit the Wingman Pro backend
+        measures a request in. Assistant replies are kept as the SDK's objects,
+        the rest as dicts."""
+        if isinstance(msg, Mapping):
+            return len(json.dumps(msg, ensure_ascii=False, default=str))
+        dump = getattr(msg, "model_dump_json", None)
+        if dump:
+            return len(dump(exclude_none=True))
+        return len(str(msg))
+
+    def drop_oldest_turns(self, chars_to_free: int) -> int:
+        """Remove whole turns from the front until ``chars_to_free`` are gone.
+
+        The last resort when a request would be too big to send: without
+        condensation nothing else shortens the history (see
+        ``trim_tool_responses``). A turn starts at a user message, so a tool call
+        and its responses always go together. The latest turn is never touched,
+        even if that frees less than asked — it holds the question being answered.
+
+        Returns how many messages were removed.
+        """
+        if chars_to_free <= 0:
+            return 0
+        user_indices = [
+            i for i, m in enumerate(self.messages) if self.get_message_role(m) == "user"
+        ]
+        if len(user_indices) < 2:
+            return 0
+
+        cut = 0
+        freed = 0
+        start = 0
+        for next_turn in user_indices[1:]:
+            freed += sum(self.message_chars(m) for m in self.messages[start:next_turn])
+            cut = start = next_turn
+            if freed >= chars_to_free:
+                break
+
+        del self.messages[:cut]
+        return cut
+
     def _tool_call_names(self) -> dict[str, str]:
         """``tool_call_id`` → function name, from the assistant messages."""
         names: dict[str, str] = {}
