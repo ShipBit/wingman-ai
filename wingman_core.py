@@ -90,6 +90,7 @@ from services.file import (
     get_pocket_tts_models_dir,
     get_prompt,
 )
+from services.audio.device_names import with_full_names
 from services.model_downloader import ModelDownloader
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
@@ -2285,8 +2286,7 @@ class WingmanCore(WebSocketUser):
 
     # GET /audio-devices
     def get_audio_devices(self):
-        audio_devices = sd.query_devices()
-        return audio_devices
+        return with_full_names(list(sd.query_devices()), list(sd.query_hostapis()))
 
     # GET /startup-errors
     def get_startup_errors(self):
