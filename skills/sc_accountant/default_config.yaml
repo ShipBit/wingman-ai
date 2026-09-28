@@ -1,14 +1,13 @@
 module: skills.sc_accountant.main
 name: SC_Accountant
 api_version: 3
-version: 4.9.0.4
-display_name: Star Citizen Personal ERP
+display_name: Star Citizen Accountant
 author: Mallachi
 auto_activate: true
-platforms: [windows, darwin, linux]
 tags: [Star Citizen, Finance, Operations]
 description:
-  en: Track personal money, cargo, operations, refining, fleet and plans in Simple or Advanced mode, with evidence-aware capture from SC_LogReader and a local dashboard.
+  en: Track personal money, cargo, operations, refining, fleet and plans in Simple or Advanced mode. Trades and rewards are booked from the Star Citizen log, and a dashboard shows everything on your computer or phone.
+  de: Führt deine Finanzen, Fracht, Einsätze, Raffinerie, Flotte und Pläne, einfach oder ausführlich. Käufe, Verkäufe und Belohnungen werden aus dem Star Citizen Log gebucht, und ein Dashboard zeigt alles am Rechner oder Handy.
 discovery_keywords: [accountant, ERP, profit, spending, balance, cargo, inventory, refinery, fleet, budget, operation, aUEC, reconciliation]
 prompt: |
   Use erp_report for recorded finances and operational status. Use help to discover
@@ -22,10 +21,10 @@ prompt: |
 hint:
   en: >
     <p>Personal operations, finances, inventory, refining, fleet and planning.
-    Simple keeps daily work short; Advanced reveals detailed records and costing.</p>
-    <p>Capture starts automatically from SC Log Reader in the same Wingman profile.
-    Enable and configure that reader first. Without it, manual entry remains available. Legacy accountant
-    files remain untouched; import them explicitly after reviewing the migration notes.</p>
+    Simple keeps daily work short. Advanced shows detailed records and costing.</p>
+    <p>Trades and rewards are booked automatically from the Star Citizen log. Switch
+    it on under Settings. Without it, manual entry remains available. Records of the
+    old accountant stay untouched. Ask your Wingman to import them.</p>
 examples:
   - en: How did my mining run do?
   - en: Record 500 aUEC for fuel
@@ -35,7 +34,7 @@ examples:
 custom_properties:
   - id: complexity_layer
     name: Experience
-    hint: Simple or Advanced views of the same records. Changing this setting selects the view; a dashboard selection persists until this setting changes again.
+    hint: Simple or Advanced views of the same records. The dashboard keeps its own choice until you change this setting again.
     property_type: single_select
     value: simple
     required: false
@@ -44,18 +43,6 @@ custom_properties:
         value: simple
       - label: Advanced
         value: advanced
-  - id: reader_database
-    name: SC_LogReader database
-    hint: Leave blank to connect automatically to SC Log Reader in this Wingman profile. Optionally enter a full SQLite database path to override discovery. Requires Log Reader 0.5.0 or newer. Legacy JSONL logs are not supported.
-    property_type: string
-    value: ''
-    required: false
-  - id: auto_sync_interval
-    name: Capture interval (seconds)
-    hint: Seconds between reader updates. Set to 0 to pause capture. Changes take effect at the next interval.
-    property_type: number
-    value: 15
-    required: false
   - id: dashboard_port
     name: Local dashboard port
     hint: Local port 1024-65535. Changes apply when the dashboard next starts.

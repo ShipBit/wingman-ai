@@ -12,14 +12,9 @@ from datetime import datetime
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 
-if __package__:
-    from .erp_actions import Actions
-    from .erp_intake import Intake
-    from .erp_values import ZERO, now, money, text
-else:
-    from erp_actions import Actions
-    from erp_intake import Intake
-    from erp_values import ZERO, now, money, text
+from skills.sc_accountant.erp_actions import Actions
+from skills.sc_accountant.erp_intake import Intake
+from skills.sc_accountant.erp_values import ZERO, now, money, text
 
 
 class ERP(Actions, Intake):
@@ -223,6 +218,24 @@ class ERP(Actions, Intake):
                 (now(), action, json.dumps({"input": data, "result": result})),
             )
             return result
+
+    def bind_core_reader(self, source_id, cursor):
+        """Take Core's Star Citizen log as the source from `cursor` on.
+
+        Books that read the SC Log Reader skill's database keep their history.
+        They continue after what Core's database already holds, so a trade the
+        old reader delivered is not booked a second time."""
+        with self.lock, self.db:
+            feed = self._setting("feed")
+            if feed.get("source_id"):
+                feed["previous_source_id"] = feed["source_id"]
+            feed.update(
+                source_id=text(str(source_id), maximum=200),
+                cursor=int(cursor),
+                core_reader=True,
+                error=None,
+            )
+            self._set("feed", feed)
 
     def set_feed_error(self, message):
         with self.lock, self.db:

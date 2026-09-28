@@ -4,10 +4,7 @@ from __future__ import annotations
 import copy
 import json
 
-if __package__:
-    from .erp_values import ZERO, money, now, number, text
-else:
-    from erp_values import ZERO, money, now, number, text
+from skills.sc_accountant.erp_values import ZERO, money, now, number, text
 
 ECONOMIC = {
     "shop_buy",

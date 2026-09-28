@@ -29,6 +29,11 @@ custom_skills/sc_log_reader. That skill goes:
 - A Wingman that had spoken reactions switched on gets the bundled Star
   Citizen Events skill instead, with the categories the old switches had on.
   2.x called that switch `proactive_notifications`, 0.5 `react_game_events`.
+
+SC Accountant, from the same author, is bundled now under the same folder and
+skill name, so Wingmen keep it and its books stay where they are. The custom
+copy moves out like the reader, and its two settings for finding the reader's
+database go: Core tells it where the log is.
 """
 
 import os
@@ -52,6 +57,9 @@ _ENVIRONMENTS = {"LIVE", "PTU", "EPTU", "HOTFIX", "TECH-PREVIEW"}
 _OLD_READER_MODULES = {"skills.sc_log_reader.main", "skills.sc_log_reader_2.main"}
 _OLD_READER_NAMES = {"SC_LogReader", "SCLogReader", "SCLogReader2"}
 _OLD_READER_FOLDERS = ("sc_log_reader", "sc_log_reader_2")
+_REPLACED_FOLDERS = _OLD_READER_FOLDERS + ("sc_accountant",)
+_ACCOUNTANT_MODULE = "skills.sc_accountant.main"
+_ACCOUNTANT_DROPPED = {"reader_database", "auto_sync_interval"}
 _NEW_SKILL = "ScGameEvents"
 _NEW_SKILL_MODULE = "skills.sc_game_events.main"
 
@@ -166,7 +174,18 @@ class Migration324To325(BaseMigration):
     def migrate_wingman(self, old: dict) -> dict:
         self._drop_fixed_limits(old)
         self._replace_old_reader(old)
+        self._drop_accountant_reader_settings(old)
         return old
+
+    def _drop_accountant_reader_settings(self, wingman: dict) -> None:
+        for entry in wingman.get("skills") or []:
+            if not isinstance(entry, dict) or entry.get("module") != _ACCOUNTANT_MODULE:
+                continue
+            props = entry.get("custom_properties") or []
+            kept = [p for p in props if not (isinstance(p, dict) and p.get("id") in _ACCOUNTANT_DROPPED)]
+            if len(kept) != len(props):
+                entry["custom_properties"] = kept
+                self.log("- SC Accountant finds the Star Citizen log through Core now")
 
     def _old_game_path(self) -> str | None:
         configs = path.join(get_users_dir(), self.old_version, "configs")
@@ -188,7 +207,7 @@ class Migration324To325(BaseMigration):
 
     def _retire_old_reader(self) -> None:
         custom_skills = get_custom_skills_dir()
-        for folder in _OLD_READER_FOLDERS:
+        for folder in _REPLACED_FOLDERS:
             source = path.join(custom_skills, folder)
             if not path.isdir(source):
                 continue
@@ -197,7 +216,7 @@ class Migration324To325(BaseMigration):
                 shutil.rmtree(target)
             os.makedirs(path.dirname(target), exist_ok=True)
             shutil.move(source, target)
-            self.log(f"- moved the SC Log Reader skill to {target}; Core reads the log now")
+            self.log(f"- moved the custom skill {folder} to {target}; Core does its job now")
 
     def _replace_old_reader(self, wingman: dict) -> None:
         entries = _old_reader_entries(wingman)

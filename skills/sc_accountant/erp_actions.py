@@ -7,10 +7,7 @@ import uuid
 from decimal import Decimal
 from pathlib import Path
 
-if __package__:
-    from .erp_values import ZERO, money, now, number, quantity, text
-else:
-    from erp_values import ZERO, money, now, number, quantity, text
+from skills.sc_accountant.erp_values import ZERO, money, now, number, quantity, text
 
 
 class Actions:

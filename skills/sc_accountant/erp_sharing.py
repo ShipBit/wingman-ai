@@ -20,10 +20,7 @@ def qr_png_base64(url: str) -> str | None:
     """Generate the PNG attachment understood by Wingman's chat renderer."""
     try:
         from PIL import Image, ImageDraw
-        if __package__:
-            from .accountant_ui.qrcodegen import QrCode
-        else:
-            from accountant_ui.qrcodegen import QrCode
+        from skills.sc_accountant.qrcodegen import QrCode
         qr = QrCode.encode_text(url, QrCode.Ecc.LOW)
         size, scale, border = qr.get_size(), 3, 4
         image = Image.new('RGB', ((size + 2 * border) * scale,) * 2, 'white')

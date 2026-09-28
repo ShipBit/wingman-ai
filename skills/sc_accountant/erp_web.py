@@ -182,19 +182,19 @@ def create_app(engine, *, lan_host="", access_token="") -> FastAPI:
 class ERPServer:
     """Background listener; phone sharing is explicit and limited to a QR session."""
 
-    def __init__(self, engine, port: int = 7863, *, share_on_lan: bool = False):
+    def __init__(
+        self, engine, port: int = 7863, *, share_on_lan: bool = False, access_token: str = ""
+    ):
         self._lan_host = ""
         if share_on_lan:
-            if __package__:
-                from .erp_sharing import get_lan_ip
-            else:
-                from erp_sharing import get_lan_ip
+            from skills.sc_accountant.erp_sharing import get_lan_ip
             address = get_lan_ip()
             if address:
                 parsed = ipaddress.ip_address(address)
                 if parsed.is_private and not (parsed.is_loopback or parsed.is_unspecified or parsed.is_multicast):
                     self._lan_host = address
-        self._access_token = secrets.token_urlsafe(18) if self._lan_host else ""
+        # A fixed token keeps a phone's link working across restarts.
+        self._access_token = (access_token or secrets.token_urlsafe(18)) if self._lan_host else ""
         self.app = create_app(engine, lan_host=self._lan_host, access_token=self._access_token)
         self.port = int(port)
         self._thread = None

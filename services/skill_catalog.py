@@ -36,10 +36,13 @@ _VERDICT_TO_OUTCOME = {
 
 
 # Custom skills whose job Core took over. They would run next to Core and do
-# everything twice, so they never load, whatever version is installed.
+# everything twice, so they never load, whatever version is installed. Where a
+# bundled skill has the same folder, the bundled one wins
+# (ModuleManager.read_available_skill_configs).
 REPLACED_BY_CORE = {
     "sc_log_reader": "replaced by Core's Star Citizen log reader",
     "sc_log_reader_2": "replaced by Core's Star Citizen log reader",
+    "sc_accountant": "replaced by the bundled Star Citizen Accountant",
 }
 
 
