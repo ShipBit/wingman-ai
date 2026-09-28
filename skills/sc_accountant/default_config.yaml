@@ -1,0 +1,64 @@
+module: skills.sc_accountant.main
+name: SC_Accountant
+api_version: 3
+version: 4.9.0.4
+display_name: Star Citizen Personal ERP
+author: Mallachi
+auto_activate: true
+platforms: [windows, darwin, linux]
+tags: [Star Citizen, Finance, Operations]
+description:
+  en: Track personal money, cargo, operations, refining, fleet and plans in Simple or Advanced mode, with evidence-aware capture from SC_LogReader and a local dashboard.
+discovery_keywords: [accountant, ERP, profit, spending, balance, cargo, inventory, refinery, fleet, budget, operation, aUEC, reconciliation]
+prompt: |
+  Use erp_report for recorded finances and operational status. Use help to discover
+  actions and help:ACTION for fields before erp_record. Keep answers brief.
+  Never invent prices, quantities, balances, confirmations, or missing costs.
+  Pending game requests are not completed trades. Recorded balance may differ
+  from the game wallet. Unknown costs mean incomplete profit. Simple and Advanced
+  share the same records; switching mode never clears history. Use erp_dashboard
+  for detailed editing. Import legacy records only on an explicit user request.
+  Background capture uses no model calls; never repeatedly poll through tools.
+hint:
+  en: >
+    <p>Personal operations, finances, inventory, refining, fleet and planning.
+    Simple keeps daily work short; Advanced reveals detailed records and costing.</p>
+    <p>Capture starts automatically from SC Log Reader in the same Wingman profile.
+    Enable and configure that reader first. Without it, manual entry remains available. Legacy accountant
+    files remain untouched; import them explicitly after reviewing the migration notes.</p>
+examples:
+  - en: How did my mining run do?
+  - en: Record 500 aUEC for fuel
+  - en: What cargo do I have recorded?
+  - en: Show things needing attention
+  - en: Open my accounting dashboard
+custom_properties:
+  - id: complexity_layer
+    name: Experience
+    hint: Simple or Advanced views of the same records. Changing this setting selects the view; a dashboard selection persists until this setting changes again.
+    property_type: single_select
+    value: simple
+    required: false
+    options:
+      - label: Simple
+        value: simple
+      - label: Advanced
+        value: advanced
+  - id: reader_database
+    name: SC_LogReader database
+    hint: Leave blank to connect automatically to SC Log Reader in this Wingman profile. Optionally enter a full SQLite database path to override discovery. Requires Log Reader 0.5.0 or newer. Legacy JSONL logs are not supported.
+    property_type: string
+    value: ''
+    required: false
+  - id: auto_sync_interval
+    name: Capture interval (seconds)
+    hint: Seconds between reader updates. Set to 0 to pause capture. Changes take effect at the next interval.
+    property_type: number
+    value: 15
+    required: false
+  - id: dashboard_port
+    name: Local dashboard port
+    hint: Local port 1024-65535. Changes apply when the dashboard next starts.
+    property_type: number
+    value: 7863
+    required: false

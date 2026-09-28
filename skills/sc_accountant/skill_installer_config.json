@@ -1,0 +1,43 @@
+{
+  "skill_name": "sc_accountant",
+  "display_name": "Star Citizen Personal ERP",
+  "version": "4.9.0.4",
+  "sc_target_version": "4.9.0",
+  "files": [
+    "__init__.py",
+    "install.bat",
+    "LICENSE",
+    "assets.py",
+    "atomic_io.py",
+    "default_config.yaml",
+    "futures.py",
+    "guid_resolver.py",
+    "hauling.py",
+    "logo.png",
+    "main.py",
+    "legacy_main.py",
+    "market_data.py",
+    "models.py",
+    "planning.py",
+    "positions.py",
+    "reports.py",
+    "statements.py",
+    "store.py",
+    "erp.py",
+    "erp_actions.py",
+    "erp_intake.py",
+    "erp_values.py",
+    "erp_skill.py",
+    "erp_web.py",
+    "erp_sharing.py",
+    "erp_feed.py",
+    "erp_reader_client.py",
+    "erp_launcher.py",
+    "ERP_README.md"
+  ],
+  "dirs": [
+    "accountant_ui",
+    "erp_ui"
+  ],
+  "preserve_on_update": []
+}
