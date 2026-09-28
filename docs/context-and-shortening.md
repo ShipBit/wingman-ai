@@ -35,6 +35,9 @@ The support model's window plays no part in these limits. It reads whatever it
 is given in chunks that fit its own window.
 
 One switch: **Auto-summarize conversations** (`features.condense_conversation`).
+It turns place 2 on or off, nothing else. The tool cap (1, 4) and the brake (3)
+apply either way: without them one skill could fill the model, and a long
+session would end with every request refused.
 
 ## The places
 
@@ -120,8 +123,11 @@ when a user message arrives. Only with **Auto-summarize conversations** on.
 Why the limit is 64,000 and why nothing happens below it: with the old rules
 (tool output cleared after 4 turns and 12,000 tokens) gpt-4.1-mini answered 4 of
 10 questions about data 3 to 36 turns old and invented a price or stock 3 times;
-with the history left alone it answered 8 and invented nothing. It rarely calls
-the tool again once the data is gone. A normal trading session costs the same
+with the history left alone it answered 8 and invented nothing. Once the data is
+gone the model does not call the tool again, whatever the placeholder says:
+with the wording above it invented 3 and 6 numbers in two runs and re-called the
+tool zero times. So the protection is clearing rarely. If a pilot needs an old
+number, they ask the Wingman to fetch it again. A normal trading session costs the same
 either way, because an untouched history is cached; a long tool-heavy evening
 about twice as much.
 
@@ -185,7 +191,7 @@ responses, and the history is nowhere near 64,000 tokens.
 ### B · Trading with UEX and the HUD
 
 Twenty-five turns: prices for Laranite, Agricium, Titanium, Gold and more, a
-trade route table on the HUD, edits to it. The request peaks around 14,000
+trade route table on the HUD, edits to it. The request peaks around 12,000
 tokens. Nothing is cleared. Turn 17 asks for the Titanium demand from turn 3
 and gets the exact number.
 
@@ -206,7 +212,7 @@ is lost; the note tells the model to ask the tool for less.
 
 ### E · A skill that dumps 870,000 tokens every call
 
-Cut to 32,000 tokens (a few hundred of its 25,000 JSON entries) every time,
+Cut to 32,000 tokens (892 of its 25,000 JSON entries) every time,
 with a warning in the client. On gpt-4.1-mini that is about 1.3 cents per call.
 
 ### F · A local model with an 8,000-token window
@@ -216,6 +222,12 @@ The table does not know it, so the Wingman assumes 32,000 for a local LLM:
 is refused; the Wingman learns a window of three quarters of that request,
 drops the oldest turns and retries. From then on the limits follow the learned
 window.
+
+This needs the server to refuse the request. llama.cpp's server and OpenAI-style
+APIs do ("exceeds the available context size", "maximum context length").
+Ollama does not: it cuts the prompt to its own `num_ctx` without saying so, and
+the Wingman cannot notice. There, set `num_ctx` high enough, or keep
+Auto-summarize on so the history stays under half of the assumed 32,000.
 
 ### G · Auto-summarize off, on the subscription
 
