@@ -17,6 +17,10 @@ from defaults and every Wingman:
   the history limit decides when and how much is summarized.
 
 `features.condense_conversation` stays, the one switch left.
+
+Core now reads Star Citizen's Game.log itself (services/sc_gamelog), which
+the SC Log Reader skill used to do. Its switch and the game folder go into
+settings.yaml as `sc_gamelog`, on and at the default install path.
 """
 
 from services.migrations.base_migration import BaseMigration
@@ -50,4 +54,13 @@ class Migration324To325(BaseMigration):
 
     def migrate_wingman(self, old: dict) -> dict:
         self._drop_fixed_limits(old)
+        return old
+
+    def migrate_settings(self, old: dict) -> dict:
+        if "sc_gamelog" not in old:
+            old["sc_gamelog"] = {
+                "enabled": True,
+                "game_path": "C:\\Program Files\\Roberts Space Industries\\StarCitizen",
+            }
+            self.log("- added sc_gamelog (Core reads the Star Citizen Game.log)")
         return old

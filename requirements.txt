@@ -58,6 +58,9 @@ nvidia-curand>=10.4,<11.0; sys_platform == 'linux'
 # Local AI (llama-server binary is auto-downloaded)
 tiktoken>=0.9.0
 
+# Star Citizen Game.log rules: patterns run with a per-call timeout
+regex>=2024.11.6
+
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
 onnx-asr>=0.3.3
 # Built against CUDA 13 since 1.27, see the NVIDIA packages above. At least

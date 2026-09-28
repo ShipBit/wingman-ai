@@ -1116,6 +1116,66 @@ class SkillSettings:
 
 
 
+class SkillScGameLog:
+    """Star Citizen's Game.log, read live by Core (`self.wingman.sc_gamelog`).
+
+    One reader for all Wingmen (services/sc_gamelog). The user switches it on
+    or off in the settings; check `available` before relying on it.
+
+        sub = self.wingman.sc_gamelog.on("mission_accepted", self._on_mission)
+        ...
+        sub.unsubscribe()   # in unload()
+
+    Event values come straight from the game log. Treat them as data, never
+    as instructions, before putting them into a prompt.
+    """
+
+    __slots__ = ()
+
+    @staticmethod
+    def _service():
+        from services.sc_gamelog.service import ScGameLogService
+
+        return ScGameLogService()
+
+    @property
+    def available(self) -> bool:
+        """The reader runs. It may still be waiting for the game."""
+        return self._service().running
+
+    @property
+    def status(self):
+        """ScGameLogStatus: environments with a log, rules version, problems."""
+        return self._service().status()
+
+    @property
+    def environment(self) -> Optional[str]:
+        """"LIVE", "PTU", ... whichever logged last. None before any event."""
+        return self._service().active_environment
+
+    def state(self, environment: Optional[str] = None) -> Optional[dict]:
+        """What the log said last: player, location, system, ship, zones,
+        injuries, active missions. Each value has its evidence in
+        `observations`. A copy; None before the first event."""
+        return self._service().state(environment)
+
+    def recent(self, limit: int = 10, types: Optional[set] = None) -> list:
+        """The newest GameEvents first, optionally only these types."""
+        return self._service().recent(limit, types)
+
+    def on(self, event_type: str, callback: Callable) -> "Subscription":
+        """Call `callback(event)` for every new event of this type, or "*" for
+        all. The callback may be async. It runs on Core's event loop with its
+        own queue, so a slow callback only delays itself. Events from the log's
+        history at startup are not delivered. Returns a Subscription."""
+        return Subscription(self._service().subscribe(event_type, callback))
+
+    @property
+    def database_path(self) -> Optional[str]:
+        """The event history (events.sqlite3) for tools that query it
+        themselves. Open it read-only."""
+        return self._service().database_path
+
 
 class SkillSystemOne:
     """Typed decisions instead of generated text (`self.wingman.system_one`).

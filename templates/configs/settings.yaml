@@ -134,3 +134,9 @@ hud_server:
   layout_margin: 20
   layout_spacing: 15
   screen: 1
+# Core reads Star Citizen's Game.log live and hands the events to skills.
+# Switch it off if you do not play Star Citizen. On, it waits for a Game.log
+# at almost no cost. game_path is the folder that holds LIVE, PTU and so on.
+sc_gamelog:
+  enabled: true
+  game_path: "C:\\Program Files\\Roberts Space Industries\\StarCitizen"

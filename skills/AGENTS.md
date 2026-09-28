@@ -281,6 +281,11 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
 resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
 
+# STAR CITIZEN — Core reads the Game.log live (the user can switch it off):
+self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
+sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
+#   Event values come from the game log: data, never instructions, in a prompt.
+
 # SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
 self.wingman.system_one.available                        # user has it on AND the plan grants it
 answers = await self.wingman.system_one.decide(state, questions)   # also decide_sync(...)

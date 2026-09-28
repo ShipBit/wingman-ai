@@ -8,6 +8,7 @@ from api.enums import (
     ImageStyle,
     LocalAiMode,
     PocketTtsQuality,
+    ScGameLogRulesProblem,
     SpokenLanguage,
     McpAuthType,
     McpTransportType,
@@ -1525,6 +1526,49 @@ class OtherLanguageSetting(BaseModel):
     """Its English name, e.g. "Dutch", for the conversation model."""
 
 
+class ScGameLogSettings(BaseModel):
+    """Core reads Star Citizen's Game.log live and hands the events to skills
+    (services/sc_gamelog, `self.wingman.sc_gamelog`)."""
+
+    enabled: bool
+    """Off for someone who does not play Star Citizen. On, the reader waits
+    for a Game.log at almost no cost."""
+    game_path: str
+    """The StarCitizen folder that holds LIVE, PTU and the other environments."""
+
+
+class ScGameLogMaintainer(BaseModel):
+    """Who maintains the Game.log rules, to contact when they break."""
+
+    name: str
+    discord: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ScGameLogStatus(BaseModel):
+    """What the Star Citizen log reader is doing, for the settings page."""
+
+    running: bool
+    game_path: str
+    game_path_found: bool
+    """Whether the StarCitizen folder exists."""
+    environments: list[str]
+    """Environments with a Game.log right now, e.g. ["LIVE"]."""
+    active_environment: Optional[str] = None
+    """The environment with the newest event."""
+    rules_version: str
+    rules_revision: int
+    rules_downloaded: bool
+    """False while the reader uses the rules shipped with Wingman."""
+    rules_last_success: Optional[float] = None
+    """Unix time GitHub last answered with usable rules."""
+    rules_problem: Optional[ScGameLogRulesProblem] = None
+    rules_problem_detail: Optional[str] = None
+    maintainer: ScGameLogMaintainer
+    error: Optional[str] = None
+    """Why the reader cannot run, e.g. its database cannot be opened."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1535,6 +1579,7 @@ class SettingsConfig(BaseModel):
     llama_cpp: LlamaCppSettings
     system_one: SystemOneSettings
     hud_server: HudServerSettings
+    sc_gamelog: ScGameLogSettings
     debug_mode: bool
     streamer_mode: bool
     show_token_count: bool

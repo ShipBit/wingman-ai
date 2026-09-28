@@ -9,7 +9,13 @@ from api.enums import (
     RecordingDevice,
     ToastType,
 )
-from api.interface import AudioFile, CommandActionConfig, BenchmarkResult, TokenUsage
+from api.interface import (
+    AudioFile,
+    BenchmarkResult,
+    CommandActionConfig,
+    ScGameLogStatus,
+    TokenUsage,
+)
 
 
 # We use this Marker base class for reflection to "iterate all commands"
@@ -136,6 +142,14 @@ class McpOAuthStateChangedCommand(WebSocketCommandModel):
     """True when a token was stored, False when the attempt failed."""
     error: Optional[str] = None
     """Why it failed, when it did."""
+
+
+class ScGameLogStateChangedCommand(WebSocketCommandModel):
+    """Sent when the Star Citizen log reader starts, stops, finds a Game.log
+    or gets new rules, and when the rules cannot be updated."""
+
+    command: Literal["sc_gamelog_state_changed"] = "sc_gamelog_state_changed"
+    status: ScGameLogStatus
 
 
 class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):

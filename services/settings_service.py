@@ -334,6 +334,13 @@ class SettingsService:
                 "hud_server_settings_changed", settings.hud_server
             )
 
+        # Star Citizen log reader
+        self.config_manager.settings_config.sc_gamelog = settings.sc_gamelog
+        if settings.sc_gamelog != old.sc_gamelog:
+            await self.settings_events.publish(
+                "sc_gamelog_settings_changed", settings.sc_gamelog
+            )
+
         # save the config file
         self.config_manager.save_settings_config()
 

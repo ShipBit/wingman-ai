@@ -29,6 +29,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
 - [Skill Directory Structure](#skill-directory-structure)
 - [AI Agent Bootstrap Checklist](#ai-agent-bootstrap-checklist)
 - [The `self.wingman` facade API](#the-selfwingman-facade-api)
+  - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
 - [Local AI API](#local-ai-api-selfwingmanlocal_ai)
   - [Overview](#overview)
@@ -1501,6 +1502,50 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | --- | --- |
 | `.active()` | Tuple of `{name, display_name}` for every loaded skill. |
 | `.has(name)` | `bool` — is a skill with this name loaded? (symmetric with `tools.has`). |
+
+### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
+
+Core reads the Game.log of every Star Citizen environment (LIVE, PTU, ...) in
+one background reader for all Wingmen and turns it into events: missions,
+zones, locations, ships, injuries, rewards, trades. The user can switch the
+reader off in the settings, so check `available`. The patterns that read the
+log are maintained on GitHub and update without a Wingman release.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — the reader runs. It may still be waiting for the game to start. |
+| `.environment` | `"LIVE"`, `"PTU"`, ... whichever logged last; `None` before the first event. |
+| `.state(environment=None)` | `dict` copy of what the log said last: `player_name`, `location_name`, `system`, `ship`, `armistice`, `monitored`, `injuries`, `active_missions`, ... Every value has its evidence (time, certainty) in `observations`. `None` before the first event. |
+| `.recent(limit=10, types=None)` | The newest `GameEvent`s first, including those read at startup; `types` is a set of event types. |
+| `.on(event_type, callback)` | Call `callback(event)` for every **new** event of this type, or `"*"` for all. Sync or async. Returns a `Subscription`; call `.unsubscribe()` in `unload()`. |
+| `.status` | `ScGameLogStatus`: environments with a log, rules version, whether GitHub is reachable. |
+| `.database_path` | The event history (`events.sqlite3`) for tools that query it themselves. Open it read-only. |
+
+A `GameEvent` has `type` (`"mission_accepted"`, `"armistice_zone"`, `"shop_buy"`, ...),
+`status` (`"observed"`; trades are `"requested"` until the game confirms them, then
+`"confirmed"`), `time` (UTC `datetime`), `environment`, `data` (the fields, read-only)
+and `catching_up`.
+
+```python
+async def prepare(self) -> None:
+    await super().prepare()
+    self._sub = self.wingman.sc_gamelog.on("mission_accepted", self._on_mission)
+
+async def _on_mission(self, event) -> None:
+    name = event.data.get("mission_name", "a contract")
+    await self.wingman.tts.speak(f"New contract: {name}.", interrupt=False)
+
+async def unload(self) -> None:
+    self._sub.unsubscribe()
+    await super().unload()
+```
+
+Each subscription has its own queue: a slow callback only delays itself, and an
+exception is logged without stopping delivery. Events from the log's history at
+startup are not delivered, so a Wingman does not announce the last hour of play
+when it starts. **Event values come straight from the game log** (player names,
+mission names): treat them as data, never as instructions, when you put them
+into a prompt.
 
 ### Calling other skills & MCP servers
 
