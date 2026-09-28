@@ -3,8 +3,8 @@
 import asyncio
 from typing import TYPE_CHECKING
 
-from api.enums import LocalAiMode, LogType, LogSource
-from services.conversation_manager import KEEP_TOOL_TURNS
+from api.enums import LogType, LogSource
+from services.context_budget import KEEP_TURNS, ContextBudget
 from services.file import get_prompt
 from services.printr import Printr
 from services.token_utils import count_tokens, truncate_to_tokens
@@ -17,39 +17,10 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
-_CONDENSE_TIMEOUT = 120.0
+_CONDENSE_TIMEOUT = 300.0
+"""A long history on a small local support model is summarized in many chunks,
+one call each."""
 
-# How much conversation is allowed to pile up before it gets summarised, in
-# tokens. The real limit is the smaller of this and what the support model can
-# take in one pass.
-#
-# It used to be only the model's capacity, which worked while that model always
-# had a 4096-token window. A cloud support model has a million: the trigger would
-# never fire, the history would never be condensed, and the *chat* model's
-# context would overflow instead — the opposite of what condensation is for.
-#
-# Local stays where it was: with n_ctx 4096 the capacity works out around 3000
-# tokens, so this ceiling never binds and behaviour is unchanged. Cloud gets the
-# larger number because there is no reason to throw detail away early when the
-# model can hold it — each summarisation round loses something.
-#
-# Cloud sat at 16,000 until 2026-09-14, which the trigger below turns into about
-# 8,300 real tokens: the first summary after roughly an hour of play, three or
-# four per session. That number is from the time when every turn paid full price
-# for the whole history.
-#
-# Since the memory block moved behind the history (see context_builder), the
-# history is a stable prefix and the provider caches it: measured 10 hits out of
-# 10 covering 98% of the tokens, so a tenth of the price for the repeated part.
-# 40,000 now costs about what 4,000 used to, and buys around two and a half
-# hours of conversation before anything gets summarised.
-#
-# Not higher, for three reasons: every turn pays for the whole history, cached
-# or not; the answer stops getting better past some point and only gets slower;
-# and the pathological case — a 78k-token table from a skill — has to stay
-# capped.
-_MAX_CONVERSATION_TOKENS = 6_000
-_MAX_CONVERSATION_TOKENS_CLOUD = 40_000
 
 # The text wrapped around the conversation before it goes to the support model.
 #
@@ -85,11 +56,6 @@ def condense_chunk_header(part: int, total: int) -> str:
     return f"CONVERSATION TO SUMMARIZE (part {part}/{total}):\n"
 
 
-# A condensation that frees less than this is not worth its support call, and
-# it is the sign of a prompt whose bulk is not history at all: system prompt,
-# memory block, tool definitions. Those never shrink by summarising; the user
-# needs to hear that instead of watching the number twitch.
-_MIN_CONDENSE_GAIN = 4_000
 
 
 def find_cutoff(
@@ -99,9 +65,8 @@ def find_cutoff(
 
     Keeps the most recent turns that fit in ``keep_tokens`` — always at least
     the latest ``min_turns``, however big they are. The automatic run passes
-    ``KEEP_TOOL_TURNS``: the conversation manager promises that tool output of
-    that many turns stays complete, and a summary of a price table is exactly
-    the loss that promise is there to prevent. A turn starts at a user message, so the
+    ``KEEP_TURNS``: those turns stay complete whatever their size, and a
+    summary of a price table is exactly the loss that is there to prevent. A turn starts at a user message, so the
     cut lands on a user message, and a tool group — ``assistant`` with
     ``tool_calls``, then the ``tool`` replies — always sits complete between two
     user messages. It cannot be torn apart.
@@ -161,6 +126,8 @@ class ConversationCondenser:
         self._reported_fixed_bulk = False
         """Whether the user has been told that the prompt is big but the history
         is not. Once per stretch — reset when a condensation actually runs."""
+        self._budget = ContextBudget(window=128_000)
+        """Set by ``maybe_condense``; a manual run before the first turn uses this."""
 
     @property
     def summary(self) -> str:
@@ -170,112 +137,94 @@ class ConversationCondenser:
     def is_condensing(self) -> bool:
         return self._is_condensing
 
-    def get_support_capacity(self, local_ai_service: "LocalAiService") -> int:
-        """How many conversation tokens one summarisation pass may cover.
-
-        The smaller of two numbers: what the support model can physically take
-        (system prompt and output budget already subtracted), and the ceiling we
-        set ourselves in ``_MAX_CONVERSATION_TOKENS``. Without the second, a
-        cloud model's million-token window would mean the history never gets
-        condensed at all.
-        """
-        system_prompt = get_prompt("condense-conversation")
-        budget = local_ai_service.get_token_budget(system_prompt)
-        # Subtract framing overhead (prefix/suffix around the conversation text)
-        framing_overhead = 80
-        model_capacity = max(0, budget.max_input_tokens - framing_overhead)
-
-        cloud = local_ai_service.settings.mode == LocalAiMode.CLOUD
-        ceiling = _MAX_CONVERSATION_TOKENS_CLOUD if cloud else _MAX_CONVERSATION_TOKENS
-        return min(ceiling, model_capacity)
-
-    def keep_tokens(self, local_ai_service: "LocalAiService", force: bool = False) -> int:
-        """How much recent history a condensation leaves verbatim.
-
-        The configured budget, but never more than a third of what one pass can
-        cover: a local model with a 3,000-token capacity that kept 8,000 would
-        never condense anything. A manual run keeps only the latest turn — the
-        user asked for a clean slate.
-        """
+    def keep_tokens(self, force: bool = False) -> int:
+        """How much recent history a condensation leaves verbatim: a quarter of
+        the history limit, and never fewer than ``KEEP_TURNS`` turns (see
+        ``find_cutoff``). A manual run keeps only the latest turn — the user
+        asked for a clean slate."""
         if force:
             return 0
-        capacity = self.get_support_capacity(local_ai_service)
-        return min(self._config.features.condense_keep_recent_tokens, capacity // 3)
+        return self._budget.keep_tokens
 
     def _tokens_of(self, msg) -> int:
-        return count_tokens(self._conversation._message_text_content(msg))
+        return count_tokens(self._conversation.message_text(msg))
 
     async def maybe_condense(
-        self, local_ai_service: "LocalAiService", last_prompt_tokens: int = 0
+        self,
+        local_ai_service: "LocalAiService",
+        last_prompt_tokens: int,
+        budget: ContextBudget,
     ):
-        """Check if condensation should run and fire it as a background task.
+        """Shorten the history once a request passed ``budget.history_limit``.
 
-        ``last_prompt_tokens`` is what the chat provider billed for the previous
-        call — the same number the client shows. On a cloud support model that
-        is the trigger: the ceiling is about what a turn may cost, and the
-        prompt is what costs. A local support model is bounded by what it can
-        summarise in one pass instead, so there the trigger stays on the
-        history estimate against that capacity. Also has a message count cap.
+        Below the limit nothing happens: every tool response and every turn is
+        still there, word for word. Above it, first the cheap step — old tool
+        responses become placeholders, no model call — and only if the request
+        would still be over three quarters of the limit, older turns are
+        summarized by the support model, in the background.
 
-        Fires only when there is enough to gain. A prompt that is big because
-        of tool definitions and memory, not history, would otherwise trigger
-        every turn and free next to nothing each time.
+        The support model's size plays no part in *when* this happens: it reads
+        the history in chunks that fit its window. It used to — condensation
+        fired once the history reached 70% of what the support model could read
+        in one pass, which with a local 4,096-token model meant summarizing the
+        chat every other turn.
+
+        ``last_prompt_tokens`` is what the provider billed for the previous
+        call; without it (first turn, a provider that reports no usage) the
+        history's own estimate stands in.
         """
         if not self._config.features.condense_conversation:
-            return
-        if not local_ai_service or not local_ai_service.is_ready():
             return
         if self._conversation.pending_tool_calls:
             return  # Never interrupt chained tool calls
         if self._is_condensing:
             return
 
-        capacity = self.get_support_capacity(local_ai_service)
-        cl100k_tokens = self._conversation.estimate_tokens()
-        cloud = local_ai_service.settings.mode == LocalAiMode.CLOUD
-        if cloud and last_prompt_tokens > 0:
-            token_trigger = last_prompt_tokens >= _MAX_CONVERSATION_TOKENS_CLOUD
-        else:
-            # cl100k_base estimate corrected by the calibrated ratio to the
-            # support model's own tokenizer.
-            conversation_tokens = int(cl100k_tokens * self._support_token_ratio)
-            token_trigger = conversation_tokens >= int(capacity * 0.7)
-
-        # Message count safety cap
-        user_msg_count = sum(
-            1
-            for m in self._conversation.messages
-            if self._conversation.get_message_role(m) == "user"
-        )
-        message_trigger = (
-            user_msg_count >= self._config.features.condense_max_messages
-        )
-
-        if not token_trigger and not message_trigger:
+        self._budget = budget
+        prompt = max(last_prompt_tokens, self._conversation.estimate_tokens())
+        if prompt <= budget.history_limit:
             return
 
         cutoff = find_cutoff(
             self._conversation.messages,
-            self.keep_tokens(local_ai_service),
+            budget.keep_tokens,
             self._conversation.get_message_role,
             self._tokens_of,
-            min_turns=KEEP_TOOL_TURNS,
+            min_turns=KEEP_TURNS,
         )
-        gain = sum(self._tokens_of(m) for m in self._conversation.messages[:cutoff])
-        if gain < _MIN_CONDENSE_GAIN and not message_trigger:
-            if token_trigger and last_prompt_tokens > 0 and not self._reported_fixed_bulk:
+        freed = 0
+        if cutoff > 0:
+            freed = await self._conversation.clear_tool_responses(cutoff)
+        if prompt - freed <= budget.history_limit * 0.75:
+            return
+
+        history = self._conversation.estimate_tokens()
+        if cutoff <= 0 or history <= budget.keep_tokens:
+            # The request is big, but not because of the history: system prompt,
+            # memory, tool definitions. Summarizing cannot shrink those.
+            if not self._reported_fixed_bulk:
                 self._reported_fixed_bulk = True
-                fixed = max(0, last_prompt_tokens - cl100k_tokens)
                 await printr.print_async(
-                    f"The last request was ~{last_prompt_tokens:,} tokens, but only "
-                    f"~{cl100k_tokens:,} of that is conversation history. The other "
-                    f"~{fixed:,} are the system prompt, memory and tool definitions "
-                    f"(skills, MCP servers), which summarizing cannot shrink. "
-                    f"Disable tools you do not use to bring it down.",
+                    f"The last request was ~{prompt:,} tokens, but only ~{history:,} "
+                    f"of that is conversation history. The rest is the system prompt, "
+                    f"memory and tool definitions (skills, MCP servers), which "
+                    f"summarizing cannot shrink. Disable tools you do not use to bring "
+                    f"it down.",
                     color=LogType.WARNING,
                     source_name=self._wingman_name,
                     source=LogSource.WINGMAN,
                 )
+            return
+        if not local_ai_service or not local_ai_service.is_ready():
+            await printr.print_async(
+                "The conversation is over its size limit, but no support model is "
+                "ready to summarize it. Older messages stay until the model's own "
+                "limit is reached.",
+                color=LogType.WARNING,
+                server_only=True,
+                source_name=self._wingman_name,
+                source=LogSource.WINGMAN,
+            )
             return
 
         # Runs in background so user is never blocked.
@@ -334,7 +283,7 @@ class ConversationCondenser:
             )
             return
 
-        keep_tokens = self.keep_tokens(local_ai_service, force=force)
+        keep_tokens = self.keep_tokens(force=force)
         total_msg_count = len(self._conversation.messages)
 
         # Need at least one finished turn beyond the one we keep
@@ -394,7 +343,7 @@ class ConversationCondenser:
                 keep_tokens,
                 self._conversation.get_message_role,
                 self._tokens_of,
-                min_turns=1 if force else KEEP_TOOL_TURNS,
+                min_turns=1 if force else KEEP_TURNS,
             )
 
             if cutoff_index <= 0:

@@ -660,28 +660,11 @@ class FeaturesConfig(BaseModel):
     conversation_provider: ConversationProvider
     image_generation_provider: ImageGenerationProvider
     condense_conversation: bool
-    """Enable automatic conversation condensation using the local support model.
-    When enabled, older messages are automatically summarized when the conversation
-    approaches the support model's context window capacity, saving tokens while
-    preserving key information."""
-    compress_tool_responses: bool
-    """Let the support model summarize a tool/MCP response that is over the
-    per-response cap (see ``skill_max_input_tokens``) instead of cutting it. Off, or
-    with no support model ready, the response is cut structurally: whole JSON entries
-    or whole lines, with a note saying what is missing. Responses under the cap are
-    never touched either way."""
-    condense_max_messages: int
-    """Maximum number of user messages before forcing condensation, regardless of token count.
-    Acts as a safety cap to prevent unbounded message list growth."""
-    condense_keep_recent_tokens: int = 8000
-    """How much recent history (in tokens) a condensation keeps verbatim. Whole turns,
-    always at least the latest one. Older messages get condensed into the running
-    summary. Capped at a third of what the support model can summarize in one pass."""
-    skill_max_input_tokens: int = 16000
-    """Max tokens skill-originated content may feed the main model at once: a
-    ctx.ai.generate side-call, or a single tool/MCP response. The side-call cap is
-    only enforced while ``condense_conversation`` is enabled; the tool-response cap is
-    always on. Wingman Pro uses a fixed limit (16000) that users cannot change."""
+    """Shorten the conversation once a request passes its history limit (64,000
+    tokens, or half of a smaller model's window): old tool responses are cleared
+    first, then older turns are summarized by the support model. Below the limit
+    nothing is touched. Off, the history is only shortened when a request would
+    not fit the model at all. See docs/context-and-shortening.md."""
 
 
 class AudioFile(BaseModel):

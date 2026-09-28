@@ -17,6 +17,7 @@ from providers.interfaces import (
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
+from services.context_budget import ContextOverflowError, is_context_overflow
 
 if TYPE_CHECKING:
     from api.interface import WingmanConfig
@@ -132,6 +133,10 @@ class BaseOpenAi(ABC):
                 )
             return completion
         except APIStatusError as e:
+            # A request larger than the model's window is not a dead end: the
+            # wingman learns the window from it, shortens and retries once.
+            if is_context_overflow(getattr(e, "message", "") or str(e)):
+                raise ContextOverflowError(getattr(e, "message", "") or str(e)) from e
             self._handle_api_error(e)
             return None
         except UnicodeEncodeError:
@@ -527,10 +532,13 @@ class CerebrasLlm(LlmInterface):
 @llm_provider(ConversationProvider.OPENROUTER)
 class OpenRouterLlm(LlmInterface):
     def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig",
-                 supports_tools: bool = False):
+                 supports_tools: bool = False, context_window: int | None = None):
         self._openai = openai_instance
         self._config = config
         self.supports_tools = supports_tools
+        self.context_window = context_window
+        """The smallest window among the model's endpoints, from OpenRouter;
+        the wingman sizes its budget from it (services/context_budget.py)."""
 
     async def ask(self, messages, tools=None):
         effective_tools = tools if self.supports_tools else None

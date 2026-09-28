@@ -24,6 +24,7 @@ from providers.interfaces import (
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
+from services.context_budget import ContextOverflowError, is_context_overflow
 from services.secret_keeper import SecretKeeper
 from services.spoken_language import inworld_language
 
@@ -172,6 +173,16 @@ class WingmanSubscription:
         elif response.status_code >= 500:
             self.send_server_error(response)
             return None
+        elif response.status_code == 400:
+            # "The conversation is too large": over the backend's 400 KB. The
+            # wingman shortens and retries once instead of failing every turn.
+            try:
+                message = (response.json().get("message") or "").strip()
+            except Exception:
+                message = ""
+            if "too large" in message.lower() or is_context_overflow(message):
+                raise ContextOverflowError(message)
+            response.raise_for_status()
         else:
             response.raise_for_status()
 

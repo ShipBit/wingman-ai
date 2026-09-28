@@ -793,7 +793,7 @@ class ConfigMigrationService:
 
         Migration hooks only transform what they know about. A field that
         became required in the models without a matching hook (hud_server,
-        pocket_tts, condense_max_messages, ...) would fail the final
+        pocket_tts, ...) would fail the final
         validation and silently reset the user's whole file to the shipped
         template. With the template as the base, every current field exists
         while migrated user values always win.

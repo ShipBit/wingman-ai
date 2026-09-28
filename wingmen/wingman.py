@@ -48,7 +48,15 @@ from services.secret_keeper import SecretKeeper
 from services import speech_text
 from services.printr import Printr
 from services.audio_library import AudioLibrary
+from services.context_budget import (
+    SUBSCRIPTION_MAX_REQUEST_CHARS,
+    ContextBudget,
+    ContextOverflowError,
+    learn_window,
+    model_window,
+)
 from services.conversation_manager import ConversationManager
+from services.token_utils import count_tokens
 from services.conversation_condenser import ConversationCondenser
 from services.context_builder import ContextBuilder
 from services.command_executor import CommandExecutor
@@ -70,11 +78,6 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
-SUBSCRIPTION_MAX_REQUEST_CHARS = 320_000
-"""80% of the backend's ``MAX_MESSAGES_BYTES`` (400,000 characters of JSON, about
-100,000 tokens). The margin covers what is counted differently here and there:
-the backend measures ``JSON.stringify`` of what it receives, this measures the
-messages before the OpenAI client serializes them."""
 
 
 class Wingman:
@@ -135,7 +138,9 @@ class Wingman:
         self.conversation = ConversationManager(config, settings, name)
         self.condenser = ConversationCondenser(self.conversation, config, name)
         self.context_builder = ContextBuilder(config, settings, name)
-        self.tool_executor = ToolExecutor(config, settings, name)
+        self.tool_executor = ToolExecutor(
+            config, settings, name, budget_fn=lambda: self.context_budget
+        )
         self.command_executor = CommandExecutor(
             config=config,
             audio_library=audio_library,
@@ -192,6 +197,9 @@ class Wingman:
 
         # --- Image generation (lazy) ---
         self._image_subscription = None
+        self._learned_window: int | None = None
+        """The main model's window as learned from an overflow; None until then.
+        Reset when the config changes, since the model may have changed."""
 
         # --- Filler line while a turn with tools runs (settings.filler_responses) ---
         self.filler = FillerResponder(
@@ -624,7 +632,6 @@ class Wingman:
             tool_timings.extend(iteration_timings)
 
             if instant_response:
-                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -643,7 +650,6 @@ class Wingman:
                 llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
                 if completion is None:
-                    await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                     self.metrics.add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
@@ -669,7 +675,6 @@ class Wingman:
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
-                await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
                 self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -682,7 +687,6 @@ class Wingman:
                 )
                 return None, None, None, interrupt
 
-        await self.conversation.trim_tool_responses(is_condensing=self.condenser.is_condensing)
 
         self.metrics.add_benchmark_snapshot(
             benchmark, "LLM Processing", llm_processing_time_ms
@@ -708,6 +712,8 @@ class Wingman:
 
         try:
             completion = await self.llm.ask(messages=messages, tools=tools)
+        except ContextOverflowError:
+            raise  # _llm_call learns the window and retries
         except APIConnectionError as e:
             provider = self.config.features.conversation_provider.value
             cause = e.__cause__
@@ -747,9 +753,36 @@ class Wingman:
 
         messages = self.conversation.messages.copy()
         await self.add_context(messages)
-        messages = await self._fit_subscription_request(messages)
+        messages = await self._fit_request(messages, tools)
 
-        completion = await self.actual_llm_call(messages, tools)
+        try:
+            completion = await self.actual_llm_call(messages, tools)
+        except ContextOverflowError as error:
+            # The provider says the window is smaller than we assumed. Learn it
+            # from the request that did not fit, shorten, and try once more.
+            request_tokens = self._request_tokens(messages, tools)
+            self._learned_window = learn_window(request_tokens)
+            await printr.print_async(
+                f"The model refused a request of ~{request_tokens:,} tokens as too long "
+                f"({error}). Wingman now assumes a window of "
+                f"~{self._learned_window:,} tokens for it and retries.",
+                color=LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            messages = self.conversation.messages.copy()
+            await self.add_context(messages)
+            messages = await self._fit_request(messages, tools)
+            try:
+                completion = await self.actual_llm_call(messages, tools)
+            except ContextOverflowError as again:
+                await printr.print_async(
+                    f"The model refused the shortened request too: {again}",
+                    color=LogType.ERROR,
+                    source=LogSource.WINGMAN,
+                    source_name=self.name,
+                )
+                return None
 
         if self.last_gpt_call != thiscall:
             await printr.print_async(
@@ -759,35 +792,68 @@ class Wingman:
 
         return completion
 
-    async def _fit_subscription_request(self, messages: list) -> list:
-        """Keep a Wingman Pro request under the backend's size limit.
+    @property
+    def context_budget(self) -> ContextBudget:
+        """What this wingman may send, from its main model's window. See
+        services/context_budget.py."""
+        return ContextBudget(
+            model_window(
+                self.config,
+                reported=getattr(self.llm, "context_window", None),
+                learned=self._learned_window,
+            )
+        )
 
-        The backend refuses a conversation over 400 KB of JSON ("The conversation
-        is too large"), and from then on every turn would fail the same way. With
-        condensation on that is never reached: it starts at 40,000 tokens. With it
-        off nothing shortens the history, so here the oldest turns go once the
-        request passes ``SUBSCRIPTION_MAX_REQUEST_CHARS``. Own providers are left
-        alone: their limit is the model's context window, which we do not know.
+    @staticmethod
+    def _request_tokens(messages: list, tools: list | None) -> int:
+        text = sum(
+            count_tokens(ConversationManager.message_text(m)) for m in messages
+        )
+        return text + (count_tokens(json.dumps(tools)) if tools else 0)
+
+    async def _fit_request(self, messages: list, tools: list | None) -> list:
+        """The brake: drop the oldest whole turns while a request is over what
+        the model can take.
+
+        The model's window is the limit (``ContextBudget.brake``), and on the
+        subscription also the backend's 400 KB, past which it refuses the
+        conversation. Below both nothing happens. With condensation on the
+        history limit keeps requests far below this; with it off this is the
+        only thing that shortens the history.
         """
+        budget = self.context_budget
+        excess_tokens = self._request_tokens(messages, tools) - budget.brake
+        excess_chars = 0
         if (
             self.config.features.conversation_provider
-            != ConversationProvider.WINGMAN_PRO
+            == ConversationProvider.WINGMAN_PRO
         ):
+            size = sum(ConversationManager.message_chars(m) for m in messages)
+            excess_chars = size - SUBSCRIPTION_MAX_REQUEST_CHARS
+        if excess_tokens <= 0 and excess_chars <= 0:
             return messages
 
-        size = sum(ConversationManager.message_chars(m) for m in messages)
-        excess = size - SUBSCRIPTION_MAX_REQUEST_CHARS
-        if excess <= 0:
-            return messages
-
-        removed = self.conversation.drop_oldest_turns(excess)
+        removed = 0
+        if excess_tokens > 0:
+            removed += self.conversation.drop_oldest_turns(
+                excess_tokens,
+                size_of=lambda m: count_tokens(ConversationManager.message_text(m)),
+            )
+        if excess_chars > 0:
+            removed += self.conversation.drop_oldest_turns(excess_chars)
         if not removed:
             return messages
 
+        limit = (
+            "the size limit of the Wingman subscription"
+            if excess_chars > 0
+            else f"what the model can take (~{budget.brake:,} tokens)"
+        )
         await printr.print_async(
-            f"The conversation reached the size limit of the Wingman subscription. "
-            f"The {removed} oldest messages were removed from the history.",
+            f"The conversation reached {limit}. The {removed} oldest messages "
+            f"were removed from the history.",
             color=LogType.WARNING,
+            source=LogSource.WINGMAN,
             source_name=self.name,
         )
         messages = self.conversation.messages.copy()
@@ -840,7 +906,6 @@ class Wingman:
             get_command_fn=self.command_executor.get_command,
             execute_command_fn=self.command_executor.execute_command,
             play_to_user_fn=self.play_to_user,
-            local_ai_service=self.local_ai_service,
             update_tool_response_fn=self.conversation.update_tool_response,
             add_tool_response_fn=self.conversation.add_tool_response,
             pending_tool_calls=self.conversation.pending_tool_calls,
@@ -970,7 +1035,9 @@ class Wingman:
             content,
             images=images,
             condense_fn=lambda: self.condenser.maybe_condense(
-                self.local_ai_service, self.metrics.last_turn_prompt_tokens
+                self.local_ai_service,
+                self.metrics.last_turn_prompt_tokens,
+                self.context_budget,
             ),
         )
 
@@ -1248,6 +1315,7 @@ class Wingman:
 
             self.config = config
             self._propagate_config(config)
+            self._learned_window = None
 
             await self._update_skill_configs(config)
             await self.skill_manager.apply_disabled_tools(config)
