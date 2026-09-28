@@ -102,6 +102,11 @@ class HUD(Skill):
         # Persistent items storage
         self._persistent_items: dict[str, dict] = {}
 
+        # Earlier contents of info panels, newest last, for hud_restore_info.
+        # Kept in memory only: it is there to undo a mistake a few messages
+        # ago, not to survive a restart.
+        self._panel_history: dict[str, list[str]] = {}
+
         # Data persistence
         self.data_path = get_writable_dir(path.join("skills", "hud", "data"))
         self.persistent_file = path.join(
@@ -925,6 +930,18 @@ class HUD(Skill):
 
     # ─────────────────────────────── Persistence ─────────────────────────────── #
 
+    PANEL_HISTORY_DEPTH = 10
+
+    def _remember(self, title: str) -> None:
+        """Keep the current content of an info panel before it is replaced or
+        removed. The panel moves to the end, so "restore the last one" finds it."""
+        item = self._persistent_items.get(title)
+        if not item or item.get('is_progress'):
+            return
+        versions = self._panel_history.pop(title, [])
+        versions.append(item.get('description', ''))
+        self._panel_history[title] = versions[-self.PANEL_HISTORY_DEPTH:]
+
     def _save_persistent_items(self):
         """Save persistent items to file."""
         try:
@@ -1093,7 +1110,10 @@ class HUD(Skill):
         duration: Optional[float] = None
     ) -> str:
         """
-        Add or update a persistent information panel on the HUD overlay.
+        Add or update a persistent information panel on the HUD overlay. An update
+        replaces the whole panel: to change one line, send the complete new content.
+        If this conversation does not show the panel's current content, call
+        hud_list_info first instead of guessing it.
 
         Supports Markdown: headers (#), **bold**, *italic*, `code`, lists, tables,
         blockquotes, and images via ![caption](source), where source is a local
@@ -1108,6 +1128,20 @@ class HUD(Skill):
             return "HUD server is not available."
 
         valid_duration = duration if duration and duration > 0 else None
+
+        # A model that says "removed that line" but sends the panel unchanged
+        # hears it here, instead of a success it would repeat to the pilot.
+        current = self._persistent_items.get(title)
+        if (
+            current
+            and not current.get('is_progress')
+            and current.get('description') == description_markdown
+            and current.get('duration') == valid_duration
+        ):
+            return (
+                f"Nothing changed: info panel '{title}' already shows exactly this content."
+            )
+        self._remember(title)
 
         self._persistent_items[title] = {
             'description': description_markdown,
@@ -1132,7 +1166,8 @@ class HUD(Skill):
     @tool()
     async def hud_remove_info(self, title: str) -> str:
         """
-        Remove a persistent information panel from the HUD.
+        Remove a whole persistent information panel from the HUD. To remove only a
+        line from a panel, use hud_add_info with the new content instead.
 
         :param title: The title of the info panel to remove.
         """
@@ -1142,10 +1177,12 @@ class HUD(Skill):
         # Reported as removed whatever happened, so a title that was never
         # there came back as a success and the model told the user so.
         resolved = await self._resolve_title(title)
-        if resolved is None or self._persistent_items.pop(resolved, None) is None:
+        if resolved is None or resolved not in self._persistent_items:
             known = ", ".join(self._persistent_items) or "none"
             return f"No info panel called '{title}'. Currently on the HUD: {known}."
         title = resolved
+        self._remember(title)
+        self._persistent_items.pop(title, None)
 
         self._send_command_sync(
             self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
@@ -1200,6 +1237,8 @@ class HUD(Skill):
         cleared_count = len(items_to_remove)
 
         for title in items_to_remove:
+            if save:
+                self._remember(title)
             self._persistent_items.pop(title, None)
             if self._client:
                 self._send_command_sync(
@@ -1210,6 +1249,54 @@ class HUD(Skill):
             self._save_persistent_items()
 
         return f"Cleared {cleared_count} item(s) from HUD."
+
+    @tool()
+    async def hud_restore_info(self, title: Optional[str] = None) -> str:
+        """
+        Bring back an info panel the way it was before it was last changed, removed
+        or cleared. Use this when the pilot wants a panel back or a change undone,
+        instead of rewriting the panel from memory. Each call goes one step further back.
+
+        :param title: The panel to restore. Leave empty for the panel changed last.
+        """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
+        if not self._panel_history:
+            return "There is no earlier version of any info panel to restore."
+        if title:
+            match = next(
+                (t for t in self._panel_history if t.lower() == title.strip().lower()),
+                None,
+            )
+        else:
+            match = next(reversed(self._panel_history))
+        if match is None:
+            known = ", ".join(self._panel_history)
+            return f"No earlier version of '{title}'. Panels that have one: {known}."
+
+        versions = self._panel_history[match]
+        description = versions.pop()
+        if not versions:
+            del self._panel_history[match]
+
+        self._persistent_items[match] = {
+            'description': description,
+            'duration': None,
+            'added_at': time.time(),
+            'expiry': None
+        }
+        self._send_command_sync(
+            self._client.add_item(
+                group_name=self._group_name,
+                element=WindowType.PERSISTENT,
+                title=match,
+                description=description,
+                duration=None
+            )
+        )
+        self._save_persistent_items()
+        return f"Restored info panel '{match}'. It now shows:\n{description}"
 
     @tool()
     async def hud_show_progress(
