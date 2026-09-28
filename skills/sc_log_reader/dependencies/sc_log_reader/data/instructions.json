@@ -1,0 +1,2981 @@
+{
+  "format_version": 1,
+  "engine_version": 3,
+  "package_id": "sc_log_reader_2",
+  "revision": 4,
+  "version": "0.3.0-evidence-state",
+  "release_notes": "Evidence timestamps and uncertain state; explicit contract withdrawal; observed refinery and emergency wording. Requires reader 0.3.0. Manual approval and next-startup activation. Build qualification remains incomplete.",
+  "verified_game_builds": [],
+  "framing": {
+    "record_start": "^<\\d{4}-\\d\\d-\\d\\dT",
+    "timestamp": "^<([^>]+)>",
+    "notification": "Added notification\\s+\"(.*?)(?:\"(?=\\s*(?:\\[\\d+\\]\\s+to queue|MissionId\\b))|$)",
+    "notification_continuation": "^\\s*(?::\\s*\"\\s*\\[\\d+\\]\\s+to queue\\.|Access (?:them|it) at (?:a )?destination Freight Elevator\\s*$)",
+    "game_build": "BackupNameAttachment=\" Build\\((\\d+)\\)"
+  },
+  "ignore_records": [
+    {
+      "contains": "UpdateNotificationItem",
+      "source": "record.text"
+    }
+  ],
+  "lookups": {
+    "ship_manufacturer_prefixes": [
+      "AEGS_",
+      "ANVL_",
+      "ORIG_",
+      "CRUS_",
+      "DRAK_",
+      "MISC_",
+      "RSI_",
+      "ARGO_",
+      "BANU_",
+      "CNOU_",
+      "ESPR_",
+      "GAMA_",
+      "KRIG_",
+      "TMBL_",
+      "VNCL_",
+      "XIAN_",
+      "XNAA_"
+    ],
+    "ship_manufacturer_names": [
+      "Aegis",
+      "Anvil",
+      "Origin",
+      "Crusader",
+      "Drake",
+      "MISC",
+      "RSI",
+      "Argo",
+      "Banu",
+      "Consolidated",
+      "Esperia",
+      "Gatac",
+      "Kruger",
+      "Tumbril",
+      "Vanduul",
+      "Aopoa",
+      "Mirai",
+      "C.O.",
+      "Grey's"
+    ],
+    "cosmetic_ports": [
+      "Beard_ItemPort",
+      "Body_ItemPort",
+      "Eyebrow_ItemPort",
+      "Eyedetail_ItemPort",
+      "Eyelashes_ItemPort",
+      "Eyes_ItemPort",
+      "Hair_ItemPort",
+      "Head_ItemPort",
+      "Lens_ItemPort",
+      "Piercings_Eyebrows_ItemPort",
+      "Piercings_L_Ear_ItemPort",
+      "Piercings_L_Eye_ItemPort",
+      "Piercings_Nose_ItemPort",
+      "Piercings_R_Ear_ItemPort",
+      "Piercings_R_Eye_ItemPort",
+      "Scar_ItemPort",
+      "Tattoo_ItemPort",
+      "Teeth_ItemPort",
+      "Universal_Scalp_ItemPort",
+      "legacy_mobiglas_screen_attach",
+      "mobiglas_attach",
+      "mobiglas_screen_attach",
+      "universal_necksock",
+      "universal_necksock_undersuit"
+    ],
+    "locations": {
+      "RR_MIC_LEO": {
+        "name": "Port Tressler",
+        "system": "Stanton"
+      },
+      "RR_HUR_LEO": {
+        "name": "Everus Harbor",
+        "system": "Stanton"
+      },
+      "RR_CRU_LEO": {
+        "name": "Seraphim",
+        "system": "Stanton"
+      },
+      "RR_ARC_LEO": {
+        "name": "Baijini Point",
+        "system": "Stanton"
+      },
+      "RR_HUR_L1": {
+        "name": "HUR-L1",
+        "system": "Stanton"
+      },
+      "RR_HUR_L2": {
+        "name": "HUR-L2",
+        "system": "Stanton"
+      },
+      "RR_HUR_L3": {
+        "name": "HUR-L3",
+        "system": "Stanton"
+      },
+      "RR_HUR_L4": {
+        "name": "HUR-L4",
+        "system": "Stanton"
+      },
+      "RR_HUR_L5": {
+        "name": "HUR-L5",
+        "system": "Stanton"
+      },
+      "RR_CRU_L1": {
+        "name": "CRU-L1",
+        "system": "Stanton"
+      },
+      "RR_CRU_L2": {
+        "name": "CRU-L2",
+        "system": "Stanton"
+      },
+      "RR_CRU_L3": {
+        "name": "CRU-L3",
+        "system": "Stanton"
+      },
+      "RR_CRU_L4": {
+        "name": "CRU-L4",
+        "system": "Stanton"
+      },
+      "RR_CRU_L5": {
+        "name": "CRU-L5",
+        "system": "Stanton"
+      },
+      "RR_ARC_L1": {
+        "name": "ARC-L1",
+        "system": "Stanton"
+      },
+      "RR_ARC_L2": {
+        "name": "ARC-L2",
+        "system": "Stanton"
+      },
+      "RR_ARC_L3": {
+        "name": "ARC-L3",
+        "system": "Stanton"
+      },
+      "RR_ARC_L4": {
+        "name": "ARC-L4",
+        "system": "Stanton"
+      },
+      "RR_ARC_L5": {
+        "name": "ARC-L5",
+        "system": "Stanton"
+      },
+      "RR_MIC_L1": {
+        "name": "MIC-L1",
+        "system": "Stanton"
+      },
+      "RR_MIC_L2": {
+        "name": "MIC-L2",
+        "system": "Stanton"
+      },
+      "RR_MIC_L3": {
+        "name": "MIC-L3",
+        "system": "Stanton"
+      },
+      "RR_MIC_L4": {
+        "name": "MIC-L4",
+        "system": "Stanton"
+      },
+      "RR_MIC_L5": {
+        "name": "MIC-L5",
+        "system": "Stanton"
+      },
+      "Stanton1_Lorville": {
+        "name": "Lorville",
+        "system": "Stanton"
+      },
+      "HUR_Lorville": {
+        "name": "Lorville",
+        "system": "Stanton"
+      },
+      "Stanton2_Area18": {
+        "name": "Area 18",
+        "system": "Stanton"
+      },
+      "Stanton3_Area18": {
+        "name": "Area 18",
+        "system": "Stanton"
+      },
+      "ARC_Area18": {
+        "name": "Area 18",
+        "system": "Stanton"
+      },
+      "Stanton2_Orison": {
+        "name": "Orison",
+        "system": "Stanton"
+      },
+      "Stanton3_Orison": {
+        "name": "Orison",
+        "system": "Stanton"
+      },
+      "CRU_Orison": {
+        "name": "Orison",
+        "system": "Stanton"
+      },
+      "Stanton4_NewBabbage": {
+        "name": "New Babbage",
+        "system": "Stanton"
+      },
+      "MIC_NewBabbage": {
+        "name": "New Babbage",
+        "system": "Stanton"
+      },
+      "Stanton1a": {
+        "name": "Arial",
+        "system": "Stanton"
+      },
+      "Stanton1b": {
+        "name": "Aberdeen",
+        "system": "Stanton"
+      },
+      "Stanton1c": {
+        "name": "Magda",
+        "system": "Stanton"
+      },
+      "Stanton1d": {
+        "name": "Ita",
+        "system": "Stanton"
+      },
+      "Stanton2a": {
+        "name": "Lyria",
+        "system": "Stanton"
+      },
+      "Stanton2b": {
+        "name": "Wala",
+        "system": "Stanton"
+      },
+      "Stanton3a": {
+        "name": "Cellin",
+        "system": "Stanton"
+      },
+      "Stanton3b": {
+        "name": "Daymar",
+        "system": "Stanton"
+      },
+      "Stanton3c": {
+        "name": "Yela",
+        "system": "Stanton"
+      },
+      "Stanton4a": {
+        "name": "Calliope",
+        "system": "Stanton"
+      },
+      "Stanton4b": {
+        "name": "Clio",
+        "system": "Stanton"
+      },
+      "Stanton4c": {
+        "name": "Euterpe",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSEdmond": {
+        "name": "HDMS-Edmond",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSHadley": {
+        "name": "HDMS-Hadley",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSOparei": {
+        "name": "HDMS-Oparei",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSPinewood": {
+        "name": "HDMS-Pinewood",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSStanhope": {
+        "name": "HDMS-Stanhope",
+        "system": "Stanton"
+      },
+      "Stanton1_HurdynMining_HDMSThedus": {
+        "name": "HDMS-Thedus",
+        "system": "Stanton"
+      },
+      "Stanton1a_HurdynMining_HDMSBezdek": {
+        "name": "HDMS-Bezdek",
+        "system": "Stanton"
+      },
+      "Stanton1a_HurdynMining_HDMSLathan": {
+        "name": "HDMS-Lathan",
+        "system": "Stanton"
+      },
+      "Stanton1b_HurdynMining_HDMSAnderson": {
+        "name": "HDMS-Anderson",
+        "system": "Stanton"
+      },
+      "Stanton1b_HurdynMining_HDMSNorgaard": {
+        "name": "HDMS-Norgaard",
+        "system": "Stanton"
+      },
+      "Stanton1c_HurdynMining_HDMSHahn": {
+        "name": "HDMS-Hahn",
+        "system": "Stanton"
+      },
+      "Stanton1c_HurdynMining_HDMSPerlman": {
+        "name": "HDMS-Perlman",
+        "system": "Stanton"
+      },
+      "Stanton1d_HurdynMining_HDMSRyder": {
+        "name": "HDMS-Ryder",
+        "system": "Stanton"
+      },
+      "Stanton1d_HurdynMining_HDMSWoodruff": {
+        "name": "HDMS-Woodruff",
+        "system": "Stanton"
+      },
+      "Stanton2a_IndyFarmer_GalleteFamily": {
+        "name": "Gallete Family Farms",
+        "system": "Stanton"
+      },
+      "Stanton2a_EMShelter_AshburnChannel": {
+        "name": "Ashburn Channel",
+        "system": "Stanton"
+      },
+      "Stanton2b_ArcCorpMining_Area141": {
+        "name": "ArcCorp Mining Area 141",
+        "system": "Stanton"
+      },
+      "Stanton2b_ShubinMining_SCD1": {
+        "name": "Shubin Mining Facility SCD-1",
+        "system": "Stanton"
+      },
+      "Stanton4_RayariHydro_Deltana": {
+        "name": "Rayari Deltana Research Outpost",
+        "system": "Stanton"
+      },
+      "Stanton4c_IndyFarm_BudsGrowery": {
+        "name": "Bud's Growery",
+        "system": "Stanton"
+      },
+      "Stanton1_DistributionCentre_Covalex_S1DC06": {
+        "name": "Covalex S1DC06",
+        "system": "Stanton"
+      },
+      "Stanton1_DistributionCentre_DupreeIndustrial_ManufacturingFacility": {
+        "name": "Dupree Industrial",
+        "system": "Stanton"
+      },
+      "Stanton1_DistributionCentre_Greycat_ComplexB": {
+        "name": "Greycat Complex B",
+        "system": "Stanton"
+      },
+      "GrimHex": {
+        "name": "GrimHEX",
+        "system": "Stanton"
+      },
+      "GH_GrimHex": {
+        "name": "GrimHEX",
+        "system": "Stanton"
+      },
+      "RR_Grim_Hex": {
+        "name": "GrimHEX",
+        "system": "Stanton"
+      },
+      "Nyx_Levski": {
+        "name": "Levski",
+        "system": "Nyx"
+      },
+      "NYX_Levski": {
+        "name": "Levski",
+        "system": "Nyx"
+      },
+      "Nyx_Kaboos": {
+        "name": "Kaboos",
+        "system": "Nyx"
+      },
+      "RR_JP_NyxCastra": {
+        "name": "Nyx-Castra Jump Point",
+        "system": "Jump Point"
+      },
+      "RR_JP_StantonPyro": {
+        "name": "Stanton-Pyro Jump Point",
+        "system": "Jump Point"
+      },
+      "JP_StantonPyro": {
+        "name": "Stanton-Pyro Jump Point",
+        "system": "Jump Point"
+      },
+      "RR_JP_NyxPyro": {
+        "name": "Nyx-Pyro Jump Point",
+        "system": "Jump Point"
+      },
+      "RR_JP_PyroNyx": {
+        "name": "Pyro-Nyx Jump Point",
+        "system": "Jump Point"
+      },
+      "RR_JP_StantonMagnus": {
+        "name": "Stanton-Nyx Jump Point",
+        "system": "Jump Point"
+      },
+      "JP_StantonMagnus": {
+        "name": "Stanton-Nyx Jump Point",
+        "system": "Jump Point"
+      },
+      "Pyro_Ruin": {
+        "name": "Ruin Station",
+        "system": "Pyro"
+      },
+      "PYRO_Ruin": {
+        "name": "Ruin Station",
+        "system": "Pyro"
+      }
+    },
+    "system_prefixes": {
+      "Stanton": "Stanton",
+      "RR_HUR": "Stanton",
+      "RR_CRU": "Stanton",
+      "RR_ARC": "Stanton",
+      "RR_MIC": "Stanton",
+      "RR_Grim": "Stanton",
+      "HUR_": "Stanton",
+      "ARC_": "Stanton",
+      "CRU_": "Stanton",
+      "MIC_": "Stanton",
+      "GH_": "Stanton",
+      "GrimHex": "Stanton",
+      "Pyro": "Pyro",
+      "PYRO": "Pyro",
+      "Nyx": "Nyx",
+      "NYX": "Nyx",
+      "RR_JP_": "Jump Point",
+      "JP_": "Jump Point"
+    }
+  },
+  "rules": [
+    {
+      "id": "armistice_zone.v1",
+      "event": "armistice_zone",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^(?:Entering|Entered|Leaving|Exited)\\s+Armistice Zone\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "regex": "^(?:Entering|Entered)\\b",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "entered"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^(?:Leaving|Exited)\\b",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "exited"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "id": "attachment_received.v1",
+      "event": "attachment_received",
+      "match": {
+        "all": [
+          {
+            "contains": "AttachmentReceived",
+            "source": "record.text"
+          },
+          {
+            "contains": "Status[persistent]",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_name": "Player",
+            "port": "Port"
+          }
+        },
+        {
+          "op": "exclude_values",
+          "field": "port",
+          "table": "cosmetic_ports"
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Attachment\\[([^\\]]+),\\s*([^\\]]+),\\s*(\\d+)\\]",
+          "groups": {
+            "1": "item_full_name",
+            "2": "item_short_name",
+            "3": "entity_id"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "item_full_name",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "item_short_name",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "elapsed": "Elapsed"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "elapsed",
+          "steps": [
+            "float"
+          ]
+        }
+      ],
+      "required": [
+        "port",
+        "entity_id"
+      ]
+    },
+    {
+      "id": "bleeding.v1",
+      "event": "bleeding",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Bleeding",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "blueprint_received.v1",
+      "event": "blueprint_received",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Received Blueprint\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ],
+            "objective_id": [
+              "ObjectiveId",
+              "ObjectiveID"
+            ]
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "\"\\s*\\[(\\d+)\\]\\s+to queue",
+          "groups": {
+            "1": "notification_id"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^Received Blueprint\\s*:\\s*([^:]+)",
+          "groups": {
+            "1": "blueprint_name"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "blueprint_name",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": [
+        "blueprint_name"
+      ]
+    },
+    {
+      "id": "cargo_transfer.v1",
+      "event": "cargo_transfer",
+      "match": {
+        "contains": "FreightElevatorUIProvider::FillUnstowRequest",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "FreightElevatorKiosk_(\\w+)\\[(\\d+)\\]",
+          "groups": {
+            "1": "kiosk_type",
+            "2": "kiosk_id"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Entities:\\s*(\\d+)",
+          "groups": {
+            "1": "entity_count"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "entity_count",
+          "steps": [
+            "int"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Location:\\s*(\\d+)",
+          "groups": {
+            "1": "location_id"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "RequestId:\\s*(\\d+)",
+          "groups": {
+            "1": "request_id"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "request_id",
+          "steps": [
+            "int"
+          ]
+        }
+      ],
+      "required": [
+        "request_id"
+      ]
+    },
+    {
+      "id": "channel_change.v2",
+      "event": "channel_change",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "(?:joined|left(?:\\s+the)?)\\s+channel\\s+'",
+            "source": "record.text",
+            "flags": [
+              "IGNORECASE"
+            ]
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "(joined|left(?:\\s+the)?)\\s+channel\\s+'([^\\r\\n]+)'\\s*\\.?\\s*:?\\s*$",
+          "groups": {
+            "1": "action_text",
+            "2": "channel_raw"
+          },
+          "flags": [
+            "IGNORECASE"
+          ]
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "regex": "^joined$",
+                "source": "fields.action_text",
+                "flags": [
+                  "IGNORECASE"
+                ]
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "joined"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^left",
+                "source": "fields.action_text",
+                "flags": [
+                  "IGNORECASE"
+                ]
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "left"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "fields.channel_raw",
+          "pattern": "\\s+:\\s+([^\\r\\n]+)$",
+          "groups": {
+            "1": "owner"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "owner",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "regex": "^\\s*(?:@vehicle_Name)?(((?:AEGS_|ANVL_|ORIG_|CRUS_|DRAK_|MISC_|RSI_|ARGO_|BANU_|CNOU_|ESPR_|GAMA_|KRIG_|TMBL_|VNCL_|XIAN_|XNAA_)[A-Za-z0-9_]+))(?:\\s+:\\s+.*)?\\s*$",
+                "source": "fields.channel_raw"
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "fields.channel_raw",
+                  "pattern": "^\\s*(?:@vehicle_Name)?(((?:AEGS_|ANVL_|ORIG_|CRUS_|DRAK_|MISC_|RSI_|ARGO_|BANU_|CNOU_|ESPR_|GAMA_|KRIG_|TMBL_|VNCL_|XIAN_|XNAA_)[A-Za-z0-9_]+))(?:\\s+:\\s+.*)?\\s*$",
+                  "groups": {
+                    "1": "ship_name",
+                    "2": "ship_class"
+                  }
+                },
+                {
+                  "op": "normalize",
+                  "field": "ship_name",
+                  "steps": [
+                    {
+                      "regex_replace": {
+                        "pattern": "_",
+                        "replacement": " "
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^\\s*((?:Aegis|Anvil|Origin|Crusader|Drake|MISC|RSI|Argo|Banu|Consolidated|Esperia|Gatac|Kruger|Tumbril|Vanduul|Aopoa|Mirai|C\\.O\\.|Grey's)\\s+(?!\\s*:).+?)(?:\\s+:\\s+[^\\r\\n]+)?\\s*$",
+                "source": "fields.channel_raw"
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "fields.channel_raw",
+                  "pattern": "^\\s*((?:Aegis|Anvil|Origin|Crusader|Drake|MISC|RSI|Argo|Banu|Consolidated|Esperia|Gatac|Kruger|Tumbril|Vanduul|Aopoa|Mirai|C\\.O\\.|Grey's)\\s+(?!\\s*:).+?)(?:\\s+:\\s+[^\\r\\n]+)?\\s*$",
+                  "groups": {
+                    "1": "ship_name"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "action",
+        "channel_raw"
+      ]
+    },
+    {
+      "id": "commodity_buy.v1",
+      "event": "commodity_buy",
+      "match": {
+        "all": [
+          {
+            "contains": "CommodityUIProvider",
+            "source": "record.text"
+          },
+          {
+            "contains": "SendCommodityBuyRequest",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "resource_guid": "resourceGUID",
+            "price": "price",
+            "quantity_raw": "quantity"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "price",
+          "steps": [
+            "float"
+          ]
+        },
+        {
+          "op": "quantity_with_unit",
+          "source": "fields.quantity_raw",
+          "number_field": "quantity_cscu",
+          "unit_field": "quantity_unit",
+          "accepted_units": [
+            "cSCU"
+          ]
+        }
+      ],
+      "required": [
+        "price",
+        "quantity_cscu",
+        "quantity_unit"
+      ]
+    },
+    {
+      "id": "commodity_sell.v1",
+      "event": "commodity_sell",
+      "match": {
+        "all": [
+          {
+            "contains": "CommodityUIProvider",
+            "source": "record.text"
+          },
+          {
+            "contains": "SendCommoditySellRequest",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "resource_guid": "resourceGUID",
+            "price": "amount",
+            "quantity": "quantity"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "price",
+          "steps": [
+            "float"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "quantity",
+          "steps": [
+            "int"
+          ]
+        }
+      ],
+      "required": [
+        "price",
+        "quantity"
+      ]
+    },
+    {
+      "id": "contract_accepted.v1",
+      "event": "contract_accepted",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Accepted\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Accepted",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "contract_available.v1",
+      "event": "contract_available",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Available\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Available",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "contract_complete.v1",
+      "event": "contract_complete",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Complete\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Complete",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "contract_failed.v1",
+      "event": "contract_failed",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Failed\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Failed",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "contract_shared.v1",
+      "event": "contract_shared",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Shared\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Shared",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "crimestat_increased.v1",
+      "event": "crimestat_increased",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^CrimeStat\\ Rating\\ Increased",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "emergency_services.v1",
+      "event": "emergency_services",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^(?:Standby, Local )?Emergency Services Are En Route\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "entered_monitored_space.v1",
+      "event": "entered_monitored_space",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Entered Monitored Space\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "monitored": true
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "exited_monitored_space.v1",
+      "event": "exited_monitored_space",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Exited Monitored Space\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "monitored": false
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "fatal_collision.v1",
+      "event": "fatal_collision",
+      "match": {
+        "contains": "<FatalCollision>",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "PlayerPilot:\\s*(\\d+)",
+          "groups": {
+            "1": "player_pilot"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "player_pilot",
+          "steps": [
+            "int"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Fatal Collision occured for vehicle\\s+(\\S+)",
+          "groups": {
+            "1": "vehicle"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Zone:\\s*([^,\\]]+)",
+          "groups": {
+            "1": "zone"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "zone",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "vehicle",
+          "steps": [
+            {
+              "regex_replace": {
+                "pattern": "_\\d+$",
+                "replacement": ""
+              }
+            }
+          ]
+        }
+      ],
+      "required": [
+        "player_pilot"
+      ]
+    },
+    {
+      "id": "fined.v1",
+      "event": "fined",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Fined\\s+",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^Fined\\s+([\\d,]+)\\s+(UEC)\\b",
+          "groups": {
+            "1": "amount",
+            "2": "currency"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "amount",
+          "steps": [
+            "remove_commas"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "\"\\s*\\[(\\d+)\\]\\s+to queue",
+          "groups": {
+            "1": "notification_id"
+          }
+        }
+      ],
+      "required": [
+        "amount",
+        "currency"
+      ]
+    },
+    {
+      "id": "fuel_low.v1",
+      "event": "fuel_low",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Low\\ Fuel",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "hangar_queue.v1",
+      "event": "hangar_queue",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Joined hangar queue\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "action": "queued"
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "hangar_ready.v1",
+      "event": "hangar_ready",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Hangar Request Completed\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "action": "ready"
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "incapacitated.v1",
+      "event": "incapacitated",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Incapacitated",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "incoming_call.v1",
+      "event": "incoming_call",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Incoming call\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^Incoming call\\s*:\\s*(.*)$",
+          "groups": {
+            "1": "caller"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "caller",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "injury.v1",
+      "event": "injury",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^\\w+\\s+Injury Detected\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "(\\w+)\\s+Injury Detected",
+          "groups": {
+            "1": "severity"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Injury Detected\\s*-\\s*([^-]+)\\s*-",
+          "groups": {
+            "1": "body_part"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Tier\\s*(\\d+)",
+          "groups": {
+            "1": "tier"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "body_part",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "tier",
+          "steps": [
+            "int"
+          ]
+        }
+      ],
+      "required": [
+        "body_part",
+        "severity"
+      ]
+    },
+    {
+      "id": "insurance_claim.v1",
+      "event": "insurance_claim",
+      "match": {
+        "all": [
+          {
+            "contains": "CWallet::ProcessClaimToNextStep",
+            "source": "record.text"
+          },
+          {
+            "contains": "New Insurance Claim Request",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "entitlementURN:\\s*([^,]+)",
+          "groups": {
+            "1": "urn"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "urn",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "requestId\\s*:\\s*(\\d+)",
+          "groups": {
+            "1": "request_id"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "request_id",
+          "steps": [
+            "int"
+          ]
+        }
+      ],
+      "required": [
+        "urn"
+      ]
+    },
+    {
+      "id": "insurance_claim_complete.v1",
+      "event": "insurance_claim_complete",
+      "match": {
+        "contains": "CWallet::RmMulticastOnProcessClaimCallback",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "entitlementURN:\\s*([^,]+)",
+          "groups": {
+            "1": "urn"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "urn",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "result:\\s*(\\d+)",
+          "groups": {
+            "1": "result"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "result",
+          "steps": [
+            "int"
+          ]
+        }
+      ],
+      "required": [
+        "urn",
+        "result"
+      ]
+    },
+    {
+      "id": "inventory_location_update.v1",
+      "event": "inventory_location_update",
+      "match": {
+        "contains": "<Update Inventory Location>",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Landing\\s*\\[(\\w+)\\]\\s*->\\s*\\[(\\w+)\\]",
+          "groups": {
+            "1": "landing_from",
+            "2": "landing_to"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Location\\s*\\[(\\w+)\\]\\s*->\\s*\\[(\\w+)\\]",
+          "groups": {
+            "1": "loc_from",
+            "2": "loc_to"
+          }
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_name": "Player"
+          }
+        }
+      ],
+      "required": [
+        "loc_from",
+        "loc_to"
+      ]
+    },
+    {
+      "id": "join_pu.v1",
+      "event": "join_pu",
+      "match": {
+        "all": [
+          {
+            "contains": "<Join PU>",
+            "source": "record.text"
+          },
+          {
+            "contains": "shard[",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "shard": "shard",
+            "server_address": "address"
+          }
+        }
+      ],
+      "required": [
+        "shard"
+      ]
+    },
+    {
+      "id": "journal_entry.v1",
+      "event": "journal_entry",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Journal Entry Added\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Journal Entry Added",
+          "field": "subject"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "subject"
+      ]
+    },
+    {
+      "id": "jurisdiction_change.v1",
+      "event": "jurisdiction_change",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Entered\\s+.+?\\s+Jurisdiction\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^Entered\\s+(.+?)\\s+Jurisdiction",
+          "groups": {
+            "1": "jurisdiction"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "jurisdiction",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": [
+        "jurisdiction"
+      ]
+    },
+    {
+      "id": "location_change.v1",
+      "event": "location_change",
+      "match": {
+        "contains": "RequestLocationInventory",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "location": "Location",
+            "player_name": "Player"
+          }
+        }
+      ],
+      "required": [
+        "location"
+      ]
+    },
+    {
+      "id": "med_bed_heal.v1",
+      "event": "med_bed_heal",
+      "match": {
+        "all": [
+          {
+            "contains": "<MED BED HEAL>",
+            "source": "record.text"
+          },
+          {
+            "contains": "Perform surgery event Success",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "collect_true_fields",
+          "field": "healed_parts",
+          "names": [
+            "head",
+            "torso",
+            "leftArm",
+            "rightArm",
+            "leftLeg",
+            "rightLeg"
+          ]
+        }
+      ],
+      "required": [
+        "healed_parts"
+      ]
+    },
+    {
+      "id": "monitored_space_down.v1",
+      "event": "monitored_space_down",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Monitored Space Down\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "monitored": false
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "monitored_space_restored.v1",
+      "event": "monitored_space_restored",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Monitored Space Restored\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "constant",
+          "fields": {
+            "monitored": true
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "objective_complete.v1",
+      "event": "objective_complete",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Objective Complete\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Objective Complete",
+          "field": "objective"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "objective",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "objective_new.v1",
+      "event": "objective_new",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^New Objective\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "New Objective",
+          "field": "objective"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "objective",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "objective_withdrawn.v1",
+      "event": "objective_withdrawn",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Objective Withdrawn\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Objective Withdrawn",
+          "field": "objective"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "objective",
+        "mission_id"
+      ]
+    },
+    {
+      "id": "party_invite.v1",
+      "event": "party_invite",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^[^\\n]+\\nParty Invite Received\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^([^\\n]+)\\nParty Invite Received",
+          "groups": {
+            "1": "from_player"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "from_player",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": [
+        "from_player"
+      ]
+    },
+    {
+      "id": "party_left.v1",
+      "event": "party_left",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^You\\ have\\ left\\ the\\ party\\.",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "party_member_joined.v1",
+      "event": "party_member_joined",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^.+ has joined the party\\.",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^(.+?) has joined the party\\.",
+          "groups": {
+            "1": "player_name"
+          }
+        }
+      ],
+      "required": [
+        "player_name"
+      ]
+    },
+    {
+      "id": "personal_inventory_data.v1",
+      "event": "personal_inventory_data",
+      "match": {
+        "contains": "RequestOrCreatePersonalInventoryData",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "inventoryID\\[\\d+:Location:(\\w+)\\]",
+          "groups": {
+            "1": "location_guid"
+          }
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_name": "Player"
+          }
+        }
+      ],
+      "required": [
+        "location_guid"
+      ]
+    },
+    {
+      "id": "qt_arrived.v1",
+      "event": "qt_arrived",
+      "match": {
+        "contains": "Quantum Drive has arrived at final destination",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "([A-Za-z0-9_]+)\\[\\d+\\]\\|CSCItemNavigation::OnQuantumDriveArrived",
+          "groups": {
+            "1": "entity_class"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "entity_class",
+          "steps": [
+            {
+              "regex_replace": {
+                "pattern": "_\\d+$",
+                "replacement": ""
+              }
+            }
+          ]
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "qt_calibration_complete_group.v1",
+      "event": "qt_calibration_complete_group",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Quantum Travel Calibration Complete By\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^Quantum Travel Calibration Complete By\\s+(.+?)(?::\\s*)?$",
+          "groups": {
+            "1": "player"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "player",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": [
+        "player"
+      ]
+    },
+    {
+      "id": "quantum_calibration_complete.v1",
+      "event": "quantum_calibration_complete",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Quantum Travel Calibration Complete(?!\\s+By\\b)\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "quantum_calibration_started.v1",
+      "event": "quantum_calibration_started",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Quantum Travel Calibration Started\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Quantum Travel Calibration Started By\\s+([^:]+)",
+          "groups": {
+            "1": "player"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "player",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "quantum_route_set.v1",
+      "event": "quantum_route_set",
+      "match": {
+        "contains": "Player Selected Quantum Target",
+        "source": "record.text"
+      },
+      "read": [],
+      "required": []
+    },
+    {
+      "id": "refinery_complete.v1",
+      "event": "refinery_complete",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^(?:A )?Refinery Work Order\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "Refinery Work Order.*?at\\s+([^:\\\"]+)",
+          "groups": {
+            "1": "location"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "location",
+          "steps": [
+            "trim"
+          ]
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "refinery_submitted.v1",
+      "event": "refinery_submitted",
+      "match": {
+        "contains": "MiningShopUIProvider::OnRefineryRequest",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "currency_type": "currencyType"
+          }
+        }
+      ],
+      "required": [
+        "player_id"
+      ]
+    },
+    {
+      "id": "restricted_area.v1",
+      "event": "restricted_area",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^(?:Leaving\\s+)?Restricted Area\\b",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "regex": "^Leaving\\b",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "exited"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^Restricted Area\\b",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "action": "entered"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "id": "reward_earned.v2",
+      "event": "reward_earned",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^(?:You've earned\\s*:|Awarded\\s+)",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ],
+            "objective_id": [
+              "ObjectiveId",
+              "ObjectiveID"
+            ]
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "\"\\s*\\[(\\d+)\\]\\s+to queue",
+          "groups": {
+            "1": "notification_id"
+          }
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "regex": "^Awarded\\s+([\\d,]+)\\s+aUEC\\b",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "notification.text",
+                  "pattern": "^Awarded\\s+([\\d,]+)\\s+(aUEC)\\b",
+                  "groups": {
+                    "1": "amount",
+                    "2": "currency"
+                  }
+                },
+                {
+                  "op": "normalize",
+                  "field": "amount",
+                  "steps": [
+                    "remove_commas"
+                  ]
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^You've earned\\s*:\\s*[\\d,]+\\s+aUEC\\b",
+                "source": "notification.text",
+                "flags": [
+                  "IGNORECASE"
+                ]
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "notification.text",
+                  "pattern": "^You've earned\\s*:\\s*([\\d,]+)\\s+(aUEC)\\b",
+                  "groups": {
+                    "1": "amount",
+                    "2": "currency"
+                  },
+                  "flags": [
+                    "IGNORECASE"
+                  ]
+                },
+                {
+                  "op": "normalize",
+                  "field": "amount",
+                  "steps": [
+                    "remove_commas"
+                  ]
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^You've earned\\s*:\\s*[\\d,]+\\s+[A-Za-z]",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "notification.text",
+                  "pattern": "^You've earned\\s*:\\s*([\\d,]+)\\s*([A-Za-z][\\w ]*)",
+                  "groups": {
+                    "1": "quantity",
+                    "2": "item_name"
+                  }
+                },
+                {
+                  "op": "normalize",
+                  "field": "quantity",
+                  "steps": [
+                    "remove_commas"
+                  ]
+                },
+                {
+                  "op": "normalize",
+                  "field": "item_name",
+                  "steps": [
+                    "trim"
+                  ]
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^You've earned\\s*:\\s*[\\d,]+\\s*:?[\\s]*$",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "capture",
+                  "source": "notification.text",
+                  "pattern": "^You've earned\\s*:\\s*([\\d,]+)",
+                  "groups": {
+                    "1": "unresolved_number"
+                  }
+                },
+                {
+                  "op": "normalize",
+                  "field": "unresolved_number",
+                  "steps": [
+                    "remove_commas"
+                  ]
+                }
+              ]
+            },
+            {
+              "when": {
+                "regex": "^You've earned\\s*:\\s*[^\\d\\s]",
+                "source": "notification.text"
+              },
+              "steps": [
+                {
+                  "op": "notification_payload",
+                  "label": "You've earned",
+                  "field": "item_name"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "item_name",
+          "steps": [
+            {
+              "regex_replace": {
+                "pattern": "\\s*\\nAccess (?:them|it) at (?:a )?destination Freight Elevator\\s*$",
+                "replacement": ""
+              }
+            },
+            "trim"
+          ]
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "session_start.v1",
+      "event": "session_start",
+      "match": {
+        "contains": "AccountLoginCharacterStatus_Character",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "name\\s+(\\S+)",
+          "groups": {
+            "1": "player_name"
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "geid\\s+(\\S+)",
+          "groups": {
+            "1": "player_geid"
+          }
+        }
+      ],
+      "required": [
+        "player_geid"
+      ]
+    },
+    {
+      "id": "shop_buy.v1",
+      "event": "shop_buy",
+      "match": {
+        "all": [
+          {
+            "any": [
+              {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              }
+            ]
+          },
+          {
+            "any": [
+              {
+                "contains": "SendShopBuyRequest",
+                "source": "record.text"
+              },
+              {
+                "contains": "SendStandardItemBuyRequest",
+                "source": "record.text"
+              }
+            ]
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "item_guid": "itemClassGUID",
+            "item_name": "itemName",
+            "currency_type": "currencyType",
+            "price": "client_price",
+            "quantity": "quantity"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "price",
+          "steps": [
+            "float"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "quantity",
+          "steps": [
+            "int"
+          ]
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shopping"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shop_ui"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "price",
+        "quantity"
+      ]
+    },
+    {
+      "id": "shop_sell.v1",
+      "event": "shop_sell",
+      "match": {
+        "all": [
+          {
+            "any": [
+              {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              }
+            ]
+          },
+          {
+            "any": [
+              {
+                "contains": "SendShopSellRequest",
+                "source": "record.text"
+              },
+              {
+                "contains": "SendStandardItemSellRequest",
+                "source": "record.text"
+              }
+            ]
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "item_guid": "itemClassGUID",
+            "item_name": "itemName",
+            "currency_type": "currencyType",
+            "price": "client_price",
+            "quantity": "quantity"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "price",
+          "steps": [
+            "float"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "quantity",
+          "steps": [
+            "int"
+          ]
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shopping"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shop_ui"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "price",
+        "quantity"
+      ]
+    },
+    {
+      "id": "shop_transaction_result.v1",
+      "event": "shop_transaction_result",
+      "match": {
+        "all": [
+          {
+            "any": [
+              {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              }
+            ]
+          },
+          {
+            "contains": "RmShopFlowResponse",
+            "source": "record.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_id": "playerId",
+            "shop_id": "shopId",
+            "shop_name": "shopName",
+            "kiosk_id": "kioskId",
+            "kiosk_state": "kioskState",
+            "result": "result",
+            "transaction_type": "type"
+          }
+        },
+        {
+          "op": "choose",
+          "cases": [
+            {
+              "when": {
+                "contains": "ShoppingProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shopping"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "contains": "ShopUIProvider",
+                "source": "record.text"
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shop_ui"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "result"
+      ]
+    },
+    {
+      "id": "transaction_complete.v1",
+      "event": "transaction_complete",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Transaction\\ Complete",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ],
+            "objective_id": [
+              "ObjectiveId",
+              "ObjectiveID"
+            ]
+          }
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "\"\\s*\\[(\\d+)\\]\\s+to queue",
+          "groups": {
+            "1": "notification_id"
+          }
+        }
+      ],
+      "required": []
+    },
+    {
+      "id": "user_login.v1",
+      "event": "user_login",
+      "match": {
+        "contains": "User Login Success",
+        "source": "record.text"
+      },
+      "read": [
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "player_name": "Handle"
+          }
+        }
+      ],
+      "required": [
+        "player_name"
+      ]
+    },
+    {
+      "id": "vehicle_impounded.v1",
+      "event": "vehicle_impounded",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Vehicle Impounded\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Vehicle Impounded",
+          "field": "reason"
+        }
+      ],
+      "required": [
+        "reason"
+      ]
+    },
+    {
+      "id": "money_sent.v1",
+      "event": "money_sent",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^You sent\\s+",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "capture",
+          "source": "notification.text",
+          "pattern": "^You sent\\s+([^:]+):\\s*([\\d,]+)\\s+(aUEC)\\b",
+          "groups": {
+            "1": "recipient",
+            "2": "amount",
+            "3": "currency"
+          }
+        },
+        {
+          "op": "normalize",
+          "field": "recipient",
+          "steps": [
+            "trim"
+          ]
+        },
+        {
+          "op": "normalize",
+          "field": "amount",
+          "steps": [
+            "remove_commas"
+          ]
+        },
+        {
+          "op": "capture",
+          "source": "record.text",
+          "pattern": "\"\\s*\\[(\\d+)\\]\\s+to queue",
+          "groups": {
+            "1": "notification_id"
+          }
+        }
+      ],
+      "required": [
+        "recipient",
+        "amount",
+        "currency"
+      ]
+    },
+    {
+      "id": "contract_withdrawn.v1",
+      "event": "contract_withdrawn",
+      "match": {
+        "all": [
+          {
+            "contains": "SHUDEvent",
+            "source": "record.text"
+          },
+          {
+            "regex": "^Contract Withdrawn\\s*:",
+            "source": "notification.text"
+          }
+        ]
+      },
+      "read": [
+        {
+          "op": "notification_payload",
+          "label": "Contract Withdrawn",
+          "field": "mission_name"
+        },
+        {
+          "op": "bracket_fields",
+          "source": "record.text",
+          "fields": {
+            "mission_id": [
+              "MissionId",
+              "MissionID"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mission_name",
+        "mission_id"
+      ]
+    }
+  ],
+  "minimum_reader_version": "0.3.0"
+}
