@@ -9,6 +9,7 @@ from api.enums import (
     LocalAiMode,
     PocketTtsQuality,
     ScGameLogRulesProblem,
+    SkillRequirement,
     SpokenLanguage,
     McpAuthType,
     McpTransportType,
@@ -910,6 +911,10 @@ class SkillConfig(CustomClassConfig):
     examples: Optional[list[LocalizedMetadata]] = None
     platforms: Optional[list[str]] = None
     """List of supported platforms: 'windows', 'darwin' (macOS), 'linux'. If None, skill works on all platforms."""
+    requires: Optional[list[SkillRequirement]] = None
+    """Core services that must be switched on in the settings, like the HUD or
+    the Star Citizen log reader. The client greys the skill out until they are.
+    None means the skill needs none."""
     auto_activate: Optional[bool] = False
     """If True, this skill's tools are always available without LLM activation.
     Use for event-driven skills or skills that should always be active when enabled.

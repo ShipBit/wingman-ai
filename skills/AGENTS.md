@@ -200,6 +200,7 @@ name: YourSkillName                    # Must match class name exactly
 display_name: Your Skill Name
 author: Your Name
 auto_activate: false                   # Default. Only set true for hook-only or 1-2 tiny tools.
+requires: [sc_gamelog]                 # Optional: hud_server and/or sc_gamelog must be on in the settings.
 tags:
   - Utility
 description:

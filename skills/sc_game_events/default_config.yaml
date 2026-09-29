@@ -2,7 +2,9 @@ module: skills.sc_game_events.main
 name: ScGameEvents
 api_version: 3
 display_name: Star Citizen Events
-author: ShipBit, Mallachi
+author: Mallachi
+requires:
+  - sc_gamelog
 auto_activate: true
 tags:
   - Star Citizen

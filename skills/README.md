@@ -698,6 +698,13 @@ auto_activate: false # Auto-enable for all Wingmen? (see Auto-Activation section
 # should only be activated when explicitly added to a Wingman's config.
 discoverable_by_default: true
 
+# Core services that must be switched on in the settings. The client greys
+# the skill out and tells the user which setting to turn on first.
+# hud_server = the HUD (Windows only), sc_gamelog = the Star Citizen log.
+# Leave it out when your skill needs neither.
+requires:
+  - sc_gamelog
+
 # CRITICAL: This is how the AI finds your skill!
 description:
   en: |

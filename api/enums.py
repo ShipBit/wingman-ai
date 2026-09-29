@@ -193,6 +193,19 @@ class ScGameLogRulesProblem(Enum):
     """The published rules need a newer Wingman."""
 
 
+class SkillRequirement(Enum):
+    """A Core service a skill needs switched on in the settings.
+
+    Declared in a skill's manifest under `requires`. The client greys the
+    skill out and tells the user which setting to turn on first.
+    """
+
+    HUD_SERVER = "hud_server"
+    """The HUD (settings.hud_server). Runs on Windows only."""
+    SC_GAMELOG = "sc_gamelog"
+    """The Star Citizen log reader (settings.sc_gamelog)."""
+
+
 class LocalAiMode(Enum):
     """Where the support model runs.
 
@@ -386,6 +399,10 @@ class ScGameLogRulesProblemEnumModel(BaseEnumModel):
     sc_gamelog_rules_problem: ScGameLogRulesProblem
 
 
+class SkillRequirementEnumModel(BaseEnumModel):
+    skill_requirement: SkillRequirement
+
+
 class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
 
@@ -421,6 +438,7 @@ ENUM_TYPES = {
     "CoreState": CoreStateEnumModel,
     "LocalAiMode": LocalAiModeEnumModel,
     "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
+    "SkillRequirement": SkillRequirementEnumModel,
     "SpokenLanguage": SpokenLanguageEnumModel,
     "PocketTtsQuality": PocketTtsQualityEnumModel,
     "ImageStyle": ImageStyleEnumModel,

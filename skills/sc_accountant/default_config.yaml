@@ -3,6 +3,8 @@ name: SC_Accountant
 api_version: 3
 display_name: Star Citizen Accountant
 author: Mallachi
+requires:
+  - sc_gamelog
 auto_activate: true
 tags: [Star Citizen, Finance, Operations]
 description:
