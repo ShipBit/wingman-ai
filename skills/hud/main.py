@@ -162,18 +162,6 @@ class HUD(Skill):
         """Validate skill configuration."""
         errors = await super().validate()
 
-        # Check if HUD server is enabled
-        hud_settings = getattr(self.settings, 'hud_server', None)
-        if not hud_settings or not hud_settings.enabled:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="HUD Server is not enabled in global settings. "
-                           "Go to Settings → HUD Server and enable it.",
-                    error_type=WingmanInitializationErrorType.UNKNOWN
-                )
-            )
-
         # Validate accent_color
         accent_color = self.retrieve_custom_property_value("accent_color", errors)
         if not self._is_valid_hex_color(accent_color):
@@ -652,7 +640,7 @@ class HUD(Skill):
         if not hud_settings or not hud_settings.enabled:
             await printr.print_async(
                 "[HUD] HUD Server is not enabled in global settings.",
-                color=LogType.ERROR,
+                color=LogType.INFO,
                 server_only=True
             )
             self.active = False
