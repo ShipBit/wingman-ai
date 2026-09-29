@@ -22,8 +22,8 @@ Core now reads Star Citizen's Game.log itself (services/sc_gamelog), which
 the community SC Log Reader skill did before, installed as a custom skill in
 custom_skills/sc_log_reader. That skill goes:
 
-- Its folder moves out of custom_skills to custom_skills_replaced, so it can
-  never run next to Core's reader and announce everything twice.
+- Its folder in custom_skills is deleted, so it can never run next to Core's
+  reader and announce everything twice. Its data in generated_files stays.
 - Every Wingman loses its entry and its name in `discoverable_skills`.
 - The game folder from its settings becomes `sc_gamelog.game_path`.
 - A Wingman that had spoken reactions switched on gets the bundled Star
@@ -32,7 +32,7 @@ custom_skills/sc_log_reader. That skill goes:
 
 SC Accountant, from the same author, is bundled now under the same folder and
 skill name, so Wingmen keep it and its books stay where they are. The custom
-copy moves out like the reader, and its two settings for finding the reader's
+copy is deleted like the reader, and its two settings for finding the reader's
 database go: Core tells it where the log is.
 """
 
@@ -211,12 +211,8 @@ class Migration324To325(BaseMigration):
             source = path.join(custom_skills, folder)
             if not path.isdir(source):
                 continue
-            target = path.join(path.dirname(custom_skills), "custom_skills_replaced", folder)
-            if path.exists(target):
-                shutil.rmtree(target)
-            os.makedirs(path.dirname(target), exist_ok=True)
-            shutil.move(source, target)
-            self.log(f"- moved the custom skill {folder} to {target}; Core does its job now")
+            shutil.rmtree(source, ignore_errors=True)
+            self.log(f"- removed the custom skill {folder}, Wingman ships it now")
 
     def _replace_old_reader(self, wingman: dict) -> None:
         entries = _old_reader_entries(wingman)
