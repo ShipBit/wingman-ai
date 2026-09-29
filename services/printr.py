@@ -215,6 +215,7 @@ class Printr(WebSocketUser):
         additional_data: dict = None,
         benchmark_result: BenchmarkResult = None,
         token_usage: TokenUsage = None,
+        wingman_name: str = None,
     ):
         # Build the server (terminal) display string
         server_text = text
@@ -255,6 +256,7 @@ class Printr(WebSocketUser):
                 additional_data=additional_data,
                 benchmark_result=benchmark_result,
                 token_usage=token_usage,
+                wingman_name=wingman_name,
             )
 
     def toast(self, text: str):

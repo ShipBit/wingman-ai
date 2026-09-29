@@ -375,6 +375,7 @@ class SkillAi:
                     color=LogType.WARNING,
                     source=LogSource.WINGMAN,
                     source_name=self._wingman.name,
+                    wingman_name=self._wingman.name,
                 )
             else:
                 raise FacadeError(
@@ -1055,6 +1056,7 @@ class SkillConversation:
             color=LogType.POSITIVE,
             source=LogSource.WINGMAN,
             source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
             skill_name=skill_name,
         )
 
