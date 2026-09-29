@@ -38,17 +38,21 @@ servers:
 
   - name: wingman_starhead
     display_name: StarHead - Star Citizen
-    description: Star Citizen game data. Ship info, trading routes, commodity prices. StarHead API for live SC data.
+    # The model picks a server from this description, so it lists what a player
+    # asks rather than where the data comes from. The keywords are what players
+    # say without ever naming the game: its currency and units, ships, places.
+    description: Star Citizen game data. Ships, loadouts, trading, prices, mining, crafting and locations. Answers ship specs and comparisons, which weapons, shields or quantum drives fit a ship and which are best, stats after swapping parts, the most profitable trade routes, which goods are worth trading, commodity prices, where to buy ships and gear, where to mine an ore, crafting blueprints, FPS weapons and armor, and planets, moons, stations and their shops. Use this instead of a web search for Star Citizen facts. Not for local time or day and night at a location, which VerseTime covers.
     discovery_keywords:
-      - Star Citizen
-      - SC
-      - trading
-      - ships
-      - commodities
-      - routes
-      - cargo
-      - profit
-      - market prices
+      - aUEC
+      - SCU
+      - cargo run
+      - make money
+      - DPS
+      - hardpoints
+      - best ship for
+      - Cutlass, Gladius, Carrack, Caterpillar, Prospector
+      - Stanton, Pyro, Hurston, Lorville, Area18
+      - Quantanium, Laranite
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
     discoverable_by_default: false
