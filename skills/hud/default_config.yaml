@@ -5,6 +5,8 @@ display_name: HUD Overlay
 auto_activate: true
 discoverable_by_default: false
 author: JayMatthew
+platforms:
+  - windows
 requires:
   - hud_server
 tags:
