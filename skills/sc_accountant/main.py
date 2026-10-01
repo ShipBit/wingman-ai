@@ -96,6 +96,7 @@ class _Books:
         self._subscription = None
         self._dirty = asyncio.Event()
         self._engine_lock = asyncio.Lock()
+        self._dashboard_lock = asyncio.Lock()  # Two Wingmen starting at once.
 
     @classmethod
     async def acquire(cls, directory: Path, gamelog) -> "_Books":
@@ -173,6 +174,10 @@ class _Books:
 
     async def dashboard(self, port: int):
         """Start the dashboard once; later calls return the running one."""
+        async with self._dashboard_lock:
+            return await self._start_dashboard(port)
+
+    async def _start_dashboard(self, port: int):
         if self.server is None:
             from skills.sc_accountant.erp_web import ERPServer
 

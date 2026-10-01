@@ -140,7 +140,17 @@ class RulesSource:
             async with session.get(self.url, headers=headers, allow_redirects=False) as resp:
                 if resp.status != 200:
                     return resp.status, b"", None
-                raw = await resp.content.read(MAX_PACKAGE_BYTES + 1)
+                # read(n) returns what has arrived so far, not n bytes: collect
+                # chunks until the end, stopping one byte past the cap so an
+                # oversized file is still refused by Instructions.load.
+                chunks, size = [], 0
+                while size <= MAX_PACKAGE_BYTES:
+                    chunk = await resp.content.readany()
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    size += len(chunk)
+                raw = b"".join(chunks)[: MAX_PACKAGE_BYTES + 1]
                 return resp.status, raw, resp.headers.get("ETag")
 
     async def check(self) -> Optional[Instructions]:

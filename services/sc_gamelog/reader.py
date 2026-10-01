@@ -344,6 +344,11 @@ class Instructions:
                 _keys(d["maintainer"], ["name"], ["discord", "url"])
                 for value in d["maintainer"].values():
                     _text(value, 256)
+                # The client turns it into a link: a web address, nothing else.
+                if "url" in d["maintainer"] and not d["maintainer"]["url"].startswith(
+                    "https://"
+                ):
+                    raise InstructionError("Maintainer url must start with https://")
             minimum = d.get("minimum_reader_version", "0.1.0")
             if not isinstance(minimum, str) or not regex.fullmatch(
                 r"\d{1,4}\.\d{1,4}\.\d{1,4}", minimum

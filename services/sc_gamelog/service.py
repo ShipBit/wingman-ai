@@ -133,6 +133,9 @@ class ScGameLogService:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._switching = asyncio.Lock()
+        """Settings saved twice in a row must not start a second thread while
+        the first is still stopping."""
         self._rules_task: Optional[asyncio.Task] = None
         self._rules: Optional[RulesSource] = None
         self._pending_rules: Optional[Instructions] = None
@@ -154,12 +157,21 @@ class ScGameLogService:
 
     async def apply_settings(self, enabled: bool, game_path: str) -> None:
         """Start, stop or restart to match the settings."""
-        if self.running and (not enabled or game_path != self._game_path):
-            await self.stop()
-        if enabled and not self.running:
-            await self.start(game_path)
+        async with self._switching:
+            if self.running and (not enabled or game_path != self._game_path):
+                await self._stop_reading()
+            if enabled and not self.running:
+                await self._start_reading(game_path)
 
     async def start(self, game_path: str) -> None:
+        async with self._switching:
+            await self._start_reading(game_path)
+
+    async def stop(self) -> None:
+        async with self._switching:
+            await self._stop_reading()
+
+    async def _start_reading(self, game_path: str) -> None:
         if self.running:
             return
         self._loop = asyncio.get_running_loop()
@@ -191,7 +203,7 @@ class ScGameLogService:
         _log(f"reading {game_path} with rules {instructions.version}", LogType.INFO)
         await self._publish_status()
 
-    async def stop(self) -> None:
+    async def _stop_reading(self) -> None:
         if not self.running:
             return
         self._stop.set()
@@ -291,7 +303,8 @@ class ScGameLogService:
             problem_before = self._rules.status.problem
             newer = await self._rules.check()
             if newer is not None:
-                self._pending_rules = newer
+                with self._lock:
+                    self._pending_rules = newer
                 _log(f"new rules {newer.version} (revision {newer.revision})", LogType.INFO)
             if newer is not None or self._rules.status.problem != problem_before:
                 await self._publish_status()
@@ -313,16 +326,32 @@ class ScGameLogService:
 
     def _run(self) -> None:
         failures = 0
+        skipped = 0  # Records and files that failed, logged 1x, 10x, 100x.
         while not self._stop.is_set():
             behind = False
             try:
-                pending, self._pending_rules = self._pending_rules, None
+                with self._lock:
+                    pending, self._pending_rules = self._pending_rules, None
                 if pending is not None:
                     self._swap_rules(pending)
                 events: list[GameEvent] = []
                 for tail in self._tails.values():
-                    for record, history in tail.poll():
-                        events.extend(self._ingest(tail, record, history))
+                    try:
+                        polled = tail.poll()
+                    except OSError as error:  # One environment's file, not all of them.
+                        skipped += 1
+                        if skipped in (1, 10, 100):
+                            _log(f"cannot read {tail.environment} ({skipped}x): {error!r}")
+                        continue
+                    for record, history in polled:
+                        # The offset has moved past the whole chunk: a record
+                        # that breaks must not take the rest of it along.
+                        try:
+                            events.extend(self._ingest(tail, record, history))
+                        except Exception as error:
+                            skipped += 1
+                            if skipped in (1, 10, 100):
+                                _log(f"record skipped ({skipped}x): {error!r}", LogType.ERROR)
                     behind = behind or tail.behind
                 found = tuple(env for env, tail in self._tails.items() if tail.found)
                 if events:

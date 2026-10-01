@@ -196,19 +196,22 @@ class ScGameEvents(Skill):
             return self._missions(state)
         return self._overview(state)
 
+    # Everything below comes from the game log, so it goes through _literal
+    # (bounded, no markup) like the reactions do.
+
     @staticmethod
     def _overview(state: dict) -> str:
         lines = [f"As last logged ({state.get('last_source_timestamp') or 'time unknown'}):"]
         if state.get("player_name"):
-            lines.append(f"Player: {state['player_name']}")
-        place = state.get("location_name")
+            lines.append(f"Player: {_literal(state['player_name'])}")
+        place = _literal(state.get("location_name"))
         if place:
             where = "Left" if state.get("location_status") == "departed" else "At"
-            lines.append(f"{where}: {place}" + (f" ({state['system']})" if state.get("system") else ""))
+            lines.append(f"{where}: {place}" + (f" ({_literal(state['system'])})" if state.get("system") else ""))
         elif state.get("system"):
-            lines.append(f"System: {state['system']}")
+            lines.append(f"System: {_literal(state['system'])}")
         if state.get("aboard_ship") and state.get("ship"):
-            lines.append(f"Aboard: {state['ship']}")
+            lines.append(f"Aboard: {_literal(state['ship'])}")
         zones = [
             label
             for key, label in (
@@ -221,12 +224,12 @@ class ScGameEvents(Skill):
         if zones:
             lines.append("In: " + ", ".join(zones))
         if state.get("jurisdiction"):
-            lines.append(f"Jurisdiction: {state['jurisdiction']}")
+            lines.append(f"Jurisdiction: {_literal(state['jurisdiction'])}")
         injuries = state.get("injuries") or {}
         if injuries:
             lines.append(
                 "Injuries: "
-                + ", ".join(f"{part} ({info.get('severity')})" for part, info in injuries.items())
+                + ", ".join(f"{_literal(part)} ({_literal(info.get('severity'))})" for part, info in injuries.items())
             )
         lines.append(f"Active missions: {len(state.get('active_missions') or {})}")
         return "\n".join(lines)
@@ -237,8 +240,8 @@ class ScGameEvents(Skill):
         if not missions:
             return "No active missions in the log. The log only knows missions accepted this session."
         lines = [
-            f"- {mission.get('name') or 'Unnamed'}"
-            + (f": {mission['objective']}" if mission.get("objective") else "")
+            f"- {_literal(mission.get('name')) or 'Unnamed'}"
+            + (f": {_literal(mission['objective'])}" if mission.get("objective") else "")
             for mission in missions[:10]
         ]
         more = f"\n(and {len(missions) - 10} more)" if len(missions) > 10 else ""
