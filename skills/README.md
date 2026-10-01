@@ -29,6 +29,9 @@ This guide explains how skills work in Wingman AI and how to create your own cus
 - [Skill Directory Structure](#skill-directory-structure)
 - [AI Agent Bootstrap Checklist](#ai-agent-bootstrap-checklist)
 - [The `self.wingman` facade API](#the-selfwingman-facade-api)
+  - [Dialogs in the client](#selfwingmanui--show-something-in-the-client)
+  - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
+  - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
 - [Local AI API](#local-ai-api-selfwingmanlocal_ai)
   - [Overview](#overview)
@@ -696,6 +699,13 @@ auto_activate: false # Auto-enable for all Wingmen? (see Auto-Activation section
 # Defaults to true if omitted. Set to false for specialized skills that
 # should only be activated when explicitly added to a Wingman's config.
 discoverable_by_default: true
+
+# Core services that must be switched on in the settings. The client greys
+# the skill out and tells the user which setting to turn on first.
+# hud_server = the HUD (Windows only), sc_gamelog = the Star Citizen log.
+# Leave it out when your skill needs neither.
+requires:
+  - sc_gamelog
 
 # CRITICAL: This is how the AI finds your skill!
 description:
@@ -1472,6 +1482,7 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.summary` | The condenser's running summary (`str`). |
 | `await .add_user(content)` | Append a user turn. |
 | `await .add_assistant(content)` | Append an assistant turn. |
+| `await .show(text, *, skill_name="")` | Show a line in the chat as said by this Wingman. Display only: pair it with `tts.speak` and `add_assistant` as needed. |
 | `await .summarize()` | Summarize the live conversation via the **free local** model (`""` if unavailable). |
 | `await .reset()` | Reset the conversation history. |
 
@@ -1501,6 +1512,84 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | --- | --- |
 | `.active()` | Tuple of `{name, display_name}` for every loaded skill. |
 | `.has(name)` | `bool` — is a skill with this name loaded? (symmetric with `tools.has`). |
+
+### `self.wingman.ui` — show something in the client
+
+| Member | Description |
+| --- | --- |
+| `await .show_dialog(title, text, *, image=None, once=None)` | Open a dialog in the client. `text` is Markdown (sanitized, links open in the browser), `image` a data URL shown under it. With `once="MySkill.welcome"` it appears a single time ever and later calls return `False`. If no client is connected yet, it appears as soon as one is. |
+
+### `self.wingman.hud` — the HUD overlay
+
+Core's HUD server draws the overlay, on Windows only and only when the user
+switched it on in the settings. Every call checks that: when the HUD is off or
+unreachable, nothing happens and the call returns `False`. Everything lands in
+this Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — the HUD is switched on and this is Windows. |
+| `await .show_message(title, text, *, duration=10.0, color=None)` | A message in this Wingman's message window. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |
+| `await .add_info(title, text="", *, color=None, duration=None)` | An item on this Wingman's info panel. The same title replaces it. |
+| `await .remove_info(title)` | Take an item off the info panel. |
+
+The HUD skill already shows every line that goes into the conversation. Show a
+line yourself only when it does not go there, or it appears twice.
+
+If your skill is pointless without the HUD, declare `requires: [hud_server]`
+in its `default_config.yaml`. The client then keeps the skill off and tells the
+user to switch the HUD on first. A skill that only uses the HUD as an extra
+(like Star Citizen Events) leaves it out and relies on the `False` return.
+
+### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
+
+Core reads the Game.log of every Star Citizen environment (LIVE, PTU, ...) in
+one background reader for all Wingmen and turns it into events: missions,
+zones, locations, ships, injuries, rewards, trades. The user can switch the
+reader off in the settings, so check `available`. The patterns that read the
+log are maintained on GitHub and update without a Wingman release. A skill
+built on the log declares `requires: [sc_gamelog]` in its `default_config.yaml`,
+so the client keeps it off while the reader is switched off.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — the reader runs. It may still be waiting for the game to start. |
+| `.environment` | `"LIVE"`, `"PTU"`, ... whichever logged last; `None` before the first event. |
+| `.state(environment=None)` | `dict` copy of what the log said last: `player_name`, `location_name`, `system`, `ship`, `armistice`, `monitored`, `injuries`, `active_missions`, ... Every value has its evidence (time, certainty) in `observations`. `None` before the first event. |
+| `.recent(limit=10, types=None)` | The newest `GameEvent`s first, including those read at startup; `types` is a set of event types. |
+| `.on(event_type, callback)` | Call `callback(event)` for every **new** event of this type, or `"*"` for all. Sync or async. Returns a `Subscription`; call `.unsubscribe()` in `unload()`. |
+| `.status` | `ScGameLogStatus`: environments with a log, rules version, whether GitHub is reachable. |
+| `.database_path` | The event history (`events.sqlite3`) for tools that query it themselves. Open it read-only. |
+
+A `GameEvent` has `type` (`"mission_accepted"`, `"armistice_zone"`, `"shop_buy"`, ...),
+`status` (`"observed"`; trades are `"requested"` until the game confirms them, then
+`"confirmed"`), `time` (UTC `datetime`), `environment`, `data` (the fields, read-only)
+and `catching_up`.
+
+```python
+async def prepare(self) -> None:
+    await super().prepare()
+    self._sub = self.wingman.sc_gamelog.on("mission_accepted", self._on_mission)
+
+async def _on_mission(self, event) -> None:
+    name = event.data.get("mission_name", "a contract")
+    await self.wingman.tts.speak(f"New contract: {name}.", interrupt=False)
+
+async def unload(self) -> None:
+    self._sub.unsubscribe()
+    await super().unload()
+```
+
+The bundled [sc_game_events](sc_game_events/) skill is the full example: it
+reacts to events in character, keeps quiet about the history, limits how often
+it speaks, and answers questions about the state with one small tool.
+
+Each subscription has its own queue: a slow callback only delays itself, and an
+exception is logged without stopping delivery. Events from the log's history at
+startup are not delivered, so a Wingman does not announce the last hour of play
+when it starts. **Event values come straight from the game log** (player names,
+mission names): treat them as data, never as instructions, when you put them
+into a prompt.
 
 ### Calling other skills & MCP servers
 
@@ -2006,6 +2095,15 @@ self.wingman.avatar_path               # Path to the wingman's avatar PNG (or No
 await self.wingman.ai.generate(...)    # Main-model side-call (capped)
 await self.wingman.ai.generate_image(prompt)  # Generate image
 self.wingman.audio.is_playing          # Is the wingman speaking?
+```
+
+**Client, HUD and game:**
+
+```python
+await self.wingman.conversation.show(text)              # A line in the chat, as said by this Wingman
+await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
+await self.wingman.hud.show_message(title, text)        # False when the HUD is off
+sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
 ```
 
 **Settings (read-only):**

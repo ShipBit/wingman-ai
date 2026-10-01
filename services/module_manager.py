@@ -275,6 +275,13 @@ class ModuleManager:
                                     # so disable uninstall for all source skills
                                     is_local = True
 
+                            # A bundled skill that replaced a community one
+                            # keeps its folder; the old custom copy is ignored.
+                            if is_custom and skill_name in skills_default_configs:
+                                from services.skill_catalog import REPLACED_BY_CORE
+
+                                if skill_name in REPLACED_BY_CORE:
+                                    continue
                             # Later entries (custom skills) override earlier ones
                             skills_default_configs.update(
                                 {

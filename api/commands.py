@@ -9,7 +9,13 @@ from api.enums import (
     RecordingDevice,
     ToastType,
 )
-from api.interface import AudioFile, CommandActionConfig, BenchmarkResult, TokenUsage
+from api.interface import (
+    AudioFile,
+    BenchmarkResult,
+    CommandActionConfig,
+    ScGameLogStatus,
+    TokenUsage,
+)
 
 
 # We use this Marker base class for reflection to "iterate all commands"
@@ -136,6 +142,26 @@ class McpOAuthStateChangedCommand(WebSocketCommandModel):
     """True when a token was stored, False when the attempt failed."""
     error: Optional[str] = None
     """Why it failed, when it did."""
+
+
+class SkillDialogCommand(WebSocketCommandModel):
+    """A skill asks the client to show a dialog (`self.wingman.ui.show_dialog`)."""
+
+    command: Literal["skill_dialog"] = "skill_dialog"
+    wingman_name: str
+    title: str
+    text: str
+    """Markdown. The client sanitizes it and opens links in the browser."""
+    image: Optional[str] = None
+    """A data URL, shown under the text."""
+
+
+class ScGameLogStateChangedCommand(WebSocketCommandModel):
+    """Sent when the Star Citizen log reader starts, stops, finds a Game.log
+    or gets new rules, and when the rules cannot be updated."""
+
+    command: Literal["sc_gamelog_state_changed"] = "sc_gamelog_state_changed"
+    status: ScGameLogStatus
 
 
 class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):

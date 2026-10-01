@@ -20,6 +20,7 @@ from api.commands import (
     AudioLibraryPlaybackFinishedCommand,
     CoreStateChangedCommand,
     LogCommand,
+    ScGameLogStateChangedCommand,
     SttVocabularyChangedCommand,
     VoiceActivationMutedCommand,
 )
@@ -35,6 +36,8 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from api.interface import (
+    ScGameLogSettings,
+    ScGameLogStatus,
     AudioDevice,
     AudioFile,
     AvatarGenerationRequest,
@@ -92,6 +95,7 @@ from services.file import (
 )
 from services.audio.device_names import with_full_names
 from services.model_downloader import ModelDownloader
+from services.sc_gamelog.service import ScGameLogService
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -211,6 +215,13 @@ class WingmanCore(WebSocketUser):
         )
         # Bundled word lists per game, switched on with a toggle and editable:
         # the user's edits are stored as a diff so an updated bundle still lands.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/sc-gamelog/status",
+            endpoint=self.get_sc_gamelog_status,
+            response_model=ScGameLogStatus,
+            tags=tags,
+        )
         self.router.add_api_route(
             methods=["GET"],
             path="/stt/vocabulary/presets",
@@ -843,6 +854,10 @@ class WingmanCore(WebSocketUser):
         self.settings_service.settings_events.subscribe(
             "hud_server_settings_changed", self._on_hud_server_settings_changed
         )
+        self.settings_service.settings_events.subscribe(
+            "sc_gamelog_settings_changed", self._apply_sc_gamelog_settings
+        )
+        ScGameLogService().status_callback = self._broadcast_sc_gamelog_status
 
         self.parakeet = Parakeet(
             settings=self.settings_service.settings.stt.parakeet,
@@ -1018,6 +1033,22 @@ class WingmanCore(WebSocketUser):
                 message="Starting HUD server...",
             )
         await self._start_hud_server_if_enabled()
+
+        # 7. Star Citizen log reader
+        await self._apply_sc_gamelog_settings(self.settings_service.settings.sc_gamelog)
+
+    async def _apply_sc_gamelog_settings(self, sc_gamelog: ScGameLogSettings):
+        await ScGameLogService().apply_settings(sc_gamelog.enabled, sc_gamelog.game_path)
+
+    async def _broadcast_sc_gamelog_status(self, status: ScGameLogStatus):
+        if self._connection_manager:
+            await self._connection_manager.broadcast(
+                ScGameLogStateChangedCommand(status=status)
+            )
+
+    # GET /sc-gamelog/status
+    async def get_sc_gamelog_status(self) -> ScGameLogStatus:
+        return ScGameLogService().status()
 
     def _get_validated_hud_settings(
         self, hud_settings, log_invalid: bool = True
@@ -4296,6 +4327,7 @@ class WingmanCore(WebSocketUser):
 
         # Stop HUD Server
         await self._stop_hud_server()
+        await ScGameLogService().stop()
 
         if self.settings_service.settings.xvasynth.enable:
             self.stop_xvasynth()

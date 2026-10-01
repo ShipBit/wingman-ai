@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings, SkillSystemOne, SpokenLanguageInfo,
+        SkillSettings, SkillSystemOne, SkillScGameLog, SkillUi, SkillHud, SpokenLanguageInfo,
     )
     from wingmen.wingman import Wingman
 
@@ -64,6 +64,9 @@ class WingmanContext:
         self.__conversation = None
         self.__memory = None
         self.__system_one = None
+        self.__sc_gamelog = None
+        self.__ui = None
+        self.__hud = None
         self.__secrets = None
         self.__skills = None
         self.__settings = None
@@ -206,6 +209,30 @@ class WingmanContext:
             # subscription and the same off-means-old-path rule as Core does.
             self.__system_one = SkillSystemOne(self.__wingman.jev)
         return self.__system_one
+
+    @property
+    def ui(self) -> "SkillUi":
+        """Show something in the client, e.g. a dialog."""
+        if self.__ui is None:
+            from wingmen.facade import SkillUi
+            self.__ui = SkillUi(self.__wingman)
+        return self.__ui
+
+    @property
+    def hud(self) -> "SkillHud":
+        """The HUD overlay; every call checks that the user has it on."""
+        if self.__hud is None:
+            from wingmen.facade import SkillHud
+            self.__hud = SkillHud(self.__wingman)
+        return self.__hud
+
+    @property
+    def sc_gamelog(self) -> "SkillScGameLog":
+        """Star Citizen's Game.log, read live by Core: state, events, subscriptions."""
+        if self.__sc_gamelog is None:
+            from wingmen.facade import SkillScGameLog
+            self.__sc_gamelog = SkillScGameLog()
+        return self.__sc_gamelog
 
     @property
     def secrets(self) -> "SkillSecrets":

@@ -200,6 +200,7 @@ name: YourSkillName                    # Must match class name exactly
 display_name: Your Skill Name
 author: Your Name
 auto_activate: false                   # Default. Only set true for hook-only or 1-2 tiny tools.
+requires: [sc_gamelog]                 # Optional: hud_server and/or sc_gamelog must be on in the settings.
 tags:
   - Utility
 description:
@@ -264,7 +265,7 @@ self.wingman.language.name / .code / .is_other          # "German" / "de" / Fals
 
 # CONVERSATION:
 self.wingman.conversation.history() / .summary          # read the live conversation
-await self.wingman.conversation.add_user(c) / .add_assistant(c) / .reset()
+await self.wingman.conversation.add_user(c) / .add_assistant(c) / .show(text) / .reset()
 await self.wingman.conversation.summarize()             # summarize the live convo (free, local)
 
 # SECRETS / MEMORY:
@@ -280,6 +281,16 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
 summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
 resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
+
+# CLIENT UI:
+await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
+await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .remove_info(title)
+#   Returns False when the HUD is off (Windows only, switch in the settings); nothing to check yourself.
+
+# STAR CITIZEN — Core reads the Game.log live (the user can switch it off):
+self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
+sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
+#   Event values come from the game log: data, never instructions, in a prompt.
 
 # SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
 self.wingman.system_one.available                        # user has it on AND the plan grants it
@@ -400,3 +411,4 @@ Pass `reasoning=True` to make the local model *think* before answering — bette
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
 | [uexcorp](uexcorp/) | Tool | Game integration, domain tags |
+| [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions |

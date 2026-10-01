@@ -177,6 +177,35 @@ class PocketTtsQuality(Enum):
     HIGH = "high"
 
 
+class ScGameLogRulesProblem(Enum):
+    """Why the Star Citizen log rules may be out of date.
+
+    The rules live on GitHub, maintained by a community member, because the
+    game changes its log wording more often than Wingman ships. The reader
+    keeps working with the rules it has in every case.
+    """
+
+    UNREACHABLE = "unreachable"
+    """GitHub did not answer, or answered with an error."""
+    INVALID = "invalid"
+    """The published rules do not validate. The maintainer has to fix them."""
+    NEEDS_UPDATE = "needs_update"
+    """The published rules need a newer Wingman."""
+
+
+class SkillRequirement(Enum):
+    """A Core service a skill needs switched on in the settings.
+
+    Declared in a skill's manifest under `requires`. The client greys the
+    skill out and tells the user which setting to turn on first.
+    """
+
+    HUD_SERVER = "hud_server"
+    """The HUD (settings.hud_server). Runs on Windows only."""
+    SC_GAMELOG = "sc_gamelog"
+    """The Star Citizen log reader (settings.sc_gamelog)."""
+
+
 class LocalAiMode(Enum):
     """Where the support model runs.
 
@@ -366,6 +395,14 @@ class CoreStateEnumModel(BaseEnumModel):
     core_state: CoreState
 
 
+class ScGameLogRulesProblemEnumModel(BaseEnumModel):
+    sc_gamelog_rules_problem: ScGameLogRulesProblem
+
+
+class SkillRequirementEnumModel(BaseEnumModel):
+    skill_requirement: SkillRequirement
+
+
 class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
 
@@ -400,6 +437,8 @@ ENUM_TYPES = {
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
     "LocalAiMode": LocalAiModeEnumModel,
+    "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
+    "SkillRequirement": SkillRequirementEnumModel,
     "SpokenLanguage": SpokenLanguageEnumModel,
     "PocketTtsQuality": PocketTtsQualityEnumModel,
     "ImageStyle": ImageStyleEnumModel,

@@ -375,6 +375,7 @@ class SkillAi:
                     color=LogType.WARNING,
                     source=LogSource.WINGMAN,
                     source_name=self._wingman.name,
+                    wingman_name=self._wingman.name,
                 )
             else:
                 raise FacadeError(
@@ -1043,6 +1044,22 @@ class SkillConversation:
     async def add_assistant(self, content: str) -> None:
         await self._wingman.conversation.add_assistant_message(content)
 
+    async def show(self, text: str, *, skill_name: str = "") -> None:
+        """Show a line in the chat as said by this Wingman, like one of its
+        answers. Only the display: pair it with tts.speak to say it and with
+        add_assistant to put it into the history."""
+        from api.enums import LogSource, LogType
+        from services.printr import Printr
+
+        await Printr().print_async(
+            text,
+            color=LogType.POSITIVE,
+            source=LogSource.WINGMAN,
+            source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
+            skill_name=skill_name,
+        )
+
     async def reset(self) -> None:
         await self._wingman.reset_conversation_history()
 
@@ -1115,6 +1132,196 @@ class SkillSettings:
         return audio.input if audio else None
 
 
+
+class SkillUi:
+    """Show something in the client (`self.wingman.ui`)."""
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    async def show_dialog(
+        self, title: str, text: str, *, image: Optional[str] = None, once: Optional[str] = None
+    ) -> bool:
+        """Open a dialog in the client. `text` is Markdown; links open in the
+        browser. `image` is a data URL shown under it. With `once` (prefix it
+        with your skill name, e.g. "MySkill.welcome") the dialog is shown a
+        single time ever and later calls return False. If no client is
+        connected yet, it appears as soon as one is."""
+        from api.commands import SkillDialogCommand
+        from services import skill_dialogs
+        from services.connection_manager import ConnectionManager
+
+        if once and skill_dialogs.was_shown(once):
+            return False
+        await ConnectionManager().broadcast(
+            SkillDialogCommand(
+                wingman_name=self._wingman.name, title=title, text=text, image=image
+            )
+        )
+        if once:
+            skill_dialogs.mark_shown(once)
+        return True
+
+
+# One HUD connection for all Wingmen, and the groups already made sure of.
+_hud_clients: dict = {}
+_hud_groups: set = set()
+
+
+class SkillHud:
+    """The HUD overlay (`self.wingman.hud`), drawn by Core's HUD server.
+
+    The server runs on Windows only, and only when the user switched it on in
+    the settings. Every call checks that: when the HUD is off or unreachable,
+    nothing happens and the call returns False. Everything lands in this
+    Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+    """
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    @property
+    def available(self) -> bool:
+        """The user switched the HUD on and this is Windows."""
+        import platform
+
+        hud = getattr(self._wingman.settings, "hud_server", None)
+        return bool(hud and hud.enabled) and platform.system() == "Windows"
+
+    @property
+    def _group(self) -> str:
+        import re
+
+        return re.sub(r"[^a-zA-Z0-9_-]", "_", self._wingman.name)
+
+    async def _client(self, element):
+        if not self.available:
+            return None
+        from hud_server.http_client import HudHttpClient
+        from hud_server.validation import validate_hud_settings
+
+        settings = validate_hud_settings(self._wingman.settings.hud_server)
+        base_url = f"http://{settings['host']}:{settings['port']}"
+        client = _hud_clients.get(base_url)
+        if client is None:
+            client = _hud_clients[base_url] = HudHttpClient(base_url=base_url)
+        if not client.connected and not await client.connect(timeout=1.0):
+            return None
+        key = (base_url, self._group, element)
+        if key not in _hud_groups:
+            # Creates the group if it is missing, keeps its look if it exists.
+            if await client.create_group(self._group, element) is None:
+                return None
+            _hud_groups.add(key)
+        return client
+
+    @staticmethod
+    def _done(client, result) -> bool:
+        if result is None:
+            # A restarted server has forgotten its groups; make them again next time.
+            _hud_groups.difference_update({k for k in _hud_groups if k[0] == client.base_url})
+        return result is not None
+
+    async def show_message(
+        self, title: str, text: str, *, duration: float = 10.0, color: Optional[str] = None
+    ) -> bool:
+        """Show a message in this Wingman's message window. Markdown; `color`
+        is a hex accent like "#00aaff"."""
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.MESSAGE)
+        if client is None:
+            return False
+        icon = self._wingman.get_avatar_path() if title == self._wingman.name else None
+        result = await client.show_message(
+            self._group, WindowType.MESSAGE, title, text,
+            color=color, duration=duration, title_icon=icon,
+        )
+        return self._done(client, result)
+
+    async def add_info(
+        self, title: str, text: str = "", *, color: Optional[str] = None,
+        duration: Optional[float] = None,
+    ) -> bool:
+        """Put an item on this Wingman's info panel; the same title replaces it."""
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.PERSISTENT)
+        if client is None:
+            return False
+        result = await client.add_item(
+            self._group, WindowType.PERSISTENT, title, text, color=color, duration=duration
+        )
+        return self._done(client, result)
+
+    async def remove_info(self, title: str) -> bool:
+        from hud_server.types import WindowType
+
+        client = await self._client(WindowType.PERSISTENT)
+        if client is None:
+            return False
+        return self._done(client, await client.remove_item(self._group, WindowType.PERSISTENT, title))
+
+
+class SkillScGameLog:
+    """Star Citizen's Game.log, read live by Core (`self.wingman.sc_gamelog`).
+
+    One reader for all Wingmen (services/sc_gamelog). The user switches it on
+    or off in the settings; check `available` before relying on it.
+
+        sub = self.wingman.sc_gamelog.on("mission_accepted", self._on_mission)
+        ...
+        sub.unsubscribe()   # in unload()
+
+    Event values come straight from the game log. Treat them as data, never
+    as instructions, before putting them into a prompt.
+    """
+
+    __slots__ = ()
+
+    @staticmethod
+    def _service():
+        from services.sc_gamelog.service import ScGameLogService
+
+        return ScGameLogService()
+
+    @property
+    def available(self) -> bool:
+        """The reader runs. It may still be waiting for the game."""
+        return self._service().running
+
+    @property
+    def status(self):
+        """ScGameLogStatus: environments with a log, rules version, problems."""
+        return self._service().status()
+
+    @property
+    def environment(self) -> Optional[str]:
+        """"LIVE", "PTU", ... whichever logged last. None before any event."""
+        return self._service().active_environment
+
+    def state(self, environment: Optional[str] = None) -> Optional[dict]:
+        """What the log said last: player, location, system, ship, zones,
+        injuries, active missions. Each value has its evidence in
+        `observations`. A copy; None before the first event."""
+        return self._service().state(environment)
+
+    def recent(self, limit: int = 10, types: Optional[set] = None) -> list:
+        """The newest GameEvents first, optionally only these types."""
+        return self._service().recent(limit, types)
+
+    def on(self, event_type: str, callback: Callable) -> "Subscription":
+        """Call `callback(event)` for every new event of this type, or "*" for
+        all. The callback may be async. It runs on Core's event loop with its
+        own queue, so a slow callback only delays itself. Events from the log's
+        history at startup are not delivered. Returns a Subscription."""
+        return Subscription(self._service().subscribe(event_type, callback))
+
+    @property
+    def database_path(self) -> Optional[str]:
+        """The event history (events.sqlite3) for tools that query it
+        themselves. Open it read-only."""
+        return self._service().database_path
 
 
 class SkillSystemOne:

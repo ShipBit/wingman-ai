@@ -147,6 +147,7 @@ class SkillLocalAI:
             f"[SkillLocalAI] {method}() failed: {error}",
             color=LogType.ERROR,
             source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
             source=LogSource.WINGMAN,
         )
 
@@ -155,6 +156,7 @@ class SkillLocalAI:
             f"[SkillLocalAI] {method}() failed: {error}",
             color=LogType.ERROR,
             source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
             source=LogSource.WINGMAN,
         )
 
