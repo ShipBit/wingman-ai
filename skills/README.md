@@ -29,6 +29,8 @@ This guide explains how skills work in Wingman AI and how to create your own cus
 - [Skill Directory Structure](#skill-directory-structure)
 - [AI Agent Bootstrap Checklist](#ai-agent-bootstrap-checklist)
 - [The `self.wingman` facade API](#the-selfwingman-facade-api)
+  - [Dialogs in the client](#selfwingmanui--show-something-in-the-client)
+  - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
 - [Local AI API](#local-ai-api-selfwingmanlocal_ai)
@@ -1534,13 +1536,20 @@ this Wingman's own windows, the ones the HUD skill uses, so it looks the same.
 The HUD skill already shows every line that goes into the conversation. Show a
 line yourself only when it does not go there, or it appears twice.
 
+If your skill is pointless without the HUD, declare `requires: [hud_server]`
+in its `default_config.yaml`. The client then keeps the skill off and tells the
+user to switch the HUD on first. A skill that only uses the HUD as an extra
+(like Star Citizen Events) leaves it out and relies on the `False` return.
+
 ### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
 
 Core reads the Game.log of every Star Citizen environment (LIVE, PTU, ...) in
 one background reader for all Wingmen and turns it into events: missions,
 zones, locations, ships, injuries, rewards, trades. The user can switch the
 reader off in the settings, so check `available`. The patterns that read the
-log are maintained on GitHub and update without a Wingman release.
+log are maintained on GitHub and update without a Wingman release. A skill
+built on the log declares `requires: [sc_gamelog]` in its `default_config.yaml`,
+so the client keeps it off while the reader is switched off.
 
 | Member | Description |
 | --- | --- |
@@ -2086,6 +2095,15 @@ self.wingman.avatar_path               # Path to the wingman's avatar PNG (or No
 await self.wingman.ai.generate(...)    # Main-model side-call (capped)
 await self.wingman.ai.generate_image(prompt)  # Generate image
 self.wingman.audio.is_playing          # Is the wingman speaking?
+```
+
+**Client, HUD and game:**
+
+```python
+await self.wingman.conversation.show(text)              # A line in the chat, as said by this Wingman
+await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
+await self.wingman.hud.show_message(title, text)        # False when the HUD is off
+sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
 ```
 
 **Settings (read-only):**
