@@ -63,7 +63,7 @@ custom_properties:
     value: false
   - id: max_unanswered
     name: Reactions until you speak again
-    hint: The Wingman stops reacting after this many reactions until you say or type something.
+    hint: The Wingman stops reacting after this many reactions until you say or type something. 0 means no limit.
     property_type: number
     required: false
     value: 10

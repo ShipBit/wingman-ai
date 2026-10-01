@@ -61,8 +61,12 @@ class ScGameEvents(Skill):
         )
 
     def _max_unanswered(self) -> int:
+        """0 means no limit."""
         value = self.retrieve_custom_property_value("max_unanswered", [])
-        return int(value) if value else 10
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 10
 
     def _remember(self) -> bool:
         return bool(self.retrieve_custom_property_value("remember_reactions", []))
@@ -113,11 +117,15 @@ class ScGameEvents(Skill):
         reports = [message["text"] for message in self._policy.flush(now=now)]
         if not reports:
             return
-        # One reaction at a time. What happens meanwhile is not queued: by the
-        # time the Wingman is done talking it would be old news.
+        # One reaction at a time and never over the Wingman's voice. What
+        # happens meanwhile is not queued: by the time the Wingman is free it
+        # would be old news. The policy above already thins out bursts.
         if self._reaction and not self._reaction.done():
             return
-        if self._unanswered >= self._max_unanswered():
+        if self.wingman.audio.is_playing:
+            return
+        limit = self._max_unanswered()
+        if limit and self._unanswered >= limit:
             return
         self._unanswered += 1
         self._reaction = asyncio.create_task(self._react(reports[:3]))
