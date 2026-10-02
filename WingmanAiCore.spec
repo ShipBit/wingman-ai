@@ -44,7 +44,6 @@ datas = [
     ('assets', 'assets'),
     ('services', 'services'),
     ('wingmen', 'wingmen'),
-    ('skills', 'skills'),
     ('templates/configs', 'templates/configs'),
     # Vocabulary presets for the speech correction, one text file per game.
     ('templates/vocabulary', 'templates/vocabulary'),
@@ -56,6 +55,18 @@ datas = [
     ('prompts', 'prompts'),
     ('LICENSE', '.'),
 ]
+
+# Bundled skills, file by file: a skill's own tests/ folder (and Python's
+# caches) stay out of the build. The test suite in tests/ is never bundled.
+def collect_skills():
+    found = []
+    for dirpath, dirnames, filenames in os.walk('skills'):
+        dirnames[:] = [d for d in dirnames if d not in ('tests', '__pycache__')]
+        found += [(os.path.join(dirpath, name), dirpath) for name in filenames]
+    return found
+
+
+datas += collect_skills()
 
 # Automatically bundle all contents from explicit_deps/
 # Add any dependencies that need manual bundling to explicit_deps/ and they'll be copied to _internal/
