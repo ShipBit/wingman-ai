@@ -464,7 +464,7 @@ class ToolExecutor:
         # ── 6. Command execution ────────────────────────────────────
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
-            command = get_command_fn(function_args["command_name"])
+            command = get_command_fn(function_args.get("command_name", ""))
             # execute the command
             instant_response, function_response = await execute_command_fn(
                 command
@@ -528,5 +528,17 @@ class ToolExecutor:
                     skill_name=skill.name,
                     server_only=not self._settings.debug_mode,
                 )
+
+        # ── 8. Nothing by that name ─────────────────────────────────
+        # An empty answer leaves the model guessing; this one it can act on.
+        if function_name != "execute_command" and function_name not in tool_skills:
+            printr.print(
+                f"Unknown tool called: {function_name}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            function_response = (
+                f"There is no tool named '{function_name}'. Use only the tools you were given."
+            )
 
         return function_response, instant_response, used_skill, tool_label

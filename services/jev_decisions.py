@@ -145,58 +145,7 @@ def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
     return picked
 
 
-# ── 2. Which tool groups this turn could need ───────────────────────
-
-
-def tool_group_questions(groups: dict[str, str]) -> dict[str, dict]:
-    """One yes/no per skill or MCP server: could this turn need it?
-
-    Grouping rather than asking per tool is deliberate. A skill's tools belong
-    together — a turn that needs ``play_track`` often needs ``search_track``
-    first — and dropping one sibling is the failure that actually hurts. At
-    group level a wrong no costs the whole skill, which is easier to see in a
-    measurement than a tool quietly missing from a list of thirty.
-    """
-    return {
-        f"group_{name}": noul(
-            instructions=(
-                f"Could answering the user's last message need {description}? "
-                "Answer yes if it might be needed, even indirectly."
-            )
-        )
-        for name, description in groups.items()
-    }
-
-
-def read_tool_groups(
-    result: JevResult,
-    groups: dict[str, str],
-    threshold: float,
-    unanswered_kept: bool = True,
-) -> Optional[set[str]]:
-    """The groups above ``threshold``, or None if there is no usable answer.
-
-    ``unanswered_kept`` is what to do with a question Jev did not answer, and
-    the right value depends on which direction the caller is moving in. A
-    caller that filters an existing tool list keeps it — a skipped question
-    must not silently disable a skill. A caller that activates skills that
-    are off drops it — a skipped question must not silently switch one on.
-    """
-    if not result.ok:
-        return None
-    kept = set()
-    for name in groups:
-        value = result.noul_value(f"group_{name}")
-        if value is None:
-            if unanswered_kept:
-                kept.add(name)
-            continue
-        if value >= threshold:
-            kept.add(name)
-    return kept
-
-
-# ── 3. What an utterance heard over the wingman actually was ────────
+# ── 2. What an utterance heard over the wingman actually was ────────
 
 
 def triage_questions(wingman_names: list[str], during_playback: bool) -> dict[str, dict]:
@@ -252,7 +201,7 @@ def read_triage(result: JevResult) -> dict[str, Any]:
     }
 
 
-# ── 4. whether a heard word really is a Star Citizen name ───────────
+# ── 3. whether a heard word really is a Star Citizen name ───────────
 
 
 def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
