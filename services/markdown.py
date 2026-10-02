@@ -26,6 +26,33 @@ def remove_emote_text(text: str):
     return text
 
 
+# A span between single asterisks: *sighs*, *leans back*. Not **bold**, not
+# a list bullet ("* item"), not a multiplication ("2 * 3").
+_STAR_SPAN_RE = re.compile(r"(?<![*\w])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![*\w])")
+
+
+def remove_action_emotes(text: str) -> str:
+    """Removes actions models write between single asterisks.
+
+    Runs before the Markdown conversion, which would otherwise turn *sighs*
+    into plain italic text that is then read aloud. A span counts as an
+    action where an action goes: at the start of a line, after a finished
+    sentence or at the end of a line. One in the middle of a sentence
+    ("that is *really* close") is emphasis and stays a word.
+    """
+
+    def replace(match: re.Match) -> str:
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        before = text[line_start : match.start()].rstrip()
+        after = text[match.end() : len(text) if line_end == -1 else line_end].strip()
+        if not before or before[-1] in ".!?…:" or not after:
+            return ""
+        return match.group(0)
+
+    return _STAR_SPAN_RE.sub(replace, text)
+
+
 def remove_emojis(text: str) -> str:
     """Removes emoji characters from text.
 
@@ -46,7 +73,10 @@ def remove_emojis(text: str) -> str:
         "\U0001f680-\U0001f6ff"  # transport & map symbols
         "\U0001f1e0-\U0001f1ff"  # flags (iOS)
         "\U00002702-\U000027b0"  # dingbats
-        "\U000024c2-\U0001f251"  # enclosed characters
+        # Enclosed characters. Not one range from U+24C2 to U+1F251: that
+        # swallowed every Chinese, Japanese and Korean character in between.
+        "\U000024c2"
+        "\U0001f170-\U0001f251"
         "\U0001f900-\U0001f9ff"  # supplemental symbols & pictographs
         "\U0001fa00-\U0001fa6f"  # chess symbols
         "\U0001fa70-\U0001faff"  # symbols & pictographs extended-A
@@ -54,6 +84,7 @@ def remove_emojis(text: str) -> str:
         "\U00002700-\U000027bf"  # dingbats
         "\U0001f000-\U0001f02f"  # mahjong tiles
         "\U0001f0a0-\U0001f0ff"  # playing cards
+        "️‍"  # emoji presentation selector and joiner, left over otherwise
         "]+",
         flags=re.UNICODE,
     )
@@ -352,7 +383,7 @@ def cleanup_text(text: str):
     - Extracts link text from Markdown links [text](url) → text
     - Removes standalone URLs
     - Removes remaining Markdown formatting
-    - Removes emote text (*action*)
+    - Removes actions between asterisks (*sighs*), keeps *emphasis* as a word
     - Removes emojis
 
     Args:
@@ -369,6 +400,8 @@ def cleanup_text(text: str):
     text = convert_lists_for_tts(text)
     # Extract link text from Markdown links before removing markdown
     text = extract_markdown_link_text(text)
+    # Actions between asterisks, before Markdown turns them into italics
+    text = remove_action_emotes(text)
     # Remove remaining markdown formatting (bold, italic, headers, etc.)
     text = remove_markdown(text)
     # Remove standalone URLs (Markdown link URLs already handled above)

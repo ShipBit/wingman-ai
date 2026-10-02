@@ -78,7 +78,7 @@ class LogCommand(WebSocketCommandModel):
     log_type: LogType
     source_name: Optional[str] = None
     wingman_name: Optional[str] = None
-    source: LogSource = "system"
+    source: LogSource = LogSource.SYSTEM
     tag: Optional[CommandTag] = None
     skill_name: Optional[str] = None
     additional_data: Optional[dict] = None

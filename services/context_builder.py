@@ -23,6 +23,22 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def fill_system_prompt(template: str, **values) -> str:
+    """Fills the system prompt's placeholders.
+
+    The shipped template escapes literal braces as ``{{ }}``. A prompt the
+    user edited may not: a JSON example in it made ``str.format`` raise on
+    every turn, and the Wingman stopped answering. Then only the known
+    placeholders are replaced and everything else stays as written.
+    """
+    try:
+        return template.format(**values)
+    except (KeyError, IndexError, ValueError):
+        for name, value in values.items():
+            template = template.replace("{" + name + "}", str(value))
+        return template
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -163,7 +179,8 @@ class ContextBuilder:
             f"{language_name(self._settings.spoken_language, self._settings.other_language)}"
         )
 
-        context = self._config.prompts.system_prompt.format(
+        context = fill_system_prompt(
+            self._config.prompts.system_prompt,
             backstory=backstory,
             skills=skill_prompts,
             ttsprompt=tts_prompt,

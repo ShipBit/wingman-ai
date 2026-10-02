@@ -137,6 +137,10 @@ class McpRegistry:
         self._prefixed_to_original: dict[str, str] = {}
         """Maps prefixed tool names to original tool names"""
 
+        self._errors: dict[str, str] = {}
+        """Why a server is not connected. A server that never connected has no
+        entry in _connections, so its error has to live here."""
+
     async def _notify_state_changed(self):
         """Notify listeners that MCP state has changed."""
         if self._on_state_changed:
@@ -165,10 +169,11 @@ class McpRegistry:
         connection = self._connections.get(server_name)
         if connection and not connection.is_connected and connection.error:
             return connection.error
-        return None
+        return self._errors.get(server_name)
 
     def set_server_error(self, server_name: str, error: str) -> None:
         """Set an error message for a server (e.g., on timeout)."""
+        self._errors[server_name] = error
         connection = self._connections.get(server_name)
         if connection:
             connection.error = error
@@ -196,6 +201,7 @@ class McpRegistry:
         connection = await self._client.connect(config, headers, auth)
 
         if connection.is_connected:
+            self._errors.pop(config.name, None)
             self._connections[config.name] = connection
             self._index_tools(connection)
 
@@ -204,6 +210,8 @@ class McpRegistry:
 
             # Notify UI that MCP state has changed (after registry is updated)
             await self._notify_state_changed()
+        else:
+            self._errors[config.name] = connection.error or "Connection failed."
 
         return connection
 
@@ -252,6 +260,7 @@ class McpRegistry:
             server_name: Name of the server to unregister
             notify: Whether to notify UI of state change (set False during batch operations)
         """
+        self._errors.pop(server_name, None)
         connection = self._connections.get(server_name)
         if connection:
             # Remove tool mappings
@@ -273,6 +282,7 @@ class McpRegistry:
 
         This batches disconnections and only sends a single UI notification at the end.
         """
+        self._errors.clear()
         server_names = list(self._connections.keys())
         if not server_names:
             return
@@ -482,7 +492,7 @@ class McpRegistry:
             parts = [
                 f"Currently active MCP servers ({len(self._active_servers)} total):\n"
             ]
-            for server_name in self._active_servers:
+            for server_name in sorted(self._active_servers):
                 manifest = self._manifests.get(server_name)
                 if manifest:
                     tools = (

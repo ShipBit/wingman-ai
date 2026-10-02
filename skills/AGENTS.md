@@ -432,7 +432,7 @@ A skill imports from Core only:
 | `services.benchmark` | only the type hint of a legacy `execute_tool` override |
 | `wingmen.wingman_context` | under `TYPE_CHECKING`, for the `WingmanContext` hint |
 
-Everything else (`services.printr`, `services.file`, `services.secret_keeper`, `wingmen.*`, `providers.*`, `hud_server.*`) is internal. Use `self.log`, `self.get_generated_files_dir()`, `self.wingman.secrets` and the other facade members instead. If the facade lacks something your skill needs, say so; do not import around it. `tests/test_skill_imports.py` checks the bundled skills.
+Everything else (`services.printr`, `services.file`, `services.secret_keeper`, `wingmen.*`, `providers.*`, `hud_server.*`) is internal. Use `self.log`, `self.get_generated_files_dir()`, `self.wingman.secrets` and the other facade members instead. If the facade lacks something your skill needs, say so; do not import around it. `tests/skills/test_skill_imports.py` checks the bundled skills.
 
 Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `system_one`, `stt`, `language` came during 3.x). A skill that uses one needs a Wingman that has it; on an older one the attribute is missing and the skill fails with an `AttributeError`. Name the minimum Wingman version in your skill's description when you share it.
 

@@ -1,0 +1,14 @@
+# Tool configuration only. Wingman AI Core is not installed as a package:
+# it ships as a PyInstaller build (WingmanAiCore.spec).
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# Core's own packages (api, services, ...) import from the repository root.
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+filterwarnings = [
+    # Raised by third-party packages Core depends on, not by Core.
+    "ignore::DeprecationWarning",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]

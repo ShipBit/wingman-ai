@@ -70,7 +70,6 @@ class SecretKeeper(WebSocketUser):
         try:
             with open(self.config_file, "w", encoding="UTF-8") as stream:
                 yaml.dump(self.secrets, stream)
-                self.load()
                 await self.secret_events.publish("secrets_saved", self.secrets)
                 return True
         except yaml.YAMLError as e:
