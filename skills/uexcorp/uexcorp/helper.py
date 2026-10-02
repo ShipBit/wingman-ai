@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import threading
 import time
@@ -207,7 +208,11 @@ class Helper:
             )
 
     def wait(self, seconds: int):
+        """Blocking wait, for worker threads only."""
         time.sleep(seconds)
+
+    async def wait_async(self, seconds: float):
+        await asyncio.sleep(seconds)
 
     def is_ready(self) -> bool:
         return self.__is_ready

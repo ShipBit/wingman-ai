@@ -695,6 +695,13 @@ tags: # Categories for filtering - use standard categories
 
 auto_activate: false # Auto-enable for all Wingmen? (see Auto-Activation section)
 
+version: 1.0.0 # Your skill's own release, shown in error reports. Bump it when you ship.
+
+# Only if the skill uses OS-specific modules: windows, darwin (macOS), linux.
+# On other systems the skill is not offered. Leave it out otherwise.
+platforms:
+  - windows
+
 # Controls whether the skill appears in the activation enum by default.
 # Defaults to true if omitted. Set to false for specialized skills that
 # should only be activated when explicitly added to a Wingman's config.
@@ -1396,7 +1403,7 @@ The reference below lists every member, one line each. Gotchas (cap, interrupt, 
 | `.config` | **Read-only** live view of the wingman config. Reads pass through to live values; any write raises `FacadeError`. Change things through a capability (`tts.set_voice`, `commands.*`, `audio.set_output_device`). |
 | `.language` | The language the user speaks, read fresh on every access. `.name` is the English name for prompts (`"German"`, `"Dutch"`), `.code` the ISO 639 code (`"de"`; `None` for an other language that has none), `.is_other` is True for a language beyond the seven Wingman supports end to end. Put `.name` into every `ai.generate` / `local_ai` prompt whose output the user hears or reads: those calls do not get the Wingman's system prompt, so nothing else tells the model the language. |
 | `.settings` | **Read-only** view of app settings. Writing raises `FacadeError`; change devices via `audio.set_output_device(...)`. |
-| `.run_in_thread(fn, *args)` | Run a blocking callable off the event loop (args spread **positionally**). If `fn` is a coroutine function it's run in a fresh event loop. |
+| `.run_in_thread(fn, *args)` | Start `fn` in its own thread and return at once (args spread **positionally**). If `fn` is a coroutine function it's run in a fresh event loop. For a background loop; to wait for one blocking call inside an `async def`, use `await asyncio.to_thread(fn, *args)`. |
 
 ### `self.wingman.ai` — main (cloud) model
 
@@ -1417,9 +1424,9 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | Member | Description |
 | --- | --- |
 | `.available` | `bool` — local model loaded and ready. |
-| `await .generate(text, *, system="", preset=None, temperature=None, top_p=None, top_k=None)` | Local single-turn generation → `str`. |
+| `await .generate(text, *, system="", preset=None, temperature=None, top_p=None, top_k=None, reasoning=None)` | Single-turn generation on the support model → `str`. Pick a `SamplingPreset` (`PRECISE` for extraction and yes/no, `CREATIVE` for in-character lines). `reasoning=True` makes it think first: better, slower, only for background work. |
 | `.generate_sync(...)` | Synchronous variant of `generate`. |
-| `await .summarize(text, *, instruction="", preset=None, temperature=None, top_p=None)` | Local (free) summarization → `str`; chunks large input automatically. |
+| `await .summarize(text, *, instruction="", preset=None, temperature=None, top_p=None, reasoning=None)` | Summarization → `str`; chunks large input automatically. `.summarize_sync(...)` for the sync variant. |
 | `await .embed(texts)` | Vector embeddings for a list of strings. (`.embed_sync(...)` for the sync variant.) |
 
 ### `self.wingman.tts` — speech
@@ -1441,7 +1448,28 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | `.on_playback_started(cb)` → `Subscription` | Observe playback start. Keep the returned `Subscription` and call `.unsubscribe()` in `unload()`. |
 | `.on_playback_finished(cb)` → `Subscription` | Observe playback finish (same `Subscription` contract). |
 | `.output_device` / `.input_device` | Currently selected audio device settings (read-only). |
-| `await .set_output_device(id)` / `await .set_input_device(id)` | Switch the system audio device (in-process). Pass `None` to reset to the system default. Returns `False` if unavailable. |
+| `await .set_output_device(device)` / `await .set_input_device(device)` | Switch one device and re-route playback; the other side stays as it is. `device` is a sounddevice index, a value read from `.output_device` / `.input_device` earlier (to switch back), or `None` for the system default. Returns `False` if unavailable. |
+| `.mic_status` | The current `MicStatus` (listening, recording, playing, ...), or `None` before Core published one. |
+| `.on_mic_status_changed(cb)` → `Subscription` | `cb(status)` on every mic / voice-activation change. Unsubscribe in `unload()`. |
+
+### `self.wingman.stt` — speech to text
+
+Which provider transcribes is a global setting. A skill may add words the transcript is corrected against.
+
+| Member | Description |
+| --- | --- |
+| `.hotwords` | The hotwords this Wingman added (`list[str]`). |
+| `.add_hotwords(words)` / `.remove_hotwords(words)` | Add or remove names (ships, places, people) for this run. Never written to a file. Returns how many changed. |
+| `.remember_spelling(correct, heard=None)` | Put a spelling into the user's vocabulary in Settings, for good and for every provider. With `heard`, exactly that form is replaced. |
+| `.forget_spelling(word)` | Remove it again. |
+
+### `self.wingman.system_one` — typed decisions
+
+A fast, cheap model that picks from options you give it instead of writing text: which of these
+does the user mean, how urgent is this, yes or no. About 300 ms. `.available` is `False` when the
+user switched it off or the plan lacks it; check it and fall back to `local_ai` or a rule.
+See [AGENTS.md — System One](AGENTS.md#system-one--ask-for-a-decision-not-a-sentence) for the
+API and the four rules that make its answers reliable.
 
 ### `self.wingman.commands` — user commands
 
@@ -1622,13 +1650,14 @@ MCP tool names are prefixed by the registry — use the name exactly as it appea
 
 ## Local AI API (`self.wingman.local_ai`)
 
-Every skill can reach the local AI capabilities through `self.wingman` — the free local model
-(`self.wingman.local_ai`), embeddings, and persistent memory (`self.wingman.memory`). These
-run entirely on the user's machine and provide a stable, safe interface.
+Every skill can reach the support model through `self.wingman` — the small, cheap model
+(`self.wingman.local_ai`), embeddings, and persistent memory (`self.wingman.memory`). The name
+is historical: by default the support model runs in the Wingman cloud; users can also run it
+on their own machine or their own llama.cpp server. Calls cost the user nothing either way.
 
 ### Overview
 
-The local AI features run entirely on the user's machine via llama.cpp. Users enable and configure them in Settings (model selection, context window size, GPU backend). Your skill doesn't need to worry about any of that — `self.wingman.local_ai` and `self.wingman.memory` handle everything internally.
+Users choose in Settings where the support model runs (cloud, local or their own server). Your skill doesn't need to worry about any of that — `self.wingman.local_ai` and `self.wingman.memory` handle everything internally.
 
 **Key principles:**
 
@@ -1642,7 +1671,7 @@ The local AI features run entirely on the user's machine via llama.cpp. Users en
 # Quick taste — that's really all it takes:
 text = await self.wingman.local_ai.generate("Summarize this text", system="You are a summarizer.")
 if text:
-    print(text)
+    self.log.info(text, server_only=True)
 ```
 
 ### Checking Availability
@@ -2068,7 +2097,7 @@ class GameStatsTracker(Skill):
 
 **Tool-Based (Progressive Disclosure):**
 
-- [image_generation](image_generation/) - DALL-E image generation
+- [image_generation](image_generation/) - Image generation with styles, aspect ratios and reference images
 - [timer](timer/) - Timer and countdown management
 - [vision_ai](vision_ai/) - Screen capture and image analysis
 - [file_manager](file_manager/) - Local file and folder operations
@@ -2083,6 +2112,12 @@ class GameStatsTracker(Skill):
 - [msfs2020_control](msfs2020_control/) - Microsoft Flight Simulator 2020 controls
 - [uexcorp](uexcorp/) - Star Citizen trading data via UEX Corp
 - [ats_telemetry](ats_telemetry/) - American/Euro Truck Simulator telemetry (auto-activated)
+- [sc_game_events](sc_game_events/) - Reacts to Star Citizen log events in character (`sc_gamelog.on`, support model, `language`)
+- [sc_accountant](sc_accountant/) - Books trades and rewards from the Star Citizen log, with its own dashboard
+
+**HUD:**
+
+- [mic_status](mic_status/) - Microphone state as a HUD icon (`audio.on_mic_status_changed`, `requires: [hud_server]`)
 
 ### Key APIs
 
@@ -2133,13 +2168,15 @@ await self.wingman.secrets.retrieve(secret_name, errors)  # Get secret from Secr
 ### Best Practices
 
 1. **Never cache config values** - retrieve them just-in-time so UI changes take effect immediately
-2. **Always implement `unload()`** - clean up resources to prevent memory leaks
-3. **Use type hints** - they auto-generate tool schemas and improve code quality
-4. **Write clear tool descriptions** - include "WHEN TO USE" guidance for the AI
-5. **Handle errors gracefully** - validate in `validate()`, don't crash at runtime
-6. **Test in both modes** - development (source) and release (custom_skills)
-7. **Keep dependencies minimal** - large dependencies make distribution difficult
-8. **Document your skill** - help users understand how to configure and use it
+2. **Never block the event loop** - wrap blocking calls in `await asyncio.to_thread(...)`; a sync `def` tool runs on the loop too
+3. **Import only the facade** - see [Allowed imports](AGENTS.md#allowed-imports)
+4. **Always implement `unload()`** - clean up resources to prevent memory leaks
+5. **Use type hints** - they auto-generate tool schemas and improve code quality
+6. **Write clear tool descriptions** - include "WHEN TO USE" guidance for the AI
+7. **Handle errors gracefully** - validate in `validate()`, don't crash at runtime
+8. **Test in both modes** - development (source) and release (custom_skills)
+9. **Keep dependencies minimal** - large dependencies make distribution difficult
+10. **Document your skill** - help users understand how to configure and use it
 
 ---
 

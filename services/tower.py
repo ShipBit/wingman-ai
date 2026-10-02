@@ -299,6 +299,7 @@ class Tower:
                             config_dir=self.config_dir,
                             wingman_file=wingman_file,
                             commands=wingman.config.commands,
+                            command_categories=wingman.config.command_categories,
                         )
                         printr.print(
                             f"Saved commands for {wingman_name}.",

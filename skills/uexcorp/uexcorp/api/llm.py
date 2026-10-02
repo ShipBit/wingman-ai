@@ -117,7 +117,7 @@ class Llm:
         if len(close_matches) > self.SYSTEM_ONE_MAX_OPTIONS:
             return None
         wingman = self.__helper.get_handler_config().get_wingman()
-        system_one = getattr(wingman, "system_one", None)
+        system_one = wingman.system_one
         if not system_one or not system_one.available:
             return None
 

@@ -1,9 +1,12 @@
-import time
+import asyncio
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig
-from api.enums import LogType
 from skills.skill_base import Skill, tool
-import keyboard.keyboard as keyboard
+
+try:
+    import keyboard.keyboard as keyboard
+except Exception:
+    keyboard = None
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
@@ -36,7 +39,7 @@ class TypingAssistant(Skill):
         Handles both exact dictation and creative content generation.
         Can optionally press Enter after typing (common for chat messages).""",
     )
-    def assist_with_typing(
+    async def assist_with_typing(
         self, content_to_type: str, end_by_pressing_enter: bool = False
     ) -> str:
         """
@@ -45,16 +48,26 @@ class TypingAssistant(Skill):
             end_by_pressing_enter: Whether the typed content should end by pressing the enter key. Default False. Typically True when typing a response in a chat program.
         """
         if self.settings.debug_mode:
-            self.printr.print(
-                text=f"TypingAssistant: typing '{content_to_type[:50]}...'",
-                color=LogType.INFO,
+            self.log.info(
+                f"TypingAssistant: typing '{content_to_type[:50]}...'",
+                server_only=True,
             )
 
-        keyboard.write(content_to_type, delay=0.01, hold=0.01)
+        if keyboard is None:
+            return "Error: Keyboard control is not available on this system, so nothing was typed."
 
-        if end_by_pressing_enter:
-            keyboard.press("enter")
-            time.sleep(0.2)
-            keyboard.release("enter")
+        try:
+            # keyboard.write is blocking (about 20 ms per character)
+            await asyncio.to_thread(
+                keyboard.write, content_to_type, delay=0.01, hold=0.01
+            )
+
+            if end_by_pressing_enter:
+                keyboard.press("enter")
+                await asyncio.sleep(0.2)
+                keyboard.release("enter")
+        except Exception as e:
+            self.log.error(f"TypingAssistant: typing failed: {e}", server_only=True)
+            return f"Error: Typing failed: {e}"
 
         return "Typed user request at active mouse cursor position."

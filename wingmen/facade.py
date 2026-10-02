@@ -821,28 +821,51 @@ class SkillAudio:
         audio = self._wingman.settings.audio
         return audio.input if audio else None
 
-    async def set_output_device(self, device_id: int | None) -> bool:
-        """Switch the system audio OUTPUT device (in-process; persists + re-routes playback).
-        Pass None to reset to the system default. Returns False if device control is
-        unavailable (no settings service)."""
-        return await self._set_devices(output_device=device_id)
+    async def set_output_device(self, device) -> bool:
+        """Switch the audio OUTPUT device and re-route playback. The input device
+        stays as it is. `device` is a sounddevice index, the value `output_device`
+        returned earlier (to switch back), or None for the system default. Returns
+        False if device control is unavailable (no settings service)."""
+        return await self._set_device("output", device)
 
-    async def set_input_device(self, device_id: int | None) -> bool:
-        """Switch the system audio INPUT device (in-process). Pass None to reset to the
-        system default. Returns False if device control is unavailable."""
-        return await self._set_devices(input_device=device_id)
+    async def set_input_device(self, device) -> bool:
+        """Switch the audio INPUT device; the output stays as it is. Same arguments
+        as set_output_device. Returns False if device control is unavailable."""
+        return await self._set_device("input", device)
 
-    async def _set_devices(self, input_device: int | None = None,
-                           output_device: int | None = None) -> bool:
+    async def _set_device(self, kind: str, device) -> bool:
         settings_service = getattr(self._wingman, "settings_service", None)
         if settings_service is None:
             return False
-        # Resolves the device, persists settings_config.audio, and publishes
-        # 'audio_devices_changed' which re-routes playback — same path as the HTTP API.
+        # set_audio_devices replaces both sides, so pass the other one on as it is.
+        current = settings_service._get_audio_settings_indexed(write=False)
+        devices = {"input": current.input, "output": current.output}
+        devices[kind] = _device_index(device, kind)
+        # Publishes 'audio_devices_changed', which re-routes playback — the same
+        # path as the HTTP API.
         await settings_service.set_audio_devices(
-            input_device=input_device, output_device=output_device
+            input_device=devices["input"], output_device=devices["output"]
         )
         return True
+
+
+def _device_index(device, kind: str) -> int | None:
+    """A sounddevice index for `device`: an index, None (system default) or the
+    AudioDeviceSettings (name + host API) the settings store. A device that is
+    gone resolves to None."""
+    if device is None or isinstance(device, int):
+        return device
+    import sounddevice as sd
+
+    channels = "max_input_channels" if kind == "input" else "max_output_channels"
+    for candidate in sd.query_devices():
+        if (
+            candidate[channels] > 0
+            and candidate["name"] == getattr(device, "name", None)
+            and candidate["hostapi"] == getattr(device, "hostapi", None)
+        ):
+            return candidate["index"]
+    return None
 
 
 class SkillTts:
@@ -864,6 +887,8 @@ class SkillTts:
         config = self._wingman.config
         provider = config.features.tts_provider
         mapping = {
+            # The subscription speaks with Inworld (apply_voice_to_current_provider).
+            TtsProvider.WINGMAN_PRO: lambda: config.inworld.voice_id,
             TtsProvider.OPENAI: lambda: config.openai.tts_voice,
             TtsProvider.ELEVENLABS: lambda: config.elevenlabs.voice,
             TtsProvider.EDGE_TTS: lambda: config.edge_tts.voice,
@@ -1215,12 +1240,20 @@ class SkillHud:
             _hud_groups.add(key)
         return client
 
-    @staticmethod
-    def _done(client, result) -> bool:
-        if result is None:
-            # A restarted server has forgotten its groups; make them again next time.
-            _hud_groups.difference_update({k for k in _hud_groups if k[0] == client.base_url})
-        return result is not None
+    async def _send(self, element, call) -> bool:
+        """Run `call(client)` against this Wingman's window. A None result means
+        the server lost the group (it restarted, or the HUD skill unloaded and
+        deleted it); the group is made again and the call tried once more."""
+        for _ in range(2):
+            client = await self._client(element)
+            if client is None:
+                return False
+            if await call(client) is not None:
+                return True
+            _hud_groups.difference_update(
+                {k for k in _hud_groups if k[0] == client.base_url}
+            )
+        return False
 
     async def show_message(
         self, title: str, text: str, *, duration: float = 10.0, color: Optional[str] = None
@@ -1229,15 +1262,14 @@ class SkillHud:
         is a hex accent like "#00aaff"."""
         from hud_server.types import WindowType
 
-        client = await self._client(WindowType.MESSAGE)
-        if client is None:
-            return False
         icon = self._wingman.get_avatar_path() if title == self._wingman.name else None
-        result = await client.show_message(
-            self._group, WindowType.MESSAGE, title, text,
-            color=color, duration=duration, title_icon=icon,
+        return await self._send(
+            WindowType.MESSAGE,
+            lambda client: client.show_message(
+                self._group, WindowType.MESSAGE, title, text,
+                color=color, duration=duration, title_icon=icon,
+            ),
         )
-        return self._done(client, result)
 
     async def add_info(
         self, title: str, text: str = "", *, color: Optional[str] = None,
@@ -1246,21 +1278,20 @@ class SkillHud:
         """Put an item on this Wingman's info panel; the same title replaces it."""
         from hud_server.types import WindowType
 
-        client = await self._client(WindowType.PERSISTENT)
-        if client is None:
-            return False
-        result = await client.add_item(
-            self._group, WindowType.PERSISTENT, title, text, color=color, duration=duration
+        return await self._send(
+            WindowType.PERSISTENT,
+            lambda client: client.add_item(
+                self._group, WindowType.PERSISTENT, title, text, color=color, duration=duration
+            ),
         )
-        return self._done(client, result)
 
     async def remove_info(self, title: str) -> bool:
         from hud_server.types import WindowType
 
-        client = await self._client(WindowType.PERSISTENT)
-        if client is None:
-            return False
-        return self._done(client, await client.remove_item(self._group, WindowType.PERSISTENT, title))
+        return await self._send(
+            WindowType.PERSISTENT,
+            lambda client: client.remove_item(self._group, WindowType.PERSISTENT, title),
+        )
 
 
 class SkillScGameLog:

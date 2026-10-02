@@ -5,6 +5,10 @@ display_name: Microphone Status
 author: JayMatthew
 auto_activate: true
 discoverable_by_default: false
+platforms:
+  - windows
+requires:
+  - hud_server
 tags:
   - Utility
   - Overlay

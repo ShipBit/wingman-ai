@@ -1,3 +1,4 @@
+import copy
 from typing import TYPE_CHECKING
 
 from api.interface import (
@@ -61,6 +62,8 @@ class ThinkingSound(Skill):
         errors: list[WingmanInitializationError] = []
         audio_config = self.retrieve_custom_property_value("audio_config", errors)
         if audio_config:
+            # Copy so the config property itself is not mutated
+            audio_config = copy.deepcopy(audio_config)
             # Force no wait for this skill to work
             audio_config.wait = False
         return audio_config
@@ -84,8 +87,14 @@ class ThinkingSound(Skill):
         if not audio_config or self.is_playing:
             return
 
+        try:
+            await self.wingman.audio.play(
+                audio_config, volume=self.wingman.config.sound.volume
+            )
+        except Exception as e:
+            self.log.error(f"Thinking Sound: playback failed: {e}", server_only=True)
+            return
         self.is_playing = True
-        await self.wingman.audio.play(audio_config, volume=self.wingman.config.sound.volume)
 
     async def stop_playback(self):
         """Stop the thinking sound with fade out."""

@@ -8,8 +8,9 @@ import requests
 import truck_telemetry
 from rapidfuzz import process, fuzz
 
-from pyproj import Proj, transform
+from pyproj import Proj
 import time
+import asyncio
 from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
@@ -224,16 +225,26 @@ class ATSTelemetry(Skill):
     async def start_telemetry_loop(self, loop_time: int):
         if not self.telemetry_loop_running:
             self.telemetry_loop_running = True
-            data = truck_telemetry.get_data()
-            filtered_data = await self.filter_data(data)
-            self.telemetry_loop_cached_data = copy.deepcopy(filtered_data)
-            while self.telemetry_loop_running:
-                changed_data = await self.query_and_compare_data(
-                    self.telemetry_loop_data_points
-                )
-                if changed_data:
-                    await self.initiate_llm_call_with_changed_data(changed_data)
-                time.sleep(loop_time)
+            try:
+                data = truck_telemetry.get_data()
+                filtered_data = await self.filter_data(data)
+                self.telemetry_loop_cached_data = copy.deepcopy(filtered_data)
+                while self.telemetry_loop_running:
+                    try:
+                        changed_data = await self.query_and_compare_data(
+                            self.telemetry_loop_data_points
+                        )
+                        if changed_data:
+                            await self.initiate_llm_call_with_changed_data(
+                                changed_data
+                            )
+                    except Exception as e:
+                        self.log.error(
+                            f"Telemetry loop iteration failed: {e}", server_only=True
+                        )
+                    time.sleep(loop_time)
+            finally:
+                self.telemetry_loop_running = False
 
     # Compare new telemetry data in monitored fields and react if there are changes
     async def query_and_compare_data(self, data_points: list):
@@ -246,24 +257,20 @@ class ATSTelemetry(Skill):
                 self.log.info("Querying and comparing telemetry data", server_only=True)
             for point in data_points:
                 current_data = filtered_data.get(point)
-                if (
-                    current_data
-                    and current_data != self.telemetry_loop_cached_data.get(point)
-                ):
+                cached_value = self.telemetry_loop_cached_data.get(point)
+                if current_data is not None and current_data != cached_value:
                     # Prevent relatively small data changes in float values from triggering new alerts, such as when cargo damage, route distance or route time change by very small values
                     if (
                         isinstance(current_data, float)
-                        and abs(
-                            (current_data - self.telemetry_loop_cached_data.get(point))
-                            / current_data
-                        )
-                        <= 0.25
+                        and isinstance(cached_value, float)
+                        and current_data != 0
+                        and abs((current_data - cached_value) / current_data) <= 0.25
                     ):
                         pass
                     else:
                         data_changed = (
                             data_changed
-                            + f"{point}:{current_data}, last value was {point}:{self.telemetry_loop_cached_data.get(point)},"
+                            + f"{point}:{current_data}, last value was {point}:{cached_value},"
                         )
             self.telemetry_loop_cached_data = copy.deepcopy(filtered_data)
             if data_changed == default:
@@ -482,7 +489,11 @@ class ATSTelemetry(Skill):
         await super().unload()
         self.loaded = False
         await self.stop_telemetry_loop()
-        truck_telemetry.deinit()
+        try:
+            truck_telemetry.deinit()
+        except Exception as e:
+            self.log.warning(f"Telemetry deinit failed: {e}", server_only=True)
+        self.already_initialized_telemetry = False
 
     # Helper Data Functions for Enhancing Telemetry Data Before Sending to LLM
     # Adapted, revised from https://github.com/mike-koch/ets2-mobile-route-advisor/blob/master/dashboard.js
@@ -1027,9 +1038,21 @@ class ATSTelemetry(Skill):
         # Request data from openstreetmap nominatum api for reverse geocoding
         url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language={self.wingman.language.code or 'en'}&extratags=1"
         headers = {"User-Agent": f"ats_telemetry_skill {self.wingman.name}"}
-        response = requests.get(url, headers=headers, timeout=10)
+        try:
+            response = await asyncio.to_thread(
+                requests.get, url, headers=headers, timeout=10
+            )
+        except requests.RequestException as e:
+            self.log.error(f"API request failed to {url}: {e}")
+            return None
         if response.status_code == 200:
-            return response.json()
+            result = response.json()
+            if isinstance(result, dict):
+                return {
+                    "display_name": result.get("display_name"),
+                    "address": result.get("address"),
+                }
+            return result
         else:
             self.log.error(f"API request failed to {url}, status code: {response.status_code}.")
             return None

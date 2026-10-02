@@ -1,5 +1,5 @@
 import time
-from random import randrange
+import random
 from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
@@ -145,21 +145,11 @@ class VoiceChanger(Skill):
         if not voices:
             return "No configured voice matches the current TTS provider."
 
-        # choose a voice different from the current one
-        while True:
-            index = randrange(len(voices)) - 1
-            if (
-                self.voice_current_index is None
-                or len(voices) == 1
-                or index != self.voice_current_index
-            ):
-                self.voice_current_index = index
-                voice_setting = voices[index]
-                break
-
-        if not voice_setting:
-            self.log.error("Voice switching failed due to missing voice settings.")
-            return "Voice switching failed due to missing voice settings."
+        # choose a voice different from the current one when possible
+        candidates = [i for i in range(len(voices)) if i != self.voice_current_index]
+        index = random.choice(candidates or list(range(len(voices))))
+        self.voice_current_index = index
+        voice_setting = voices[index]
 
         return await self.wingman.tts.set_voice(voice_setting.voice)
 
@@ -185,9 +175,14 @@ class VoiceChanger(Skill):
             Like "You are a grumpy..." or "You are an enthusiastic..." and so on.
             Only output the personality description without additional context or commentary.
         """
-        self.context_personality_next = await self.wingman.ai.generate(
-            context_prompt, system=system, auto_shorten=True
-        )
+        try:
+            self.context_personality_next = await self.wingman.ai.generate(
+                context_prompt, system=system, auto_shorten=True
+            )
+        except Exception as e:
+            self.log.error(
+                f"Could not generate a new personality: {e}", server_only=True
+            )
 
     async def get_prompt(self) -> str | None:
         prompts = []

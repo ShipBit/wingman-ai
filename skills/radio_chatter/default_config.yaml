@@ -14,7 +14,7 @@ discoverable_by_default: false
 custom_properties:
   - id: prompt
     name: Prompt for message generation
-    hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
+    hint: The scenario for the generated radio chatter. If empty, a generic radio conversation is used.
     required: false
     value: "Generate a dialog between random pilots in the Star Citizen universe. Feel free to throw in some random details. Keep in mind that Port Olisar does no longer exist."
     property_type: textarea

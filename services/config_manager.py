@@ -1104,6 +1104,7 @@ class ConfigManager:
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         commands: list,
+        command_categories: Optional[list] = None,
     ):
         """Save only the commands section of a wingman config.
 
@@ -1115,6 +1116,8 @@ class ConfigManager:
             config_dir: The config directory info
             wingman_file: The wingman file info
             commands: The commands list from wingman.config.commands
+            command_categories: wingman.config.command_categories. None leaves
+                the categories in the file untouched.
         """
         config_path = path.join(
             self.config_dir,
@@ -1145,6 +1148,16 @@ class ConfigManager:
         elif "commands" in existing_yaml:
             # Remove commands key if it matches defaults (keep config minimal)
             del existing_yaml["commands"]
+
+        # Commands point at their category by id, so a category a skill made
+        # has to be written with them or the command loses it on restart.
+        if command_categories is not None:
+            if command_categories:
+                existing_yaml["command_categories"] = [
+                    self.convert_to_dict(category) for category in command_categories
+                ]
+            elif "command_categories" in existing_yaml:
+                del existing_yaml["command_categories"]
 
         # Write back the YAML with only commands changed
         return self.write_config(config_path, existing_yaml)

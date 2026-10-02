@@ -212,6 +212,7 @@ class SkillCatalog:
         ]
 
     def drain_runtime_records(self) -> list[dict]:
-        """Return + clear recorded runtime-failure records (so WingmanCore broadcasts each once)."""
+        """The runtime-failure records recorded so far. They stay recorded, because
+        current_records() still reports them to a client that connects later."""
         records = list(self._runtime_outcomes.values())
         return records

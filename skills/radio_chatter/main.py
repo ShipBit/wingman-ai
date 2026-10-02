@@ -1,8 +1,9 @@
 import json
+import re
 import time
 import copy
 from os import path
-from random import randrange
+import random
 from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
@@ -39,6 +40,8 @@ class RadioChatter(Skill):
         self.last_message = None
         self.radio_status = False
         self.loaded = False
+        # Bumped on every start/stop so an older chatter loop notices it was replaced
+        self.run_id = 0
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -203,18 +206,25 @@ class RadioChatter(Skill):
         await super().prepare()
         self.loaded = True
         if self._get_auto_start() and not self.radio_status:
-            self.wingman.run_in_thread(self._init_chatter)
+            self._start_chatter()
 
     async def unload(self) -> None:
         await super().unload()
         self.loaded = False
         self.radio_status = False
+        self.run_id += 1
 
-    def randrange(self, start, stop=None):
-        if start == stop:
+    def _start_chatter(self) -> None:
+        """Mark the radio as on right away and start a loop owning this run id."""
+        self.radio_status = True
+        self.run_id += 1
+        self.wingman.run_in_thread(self._init_chatter, self.run_id)
+
+    def randint(self, start: int, stop: int) -> int:
+        """Random number from start to stop, both inclusive."""
+        if stop <= start:
             return start
-        random = randrange(start, stop)
-        return random
+        return random.randint(start, stop)
 
     @tool(
         name="turn_on_radio",
@@ -230,7 +240,7 @@ class RadioChatter(Skill):
         if self.radio_status:
             return "Radio is already on."
         else:
-            self.wingman.run_in_thread(self._init_chatter)
+            self._start_chatter()
             return "Radio is now on."
 
     @tool(
@@ -246,6 +256,7 @@ class RadioChatter(Skill):
         """Turn the radio off."""
         if self.radio_status:
             self.radio_status = False
+            self.run_id += 1
             return "Radio is now off."
         else:
             return "Radio is already off."
@@ -267,25 +278,33 @@ class RadioChatter(Skill):
         """Async helper for threaded TTS with interrupt=False and optional sound_config."""
         await self.wingman.tts.speak(text, interrupt=False, sound_config=sound_config)
 
-    async def _init_chatter(self) -> None:
+    async def _init_chatter(self, run_id: int) -> None:
         """Start the radio chatter."""
-
-        self.radio_status = True
         interval_min = self._get_interval_min()
         time.sleep(max(5, interval_min))  # sleep for min 5s else min interval
 
-        while self.is_active():
-            await self._generate_chatter()
-            interval_min = self._get_interval_min()
-            interval_max = self._get_interval_max()
-            interval = self.randrange(interval_min, interval_max)
-            time.sleep(interval)
+        try:
+            while self.is_active(run_id):
+                try:
+                    await self._generate_chatter(run_id)
+                except Exception as e:
+                    self.log.error(f"Radio chatter failed: {e}", server_only=True)
+                interval_min = self._get_interval_min()
+                interval_max = self._get_interval_max()
+                interval = self.randint(interval_min, interval_max)
+                time.sleep(max(1, interval))
+        finally:
+            # Only the newest loop may reset the flag
+            if run_id == self.run_id:
+                self.radio_status = False
 
-    def is_active(self) -> bool:
+    def is_active(self, run_id: int | None = None) -> bool:
+        if run_id is not None and run_id != self.run_id:
+            return False
         return self.radio_status and self.loaded
 
-    async def _generate_chatter(self):
-        if not self.is_active():
+    async def _generate_chatter(self, run_id: int):
+        if not self.is_active(run_id):
             return
 
         messages_min = self._get_messages_min()
@@ -293,9 +312,11 @@ class RadioChatter(Skill):
         participants_min = self._get_participants_min()
         participants_max = self._get_participants_max()
         prompt = self._get_prompt()
+        if not prompt or not prompt.strip():
+            prompt = "Generate a dialog between random radio operators."
 
-        count_message = self.randrange(messages_min, messages_max)
-        count_participants = self.randrange(participants_min, participants_max)
+        count_message = self.randint(messages_min, messages_max)
+        count_participants = self.randint(participants_min, participants_max)
 
         system = get_prompt("radio-chatter").format(
             count_participants=count_participants,
@@ -305,7 +326,7 @@ class RadioChatter(Skill):
         # auto_shorten so a large radio prompt is truncated to the cap rather than
         # raising (which, in this background thread, would silently kill the loop).
         messages = await self.wingman.ai.generate(
-            str(prompt), system=system, auto_shorten=True
+            prompt, system=system, auto_shorten=True
         )
 
         if not messages:
@@ -315,22 +336,30 @@ class RadioChatter(Skill):
         voice_participant_mapping = {}
         try:
             messages = messages.strip()
+            if messages.startswith("```"):
+                messages = re.sub(r"^```(?:json)?\s*|\s*```$", "", messages).strip()
             messages = json.loads(messages)
         except json.JSONDecodeError as e:
-            await self.printr.print_async(
-                f"Radio chatter message generation failed due to invalid JSON: {str(e)}",
-                LogType.ERROR,
+            self.log.error(
+                f"Radio chatter message generation failed due to invalid JSON: {str(e)}"
             )
+            return
+
+        if not isinstance(messages, list):
+            self.log.error(f"Radio chatter message generation returned no list: {messages}")
             return
 
         for message in messages:
             if not message:
                 continue
 
-            if "user" not in message or "content" not in message:
-                await self.printr.print_async(
-                    f"Radio chatter message generation failed due to invalid JSON format: {messages}",
-                    LogType.ERROR,
+            if (
+                not isinstance(message, dict)
+                or "user" not in message
+                or "content" not in message
+            ):
+                self.log.error(
+                    f"Radio chatter message generation failed due to invalid JSON format: {messages}"
                 )
                 return
 
@@ -372,7 +401,7 @@ class RadioChatter(Skill):
             sound_config = original_sound_config
             if force_radio_sound and radio_sounds:
                 sound_config = copy.deepcopy(custom_sound_config)
-                sound_config.effects = [radio_sounds[self.randrange(len(radio_sounds))]]
+                sound_config.effects = [random.choice(radio_sounds)]
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
@@ -380,14 +409,14 @@ class RadioChatter(Skill):
             name = message["user"]
             text = message["content"]
 
-            if not self.is_active():
+            if not self.is_active(run_id):
                 return
 
             # wait for audio_player idling
-            while self.wingman.audio.is_playing:
+            while self.wingman.audio.is_playing and self.is_active(run_id):
                 time.sleep(2)
 
-            if not self.is_active():
+            if not self.is_active(run_id):
                 return
 
             voice_index, sound_config = voice_participant_mapping[name]
@@ -406,7 +435,7 @@ class RadioChatter(Skill):
                     f"Background radio chatter: {text}"
                 )
             max_wait = 10
-            while not self.wingman.audio.is_playing or max_wait < 0:
+            while not self.wingman.audio.is_playing and max_wait > 0:
                 time.sleep(0.1)
                 max_wait -= 0.1
             await self._switch_voice(
@@ -434,7 +463,7 @@ class RadioChatter(Skill):
         voice_index = []
         for _ in range(count):
             while True:
-                index = self.randrange(len(voices)) - 1
+                index = random.randrange(len(voices))
                 if index not in voice_index:
                     voice_index.append(index)
                     break
@@ -460,15 +489,17 @@ class RadioChatter(Skill):
         current_provider = self.wingman.config.features.tts_provider
         if voice_setting.provider != current_provider:
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"Radio: skipping voice for {getattr(voice_setting.provider, 'value', voice_setting.provider)} "
-                    f"(current provider is {getattr(current_provider, 'value', current_provider)})"
+                    f"(current provider is {getattr(current_provider, 'value', current_provider)})",
+                    server_only=True,
                 )
             return
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                f"Switching radio voice ({getattr(current_provider, 'value', current_provider)})"
+            self.log.info(
+                f"Switching radio voice ({getattr(current_provider, 'value', current_provider)})",
+                server_only=True,
             )
 
         await self.wingman.tts.set_voice(voice_setting.voice)

@@ -47,7 +47,7 @@ class ToolHandler:
                     await self.__helper.get_handler_debug().write_async(
                         f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Giving it 5 more seconds ..", True
                     )
-                    self.__helper.wait(5)
+                    await self.__helper.wait_async(5)
                     if self.__helper.get_handler_import().get_imported_percent() not in [100, 0]:
                         await self.__helper.get_handler_debug().write_async(
                             f"UEX skill is still loading after 5s: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Deciding to retry later.",

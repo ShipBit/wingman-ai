@@ -37,6 +37,7 @@ class MicStatus(Skill):
 
     # A single space keeps the panel icon-only; "" would hide the whole window.
     ITEM_TITLE = " "
+    RETRY_SECONDS = 10
 
     def __init__(
         self,
@@ -219,13 +220,27 @@ class MicStatus(Skill):
         host = getattr(hud_settings, "host", "127.0.0.1") or "127.0.0.1"
         hud_port = getattr(hud_settings, "port", 7862) or 7862
         self._client = HudHttpClient(base_url=f"http://{host}:{hud_port}")
-        if not await self._client.connect(timeout=3.0):
-            self.log.warning("Could not connect to the HUD server.", server_only=True)
-            return
-
-        await self._client.create_group(
-            self._group, WindowType.PERSISTENT, props=self._build_props()
-        )
+        # The HUD server may start after this skill: retry until it is there.
+        # Unload cancels this task.
+        while True:
+            try:
+                if await self._client.connect(timeout=3.0) and (
+                    await self._client.create_group(
+                        self._group, WindowType.PERSISTENT, props=self._build_props()
+                    )
+                    is not None
+                ):
+                    break
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                self.log.warning(f"HUD connect failed: {error}", server_only=True)
+            else:
+                self.log.warning(
+                    f"Could not reach the HUD server, retrying in {self.RETRY_SECONDS} s.",
+                    server_only=True,
+                )
+            await asyncio.sleep(self.RETRY_SECONDS)
 
         # drop any leftover subscription before re-subscribing
         if self._subscription is not None:
