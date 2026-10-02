@@ -107,7 +107,13 @@ Before implementing, estimate the token cost of your skill:
    ```
    Internal calls (yes/no checks, JSON extraction, matching) don't need it. If a user-written prompt may ask for another language on purpose (English radio chatter for a German user), add "unless the scenario asks for another language".
 
-6. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
+6. **Never block Core's event loop.** Tools and hooks run on the loop that also plays audio and listens to the microphone. A sync `def` tool runs on that loop too. Wrap blocking calls (`requests`, SDK clients, file or image work, `keyboard`, `time.sleep`) in `await asyncio.to_thread(fn, *args)` and wait with `await asyncio.sleep(...)`. `aiohttp` needs no thread.
+
+7. **Background loops must survive errors.** A loop started with `self.wingman.run_in_thread(...)` dies silently on the first exception. Put `try/except` around the work of each iteration, reset any "running" flag in `finally`, and check a flag or run id so `unload()` stops it.
+
+8. **Import only what the facade allows** (see [Allowed imports](#allowed-imports)). Everything else is Core-internal and changes without notice.
+
+9. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
 
 ## Required Files
 
@@ -184,6 +190,8 @@ class YourSkill(Skill):
 
 **Interplay with a Command's static `responses`:** the command's static `responses` (e.g. "I got you.") are the *fixed* acknowledgment — used when the action doesn't speak its own result (`respond="ai"` or fire-and-forget). A `respond="speak"` action provides a *dynamic* spoken result and **takes precedence** over the static response (the wingman never says both). Static for input-independent replies; `respond="speak"` for input-dependent ones.
 
+**Runtime functions** registered with `self.wingman.commands.register_function(...)` or `add_skill_command(...)` live until Core restarts. A saved command keeps pointing at the function name, so register it again in `prepare()` on every start.
+
 **Reference examples in bundled skills:**
 
 - `radio_chatter` — `turn_on_radio` / `turn_off_radio` / `get_radio_status`: stacks `@command_action` on existing `@tool` methods; no-arg `respond="speak"` toggles.
@@ -199,6 +207,8 @@ api_version: 3                         # REQUIRED for v3 — without it the skil
 name: YourSkillName                    # Must match class name exactly
 display_name: Your Skill Name
 author: Your Name
+version: 1.0.0                         # Your skill's own release, shown in error reports. Bump it when you ship.
+platforms: [windows]                   # Optional: only if you use OS-specific modules. windows | darwin | linux
 auto_activate: false                   # Default. Only set true for hook-only or 1-2 tiny tools.
 requires: [sc_gamelog]                 # Optional: hud_server and/or sc_gamelog must be on in the settings.
 tags:
@@ -259,6 +269,11 @@ await self.wingman.audio.set_output_device(device_id)   # switch output device i
 self.wingman.commands.get(name) / .all() / await .save()  # read/edit/persist commands
 self.wingman.tools.has(name) / await .invoke(name, args)  # discover + invoke tools/commands -> ToolResult
 self.wingman.tools.source(name) / .all() / .servers()   # tool origin + enumerate callable functions / MCP servers
+self.wingman.audio.mic_status                           # current MicStatus (listening/recording/...), None before the first
+sub = self.wingman.audio.on_mic_status_changed(cb)      # cb(status) on every change; sub.unsubscribe() in unload()
+self.wingman.stt.add_hotwords(["Hornet"]) / .remove_hotwords([...])  # names the transcript is corrected against (runtime only)
+self.wingman.stt.remember_spelling("Hornet", heard="Hornit")         # permanent: goes into the user's vocabulary
+self.wingman.run_in_thread(fn, *args)                   # start a background loop in its own thread (fire and forget)
 
 # LANGUAGE — the one language the user and their Wingmen speak (read fresh, it can change):
 self.wingman.language.name / .code / .is_other          # "German" / "de" / False — put .name into side-call prompts
@@ -279,8 +294,13 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   tool response: 32,000 tokens, or a quarter of a smaller main model's window (services/context_budget.py).
 #   Over the cap -> FacadeError (or truncates if auto_shorten=True). Images are charged a flat
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
-summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the small support model
-resp = await self.wingman.local_ai.generate(t, system_prompt=...)  # support-model single-turn -> SupportResponse (.text)
+await self.wingman.ai.converse(msg)                     # reply WITH the Wingman's prompt + history; both turns join the conversation
+await self.wingman.ai.generate_image(prompt, aspect="square")  # data URL or URL, "" on failure
+
+# SUPPORT MODEL — small and cheap, runs in our cloud by default (or locally). Returns a str, "" when unavailable.
+text = await self.wingman.local_ai.generate(t, system="...", preset=SamplingPreset.PRECISE)
+summary = await self.wingman.local_ai.summarize(text, instruction="...")   # chunks large input itself
+#   Prefer it over ai.generate for background work (commentary, extraction, yes/no checks): it costs the user nothing.
 
 # CLIENT UI:
 await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
@@ -394,9 +414,35 @@ MCP tool names are prefixed by the registry — use the name exactly as it appea
 
 ## Local Model — Sampling Parameters
 
-Global defaults are tuned for summarization (low temperature). **Override for creative tasks.** Use `SamplingPreset` from `services/skill_local_ai.py` or pass `temperature` / `top_p` directly to `self.wingman.local_ai.generate()`, `.generate_sync()`, and `.summarize()`. Manual values override presets. See `SamplingPreset` docstring for available presets and values.
+The global defaults are 1.0 / 1.0, which is too loose for most skill work. **Pick a preset per call:** `PRECISE` for extraction, matching and yes/no answers (otherwise the model drops or duplicates facts), `BALANCED` for summaries, `CREATIVE` for in-character lines. Import `SamplingPreset` from `services.skill_local_ai` and pass `preset=` to `self.wingman.local_ai.generate()`, `.generate_sync()`, `.summarize()` and `.summarize_sync()`. Manual `temperature` / `top_p` override the preset. See the `SamplingPreset` docstring for the values.
 
 Pass `reasoning=True` to make the local model *think* before answering — better quality on structured or analytical work, but slower. Only do this on background tasks the user is not waiting for. Leave it unset (or `False`) on anything latency-sensitive. Available on `generate()`, `generate_sync()`, `summarize()`, and `summarize_sync()`.
+
+## Allowed imports
+
+A skill imports from Core only:
+
+| Import | For |
+|---|---|
+| `api.interface`, `api.enums` | config types, `WingmanInitializationError`, enums |
+| `skills.skill_base` | `Skill`, `tool`, `command_action` |
+| `skills.<your_skill>.*` | your own modules (absolute imports, no `sys.path` changes) |
+| `services.skill_local_ai` | `SamplingPreset` |
+| `services.image_generation` | `reference_data_url` and the image file helpers next to `ai.generate_image` |
+| `services.benchmark` | only the type hint of a legacy `execute_tool` override |
+| `wingmen.wingman_context` | under `TYPE_CHECKING`, for the `WingmanContext` hint |
+
+Everything else (`services.printr`, `services.file`, `services.secret_keeper`, `wingmen.*`, `providers.*`, `hud_server.*`) is internal. Use `self.log`, `self.get_generated_files_dir()`, `self.wingman.secrets` and the other facade members instead. If the facade lacks something your skill needs, say so; do not import around it. `tests/test_skill_imports.py` checks the bundled skills.
+
+Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `system_one`, `stt`, `language` came during 3.x). A skill that uses one needs a Wingman that has it; on an older one the attribute is missing and the skill fails with an `AttributeError`. Name the minimum Wingman version in your skill's description when you share it.
+
+## Before you finish
+
+1. `python -m py_compile` on every file, and `python -c "import skills.<name>.main"` (on the skill's platform).
+2. No `print()`, no import from the list above that is not allowed, no blocking call in an `async def`.
+3. Every `on(...)` / `on_playback_*` subscription and every background loop is stopped in `unload()`.
+4. Tool returns are capped; the manifest has `api_version: 3`, `version`, and `platforms` if needed.
+5. Start Wingman, activate the skill on a Wingman and call each tool once. Check the log for errors.
 
 ## Example Skills
 
@@ -404,11 +450,14 @@ Pass `reasoning=True` to make the local model *think* before answering — bette
 |-------|------|-------------|
 | [audio_device_changer](audio_device_changer/) | Hook (auto) | Audio routing via `on_play_to_user` |
 | [thinking_sound](thinking_sound/) | Hook (auto) | Sound during processing |
-| [hud](hud/) | Hook+Tool (auto) | HUD overlay, `color` properties |
+| [mic_status](mic_status/) | Hook (auto) | `audio.on_mic_status_changed`, `requires: [hud_server]` |
 | [image_generation](image_generation/) | Tool | `@tool` with `wait_response` |
 | [timer](timer/) | Hook+Tool | State management, `unload()` cleanup |
 | [vision_ai](vision_ai/) | Tool | Screen capture, discovery keywords |
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
 | [uexcorp](uexcorp/) | Tool | Game integration, domain tags |
-| [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions |
+| [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions, `language.name` in prompts |
+| [sc_accountant](sc_accountant/) | Hook+Tool (auto) | `sc_gamelog.on("*")`, own web dashboard, `ui.show_dialog(once=...)` |
+
+Do not copy the tool count of `hud`, `control_windows` or `file_manager`: they predate the token rules and expose 9–10 tools each.
