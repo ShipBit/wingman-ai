@@ -1,12 +1,8 @@
-import sys
-import os
+import asyncio
 import uuid
 
 from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
-
-# add skill to sys path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
@@ -84,7 +80,8 @@ class UEXCorp(Skill):
         if self.__invalid_session or not self.__helper:
             return
         self.__helper.set_loaded(False)
-        Helper.destroy_instance()
+        # destroy() may wait up to 60 s for a running import
+        await asyncio.to_thread(Helper.destroy_instance)
 
     def loop_master(self):
         cycle = 600

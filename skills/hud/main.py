@@ -57,7 +57,7 @@ class HUD(Skill):
         """
         if title in self._persistent_items:
             return title
-        system_one = getattr(self.wingman, "system_one", None)
+        system_one = self.wingman.system_one
         if not system_one or not system_one.available or not self._persistent_items:
             return None
 
@@ -96,6 +96,7 @@ class HUD(Skill):
         # State
         self.active = False
         self.stop_event = threading.Event()
+        self._unloading = False
         self.expecting_audio = False
         self.audio_expect_start_time = 0.0
 
@@ -561,6 +562,9 @@ class HUD(Skill):
 
     async def _ensure_connected(self) -> bool:
         """Ensure the HUD client is connected. Create client and connect if needed."""
+        if self._unloading:
+            return False
+
         # Get HUD server settings
         hud_settings = getattr(self.settings, 'hud_server', None)
         if not hud_settings or not hud_settings.enabled:
@@ -633,6 +637,7 @@ class HUD(Skill):
     async def prepare(self) -> None:
         """Prepare the skill - connect to HUD server."""
         await super().prepare()
+        self._unloading = False
         self.stop_event.clear()
 
         # Get HUD server settings
@@ -709,6 +714,7 @@ class HUD(Skill):
 
     async def unload(self) -> None:
         """Cleanup when skill is unloaded."""
+        self._unloading = True
         await super().unload()
 
         printr.print(
@@ -892,29 +898,16 @@ class HUD(Skill):
             return
         await self._client.show_loader(group_name=self._group_name, element=WindowType.MESSAGE, show=show, color=color)
 
-    def _send_command_sync(self, coro):
-        """Send a command synchronously (for @tool methods)."""
-        if self._main_loop and self._main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(coro, self._main_loop)
-            return
-
+    async def _send_command(self, coro):
+        """Send a HUD command and wait for it; errors are logged, not raised."""
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(coro)
-        except RuntimeError:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    future = asyncio.run_coroutine_threadsafe(coro, loop)
-                    future.result(timeout=5.0)
-                else:
-                    loop.run_until_complete(coro)
-            except Exception as e:
-                printr.print(
-                    f"[HUD] Command error: {e}",
-                    color=LogType.ERROR,
-                    server_only=True
-                )
+            await coro
+        except Exception as e:
+            printr.print(
+                f"[HUD] Command error: {e}",
+                color=LogType.ERROR,
+                server_only=True
+            )
 
     # ─────────────────────────────── Persistence ─────────────────────────────── #
 
@@ -976,7 +969,7 @@ class HUD(Skill):
 
                     if remaining > 0 or not item.get('auto_close', True):
                         self._persistent_items[title] = item
-                        self._send_command_sync(
+                        await self._send_command(
                             self._client.show_timer(
                                 group_name=self._group_name,
                                 element=WindowType.PERSISTENT,
@@ -991,7 +984,7 @@ class HUD(Skill):
                 else:
                     # Regular progress bar
                     self._persistent_items[title] = item
-                    self._send_command_sync(
+                    await self._send_command(
                         self._client.show_progress(
                             group_name=self._group_name,
                             element=WindowType.PERSISTENT,
@@ -1012,7 +1005,7 @@ class HUD(Skill):
                         continue
 
                 self._persistent_items[title] = item
-                self._send_command_sync(
+                await self._send_command(
                     self._client.add_item(
                         group_name=self._group_name,
                         element=WindowType.PERSISTENT,
@@ -1138,7 +1131,7 @@ class HUD(Skill):
             'expiry': time.time() + valid_duration if valid_duration else None
         }
 
-        self._send_command_sync(
+        await self._send_command(
                 self._client.add_item(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -1172,7 +1165,7 @@ class HUD(Skill):
         self._remember(title)
         self._persistent_items.pop(title, None)
 
-        self._send_command_sync(
+        await self._send_command(
             self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
         )
 
@@ -1217,7 +1210,11 @@ class HUD(Skill):
         """
         Remove all information panels and progress bars from the HUD.
         """
-        if not await self._ensure_connected():
+        if self._unloading:
+            # Unload clears over the client it already has; never reconnects.
+            if not (self._client and self._client.connected):
+                return "HUD server is not available."
+        elif not await self._ensure_connected():
             return "HUD server is not available."
 
         # Create a copy of keys to iterate because we will modify the dict
@@ -1229,7 +1226,7 @@ class HUD(Skill):
                 self._remember(title)
             self._persistent_items.pop(title, None)
             if self._client:
-                self._send_command_sync(
+                await self._send_command(
                     self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
                 )
 
@@ -1274,7 +1271,7 @@ class HUD(Skill):
             'added_at': time.time(),
             'expiry': None
         }
-        self._send_command_sync(
+        await self._send_command(
             self._client.add_item(
                 group_name=self._group_name,
                 element=WindowType.PERSISTENT,
@@ -1326,7 +1323,7 @@ class HUD(Skill):
         }
 
         if self._client:
-            self._send_command_sync(
+            await self._send_command(
                 self._client.show_progress(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -1381,7 +1378,7 @@ class HUD(Skill):
         }
 
         if self._client:
-            self._send_command_sync(
+            await self._send_command(
                 self._client.show_timer(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -1443,7 +1440,7 @@ class HUD(Skill):
         percentage = min(100.0, max(0.0, (current / maximum) * 100))
 
         if self._client:
-            self._send_command_sync(
+            await self._send_command(
                 self._client.show_progress(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -1500,7 +1497,7 @@ class HUD(Skill):
                 item['expiry'] = None
 
         if self._client:
-            self._send_command_sync(
+            await self._send_command(
                 self._client.update_item(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -1530,13 +1527,13 @@ class HUD(Skill):
         if not await self._ensure_connected():
             return "HUD server is not available."
 
-        self._send_command_sync(
+        await self._send_command(
             self._client.hide_element(
                 group_name=self._group_name,
                 element=WindowType.PERSISTENT
             )
         )
-        self._send_command_sync(
+        await self._send_command(
             self._client.hide_element(
                 group_name=self._group_name,
                 element=WindowType.MESSAGE
@@ -1559,13 +1556,13 @@ class HUD(Skill):
         and will now be displayed again.
         """
         if self._client:
-            self._send_command_sync(
+            await self._send_command(
                 self._client.show_element(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT
                 )
             )
-            self._send_command_sync(
+            await self._send_command(
                 self._client.show_element(
                     group_name=self._group_name,
                     element=WindowType.MESSAGE

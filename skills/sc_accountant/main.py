@@ -52,14 +52,23 @@ def compact_report(value: Any, budget: int = 3500) -> str:
     encoded = json.dumps(result, ensure_ascii=False, default=str)
     if len(encoded) <= budget:
         return encoded
-    # Too many independent fields: retain a small preview and a clear indicator.
-    result = {
-        "mode": result.get("mode"),
-        "truncated": True,
-        "hint": "Open the dashboard for this detailed report.",
-        "preview": encoded[: max(0, budget // 2)],
-    }
-    return json.dumps(result, ensure_ascii=False)
+    # Too large: drop the biggest fields one by one, so it stays valid JSON.
+    result["truncated"] = True
+    result.setdefault("hint", "Open the dashboard for all records and details.")
+    dropped = []
+    while len(encoded) > budget:
+        candidates = [k for k in result if k not in ("truncated", "hint", "omitted_fields")]
+        if not candidates:
+            break
+        biggest = max(
+            candidates,
+            key=lambda k: len(json.dumps(result[k], ensure_ascii=False, default=str)),
+        )
+        del result[biggest]
+        dropped.append(biggest)
+        result["omitted_fields"] = dropped
+        encoded = json.dumps(result, ensure_ascii=False, default=str)
+    return encoded
 
 
 def normalized_mode(value: Any) -> str:
@@ -226,14 +235,19 @@ class SC_Accountant(Skill):
         await super().prepare()
         if self._books is not None:
             return
-        self._books = await _Books.acquire(
+        books = await _Books.acquire(
             Path(self.get_generated_files_dir()), self.wingman.sc_gamelog
         )
-        await self._books.run(
-            self._books.engine.command, "apply_config_mode", {"mode": self._mode()}
-        )
         try:
-            server = await self._books.dashboard(int(self._property("dashboard_port", 7863)))
+            await books.run(
+                books.engine.command, "apply_config_mode", {"mode": self._mode()}
+            )
+        except BaseException:
+            await books.release()
+            raise
+        self._books = books
+        try:
+            server = await books.dashboard(int(self._property("dashboard_port", 7863)))
             await self._show_dashboard(server, once=True)
         except Exception as error:
             self.log.warning("Accountant dashboard unavailable: " + str(error)[:300])

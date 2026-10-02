@@ -1,3 +1,4 @@
+import asyncio
 from os import path
 from typing import TYPE_CHECKING, Literal, Optional
 from urllib.parse import quote
@@ -81,9 +82,13 @@ reference_images: to change or build on an image. ["last"] is the previous gener
     ) -> str:
         full_prompt = compose_prompt(prompt, ImageStyle(style))
         if self.settings.debug_mode:
-            self.log.info(f"Generate image with prompt: {full_prompt}")
+            self.log.info(
+                f"Generate image with prompt: {full_prompt}", server_only=True
+            )
 
-        references = self._resolve_references(reference_images or [])
+        references = await asyncio.to_thread(
+            self._resolve_references, reference_images or []
+        )
         if isinstance(references, str):
             return references
 
@@ -99,7 +104,9 @@ reference_images: to change or build on an image. ["last"] is the previous gener
         # here. Sending the provider's data URL instead would push megabytes
         # of base64 through the WebSocket.
         try:
-            image_path = store_image(image, self.image_path, prompt)
+            image_path = await asyncio.to_thread(
+                store_image, image, self.image_path, prompt
+            )
         except Exception as e:
             self.log.warning(f"Unable to store the generated image: {e}")
             await self._show(image)
@@ -111,7 +118,7 @@ reference_images: to change or build on an image. ["last"] is the previous gener
         if self._get_save_images():
             response += f" Stored at {image_path}."
         else:
-            self._prune()
+            await asyncio.to_thread(self._prune)
         return response
 
     def _resolve_references(self, names: list[str]) -> list[str] | str:

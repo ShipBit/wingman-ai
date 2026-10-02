@@ -22,14 +22,20 @@ class AudioDeviceChanger(Skill):
         wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.original_audio_device = settings.audio.output
-        self.current_audio_device = settings.audio.output
-        self._sub_finished = self.wingman.audio.on_playback_finished(self.playback_finished)
+        # The device the user had before we switched, read at the moment of the
+        # switch so a change in the settings meanwhile is respected.
+        self.original_audio_device = None
+        self.switched = False
+        self._sub_finished = None
 
     async def validate(self) -> list[WingmanInitializationError]:
         return await super().validate()
 
-    async def _change_audio_device(self, device_id: int | None) -> bool:
+    async def prepare(self) -> None:
+        await super().prepare()
+        self._sub_finished = self.wingman.audio.on_playback_finished(self.playback_finished)
+
+    async def _change_audio_device(self, device_id) -> bool:
         """Change the audio output device in-process via the facade. Pass None to reset to
         the system default. Returns False if device control is unavailable."""
         try:
@@ -59,9 +65,11 @@ class AudioDeviceChanger(Skill):
             self.log.error(
                 f"Audio Device Changer: Error retrieving audio device settings: {errors[0].message}"
             )
-        elif audio_device is not None and audio_device != self.original_audio_device:
-            self.current_audio_device = audio_device
-            await self._change_audio_device(audio_device)
+        elif audio_device is not None:
+            if not self.switched:
+                self.original_audio_device = self.wingman.audio.output_device
+            if await self._change_audio_device(audio_device):
+                self.switched = True
         return text
 
     async def playback_finished(self, _):
@@ -71,15 +79,17 @@ class AudioDeviceChanger(Skill):
         await super().unload()
         await self.reset_audio_device()
 
-        self._sub_finished.unsubscribe()
+        if self._sub_finished:
+            self._sub_finished.unsubscribe()
 
         self.log.info("Audio Device Changer Skill unloaded.", server_only=True)
 
     async def reset_audio_device(self) -> None:
         """Resets the audio device to the original one"""
 
-        if self.current_audio_device == self.original_audio_device:
+        if not self.switched:
             return
+        self.switched = False
         await self._change_audio_device(self.original_audio_device)
         self.log.info(
             "Audio Device Changer: Reset audio device to original.", server_only=True

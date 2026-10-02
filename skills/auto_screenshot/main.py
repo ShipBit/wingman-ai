@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -9,7 +10,6 @@ try:
 except (ImportError, NotImplementedError):
     gw = None
 
-from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
 
@@ -71,22 +71,15 @@ class AutoScreenshot(Skill):
             reason: The reason for taking a screenshot.
         """
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                f"AutoScreenshot: taking screenshot for reason: {reason}",
-                color=LogType.INFO,
+            self.log.info(
+                f"Taking screenshot for reason: {reason}", server_only=True
             )
 
         window_bbox = None
         try:
             if gw is None:
                 raise RuntimeError("pygetwindow not available on this platform")
-            focused_window = gw.getActiveWindow()
-
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Taking screenshot because: {reason}. Focused window: {focused_window}",
-                    color=LogType.INFO,
-                )
+            focused_window = await asyncio.to_thread(gw.getActiveWindow)
 
             if focused_window:
                 window_bbox = {
@@ -97,39 +90,44 @@ class AutoScreenshot(Skill):
                 }
 
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"{focused_window} bbox detected as: {window_bbox}",
-                    color=LogType.INFO,
+                self.log.info(
+                    f"Focused window {focused_window} bbox: {window_bbox}",
+                    server_only=True,
                 )
 
         except Exception as e:
-            await self.printr.print_async(
+            self.log.warning(
                 f"Window detection unavailable ({e}), using full screen capture.",
-                color=LogType.WARNING,
                 server_only=True,
             )
 
+        screenshot_file = os.path.join(
+            self._get_default_directory(),
+            f"{self.wingman.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+        )
+        await asyncio.to_thread(
+            self._grab_and_save, window_bbox, self._get_display(), screenshot_file
+        )
+
+        if self.settings.debug_mode:
+            self.log.info(f"Screenshot saved at: {screenshot_file}", server_only=True)
+
+        return f"Screenshot saved to: {screenshot_file}"
+
+    @staticmethod
+    def _grab_and_save(window_bbox, display, screenshot_file: str) -> None:
         with mss() as sct:
             if window_bbox:
                 screenshot = sct.grab(window_bbox)
             else:
-                main_display = sct.monitors[self._get_display()]
-                screenshot = sct.grab(main_display)
-
+                try:
+                    display = int(display)
+                except (TypeError, ValueError):
+                    display = -1
+                if not 0 <= display < len(sct.monitors):
+                    display = 1 if len(sct.monitors) > 1 else 0
+                screenshot = sct.grab(sct.monitors[display])
             image = Image.frombytes(
                 "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
             )
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            screenshot_file = os.path.join(
-                self._get_default_directory(), f"{self.wingman.name}_{timestamp}.png"
-            )
             image.save(screenshot_file)
-
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Screenshot saved at: {screenshot_file}",
-                    color=LogType.INFO,
-                )
-
-        return f"Screenshot saved to: {screenshot_file}"

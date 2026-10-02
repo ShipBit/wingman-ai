@@ -133,19 +133,26 @@ class ScGameEvents(Skill):
     async def _react(self, reports: list[str]) -> None:
         try:
             line = await self._phrase(reports)
+            if not line:
+                return
+            await self.wingman.conversation.show(
+                line, skill_name=self.config.display_name
+            )
+            if self._remember():
+                await self.wingman.conversation.add_assistant(line)
+            # The HUD skill already shows every line that goes into the history
+            # (unless its own "show chat messages" switch is off, which a skill
+            # cannot read; then only this line is missing on the HUD).
+            hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
+            if self._show_in_hud() and not hud_skill_shows_it:
+                await self.wingman.hud.show_message(
+                    self.wingman.name, line, duration=15
+                )
+            await self.wingman.tts.speak(line, interrupt=False)
+        except asyncio.CancelledError:
+            raise
         except Exception as error:  # The model may be down; the game goes on.
             self.log.warning(f"No reaction: {error}", server_only=True)
-            return
-        if not line:
-            return
-        await self.wingman.conversation.show(line, skill_name=self.config.display_name)
-        if self._remember():
-            await self.wingman.conversation.add_assistant(line)
-        # The HUD skill already shows every line that goes into the history.
-        hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
-        if self._show_in_hud() and not hud_skill_shows_it:
-            await self.wingman.hud.show_message(self.wingman.name, line, duration=15)
-        await self.wingman.tts.speak(line, interrupt=False)
 
     async def _phrase(self, reports: list[str]) -> str:
         language = self.wingman.language.name

@@ -5,7 +5,6 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Optional
 from api.interface import SettingsConfig, SkillConfig
-from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -164,7 +163,7 @@ class Timer(Skill):
             loop_counts: Number of loops (-1 for infinite).
             silent: Whether to suppress output.
         """
-        if delay < 0:
+        if delay <= 0:
             return "Error: Delay must be greater than 0."
 
         if "." in function_name:
@@ -189,7 +188,7 @@ class Timer(Skill):
 
         # set timer
         timer = ActualTimer(
-            delay=int(delay),
+            delay=max(1, int(delay)),
             is_loop=is_loop,
             loops=loop_counts,
             silent=silent,
@@ -264,7 +263,7 @@ class Timer(Skill):
 
         timer = self.timers[id]
         if delay is not None:
-            timer.delay = int(delay)
+            timer.delay = max(1, int(delay))
         if is_loop is not None:
             timer.is_loop = bool(is_loop)
         if loops is not None:
@@ -291,18 +290,26 @@ class Timer(Skill):
         while self.active:
             await asyncio.sleep(2)
             timers_to_delete = []
-            for timer_id, timer in self.timers.items():
-                if (timer.is_loop and timer.loops == 0) or timer.deleted:
-                    timer.deleted = True
-                    timers_to_delete.append(timer_id)
-                    continue
+            for timer_id, timer in list(self.timers.items()):
+                try:
+                    if (timer.is_loop and timer.loops == 0) or timer.deleted:
+                        timer.deleted = True
+                        timers_to_delete.append(timer_id)
+                        continue
 
-                if time.time() - timer.last_run >= timer.delay:
-                    await self.execute_timer(timer_id)
+                    if time.time() - timer.last_run >= timer.delay:
+                        await self.execute_timer(timer_id)
+                except Exception as e:
+                    self.log.error(f"Timer {timer_id} failed: {e}", server_only=True)
+                    # Do not retry a failing timer every 2 seconds
+                    if timer.is_loop:
+                        timer.update_last_run()
+                    else:
+                        timer.deleted = True
 
             # delete timers marked for deletion
             for timer_id in timers_to_delete:
-                del self.timers[timer_id]
+                self.timers.pop(timer_id, None)
 
         # clear timers after unload
         self.timers = {}
@@ -319,6 +326,9 @@ class Timer(Skill):
         response = result.instant_response or result.response
         if response:
             summary = await self._summarize_timer_execution(timer, response)
+            if not summary and not timer.silent:
+                # Summary failed, speak the plain message instead of staying silent
+                summary = str(response)
             if summary:
                 await self.wingman.conversation.add_assistant(summary)
                 self.log.info(summary)
@@ -339,9 +349,11 @@ class Timer(Skill):
         if timer.silent:
             return None
         history = self.wingman.conversation.history()
+        # Only plain text content of the last few messages (no image parts)
         conversation = "\n".join(
-            f"{message.get('role', '')}: {message.get('content', '')}"
-            for message in history
+            f"{message.get('role', '')}: {message.get('content')}"
+            for message in history[-6:]
+            if isinstance(message.get("content"), str)
         )
         prompt = f"""
                     Timed "{timer.function_name}" with "{timer.function_arguments}" was executed.

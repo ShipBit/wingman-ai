@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 from typing import TYPE_CHECKING
@@ -63,42 +64,49 @@ class VisionAI(Skill):
     async def analyse_screen(self, prompt: str, desired_image_width: int = 1000):
         function_response = ""
 
-        # Take a screenshot
+        # Take a screenshot (blocking work runs in a thread)
+        png_base64 = await asyncio.to_thread(
+            self._capture_screen_base64, self._get_display(), desired_image_width
+        )
+
+        if self._get_show_screenshots():
+            await self.printr.print_async(
+                "Analyzing this image",
+                color=LogType.INFO,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman.name,
+                skill_name=self.name,
+                additional_data={"image_base64": png_base64},
+            )
+
+        response_text = await self.wingman.ai.generate(
+            prompt,
+            system="You are a helpful ai assistant.",
+            image=f"data:image/png;base64,{png_base64}",
+        )
+        function_response = response_text or ""
+
+        return function_response
+
+    def _capture_screen_base64(self, display: int, desired_image_width: int) -> str:
         with mss() as sct:
-            display = self._get_display()
-            main_display = sct.monitors[display]
-            screenshot = sct.grab(main_display)
+            try:
+                display = int(display)
+            except (TypeError, ValueError):
+                display = 1
+            if not 1 <= display < len(sct.monitors):
+                display = 1
+            screenshot = sct.grab(sct.monitors[display])
 
             # Create a PIL image from array
             image = Image.frombytes(
                 "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
             )
 
-            aspect_ratio = image.height / image.width
-            new_height = int(desired_image_width * aspect_ratio)
-
-            resized_image = image.resize((desired_image_width, new_height))
-
-            png_base64 = self.pil_image_to_base64(resized_image)
-
-            if self._get_show_screenshots():
-                await self.printr.print_async(
-                    "Analyzing this image",
-                    color=LogType.INFO,
-                    source=LogSource.WINGMAN,
-                    source_name=self.wingman.name,
-                    skill_name=self.name,
-                    additional_data={"image_base64": png_base64},
-                )
-
-            response_text = await self.wingman.ai.generate(
-                prompt,
-                system="You are a helpful ai assistant.",
-                image=f"data:image/jpeg;base64,{png_base64}",
-            )
-            function_response = response_text or ""
-
-        return function_response
+        aspect_ratio = image.height / image.width
+        new_height = int(desired_image_width * aspect_ratio)
+        resized_image = image.resize((desired_image_width, new_height))
+        return self.pil_image_to_base64(resized_image)
 
     def pil_image_to_base64(self, pil_image):
         """
