@@ -23,6 +23,9 @@ from api.interface import (
     WingmanSkillState,
 )
 from services.config_manager import ConfigManager
+from services.elite_runtime_identity import capture as capture_elite_module
+
+capture_elite_module(__file__)
 from services.config_migration_service import ConfigMigrationService
 from services.file import get_custom_skills_dir
 from services.module_manager import ModuleManager
@@ -966,6 +969,7 @@ class ConfigService:
 
     # GET /config
     async def get_config(self, config_name: Optional[str] = "") -> ConfigWithDirInfo:
+        config_dir = self.current_config_dir
         if config_name and len(config_name) > 0:
             config_dir = self.config_manager.get_config_dir(config_name)
 

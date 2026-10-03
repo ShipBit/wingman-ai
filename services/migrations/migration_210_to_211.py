@@ -69,6 +69,26 @@ class Migration210To211(BaseMigration):
 
     def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
         """Migrate wingman configs from 2.1.0 to 2.1.1."""
+        # New Elite profiles use runtime controls, not exported static hotkeys.
+        # Existing static installations need the receipt-aware control_setup
+        # repair command; do not delete or reinterpret user commands here.
+        capabilities = old.get("discoverable_skills") or []
+        if "EliteDangerous" in capabilities and "EliteDangerousControls" not in capabilities:
+            old["discoverable_skills"] = [*capabilities, "EliteDangerousControls"]
+            self.log("- enabled discovery of verified Elite controls; run controls repair for legacy hotkeys")
+        if "EliteDangerousControls" in (old.get("discoverable_skills") or []) or any(
+                s.get("module") == "skills.elite_dangerous_controls.main" for s in old.get("skills") or []):
+            skills = old.setdefault("skills", [])
+            if skills is None:
+                skills = old["skills"] = []
+            control = next((s for s in skills if s.get("module") == "skills.elite_dangerous_controls.main"), None)
+            if control is None:
+                control = {"module": "skills.elite_dangerous_controls.main", "custom_properties": []}
+                skills.append(control)
+            props = control.get("custom_properties") or []
+            if not any(p.get("id") == "semantic_routing" for p in props):
+                control["custom_properties"] = [*props, {"id": "semantic_routing", "value": True}]
+                self.log("- enabled natural-language Elite control routing")
         # Only migrate wingmen that have an explicit wingman_pro conversation model override.
         # Wingmen without this override inherit from defaults (already migrated above).
         if "wingman_pro" in old and "conversation_deployment" in old["wingman_pro"]:

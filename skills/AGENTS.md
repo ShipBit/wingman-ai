@@ -83,6 +83,38 @@ Before implementing, estimate the token cost of your skill:
 
 ## Critical Rules
 
+For controls requiring originating-user intent, use the internal task-local
+`services.tool_execution.current_turn` and `current_call` context. Core establishes
+the turn before progressive activation. A prepared-only message hook cannot
+validate the first activating request. Keep this metadata out of model schemas.
+
+For deterministic control phrases, the optional `resolve_direct_request(text)`
+hook returns `(tool_name, parameters)` or `None` without side effects. Use bounded
+whole-phrase parsing, not fuzzy or substring matching. Core owns activation,
+provenance, dispatch and normal response playback. A resolved phrase bypasses
+legacy instant commands and the model, preventing duplicate or invented actions.
+
+For unmatched requests, an opt-in asynchronous `route_request(text)` hook can
+return an internal `SkillRoute`: execute with the existing tool/parameters,
+clarify/unsupported with a short reply, conversation, or `None` to opt out. Core
+checks all exact hooks first, then async hooks before legacy instant commands.
+Hooks run on configured skills before progressive activation. Conversation skips
+legacy instant commands; the skill must retain its denial in `current_turn.routes`
+so later model tool calls cannot reinterpret it as permission. Handled results
+always terminate dispatch. Do not add authorization fields to model schemas.
+Use bounded, tool-free model calls; synchronous provider adapters need a worker
+so an async timeout actually bounds waiting. Late output must never send input.
+The Elite implementation maintains a 30-second clarification and uses internal
+`ControlAuthorization` at both skill and engine boundaries, checking current turn,
+action identity, cancellation, context and duplicate delivery before input.
+
+Runtime monitors must use Core's persistent event loop
+(`self.wingman.audio_player.event_loop`), which is available before profile
+preparation. Do not create long-lived tasks on temporary voice-request loops.
+Cancel monitors and recovery tasks during `unload()`; recovery must not reactivate
+a skill after it has been disabled. Audio-device recovery belongs to Core's
+supervisor, not to individual skills or repeated AI tool calls.
+
 1. **Never cache config values.** Always retrieve custom properties just-in-time — users can change them in the UI while the skill is running:
    ```python
    # BAD — cached, won't reflect UI changes:
@@ -203,3 +235,10 @@ self.get_generated_files_dir()                             # Persistent storage 
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
 | [uexcorp](uexcorp/) | Tool | Game integration, domain tags |
+
+
+Elite control implementation example: [elite_dangerous_controls](elite_dangerous_controls/)
+uses two progressively activated tools for controls and supervised workflows,
+with one bounded, tool-free AI acknowledgment call after successful individual input,
+physical input checks and lifecycle cancellation. Telemetry remains in the
+separate EliteDangerous skill; external reference queries remain MCP tools.

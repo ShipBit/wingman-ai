@@ -2,6 +2,39 @@
 
 Official website: [https://www.wingman-ai.com](https://www.wingman-ai.com)
 
+Private fork: an [Elite Dangerous companion](docs/elite-dangerous.md) is under
+development using ordinary Wingman skills, MCP and profiles. Local observations
+cover ship status, inventories, missions, navigation, exploration and progression,
+including supported cargo transactions and independently dated ranks and engineer
+updates. Public-data tools provide dated system/station information, service
+candidates, trade comparisons and ship engineering recipes.
+
+The companion starts local monitoring automatically when its profile loads.
+[Game controls under acceptance](docs/elite-dangerous-controls.md) add physical-key input,
+single binding presses and supplemental bindings alongside HOTAS/gamepad controls.
+Shortcut checks include actions triggered by modifier keys; map commands confirm
+the observed map transition or report an unverified result without retrying.
+Recognized control phrases execute directly; on/off wording still presses toggle
+keys once per request. After execution, the configured AI composes a brief varied
+companion acknowledgment. [Supervised workflows](docs/elite-dangerous-workflows.md)
+cover travel, exploration, combat, SRV and on-foot assistance, with local cancellation
+and player checkpoints. Natural-language routing handles paraphrases, clarification,
+and conversation before input. The catalog has 108 action IDs across 151 vehicle/action
+combinations, including targeting, fighter orders, on-foot tools and contextual menus. Live
+evidence and remaining limits are recorded in [acceptance](docs/elite-dangerous-acceptance.md).
+Controls use friendly preset names and explicit action/state arguments; startup
+repairs duplicate template configurations with backups. See the
+[controls upgrade instructions](docs/elite-dangerous-controls.md#preset-changes-and-recovery).
+Gameplay and hardware acceptance results must be recorded before release.
+The [managed launch and audio recovery guide](docs/audio-recovery.md) explains the
+normal Wingman shortcut, preferred-device fallback/return, and live acceptance.
+
+The [setup guide](docs/elite-dangerous.md#repeatable-source-configuration) covers
+repeatable profile/MCP installation, AI-executable commands generated from active bindings,
+preflight and client/gameplay acceptance. See the
+[research and acceptance ledger](docs/elite-dangerous-research.md) for verified
+capabilities, limits and remaining work.
+
 [![Wingman AI Showreel](https://img.youtube.com/vi/qR8FjmQJRGE/0.jpg)](https://youtu.be/qR8FjmQJRGE 'Wingman AI Showreel')
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer. AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.

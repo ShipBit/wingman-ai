@@ -1,16 +1,11 @@
 import asyncio
-from typing import Callable, Optional
+from typing import Optional
 import requests
-from threading import Event, Thread
-import numpy as np
-import sounddevice as sd
-from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
-from api.enums import LogType, SoundEffect, WingmanInitializationErrorType
+from elevenlabslib import User, GenerationOptions, SFXOptions
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-from services.sound_effects import get_sound_effects
-from services.websocket_user import WebSocketUser
 
 
 class ElevenLabs:
@@ -43,7 +38,8 @@ class ElevenLabs:
         config: ElevenlabsConfig,
         voice_id: str,
     ) -> bytes:
-        stability = self._quantize_stability(config.voice_settings.stability)
+        stability = (self._quantize_stability(config.voice_settings.stability)
+                     if config.model.startswith("eleven_v3") else config.voice_settings.stability)
 
         payload = {
             "text": text,
@@ -89,11 +85,10 @@ class ElevenLabs:
         voice_id: str,
         audio_player: AudioPlayer,
         wingman_name: str,
-        sound_effects: list,
-        on_playback_started: Callable[[], None],
-        on_playback_finished: Callable[[Optional[Callable]], None],
+        sound_config: SoundConfig,
     ) -> bool:
-        stability = self._quantize_stability(config.voice_settings.stability)
+        stability = (self._quantize_stability(config.voice_settings.stability)
+                     if config.model.startswith("eleven_v3") else config.voice_settings.stability)
 
         payload = {
             "text": text,
@@ -143,65 +138,16 @@ class ElevenLabs:
                 return False
         response.raise_for_status()
 
-        stop_event = Event()
+        def read_audio(buffer):
+            chunk = response.raw.read(len(buffer), decode_content=True)
+            buffer[:len(chunk)] = chunk
+            return len(chunk)
 
-        def stop_stream(_: str):
-            stop_event.set()
-
-        audio_player.playback_events.subscribe("finished", stop_stream)
-        audio_player.is_playing = True
-        audio_player.wingman_name = wingman_name
-
-        def stream_audio():
-            try:
-                on_playback_started()
-                audio_player.raw_stream = sd.RawOutputStream(
-                    samplerate=44100,
-                    channels=1,
-                    dtype="int16",
-                )
-                audio_player.raw_stream.start()
-
-                volume = sound_config.volume
-                for chunk in response.iter_content(chunk_size=4096):
-                    if stop_event.is_set():
-                        break
-                    if not chunk:
-                        continue
-
-                    audio_chunk = (
-                        np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
-                        / 32768.0
-                    )
-                    audio_chunk = audio_chunk.reshape(-1, 1)
-                    for sound_effect in sound_effects:
-                        audio_chunk = sound_effect(audio_chunk, 44100, reset=False)
-                    if volume != 1.0:
-                        audio_chunk = audio_chunk * volume
-                    audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
-                    chunk = (
-                        (audio_chunk.reshape(-1) * 32767.0).astype(np.int16).tobytes()
-                    )
-
-                    audio_player.raw_stream.write(chunk)
-            finally:
-                if audio_player.raw_stream is not None:
-                    audio_player.raw_stream.stop()
-                    audio_player.raw_stream.close()
-                    audio_player.raw_stream = None
-                audio_player.is_playing = False
-                audio_player.playback_events.unsubscribe("finished", stop_stream)
-                try:
-                    response.close()
-                except Exception as exc:
-                    self.printr.print(
-                        f"Failed to close ElevenLabs streaming response: {exc}",
-                        color=LogType.WARNING,
-                        server_only=True,
-                    )
-                on_playback_finished()
-
-        Thread(target=stream_audio, daemon=True).start()
+        try:
+            await audio_player.stream_with_effects(
+                read_audio, sound_config, wingman_name, sample_rate=44100, dtype="int16")
+        finally:
+            response.close()
         return True
 
     def validate_config(
@@ -230,143 +176,32 @@ class ElevenLabs:
         wingman_name: str,
         stream: bool,
     ):
-        use_stream = stream
-        use_direct_api = config.model.startswith("eleven_v3")
-
         voice = (
             self.user.get_voice_by_ID(config.voice.id)
-            if config.voice.id
-            else self.user.get_voices_by_name_v2(config.voice.name)[0]
+            if config.voice.id else self.user.get_voices_by_name_v2(config.voice.name)[0]
         )
-
-        def handle_playback_finished(unsubscribe_callback=None):
-            if unsubscribe_callback:
-                audio_player.playback_events.unsubscribe(
-                    "finished", unsubscribe_callback
-                )
-            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
-            if contains_high_end_radio:
-                audio_player.play_wav_sample(
-                    "Radio_Static_Beep.wav", sound_config.volume
-                )
-
-            if sound_config.play_beep:
-                audio_player.play_wav_sample("beep.wav", sound_config.volume)
-            elif sound_config.play_beep_apollo:
-                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
-
-            WebSocketUser.ensure_async(
-                audio_player.notify_playback_finished(wingman_name)
-            )
-
-        def notify_playback_finished():
-            handle_playback_finished(playback_finished)
-
-        def notify_playback_started():
-            if sound_config.play_beep:
-                audio_player.play_wav_sample("beep.wav", sound_config.volume)
-            elif sound_config.play_beep_apollo:
-                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
-
-            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
-            if contains_high_end_radio:
-                audio_player.play_wav_sample(
-                    "Radio_Static_Beep.wav", sound_config.volume
-                )
-
-            WebSocketUser.ensure_async(
-                audio_player.notify_playback_started(wingman_name)
-            )
-
-        sound_effects = get_sound_effects(sound_config)
-
-        def audio_post_processor(audio_chunk, sample_rate):
-            for sound_effect in sound_effects:
-                audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
-
-            return audio_chunk
-
-        playback_options = (
-            PlaybackOptions(
-                runInBackground=True,
-                onPlaybackStart=notify_playback_started,
-                onPlaybackEnd=notify_playback_finished,
-            )
-            if use_stream
-            else PlaybackOptions(runInBackground=True)
-        )
-
-        if use_stream and len(sound_effects) > 0:
-            playback_options.audioPostProcessor = audio_post_processor
-
-        generation_options = GenerationOptions(
-            model=config.model,
-            use_speaker_boost=config.voice_settings.use_speaker_boost,
-            stability=config.voice_settings.stability,
-            similarity_boost=config.voice_settings.similarity_boost,
-            style=(
-                config.voice_settings.style
-                if config.model != "eleven_turbo_v2"
-                else None
-            ),
-        )
-
-        if use_direct_api and use_stream:
-            voice_id = self._get_voice_id(voice, config)
-            stream_ok = await self._stream_audio_direct_v3(
-                text=text,
-                config=config,
-                voice_id=voice_id,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-                sound_effects=sound_effects,
-                on_playback_started=notify_playback_started,
-                on_playback_finished=handle_playback_finished,
-            )
-            if not stream_ok:
-                audio_bytes = await self._generate_audio_direct(text, config, voice_id)
-                if audio_bytes:
-                    await audio_player.play_with_effects(
-                        input_data=audio_bytes,
-                        config=sound_config,
-                        wingman_name=wingman_name,
-                    )
-        elif use_direct_api:
-            voice_id = self._get_voice_id(voice, config)
-            audio_bytes = await self._generate_audio_direct(text, config, voice_id)
-            if audio_bytes:
-                await audio_player.play_with_effects(
-                    input_data=audio_bytes,
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
-        elif not use_stream:
-            # play with our audio player so that we call our started and ended callbacks
-            audio_bytes, generation_info = voice.generate_audio_v3(
-                prompt=text,
-                generation_options=generation_options,
-            )
-            if audio_bytes:
-                await audio_player.play_with_effects(
-                    input_data=audio_bytes.result(),
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
+        voice_id = self._get_voice_id(voice, config)
+        if stream:
+            # SDK-managed playback bypasses Core's device policy and recovery.
+            # Use the same HTTP PCM stream for all ElevenLabs models.
+            if await self._stream_audio_direct_v3(text, config, voice_id, audio_player,
+                                                   wingman_name, sound_config):
+                return
+        if config.model.startswith("eleven_v3"):
+            audio = await self._generate_audio_direct(text, config, voice_id)
         else:
-            # playback using elevenlabslib
-            _, _, output_stream_future, _ = voice.stream_audio_v3(
-                prompt=text,
-                generation_options=generation_options,
-                playback_options=playback_options,
-            )
-
-            # if the user cancels the playback...
-            output_stream = output_stream_future.result()
-
-            def playback_finished(wingman_name):
-                output_stream.abort()
-
-            audio_player.playback_events.subscribe("finished", playback_finished)
+            options = GenerationOptions(
+                model=config.model,
+                use_speaker_boost=config.voice_settings.use_speaker_boost,
+                stability=config.voice_settings.stability,
+                similarity_boost=config.voice_settings.similarity_boost,
+                style=config.voice_settings.style if config.model != "eleven_turbo_v2" else None)
+            def generate():
+                audio_future, _ = voice.generate_audio_v3(prompt=text, generation_options=options)
+                return audio_future.result()
+            audio = await asyncio.to_thread(generate)
+        if audio:
+            await audio_player.play_with_effects(audio, sound_config, wingman_name)
 
     async def generate_sound_effect(
         self,

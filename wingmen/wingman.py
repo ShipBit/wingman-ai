@@ -683,9 +683,17 @@ class Wingman:
                 return None
 
             # execute all commands for the phrase
-            commands = commands_by_instant_activation[phrase[0]]
-            for command in commands:
-                await self._execute_command(command, True)
+            commands = []
+            for command in commands_by_instant_activation[phrase[0]]:
+                result = await self._execute_command(command, True)
+                if isinstance(result, tuple) and result[1] == "ERROR DURING PROCESSING":
+                    # Instant activation synthesizes tool responses later.
+                    # Carry failure through without mutating the saved command.
+                    command = command.model_copy(update={
+                        "responses": [f"Command {command.name} failed. Check the Wingman log."],
+                        "additional_context": result[1],
+                    })
+                commands.append(command)
 
             # return the executed command
             return commands
@@ -849,6 +857,9 @@ class Wingman:
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+            # Let _execute_command report failure instead of returning "OK".
+            raise
 
     def threaded_execution(self, function, *args) -> threading.Thread | None:
         """Execute a function in a separate thread."""

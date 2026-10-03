@@ -1,0 +1,37 @@
+module: skills.elite_dangerous.main
+name: EliteDangerous
+display_name: Elite Dangerous Companion
+author: Private fork
+tags:
+  - Game
+  - Elite Dangerous
+auto_activate: true
+discoverable_by_default: false
+platforms:
+  - windows
+  - darwin
+  - linux
+description:
+  en: Read your Elite Dangerous journal for ship, cargo, materials, missions, navigation, exploration, local market, planning and Odyssey suit/backpack observations. Monitor new arrivals and dockings automatically while this companion is loaded.
+discovery_keywords:
+  - Elite Dangerous
+  - commander status
+  - ship loadout
+  - engineering materials
+  - missions
+  - exploration
+  - plotted route and fuel
+  - Odyssey suit and backpack
+custom_properties:
+  - id: journal_directory
+    name: Journal directory
+    hint: Leave empty to find Windows Saved Games automatically. On other systems, select a mounted or copied Elite journal directory.
+    value: ""
+    required: false
+    property_type: string
+  - id: announce_events
+    name: Announce gameplay events
+    hint: While the companion is loaded, speak fresh arrivals, dockings and mission completions through your Wingman's voice, at most once per 30 seconds. Historical events are silent.
+    value: true
+    required: true
+    property_type: boolean

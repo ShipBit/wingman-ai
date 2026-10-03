@@ -9,7 +9,7 @@ import pygame
 from google.genai import types
 from fastapi import APIRouter, Body, File, UploadFile
 import requests
-import sounddevice as sd
+from services import audio_backend as sd
 from showinfm import show_in_file_manager
 import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
@@ -47,6 +47,9 @@ from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir, get_audio_library_dir, get_custom_voices_dir
+from services.elite_runtime_identity import capture as capture_elite_module, write_identity
+
+capture_elite_module(__file__)
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
@@ -371,7 +374,7 @@ class WingmanCore(WebSocketUser):
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
 
-        self.azure_speech_recognizer: speechsdk.SpeechRecognizer = None
+        self.azure_speech_config: speechsdk.SpeechConfig = None
         self.is_listening = False
         self.was_listening_before_ptt = False
         self.was_listening_before_playback = False
@@ -433,14 +436,16 @@ class WingmanCore(WebSocketUser):
             on_speech_recorded=self.on_audio_recorder_speech_recorded
         )
 
-        if self.settings_service.settings.audio:
-            sd.default.device = [
-                self.settings_service.settings.audio.input,
-                self.settings_service.settings.audio.output,
-            ]
-            self.audio_recorder.update_input_stream()
+        sd.supervisor.configure(self.settings_service.config_manager.settings_config.audio)
 
     async def startup(self):
+        loop = asyncio.get_running_loop()
+        def audio_status(direction, message):
+            if loop.is_running():
+                asyncio.run_coroutine_threadsafe(self.printr.print_async(
+                    f"Audio {direction}: {message}", color=LogType.INFO), loop)
+        sd.supervisor.listeners.append(audio_status)
+        sd.supervisor.start()
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
@@ -860,6 +865,15 @@ class WingmanCore(WebSocketUser):
 
         self.config_service.set_tower(self.tower)
 
+        try:
+            identity = write_identity(self)
+            self.printr.print(
+                f"Elite runtime identity: pid={identity['pid']} instance={identity['instance']} profile={identity['profile']}",
+                server_only=True,
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            self.printr.print(f"Elite runtime identity unavailable: {exc}", server_only=True)
+
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
 
@@ -978,7 +992,7 @@ class WingmanCore(WebSocketUser):
                     self.settings_service.settings.voice_activation.enabled
                     and self.is_listening
                 ):
-                    self.start_voice_recognition(mute=True)
+                    self._set_voice_recognition(mute=True)
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
@@ -1006,7 +1020,7 @@ class WingmanCore(WebSocketUser):
                 and not self.is_listening
                 and self.was_listening_before_ptt
             ):
-                self.start_voice_recognition()
+                self._set_voice_recognition()
 
             def run_async_process():
                 loop = asyncio.new_event_loop()
@@ -1053,10 +1067,21 @@ class WingmanCore(WebSocketUser):
             finally:
                 loop.close()
 
+        generation = self.audio_recorder._generation
         provider = self.settings_service.settings.voice_activation.stt_provider
         text = None
 
-        if provider == VoiceActivationSttProvider.WINGMAN_PRO:
+        if provider == VoiceActivationSttProvider.AZURE:
+            if self.azure_speech_config is None:
+                return
+            recognizer = speechsdk.SpeechRecognizer(
+                speech_config=self.azure_speech_config,
+                audio_config=speechsdk.audio.AudioConfig(filename=recording_file),
+                auto_detect_source_language_config=self._azure_language_config)
+            result = recognizer.recognize_once_async().get()
+            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                text = result.text
+        elif provider == VoiceActivationSttProvider.WINGMAN_PRO:
             wingman_pro = WingmanPro(
                 wingman_name="system",
                 settings=self.settings_service.settings.wingman_pro,
@@ -1139,6 +1164,8 @@ class WingmanCore(WebSocketUser):
             )
             text = transcription.text
 
+        if not self.audio_recorder.capture_valid(generation) or not self.is_listening:
+            return
         if text:
             wingman = self.tower.get_wingman_from_text(text)
             if wingman:
@@ -1150,33 +1177,23 @@ class WingmanCore(WebSocketUser):
             )
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
-        # devices: [input_device, output_device]
-
-        # get current audio devices
-        current_mic = sd.default.device[0]
-
-        # set new devices
-        sd.default.device = devices
-
-        # update input stream if the input device has changed
-        if current_mic != devices[0]:
-            self.audio_recorder.valid_mic = True  # this allows a new error message
-            self.audio_recorder.update_input_stream()
-            if self.is_listening:
-                self.start_voice_recognition(mute=True)
-                self.start_voice_recognition(mute=False, adjust_for_ambient_noise=True)
+        # The supervisor invalidates only affected streams. Continuous capture
+        # reopens itself without changing the user's mute/listening intent.
+        sd.supervisor.configure(self.settings_service.config_manager.settings_config.audio)
 
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
             if (
                 self.settings_service.settings.voice_activation.stt_provider
                 == VoiceActivationSttProvider.AZURE
-                and not self.azure_speech_recognizer
+                and not self.azure_speech_config
             ):
                 await self.__init_azure_voice_activation()
         else:
-            self.start_voice_recognition(mute=True)
-            self.azure_speech_recognizer = None
+            self.was_listening_before_playback = False
+            self.was_listening_before_ptt = False
+            self._set_voice_recognition(mute=True)
+            self.azure_speech_config = None
 
     # called when Azure Speech Recognizer recognized voice
     def on_azure_voice_recognition(self, voice_event):
@@ -1189,13 +1206,15 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         text = voice_event.result.text
+        if not self.is_listening or getattr(self, "_azure_capture_interrupted", False):
+            return
         wingman = self.tower.get_wingman_from_text(text)
         if text and wingman:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
     async def __init_azure_voice_activation(self):
-        if self.azure_speech_recognizer or not self.config_service.current_config:
+        if self.azure_speech_config or not self.config_service.current_config:
             return
 
         key = await self.secret_keeper.retrieve(
@@ -1213,11 +1232,8 @@ class WingmanCore(WebSocketUser):
             languages=self.settings_service.settings.voice_activation.azure.languages
         )
 
-        self.azure_speech_recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            auto_detect_source_language_config=auto_detect_source_language_config,
-        )
-        self.azure_speech_recognizer.recognized.connect(self.on_azure_voice_recognition)
+        self.azure_speech_config = speech_config
+        self._azure_language_config = auto_detect_source_language_config
 
     async def on_playback_started(self, wingman_name: str):
         await self.printr.print_async(
@@ -1231,7 +1247,7 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.enabled
             and self.is_listening
         ):
-            self.start_voice_recognition(mute=True)
+            self._set_voice_recognition(mute=True)
 
     async def on_playback_finished(self, wingman_name: str):
         await self.printr.print_async(
@@ -1245,7 +1261,7 @@ class WingmanCore(WebSocketUser):
             and not self.is_listening
             and self.was_listening_before_playback
         ):
-            self.start_voice_recognition()
+            self._set_voice_recognition()
 
     async def process_events(self):
         while True:
@@ -1255,41 +1271,37 @@ class WingmanCore(WebSocketUser):
     def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
         # restart VA with new settings
         if self.is_listening:
-            self.start_voice_recognition(mute=True)
-            self.start_voice_recognition(mute=False, adjust_for_ambient_noise=True)
+            self._set_voice_recognition(mute=True)
+            self._set_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     def start_voice_recognition(
         self,
         mute: Optional[bool] = False,
         adjust_for_ambient_noise: Optional[bool] = False,
     ):
+        # This method is also the client's mute endpoint. Explicit choices must
+        # cancel an automatic resume that playback or push-to-talk had scheduled.
+        self.was_listening_before_playback = False
+        self.was_listening_before_ptt = False
+        self._set_voice_recognition(mute, adjust_for_ambient_noise)
+
+    def _set_voice_recognition(self, mute=False, adjust_for_ambient_noise=False):
         self.is_listening = not mute
         if self.is_listening:
-            if (
-                self.settings_service.settings.voice_activation.stt_provider
-                == VoiceActivationSttProvider.AZURE
-            ):
-                self.azure_speech_recognizer.start_continuous_recognition()
-            else:
-                if adjust_for_ambient_noise:
-                    self.audio_recorder.adjust_for_ambient_noise()
-                self.audio_recorder.start_continuous_listening(
-                    va_settings=self.settings_service.settings.voice_activation
-                )
+            if adjust_for_ambient_noise:
+                self.audio_recorder.adjust_for_ambient_noise()
+            self.audio_recorder.start_continuous_listening(
+                va_settings=self.settings_service.settings.voice_activation)
         else:
-            if (
-                self.settings_service.settings.voice_activation.stt_provider
-                == VoiceActivationSttProvider.AZURE
-            ):
-                self.azure_speech_recognizer.stop_continuous_recognition()
-            else:
-                self.audio_recorder.stop_continuous_listening()
+            self.audio_recorder.stop_continuous_listening()
 
         command = VoiceActivationMutedCommand(muted=mute)
         self.ensure_async(self._connection_manager.broadcast(command))
 
     def toggle_voice_recognition(self):
         mute = self.is_listening
+        self.was_listening_before_playback = False
+        self.was_listening_before_ptt = False
         self.start_voice_recognition(mute)
 
     # GET /audio-devices
@@ -1776,6 +1788,12 @@ class WingmanCore(WebSocketUser):
 
     async def shutdown(self):
         await self.set_core_state(CoreState.SHUTTING_DOWN)
+        self.was_listening_before_playback = False
+        self.was_listening_before_ptt = False
+        self.is_listening = False
+        self.audio_recorder.close()
+        await self.audio_player.stop_playback()
+        await asyncio.to_thread(sd.supervisor.close)
 
         # Stop HUD Server
         await self._stop_hud_server()

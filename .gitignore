@@ -180,3 +180,8 @@ pocket-tts-voices/
 
 
 .claude/settings.json
+
+# Isolated Elite integration tests and local provider caches
+.venv-elite/
+.venv-core/
+.elite-local/
