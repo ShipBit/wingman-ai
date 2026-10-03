@@ -24,6 +24,10 @@ from api.interface import (
 )
 from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
+from services.config_repair import config_name, repair_config_directories
+from services.elite_runtime_identity import capture as capture_elite_module
+
+capture_elite_module(__file__)
 
 TEMPLATES_DIR = "templates"
 CONFIGS_DIR = "configs"
@@ -150,18 +154,19 @@ class ConfigManager:
         )
 
     def find_default_config(self) -> ConfigDirInfo:
-        """Find the (first) default config (name starts with "_") found or another normal config as fallback."""
+        """Find a top-level, enabled default, with deterministic fallback selection."""
         count_default = 0
         fallback: Optional[ConfigDirInfo] = None
         default_dir: Optional[ConfigDirInfo] = None
-        for _, dirs, _ in walk(self.config_dir):
-            for d in dirs:
+        for config in self.get_config_dirs():
+            if not config.is_deleted:
+                d = config.directory
                 if d.startswith(DEFAULT_PREFIX):
                     count_default += 1
                     if not default_dir:
                         default_dir = ConfigDirInfo(
                             directory=d,
-                            name=d.replace(DEFAULT_PREFIX, "", 1),
+                            name=config.name,
                             is_default=True,
                             is_deleted=False,
                         )
@@ -176,7 +181,7 @@ class ConfigManager:
 
         if count_default == 0:
             self.printr.print(
-                f"No default config found. Picking the first normal config found: {fallback.directory} .",
+                f"No default config found. Using: {fallback.directory if fallback else 'none'}.",
                 color=LogType.ERROR,
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
@@ -229,6 +234,10 @@ class ConfigManager:
         This method now only copies config templates (configs/, migration/*/configs/).
         Skills directories are skipped entirely.
         """
+        backup = repair_config_directories(self.config_dir, Path(self.templates_dir) / CONFIGS_DIR)
+        if backup:
+            self.printr.print(f"Repaired duplicate configuration directories. Backup: {backup}",
+                              server_only=True, color=LogType.WARNING)
         for root, dirs, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
             path_parts = relative_path.split(path.sep)
@@ -238,17 +247,19 @@ class ConfigManager:
             if "skills" in path_parts:
                 continue
 
-            if relative_path != ".":
-                config_dir_name = (
-                    relative_path.replace(DELETED_PREFIX, "", 1)
-                    .replace(DEFAULT_PREFIX, "", 1)
-                    .replace(f"{CONFIGS_DIR}{path.sep}", "", 1)
-                    .replace("/", path.sep)
-                )
-                config_dir = self.get_config_dir(config_dir_name)
+            # Only live config directories follow the user's selected identity.
+            # Migration snapshots always retain their own relative paths.
+            if len(path_parts) >= 2 and path_parts[0] == CONFIGS_DIR:
+                template_name = path_parts[1]
+                config_dir = self.get_config_dir(config_name(template_name))
                 if not force and config_dir and config_dir.is_deleted:
-                    # skip logically deleted config dirs
+                    dirs[:] = []
                     continue
+                if config_dir:
+                    path_parts[1] = config_dir.directory
+                elif template_name.startswith(DEFAULT_PREFIX) and any(c.is_default for c in self.get_config_dirs()):
+                    path_parts[1] = config_name(template_name)
+                relative_path = path.join(*path_parts)
 
             # Create the same relative path in the target directory
             target_path = get_writable_dir(
@@ -598,8 +609,12 @@ class ConfigManager:
             )
             return False
 
-        old_default = self.find_default_config()
-        if config_dir.is_default:
+        configs = self.get_config_dirs()
+        selected = next((c for c in configs if c.directory == config_dir.directory and not c.is_deleted), None)
+        if selected is None:
+            raise ValueError("Configuration selection changed; reload the configuration list")
+        defaults = [c for c in configs if c.is_default]
+        if selected.is_default and len(defaults) == 1:
             self.printr.print(
                 f"Config {config_dir.name} is already the default config.",
                 color=LogType.WARNING,
@@ -609,30 +624,29 @@ class ConfigManager:
             )
             return False
 
-        if old_default and old_default.directory.startswith(DEFAULT_PREFIX):
-            shutil.move(
-                path.join(self.config_dir, old_default.directory),
-                path.join(
-                    self.config_dir,
-                    old_default.directory.replace(DEFAULT_PREFIX, "", 1),
-                ),
-            )
-            old_default.is_default = False
-
-            self.printr.print(
-                f"Renamed config {old_default.name} to no longer be default.",
-                color=LogType.INFO,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
-            )
-
-        new_dir = path.join(self.config_dir, f"{DEFAULT_PREFIX}{config_dir.name}")
-        shutil.move(
-            path.join(self.config_dir, config_dir.directory),
-            new_dir,
-        )
-        config_dir.directory = new_dir
+        root = Path(self.config_dir).resolve()
+        moves = [(root / c.directory, root / c.name) for c in defaults if c.directory != selected.directory]
+        new_name = f"{DEFAULT_PREFIX}{selected.name}"
+        if selected.directory != new_name:
+            moves.append((root / selected.directory, root / new_name))
+        for source, target in moves:
+            if source.resolve().parent != root or target.resolve().parent != root or source.is_symlink():
+                raise ValueError("Invalid configuration directory")
+            if target.exists():
+                raise ValueError("Configuration destination already exists; repair duplicate configurations first")
+        completed = []
+        try:
+            for source, target in moves:
+                if target.exists():
+                    raise ValueError("Configuration changed while selecting the default")
+                source.rename(target)
+                completed.append((source, target))
+        except Exception:
+            for source, target in reversed(completed):
+                target.rename(source)
+            raise
+        config_dir.directory = new_name
+        config_dir.name = selected.name
         config_dir.is_default = True
 
         self.printr.print(
@@ -1292,23 +1306,21 @@ class ConfigManager:
                 )
         return False
 
-    def __get_dirs_info(self, configs_path: str) -> ConfigDirInfo:
+    def __get_dirs_info(self, configs_path: str) -> list[ConfigDirInfo]:
         return [
             ConfigDirInfo(
                 directory=name,
-                name=name.replace(DELETED_PREFIX, "", 1).replace(DEFAULT_PREFIX, "", 1),
+                name=config_name(name),
                 is_default=name.startswith(DEFAULT_PREFIX),
                 is_deleted=name.startswith(DELETED_PREFIX),
             )
-            for name in next(walk(configs_path))[1]
+            for name in sorted(next(walk(configs_path), (None, [], []))[1], key=str.casefold)
         ]
 
     def get_config_dir(self, config_name: str) -> Optional[ConfigDirInfo]:
         """Gets a config dir by name."""
-        for config in self.get_config_dirs():
-            if config.name == config_name:
-                return config
-        return None
+        matches = [c for c in self.get_config_dirs() if c.name.casefold() == config_name.casefold()]
+        return min(matches, key=lambda c: (c.is_deleted, not c.is_default, c.directory.casefold()), default=None)
 
     # Settings config:
 

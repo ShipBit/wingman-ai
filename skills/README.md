@@ -64,6 +64,40 @@ Wingman AI uses a **Progressive Tool Disclosure** system to manage skills and th
 
 ### Progressive Tool Disclosure
 
+Core captures internal tool provenance in `services/tool_execution.py` before
+delivering user hooks. `current_turn` and `current_call` are task-local, so a
+newly activated skill can validate the request that activated it. They are not
+model parameters. Elite controls use them to reject stale or conflicting intent
+and prevent replay of a tool-call ID. Do not infer the originating turn from the
+last item in shared conversation history.
+
+A skill can optionally implement a synchronous, side-effect-free
+`resolve_direct_request(text)` returning `(tool_name, parameters)` or `None`.
+Core checks this before legacy instant commands and model calls. Match only bounded
+whole phrases; return `None` for conversation and questions. Core activates and
+validates the skill, executes its tool under turn/call provenance, and returns its
+exact result for normal playback. Do not play audio inside the resolver or invoke
+the model to decide a match. Elite uses this for individual key commands, so the
+model cannot answer a repeated request from remembered game state. A handled
+phrase never falls through to a second input path after failure.
+
+An optional `async route_request(text)` hook handles unmatched speech after all
+exact hooks and before instant commands. Return `services.tool_execution.SkillRoute`
+with `kind=execute` and an existing `(tool_name, parameters)` request, or
+`kind=clarify`/`unsupported` with a final reply. `kind=conversation` resumes normal
+conversation while skipping legacy instant commands; `None` opts out. Core does
+not activate the skill unless it dispatches a tool. Cold hooks therefore cannot
+depend on `prepare()` or prior message hooks. The Elite hook installs its local
+cancellation listener on the persistent loop before awaiting the first model call.
+
+Keep any input authorization in `current_turn.routes`, outside tool parameters.
+A conversation decision must deny subsequent model calls for that turn. Elite
+uses one five-second tool-free classification call, a reviewed catalog, a
+30-second clarification, and action-specific vehicle/UI checks. Its compact two
+tools expose no keys, code, or model-controlled authorization. Model timeouts and
+late results cannot trigger input. Existing synchronous provider wrappers run in
+a bounded daemon worker so they cannot block the timeout or runtime loop.
+
 When Wingman AI starts, not all skill tools are immediately available to the AI. Instead, skills use an **enum-based discovery mechanism**:
 
 1. **Registration**: When a Wingman loads, all its configured skills are registered in the `SkillRegistry`
@@ -280,6 +314,12 @@ tags:
 **Remember:** The AI cannot read your code. It ONLY sees your descriptions, keywords, and tags. Make them count!
 
 ### Auto-Activation
+
+Core assigns its persistent audio event loop before loading profiles. Runtime
+monitors should schedule work there, not on a temporary voice-request loop, and
+cancel their tasks during `unload()`. The Elite companion uses automatic activation
+only in profiles that enable it; its local monitor is independent of AI requests
+and audio-device recovery. See [audio recovery](../docs/audio-recovery.md).
 
 Skills can be marked with `auto_activate: true` in their `default_config.yaml`. This bypasses the progressive disclosure system.
 
@@ -1432,3 +1472,10 @@ self.secret_keeper.retrieve()                              # Direct SecretKeeper
 - **Discord**: Join the [Wingman AI Discord](https://www.shipbit.de/discord) for community support
 - **GitHub**: Check existing skills for examples and patterns
 - **Base Class**: Read [skill_base.py](skill_base.py) for complete API documentation
+
+
+Elite control implementation example: [elite_dangerous_controls](elite_dangerous_controls/)
+uses two progressively activated tools for controls and supervised workflows,
+with one bounded, tool-free AI acknowledgment call after successful individual input,
+physical input checks and lifecycle cancellation. Telemetry remains in the
+separate EliteDangerous skill; external reference queries remain MCP tools.

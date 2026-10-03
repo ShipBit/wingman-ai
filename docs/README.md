@@ -26,6 +26,7 @@ Learn how to create custom extensions for Wingman AI:
 Additional reference documentation:
 
 - **[Available Edge TTS Voices](available-edge-tts-voices.md)** - Complete list of available voices for Edge TTS
+- **[Elite Dangerous PR Readiness Check](elite-dangerous-pr-readiness-check.md)** - First-run findings, acceptance criteria, and verification required before general release
 
 ## Additional Resources
 

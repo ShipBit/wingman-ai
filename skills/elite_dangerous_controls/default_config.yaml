@@ -1,0 +1,46 @@
+module: skills.elite_dangerous_controls.main
+name: EliteDangerousControls
+display_name: Elite Dangerous Controls
+author: Wingman AI community
+auto_activate: false
+discoverable_by_default: false
+platforms:
+  - windows
+tags:
+  - Game
+  - Elite Dangerous
+description:
+  en: Elite ship, SRV and on-foot controls, one press per request with varied companion acknowledgments. Supervised travel, route, scanning, landing, combat, power, defense, SRV and on-foot checklists. The commander flies and decides.
+discovery_keywords:
+  - turn on ship lights
+  - activate night vision
+  - ship controls
+  - SRV controls
+  - on foot controls
+  - gamepad
+  - HOTAS
+custom_properties:
+  - id: semantic_routing
+    name: Natural language controls
+    hint: Interpret unmatched requests with your configured model. Exact commands remain available when disabled.
+    value: true
+    required: true
+    property_type: boolean
+  - id: bindings_directory
+    name: Game bindings directory
+    hint: Leave empty to detect the current Windows user's Elite bindings.
+    value: ""
+    required: false
+    property_type: string
+  - id: presets_directory
+    name: Game ControlSchemes directory
+    hint: Leave empty to use the foreground Elite process's installation.
+    value: ""
+    required: false
+    property_type: string
+  - id: journal_directory
+    name: Journal directory
+    hint: Leave empty to use the telemetry skill's journal directory or Saved Games.
+    value: ""
+    required: false
+    property_type: string

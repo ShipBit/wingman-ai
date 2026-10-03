@@ -40,6 +40,7 @@ datas = [
     ('services', 'services'),
     ('wingmen', 'wingmen'),
     ('skills', 'skills'),
+    ('integrations/elite_dangerous', 'integrations/elite_dangerous'),
     ('templates/configs', 'templates/configs'),
     ('templates/migration', 'templates/migration'),
     ('audio_samples', 'audio_samples'),

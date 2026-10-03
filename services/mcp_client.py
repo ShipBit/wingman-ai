@@ -21,7 +21,7 @@ For SSE transport specifically:
 
 For HTTP/STDIO:
 - HTTP: Per-call connections (stateless)
-- STDIO: Per-call connections (local process, to avoid anyio task group issues)
+    - STDIO: Per-call connections (local process, to avoid anyio task group issues)
 """
 
 import asyncio
@@ -102,7 +102,7 @@ class McpClient:
       Runs in a dedicated background thread with its own event loop to avoid
       blocking the main event loop (keyboard handling, etc.)
     - STDIO: For local processes (like Docker MCP)
-      Maintains persistent connections since local process overhead is minimal.
+      Uses scoped connections for discovery and each tool call.
 
     Usage:
         client = McpClient(wingman_name="MyWingman")
@@ -314,7 +314,7 @@ class McpClient:
             raise
 
     async def _connect_stdio(self, connection: McpConnection) -> None:
-        """Connect using STDIO transport (local process)."""
+        """Discover STDIO tools without retaining task-owned transport contexts."""
         config = connection.config
         if not config.command:
             connection.error = "Command is required for STDIO transport"
@@ -328,32 +328,17 @@ class McpClient:
                 env=config.env,
             )
 
-            # Create the stdio client context
-            context_manager = stdio_client(server_params)
-
-            # Enter the context to get streams
-            streams = await context_manager.__aenter__()
-            read_stream, write_stream = streams
-
-            connection.context_manager = context_manager
-            connection.read_stream = read_stream
-            connection.write_stream = write_stream
-
-            # Create and initialize session
-            session = ClientSession(read_stream, write_stream)
-            session_context = await session.__aenter__()
-            connection.session_context = session
-
-            await session.initialize()
-            connection.session = session
+            # Tool calls already use a fresh process. Discovery must also enter
+            # and exit the SDK's anyio cancel scopes in the same task; retaining
+            # them for later disconnect() can cancel unrelated Wingman work.
+            async with stdio_client(server_params) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    connection.session = session
+                    await self._fetch_tools(connection)
             connection.is_connected = True
-
-            # Fetch available tools
-            await self._fetch_tools(connection)
-
-        except Exception as e:
-            await self._cleanup_connection(connection)
-            raise
+        finally:
+            connection.session = None
 
     async def _connect_sse(
         self, connection: McpConnection, headers: dict[str, str]

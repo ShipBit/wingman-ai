@@ -6,6 +6,12 @@ from os import path
 import os
 import signal
 import sys
+
+# Child drivers must not construct Core, load models, or open a server socket.
+if __name__ == "__main__" and "--audio-worker" in sys.argv:
+    from services.audio_worker import serve
+    serve()
+    raise SystemExit(0)
 import traceback
 from typing import Any, Literal, get_args, get_origin
 
@@ -438,6 +444,9 @@ async def get_dummy_benchmark():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
+    event_loop = asyncio.get_running_loop()
+    core.audio_player.set_event_loop(event_loop)
+    core.audio_recorder.event_loop = event_loop
     # Set MIGRATING state before migrations
     await core.set_core_state(CoreState.MIGRATING)
     await core.config_service.migrate_configs(system_manager)
@@ -465,8 +474,6 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     try:
         await core.startup()
-        event_loop = asyncio.get_running_loop()
-        core.audio_player.set_event_loop(event_loop)
         asyncio.create_task(core.process_events())
         # Set READY state - this also sets is_started = True
         await core.set_core_state(CoreState.READY)

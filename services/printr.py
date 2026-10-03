@@ -56,6 +56,10 @@ class StreamToLogger:
     def isatty(self):
         return False
 
+    def fileno(self):
+        """Preserve the wrapped descriptor for subprocess stderr (e.g. MCP)."""
+        return self.stream.fileno()
+
 
 class Printr(WebSocketUser):
     """Singleton"""

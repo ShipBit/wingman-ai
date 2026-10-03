@@ -4,6 +4,10 @@ import asyncio
 import random
 import traceback
 import uuid
+from services.tool_execution import begin_turn, tool_call_scope
+from services.elite_runtime_identity import capture as capture_elite_module
+
+capture_elite_module(__file__)
 from datetime import datetime
 from typing import (
     Mapping,
@@ -1025,8 +1029,16 @@ class OpenAiWingman(Wingman):
         """
         await self.add_user_message(transcript)
 
+        direct = await self._try_direct_skill_request(transcript, benchmark)
+        conversation_routed = direct is not None and direct[0] is None
+        if direct is not None and not conversation_routed:
+            response, skill = direct
+            await self.add_assistant_message(response)
+            # process() owns playback. No model call or second key dispatch.
+            return response, response, skill, True
+
         benchmark.start_snapshot("Instant activation commands")
-        instant_response, instant_command_executed = await self._try_instant_activation(
+        instant_response, instant_command_executed = (None, False) if conversation_routed else await self._try_instant_activation(
             transcript=transcript
         )
         if instant_response:
@@ -1209,6 +1221,54 @@ class OpenAiWingman(Wingman):
             )
         )
 
+    async def _try_direct_skill_request(self, transcript, benchmark):
+        """Exact phrases first, then opt-in async routing, including cold skills.
+
+        (None, skill) means conversation: skip legacy instant commands. The skill
+        retains its internal denial so later model calls cannot authorize input.
+        """
+        selected = None
+        for hook in ("resolve_direct_request", "route_request"):
+            for skill in self.skills:
+                resolver = getattr(skill, hook, None)
+                if not callable(resolver) or getattr(skill, "is_unloaded", False):
+                    continue
+                try:
+                    request = resolver(transcript) if hook == "resolve_direct_request" else await resolver(transcript)
+                    if request is None:
+                        continue
+                    if hook == "route_request":
+                        if request.kind == "conversation":
+                            return None, skill
+                        if request.kind != "execute":
+                            return request.reply, skill
+                        request = request.request
+                    selected = skill, request
+                    break
+                except Exception:
+                    printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                    return "I missed that order. Please repeat the control you want, Commander.", skill
+            if selected:
+                break
+        if selected:
+            skill, (tool_name, parameters) = selected
+            try:
+                success, message, _ = await self.skill_registry.activate_skill(skill.name)
+                if not success:
+                    return "Blocked: " + message, skill
+                success, message = await skill.ensure_activated()
+                if not success:
+                    self.skill_registry.deactivate_skill(skill.name)
+                    return "Blocked: " + message, skill
+                with tool_call_scope("direct"):
+                    response, instant = await skill.execute_tool(tool_name, parameters, benchmark)
+                return instant or response, skill
+            except Exception:
+                # A handled phrase must never fall through to another input path.
+                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                return "Unverified: control execution did not finish. No retry sent.", skill
+        return None
+
     def _get_random_filler(self):
         # get last two used instant responses
         if len(self.last_used_instant_responses) > 2:
@@ -1365,6 +1425,8 @@ class OpenAiWingman(Wingman):
         Args:
             content (str): The message content to add.
         """
+        begin_turn(self, content)
+        # Provenance is captured before hooks, including for inactive skills.
         # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
             if skill.is_prepared:
@@ -1901,14 +1963,15 @@ class OpenAiWingman(Wingman):
 
                 # Time the individual tool execution
                 tool_start = time.perf_counter()
-                (
-                    function_response,
-                    instant_response,
-                    skill,
-                    tool_label,
-                ) = await self.execute_command_by_function_call(
-                    function_name, function_args
-                )
+                with tool_call_scope(tool_call.id):
+                    (
+                        function_response,
+                        instant_response,
+                        skill,
+                        tool_label,
+                    ) = await self.execute_command_by_function_call(
+                        function_name, function_args
+                    )
                 tool_time_ms = (time.perf_counter() - tool_start) * 1000
 
                 # Add timing if we got a label (actual tool execution, not meta-tool)
