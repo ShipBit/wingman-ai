@@ -41,6 +41,8 @@ from api.interface import (
     AudioDevice,
     AudioFile,
     AvatarGenerationRequest,
+    AvatarPrompt,
+    AvatarPromptRequest,
     AvatarVariant,
     BenchmarkResult,
     ChangelogEntry,
@@ -49,6 +51,7 @@ from api.interface import (
     ConfigWithDirInfo,
     CoreStatusResponse,
     ElevenlabsModel,
+    ImageStylePrompt,
     MemoryEntryResponse,
     MemoryUpdateRequest,
     MicStatusResponse,
@@ -337,6 +340,20 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/generate-image",
             endpoint=self.generate_image,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/image-style-prompts",
+            endpoint=self.get_image_style_prompts,
+            response_model=list[ImageStylePrompt],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/avatar-prompt",
+            endpoint=self.write_avatar_prompt,
+            response_model=AvatarPrompt,
             tags=tags,
         )
         self.router.add_api_route(
@@ -2374,22 +2391,38 @@ class WingmanCore(WebSocketUser):
     async def get_avatar_variants(self, wingman_name: str) -> list[AvatarVariant]:
         return avatar_studio.list_variants(wingman_name)
 
+    # GET /image-style-prompts
+    async def get_image_style_prompts(self) -> list[ImageStylePrompt]:
+        return avatar_studio.style_prompts()
+
+    # POST /avatar-prompt
+    async def write_avatar_prompt(self, request: AvatarPromptRequest) -> AvatarPrompt:
+        wingman = self._studio_wingman(request.wingman_name)
+        try:
+            return AvatarPrompt(
+                prompt=await avatar_studio.write_prompt(wingman, request)
+            )
+        except avatar_studio.AvatarStudioError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
     # POST /avatar-variants
     async def generate_avatar_variant(
         self, request: AvatarGenerationRequest
     ) -> AvatarVariant:
-        wingman = (
-            self.tower.get_wingman_by_name(request.wingman_name) if self.tower else None
-        )
+        wingman = self._studio_wingman(request.wingman_name)
+        try:
+            return await avatar_studio.generate_variant(wingman, request)
+        except avatar_studio.AvatarStudioError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    def _studio_wingman(self, wingman_name: str) -> OpenAiWingman:
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not isinstance(wingman, OpenAiWingman):
             raise HTTPException(
                 status_code=404,
                 detail="This wingman is not loaded. Enable it and try again.",
             )
-        try:
-            return await avatar_studio.generate_variant(wingman, request)
-        except avatar_studio.AvatarStudioError as e:
-            raise HTTPException(status_code=502, detail=str(e))
+        return wingman
 
     # DELETE /avatar-variants
     async def delete_avatar_variant(self, wingman_name: str, file_name: str):

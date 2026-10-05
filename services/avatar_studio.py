@@ -1,10 +1,13 @@
 """The avatar studio: generated avatar variants per wingman.
 
-The wingman's main model writes the character description from the backstory
-and the user's wishes (prompts/avatar-image*.md). Core adds the style preset and
-the fixed avatar framing, so the result is a square, centered portrait that
-needs no crop. Every variant is kept on disk with its prompt, so the user can
-flip back to an older one, even after closing the studio.
+Two steps, so the user can edit the prompt before paying for an image. First
+the wingman's main model writes the character description from the backstory
+and the user's wishes (prompts/avatar-image*.md), and Core puts the style
+preset in front and the fixed avatar framing behind it, for a square, centered
+portrait that needs no crop. Then the user edits that prompt as they like and
+Core sends it to the image model as is. Every variant is kept on disk with its
+prompt, so the user can flip back to an older one, even after closing the
+studio.
 """
 
 import json
@@ -15,11 +18,17 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from api.enums import ImageAspect, ImageStyle
-from api.interface import AvatarGenerationRequest, AvatarVariant
+from api.interface import (
+    AvatarGenerationRequest,
+    AvatarPromptRequest,
+    AvatarVariant,
+    ImageStylePrompt,
+)
 from services.file import get_generated_files_dir, get_prompt
 from services.image_generation import (
     AVATAR_FRAMING,
     AVATAR_FRAMING_REFINE,
+    STYLE_PROMPTS,
     compose_prompt,
     list_images,
     prune_images,
@@ -74,24 +83,38 @@ def variant_file(wingman_name: str, file_name: str) -> str | None:
     return safe_file_in(variants_dir(wingman_name), file_name)
 
 
+def style_prompts() -> list[ImageStylePrompt]:
+    """The text of every style preset. The studio swaps it in the prompt when
+    the user picks another style."""
+    return [
+        ImageStylePrompt(style=style, prompt=STYLE_PROMPTS.get(style, ""))
+        for style in ImageStyle
+    ]
+
+
+async def write_prompt(wingman: "Wingman", request: AvatarPromptRequest) -> str:
+    """The complete prompt for a new variant: style, description, framing."""
+    description = await _write_description(
+        wingman, request.wishes, refine=request.refine
+    )
+    return compose_prompt(
+        description,
+        request.style,
+        AVATAR_FRAMING_REFINE if request.refine else AVATAR_FRAMING,
+    )
+
+
 async def generate_variant(
     wingman: "Wingman", request: AvatarGenerationRequest
 ) -> AvatarVariant:
+    prompt = " ".join(request.prompt.split())
+    if not prompt:
+        raise AvatarStudioError("The prompt is empty.")
     directory = variants_dir(wingman.name, create=True)
     reference = _reference(directory, request.reference)
 
-    description = (request.prompt or "").strip()
-    if not description:
-        description = await _write_description(
-            wingman, request.wishes, refine=reference is not None
-        )
-
     image = await wingman.generate_image(
-        compose_prompt(
-            description,
-            request.style,
-            AVATAR_FRAMING_REFINE if reference else AVATAR_FRAMING,
-        ),
+        prompt,
         aspect=ImageAspect.SQUARE,
         reference_images=[reference] if reference else None,
     )
@@ -101,7 +124,7 @@ async def generate_variant(
     file_path = store_image(image, directory, "avatar")
     with open(_meta_path(file_path), "w", encoding="utf-8") as file:
         json.dump(
-            {"prompt": description, "style": request.style.value},
+            {"image_prompt": prompt, "style": request.style.value},
             file,
             ensure_ascii=False,
         )
@@ -162,12 +185,20 @@ def _variant(wingman_name: str, file_path: str) -> AvatarVariant:
         style = ImageStyle(meta.get("style", ImageStyle.NONE.value))
     except ValueError:
         style = ImageStyle.NONE
+    prompt = meta.get("image_prompt")
+    if prompt is None:
+        # Older variants stored only the character description. Rebuild what
+        # was sent, so generating from it gives the same kind of image again.
+        description = meta.get("prompt", "")
+        prompt = (
+            compose_prompt(description, style, AVATAR_FRAMING) if description else ""
+        )
     file_name = path.basename(file_path)
     return AvatarVariant(
         file_name=file_name,
         url=f"/avatar-images/{quote(wingman_name)}/{quote(file_name)}",
         path=file_path,
-        prompt=meta.get("prompt", ""),
+        prompt=prompt,
         style=style,
         created=path.getmtime(file_path) if path.exists(file_path) else time.time(),
     )

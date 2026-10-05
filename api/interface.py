@@ -1690,18 +1690,42 @@ class TokenUsage(BaseModel):
     """Tokens the model wrote, summed over every request of the turn."""
 
 
+class AvatarPromptRequest(BaseModel):
+    """Lets the wingman's model write the prompt for a new avatar variant."""
+
+    wingman_name: str
+    style: ImageStyle
+    """The art style preset. Its text opens the prompt."""
+    wishes: str
+    """What the user wants, in any language. May be empty: then the backstory
+    alone decides. With `refine` it says what should change."""
+    refine: bool
+    """True when the image will be built on a reference image. Then the
+    prompt says what changes instead of describing the whole character."""
+
+
+class AvatarPrompt(BaseModel):
+    prompt: str
+    """The complete prompt: style, character description and framing."""
+
+
+class ImageStylePrompt(BaseModel):
+    """What a style preset adds to an image prompt."""
+
+    style: ImageStyle
+    prompt: str
+    """Empty for NONE."""
+
+
 class AvatarGenerationRequest(BaseModel):
     """One new avatar variant from the avatar studio."""
 
     wingman_name: str
+    prompt: str
+    """The complete prompt. Core sends it to the image model as is."""
     style: ImageStyle
-    """The art style preset. Core adds its text and the avatar framing."""
-    wishes: str
-    """What the user wants, in any language. May be empty: then the backstory
-    alone decides. With a reference it says what should change."""
-    prompt: Optional[str] = None
-    """The character description to use as is. None lets the wingman's model
-    write it from backstory and wishes."""
+    """The style preset the prompt was written with. Stored with the variant,
+    so the studio selects it again when the user goes back to it."""
     reference: Optional[str] = None
     """File name of an earlier variant, or an uploaded image as data URL. The
     new image keeps its character. None generates from scratch."""
@@ -1716,7 +1740,7 @@ class AvatarVariant(BaseModel):
     path: str
     """Absolute file path, for "show in folder"."""
     prompt: str
-    """The character description the image was made from, without style and framing."""
+    """The complete prompt the image was made from."""
     style: ImageStyle
     created: float
     """Unix timestamp."""
