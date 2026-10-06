@@ -249,3 +249,19 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/elite/mcp
     discoverable_by_default: false
+
+  - name: wingman_galactapedia
+    display_name: Galactapedia - Star Citizen Lore
+    description: Star Citizen lore from RSI's Galactapedia. People, factions, species, star systems, planets, ships and events of the Star Citizen universe and their history. Answers who is and what is questions about the lore. Not for ship stats, prices or game mechanics, which StarHead covers.
+    discovery_keywords:
+      - Star Citizen lore
+      - Galactapedia
+      - Star Citizen history
+      - UEE
+      - Vanduul
+      - Xi'an
+      - Banu
+      - Tevarin
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/galactapedia/mcp
+    discoverable_by_default: false
