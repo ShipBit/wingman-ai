@@ -52,7 +52,7 @@ GALACTAPEDIA_SERVER = {
         "star systems, planets, ships and events of the Star Citizen universe "
         "and their history. Answers who is and what is questions about the "
         "lore. Not for ship stats, prices or game mechanics, which StarHead "
-        "covers."
+        "covers. Unofficial fan project, not affiliated with Cloud Imperium."
     ),
     "discovery_keywords": [
         "Star Citizen lore",
