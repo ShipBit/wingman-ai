@@ -249,3 +249,26 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/elite/mcp
     discoverable_by_default: false
+
+  # The articles belong to Cloud Imperium. RSI's Fandom FAQ allows them in fan
+  # projects without a paywall, with a link to the official site and with this
+  # notice: "This is an unofficial Star Citizen fan site, not affiliated with
+  # the Cloud Imperium group of companies. All content on this site not
+  # authored by its host or users are property of their respective owners."
+  # The server sends it as its MCP instructions. The description only says it
+  # in one sentence, because the model reads the description on every turn.
+  - name: wingman_galactapedia
+    display_name: Galactapedia - Star Citizen Lore
+    description: Star Citizen lore from RSI's Galactapedia. People, factions, species, star systems, planets, ships and events of the Star Citizen universe and their history. Answers who is and what is questions about the lore. Not for ship stats, prices or game mechanics, which StarHead covers. Unofficial fan project, not affiliated with Cloud Imperium.
+    discovery_keywords:
+      - Star Citizen lore
+      - Galactapedia
+      - Star Citizen history
+      - UEE
+      - Vanduul
+      - Xi'an
+      - Banu
+      - Tevarin
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/galactapedia/mcp
+    discoverable_by_default: false
