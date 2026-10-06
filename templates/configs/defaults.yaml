@@ -215,6 +215,10 @@ pocket_tts:
   output_streaming: true
 wingman_pro:
   tts_provider: inworld
+  # Used when tts_provider is azure. Multilingual, so it speaks every language.
+  azure:
+    voice: en-US-JennyMultilingualNeural
+    output_streaming: true
   # Empty means: whatever the plan lists as its default right now.
   conversation_deployment: ''
 commands:

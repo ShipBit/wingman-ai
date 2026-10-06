@@ -68,8 +68,10 @@ def test_a_nonsense_fallback_is_not_trusted():
 
 
 def test_wingman_pro_section_from_316():
+    # 3.1.6 could still say "openai" here, which no longer exists.
     data = {
-        "tts_provider": "azure",
+        "tts_provider": "openai",
+        "azure": {"voice": "en-US-JennyMultilingualNeural", "output_streaming": True},
         "conversation_deployment": "gpt-4o-mini",
     }
     sanitize(WingmanProConfig, data)
@@ -134,7 +136,7 @@ def test_a_voice_inside_a_skill_property_is_repaired_too():
 
 
 def test_it_walks_into_nested_models():
-    data = {"features": _features(), "wingman_pro": {"tts_provider": "azure"}}
+    data = {"features": _features(), "wingman_pro": {"tts_provider": "openai"}}
     changes = sanitize(NestedConfig, data)
 
     assert data["wingman_pro"]["tts_provider"] in {e.value for e in WingmanProTtsProvider}

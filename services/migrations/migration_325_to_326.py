@@ -9,6 +9,14 @@ appended here, unless one of that name is there already: someone may have added
 it by hand, and their settings win. Neither is discoverable by default, so no
 Wingman uses them until the user switches them on.
 
+Azure voices come back to the subscription, next to Inworld (`wingman_pro.tts_provider`
+can be `azure` again). The new `wingman_pro.azure` block is backfilled from the
+template (Jenny, streaming on), which gives every Wingman a female voice. So each
+Wingman that speaks through the subscription, or inherits its speech output and has
+an Inworld voice of its own, gets the Azure voice of its Inworld voice's gender:
+Andrew for a male one, Jenny otherwise. It is only used once the Wingman is switched
+to Azure, by the user or by Core when the plan has no Inworld. Nobody is switched here.
+
 Nothing else changes.
 """
 
@@ -74,6 +82,27 @@ NEW_SERVERS = [
     (GALACTAPEDIA_SERVER, "Galactapedia"),
 ]
 
+# Kept in step with services/wingman_default_voices.py, copied so this
+# migration gives the same result whatever that file says later.
+AZURE_FEMALE_VOICE = "en-US-JennyMultilingualNeural"
+AZURE_MALE_VOICE = "en-US-AndrewMultilingualNeural"
+INWORLD_MALE_VOICES = frozenset(
+    {
+        "alex", "blake", "carter", "clive", "craig", "dennis", "dominus",
+        "edward", "hades", "mark", "ronald", "shaun", "theodore", "timothy",
+        "matthias", "alain", "mathieu", "etienne", "diego", "miguel", "rafael",
+        "gianni", "dmitry", "nikolai", "heitor", "szymon", "wojciech", "erik",
+        "lennart", "yichen", "satoshi", "hyunwoo", "seojun",
+    }
+)
+
+
+def azure_voice_for_inworld(voice_id) -> str:
+    """Andrew for a male Inworld voice, Jenny for a female or unknown one."""
+    if voice_id and str(voice_id).strip().lower() in INWORLD_MALE_VOICES:
+        return AZURE_MALE_VOICE
+    return AZURE_FEMALE_VOICE
+
 
 class Migration325To326(BaseMigration):
     """Migration from 3.2.5 to 3.2.6."""
@@ -97,3 +126,37 @@ class Migration325To326(BaseMigration):
             servers.append(dict(server))
             self.log(f"- added the {label} MCP server")
         return old
+
+    def migrate_defaults(self, old: dict) -> dict:
+        return self._set_azure_voice(old, "defaults", is_defaults=True)
+
+    def migrate_wingman(self, old: dict) -> dict:
+        return self._set_azure_voice(old, old.get("name", "wingman"), is_defaults=False)
+
+    def _set_azure_voice(self, config: dict, label: str, is_defaults: bool) -> dict:
+        """Give the config the Azure voice of its Inworld voice's gender."""
+        features = config.get("features") if isinstance(config.get("features"), dict) else {}
+        tts = features.get("tts_provider")
+        inworld = config.get("inworld") if isinstance(config.get("inworld"), dict) else {}
+        voice_id = inworld.get("voice_id")
+        if tts is not None and tts != "wingman_pro":
+            # Speaks through something else; the template voice is fine.
+            return config
+        if tts is None and not voice_id and not is_defaults:
+            # Inherits both speech output and voice: the defaults' Azure voice fits.
+            return config
+        wingman_pro = config.get("wingman_pro")
+        if wingman_pro is not None and not isinstance(wingman_pro, dict):
+            return config
+        wingman_pro = dict(wingman_pro or {})
+        azure = dict(wingman_pro.get("azure") or {})
+        if azure.get("voice"):
+            return config
+        azure["voice"] = azure_voice_for_inworld(voice_id)
+        if is_defaults:
+            # A Wingman inherits the streaming switch from the defaults.
+            azure.setdefault("output_streaming", True)
+        wingman_pro["azure"] = azure
+        config["wingman_pro"] = wingman_pro
+        self.log(f"- {label}: Azure voice {azure['voice']} (Inworld voice {voice_id or 'default'})")
+        return config

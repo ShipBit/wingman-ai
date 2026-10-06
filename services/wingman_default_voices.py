@@ -9,6 +9,7 @@ a default voice: none, the one its template had up to 3.2.3 (language
 user picked is never replaced, even one that is another language's default.
 """
 
+import copy
 import json
 import os
 from typing import Optional
@@ -19,6 +20,90 @@ from services.printr import Printr
 DEFAULTS_FILE = os.path.join("templates", "pocket_tts", "default_voices.tsv")
 RECORD_FILE = ".default_voices.json"
 """In the configs folder: the voice Wingman last gave each Wingman."""
+
+
+# The subscription's Azure voices. Both are multilingual, so one pair covers
+# every language Wingman speaks, and they are the two voices every plan has.
+AZURE_FEMALE_VOICE = "en-US-JennyMultilingualNeural"
+AZURE_MALE_VOICE = "en-US-AndrewMultilingualNeural"
+
+# Male Inworld voices, lowercased. Inworld names carry no gender, so it is
+# looked up here; a name not listed counts as female, like the template default.
+INWORLD_MALE_VOICES = frozenset(
+    {
+        "alex", "blake", "carter", "clive", "craig", "dennis", "dominus",
+        "edward", "hades", "mark", "ronald", "shaun", "theodore", "timothy",
+        "matthias", "alain", "mathieu", "etienne", "diego", "miguel", "rafael",
+        "gianni", "dmitry", "nikolai", "heitor", "szymon", "wojciech", "erik",
+        "lennart", "yichen", "satoshi", "hyunwoo", "seojun",
+    }
+)
+
+
+def azure_voice_for_inworld(voice_id: Optional[str]) -> str:
+    """The Azure voice of the same gender as the Inworld voice ``voice_id``."""
+    if voice_id and voice_id.strip().lower() in INWORLD_MALE_VOICES:
+        return AZURE_MALE_VOICE
+    return AZURE_FEMALE_VOICE
+
+
+def _effective(config: dict, defaults: dict, section: str, key: str):
+    """A value as the Wingman sees it: its own, else the defaults'."""
+    own = (config.get(section) or {}).get(key)
+    return own if own is not None else (defaults.get(section) or {}).get(key)
+
+
+def downgrade_config_to_azure(config: dict, defaults: dict) -> bool:
+    """Move one raw config (a Wingman, or the defaults with ``defaults={}``)
+    that speaks through the subscription's Inworld to its Azure voices.
+
+    The Azure voice follows the Inworld voice's gender, unless the user picked
+    an Azure voice of their own. Returns True when ``config`` changed."""
+    if _effective(config, defaults, "features", "tts_provider") != "wingman_pro":
+        return False
+    if _effective(config, defaults, "wingman_pro", "tts_provider") != "inworld":
+        return False
+    wingman_pro = config.setdefault("wingman_pro", {})
+    wingman_pro["tts_provider"] = "azure"
+    azure = dict(wingman_pro.get("azure") or {})
+    current = azure.get("voice") or ((defaults.get("wingman_pro") or {}).get("azure") or {}).get("voice")
+    if not current or current in (AZURE_FEMALE_VOICE, AZURE_MALE_VOICE):
+        azure["voice"] = azure_voice_for_inworld(_effective(config, defaults, "inworld", "voice_id"))
+    wingman_pro["azure"] = azure
+    return True
+
+
+def downgrade_inworld_to_azure(config_manager: ConfigManager) -> list[str]:
+    """For a plan without Inworld: every Wingman that speaks through the
+    subscription's Inworld moves to its Azure voices. Never the other way, so
+    an upgrade keeps what the user has. Returns what changed, "defaults" or
+    "config/wingman"."""
+    changed = []
+    try:
+        defaults = config_manager.read_config(config_manager.default_config_path) or {}
+    except Exception as e:
+        Printr().print(f"Could not read the defaults: {e}", server_only=True)
+        return changed
+    # Wingmen inherit from the defaults as they were before this runs.
+    original_defaults = copy.deepcopy(defaults)
+
+    for config_dir in config_manager.get_config_dirs():
+        for wingman in config_manager.get_wingmen_configs(config_dir):
+            path = os.path.join(config_manager.config_dir, config_dir.directory, wingman.file)
+            try:
+                config = config_manager.read_config(path) or {}
+            except Exception as e:
+                Printr().print(f"Could not read {path}: {e}", server_only=True)
+                continue
+            if downgrade_config_to_azure(config, original_defaults) and config_manager.write_config(path, config):
+                changed.append(f"{config_dir.name}/{wingman.name}")
+
+    if downgrade_config_to_azure(defaults, {}) and config_manager.write_config(
+        config_manager.default_config_path, defaults
+    ):
+        config_manager.default_config = config_manager.load_defaults_config(silent_on_error=True)
+        changed.insert(0, "defaults")
+    return changed
 
 
 def load_default_voices(app_root: str) -> dict[str, dict[str, str]]:

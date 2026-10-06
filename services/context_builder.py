@@ -95,10 +95,11 @@ class ContextBuilder:
                 and self._config.elevenlabs.tts_prompt
             ):
                 tts_prompt = self._config.elevenlabs.tts_prompt
-        elif self._config.features.tts_provider in (
-            TtsProvider.INWORLD,
-            # The subscription speaks through Inworld, so it takes the same prompt.
-            TtsProvider.WINGMAN_PRO,
+        elif self._config.features.tts_provider == TtsProvider.INWORLD or (
+            # The subscription takes the Inworld prompt when it speaks through
+            # Inworld. Azure reads the text as it is, so it gets none.
+            self._config.features.tts_provider == TtsProvider.WINGMAN_PRO
+            and self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD
         ):
             if self._config.inworld.use_tts_prompt and self._config.inworld.tts_prompt:
                 tts_prompt = self._config.inworld.tts_prompt
@@ -106,7 +107,11 @@ class ContextBuilder:
                 # inworld-tts-2; the flash model ignores them, and the shipped
                 # prompt says so. The delivery block is appended for tts-2 only,
                 # so a user's edited prompt stays one text and still gets it.
-                if (self._config.inworld.model_id or "").strip() == "inworld-tts-2":
+                # The subscription always speaks with flash, whatever model_id says.
+                if (
+                    self._config.features.tts_provider == TtsProvider.INWORLD
+                    and (self._config.inworld.model_id or "").strip() == "inworld-tts-2"
+                ):
                     from services.file import get_prompt
 
                     tts_prompt = tts_prompt.rstrip() + "\n\n" + get_prompt("inworld-tts2-delivery")

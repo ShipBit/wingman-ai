@@ -11,7 +11,7 @@ tests check that parts are present, not the exact wording.
 import asyncio
 from types import SimpleNamespace
 
-from api.enums import SpokenLanguage, TtsProvider
+from api.enums import SpokenLanguage, TtsProvider, WingmanProTtsProvider
 from services.context_builder import ContextBuilder
 
 TEMPLATE = (
@@ -187,3 +187,35 @@ def test_the_conversation_summary_is_kept_even_if_the_template_has_no_slot():
 
     assert "We talked about trade routes." in with_summary
     assert "CONVERSATION SUMMARY" not in without
+
+
+# ── the TTS prompt ──
+
+
+def _subscription_config(subprovider, model_id="inworld-tts-2-flash"):
+    config = make_config()
+    config.features = SimpleNamespace(tts_provider=TtsProvider.WINGMAN_PRO)
+    config.wingman_pro = SimpleNamespace(tts_provider=subprovider)
+    config.inworld = SimpleNamespace(
+        use_tts_prompt=True, tts_prompt="INWORLD-MARKUP-PROMPT", model_id=model_id
+    )
+    return config
+
+
+def test_the_subscription_takes_the_inworld_prompt_only_when_it_speaks_inworld():
+    inworld = build(config=_subscription_config(WingmanProTtsProvider.INWORLD))
+    azure = build(config=_subscription_config(WingmanProTtsProvider.AZURE))
+
+    assert "INWORLD-MARKUP-PROMPT" in inworld
+    assert "INWORLD-MARKUP-PROMPT" not in azure
+    assert "TEXT-TO-SPEECH" not in azure
+
+
+def test_the_subscription_never_gets_the_tts2_delivery_block():
+    """The subscription always speaks with flash, whatever model_id says."""
+    from services.file import get_prompt
+
+    tts2 = build(config=_subscription_config(WingmanProTtsProvider.INWORLD, "inworld-tts-2"))
+
+    assert "INWORLD-MARKUP-PROMPT" in tts2
+    assert get_prompt("inworld-tts2-delivery") not in tts2

@@ -14,7 +14,7 @@ from api.commands import (
     WebSocketCommandModel,
     ClientLoggedInCommand,
 )
-from api.enums import CoreState, KeyboardRecordingType, LogSource, RecordingDevice, ToastType
+from api.enums import CoreState, KeyboardRecordingType, LogSource, LogType, RecordingDevice, ToastType
 from api.interface import (
     CommandActionConfig,
     CommandJoystickConfig,
@@ -323,11 +323,43 @@ class CommandHandler:
             server_only=True,
         )
 
+        if await self._downgrade_subscription_tts():
+            # Reloading publishes config_loaded, which initializes the Tower
+            # with the rewritten configs.
+            await self.core.config_service.load_config(
+                self.core.config_service.current_config_dir
+            )
+            return
+
         config_dir_info = ConfigWithDirInfo(
             config=self.core.config_service.current_config,
             config_dir=self.core.config_service.current_config_dir,
         )
         await self.core.initialize_tower(config_dir_info)
+
+    async def _downgrade_subscription_tts(self) -> bool:
+        """A plan without Inworld (Free) speaks with Azure: Wingmen set to the
+        subscription's Inworld move there, with a voice of the same gender.
+        Whether the plan has Inworld comes from the backend's model list, not
+        the plan name. No answer from the backend: nothing changes."""
+        from services.wingman_default_voices import downgrade_inworld_to_azure
+
+        tts = await self.core.get_wingman_tts_models()
+        if not tts.models or any(
+            m.provider == "inworld" and m.available for m in tts.models
+        ):
+            return False
+        changed = downgrade_inworld_to_azure(self.core.config_manager)
+        if not changed:
+            return False
+        await self.printr.print_async(
+            "Your plan has no Inworld voices, so these Wingmen now speak with Azure: "
+            + ", ".join(changed),
+            color=LogType.INFO,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+        )
+        return True
 
     async def handle_client_logged_out(
         self, command: ClientLoggedOutCommand, websocket: WebSocket

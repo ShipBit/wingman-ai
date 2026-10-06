@@ -221,3 +221,6 @@ prompts:
 
     '
 record_key: end
+wingman_pro:
+  azure:
+    voice: en-US-AndrewMultilingualNeural

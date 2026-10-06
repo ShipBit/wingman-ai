@@ -2,6 +2,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
 from api.interface import (
+    AzureTtsConfig,
     EdgeTtsConfig,
     ElevenlabsConfig,
     HumeConfig,
@@ -67,6 +68,13 @@ class VoiceService:
             methods=["GET"],
             path="/voices/openai-compatible",
             endpoint=self.get_openai_compatible_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/azure/wingman-pro",
+            endpoint=self.get_wingman_pro_azure_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -140,6 +148,12 @@ class VoiceService:
             endpoint=self.play_wingman_pro_inworld,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/wingman-pro/azure",
+            endpoint=self.play_wingman_pro_azure,
+            tags=tags,
+        )
 
 
     # GET /voices/elevenlabs
@@ -183,6 +197,15 @@ class VoiceService:
         return await openai_compatible.get_available_voices(
             voices_endpoint=voices_endpoint
         )
+
+    # GET /voices/azure/wingman-pro
+    def get_wingman_pro_azure_voices(
+        self, filter_language: str = None
+    ) -> list[VoiceInfo]:
+        wingman_pro = WingmanSubscription(
+            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+        )
+        return wingman_pro.get_available_azure_voices(filter_language=filter_language)
 
     # GET /voices/inworld/wingman-pro
     def get_wingman_pro_inworld_voices(
@@ -381,5 +404,30 @@ class VoiceService:
                 audio_player=self.audio_player,
                 wingman_name="system",
                 language=self._inworld_language(),
+                # A preview plays even a voice the plan does not include.
+                preview=True,
+            )
+        )
+
+    # POST /play/wingman-pro/azure
+    async def play_wingman_pro_azure(
+        self,
+        text: str,
+        config: AzureTtsConfig,
+        sound_config: SoundConfig,
+    ):
+        wingman_pro = WingmanSubscription(
+            wingman_name="system",
+            settings=self.config_manager.settings_config.wingman_pro,
+        )
+        await self._run_playback(
+            wingman_pro.generate_azure_speech(
+                text=text,
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                language=self._inworld_language(),
+                preview=True,
             )
         )

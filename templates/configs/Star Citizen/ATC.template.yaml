@@ -31,6 +31,9 @@ prompts:
 record_key: delete
 inworld:
   voice_id: Clive
+wingman_pro:
+  azure:
+    voice: en-US-AndrewMultilingualNeural
 pocket_tts:
   voice: azelma
 sound:

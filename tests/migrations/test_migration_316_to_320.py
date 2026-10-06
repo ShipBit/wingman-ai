@@ -14,9 +14,10 @@ import pytest
 
 from api.enums import WingmanProTtsProvider
 from api.interface import NestedConfig
+from services.config_manager import deep_merge_configs
 from services.config_sanitizer import sanitize
 from services.migrations.migration_316_to_320 import Migration316To320, voice_to_inworld
-from tests.support import FIXTURES, read_yaml
+from tests.support import FIXTURES, read_yaml, template
 
 
 @pytest.fixture
@@ -33,7 +34,9 @@ def migration() -> Migration316To320:
 def test_the_migration_makes_it_loadable(defaults_316, migration):
     migrated = migration.migrate_defaults(defaults_316)
 
-    config = NestedConfig(**migrated)
+    # Fields added after 3.2.0 (wingman_pro.azure) come from the template at
+    # the end of the chain, as backfill_from_template does.
+    config = NestedConfig(**deep_merge_configs(template("defaults.yaml"), migrated))
     # `wingman_pro.stt_provider` is an intermediate value here: 3.2.2 drops it.
     assert migrated["wingman_pro"]["stt_provider"] == "cloud"
     assert config.wingman_pro.tts_provider is WingmanProTtsProvider.INWORLD
@@ -106,7 +109,7 @@ def test_the_sanitizer_catches_what_the_migration_skips(defaults_316):
     sanitize(NestedConfig, untouched)
     # The sanitizer only repairs enums; the `azure:` section is an unknown key,
     # which Pydantic ignores anyway.
-    config = NestedConfig(**untouched)
+    config = NestedConfig(**deep_merge_configs(template("defaults.yaml"), untouched))
 
     assert config.features.tts_provider.value != "azure"
 

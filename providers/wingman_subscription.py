@@ -8,10 +8,14 @@ from api.enums import (
     ConversationProvider,
     LogType,
     TtsProvider,
+    TtsVoiceGender,
+    WingmanProTtsProvider,
 )
 from api.interface import (
+    AzureTtsConfig,
     InworldConfig,
     SoundConfig,
+    SubscriptionTtsModels,
     VoiceInfo,
     WingmanProSettings,
 )
@@ -30,6 +34,34 @@ from services.spoken_language import inworld_language
 
 if TYPE_CHECKING:
     from api.interface import SettingsConfig, WingmanConfig
+
+# The only Inworld model the backend accepts for subscriptions. Any other id
+# (an old config may still say inworld-tts-2) is answered with 400
+# unknown_model, so the configured model_id is ignored here.
+SUBSCRIPTION_INWORLD_MODEL = "inworld-tts-2-flash"
+
+# Azure through the backend: raw PCM when streaming, MP3 otherwise.
+AZURE_STREAM_SAMPLE_RATE = 24000
+
+_substitution_noted = False
+"""The hint about a substituted voice is shown once per process, not on
+every sentence the Wingman speaks."""
+
+
+def tts_models_from(body: dict) -> SubscriptionTtsModels:
+    """The `tts` part of the backend's /api/v1/models answer. Empty when it
+    has none (an older backend, or not signed in)."""
+    tts = body.get("tts") if isinstance(body, dict) else None
+    if not isinstance(tts, dict):
+        return SubscriptionTtsModels()
+    return SubscriptionTtsModels(**tts)
+
+
+def _voice_gender(value) -> Optional[TtsVoiceGender]:
+    try:
+        return TtsVoiceGender(value) if value else TtsVoiceGender.UNKNOWN
+    except ValueError:
+        return TtsVoiceGender.UNKNOWN
 
 
 class WingmanSubscription:
@@ -198,17 +230,21 @@ class WingmanSubscription:
         audio_player: AudioPlayer,
         wingman_name: str,
         language: Optional[str] = None,
+        preview: bool = False,
     ):
         data = {
             "provider": "inworld",
             "input": text,
             "voice_id": config.voice_id,
             "stream": config.output_streaming,
-            "model_id": config.model_id,
+            # Not config.model_id: see SUBSCRIPTION_INWORLD_MODEL.
+            "model_id": SUBSCRIPTION_INWORLD_MODEL,
             "temperature": config.temperature,
         }
         if language:
             data["language"] = language
+        if preview:
+            data["preview"] = True
         if config.audio_config is not None:
             data["audio_config"] = config.audio_config.model_dump()
 
@@ -221,81 +257,187 @@ class WingmanSubscription:
                     "sample_rate_hertz"
                 ] = config.audio_config.streaming_sample_rate_hertz
 
-            def buffer_generator():
-                with requests.post(
-                    url=f"{self.settings.base_url}/api/v1/audio/speech",
-                    json=data,
-                    headers=self._get_headers(),
-                    timeout=self.timeout,
-                    stream=True,
-                ) as response:
-                    if response.status_code in (401, 403):
-                        self.send_unauthorized_error(response)
-                        return None
-                    else:
-                        response.raise_for_status()
-                    for chunk in response.iter_content(chunk_size=2048):
-                        if not chunk:
-                            break
-                        # Skip WAV header if present (44 bytes starting with "RIFF")
-                        if len(chunk) > 44 and chunk[:4] == b"RIFF":
-                            chunk = chunk[44:]
-                        if len(chunk) > 0:
-                            yield chunk
-
-            generator_instance = buffer_generator()
-            incomplete_buffer = b""
-
-            def buffer_callback(audio_buffer):
-                nonlocal incomplete_buffer
-                try:
-                    chunk = next(generator_instance)
-                    chunk = incomplete_buffer + chunk
-                    remainder = len(chunk) % 2
-                    if remainder:
-                        incomplete_buffer = chunk[-remainder:]
-                        chunk = chunk[:-remainder]
-                    else:
-                        incomplete_buffer = b""
-
-                    audio_buffer[: len(chunk)] = chunk
-                    return len(chunk)
-                except StopIteration:
-                    if incomplete_buffer:
-                        audio_buffer[: len(incomplete_buffer)] = incomplete_buffer
-                        chunk_length = len(incomplete_buffer)
-                        incomplete_buffer = b""
-                        return chunk_length
-                    return 0
-
-            await audio_player.stream_with_effects(
-                buffer_callback=buffer_callback,
-                config=sound_config,
+            await self._stream_speech(
+                data=data,
+                sound_config=sound_config,
+                audio_player=audio_player,
                 wingman_name=wingman_name,
                 sample_rate=config.audio_config.streaming_sample_rate_hertz,
-                channels=1,  # LINEAR16 is typically mono
-                dtype="int16",  # LINEAR16 uses 16-bit integers
-                use_gain_boost=True,  # Streaming audio needs gain boost for radio effects
+                # Inworld puts a 44-byte WAV header in front of LINEAR16.
+                strip_riff_header=True,
             )
         else:
-            response = requests.post(
-                url=f"{self.settings.base_url}/api/v1/audio/speech",
-                headers=self._get_headers(),
-                json=data,
-                timeout=self.timeout,
-            )
-            if response.status_code in (401, 403):
-                self.send_unauthorized_error(response)
-                return
-            else:
-                response.raise_for_status()
-
-            audio_data = response.content
-            await audio_player.play_with_effects(
-                input_data=audio_data,
-                config=sound_config,
+            await self._play_speech(
+                data=data,
+                sound_config=sound_config,
+                audio_player=audio_player,
                 wingman_name=wingman_name,
             )
+
+    async def generate_azure_speech(
+        self,
+        text: str,
+        config: AzureTtsConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        language: Optional[str] = None,
+        preview: bool = False,
+    ):
+        data = {
+            "provider": "azure",
+            "input": text,
+            "voice_id": config.voice,
+            "stream": config.output_streaming,
+        }
+        if language:
+            data["language"] = language
+        if preview:
+            data["preview"] = True
+
+        if config.output_streaming:
+            # Raw PCM, 16-bit signed little-endian, mono, 24 kHz, no header.
+            await self._stream_speech(
+                data=data,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+                sample_rate=AZURE_STREAM_SAMPLE_RATE,
+                strip_riff_header=False,
+            )
+        else:  # non-streaming: MP3
+            await self._play_speech(
+                data=data,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+
+    def _speech_refused(self, response: requests.Response) -> bool:
+        """True (after telling the user) when the backend did not speak."""
+        if response.status_code in (401, 403):
+            self.send_unauthorized_error(response)
+            return True
+        if response.status_code == 429:
+            # Without this branch a used-up allowance surfaced as "Error during
+            # TTS playback".
+            self.send_quota_error(response)
+            return True
+        response.raise_for_status()
+        return False
+
+    async def _note_substitution(self, voice: Optional[str], wingman_name: str):
+        """The plan does not include the configured voice, so the backend
+        spoke with its free voice of the same gender. Said once per process."""
+        global _substitution_noted
+        if not voice or _substitution_noted:
+            return
+        _substitution_noted = True
+        await self.printr.print_async(
+            f"This voice needs a higher plan. Playing {voice} instead.",
+            color=LogType.INFO,
+            source_name=wingman_name,
+        )
+
+    async def _stream_speech(
+        self,
+        data: dict,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        sample_rate: int,
+        strip_riff_header: bool,
+    ):
+        substituted: Optional[str] = None
+
+        def buffer_generator():
+            nonlocal substituted
+            with requests.post(
+                url=f"{self.settings.base_url}/api/v1/audio/speech",
+                json=data,
+                headers=self._get_headers(),
+                timeout=self.timeout,
+                stream=True,
+            ) as response:
+                if self._speech_refused(response):
+                    return None
+                substituted = response.headers.get("x-voice-substituted")
+                for chunk in response.iter_content(chunk_size=2048):
+                    if not chunk:
+                        break
+                    # Skip WAV header if present (44 bytes starting with "RIFF")
+                    if strip_riff_header and len(chunk) > 44 and chunk[:4] == b"RIFF":
+                        chunk = chunk[44:]
+                    if len(chunk) > 0:
+                        yield chunk
+
+        generator_instance = buffer_generator()
+        # Initialize an incomplete buffer storage
+        incomplete_buffer = b""
+
+        def buffer_callback(audio_buffer):
+            nonlocal incomplete_buffer
+            try:
+                chunk = next(generator_instance)
+                # Prepend any previously incomplete buffer to the chunk
+                chunk = incomplete_buffer + chunk
+                # Compute new incomplete buffer size if any
+                remainder = len(chunk) % 2  # 2 bytes for 'int16'
+                if remainder:
+                    # Store incomplete bytes for next callback
+                    incomplete_buffer = chunk[-remainder:]
+                    # Exclude the incomplete buffer from the current chunk
+                    chunk = chunk[:-remainder]
+                else:
+                    # No incomplete bytes, reset the incomplete buffer
+                    incomplete_buffer = b""
+
+                audio_buffer[: len(chunk)] = chunk
+                return len(chunk)
+            except StopIteration:
+                if incomplete_buffer:
+                    # Handle any remaining incomplete buffer when the stream ends
+                    audio_buffer[: len(incomplete_buffer)] = incomplete_buffer
+                    chunk_length = len(incomplete_buffer)
+                    incomplete_buffer = b""  # Clear the storage
+                    return chunk_length
+                return 0
+
+        await audio_player.stream_with_effects(
+            buffer_callback=buffer_callback,
+            config=sound_config,
+            wingman_name=wingman_name,
+            sample_rate=sample_rate,
+            channels=1,
+            dtype="int16",
+            use_gain_boost=True,  # Streaming audio needs gain boost for radio effects
+        )
+        await self._note_substitution(substituted, wingman_name)
+
+    async def _play_speech(
+        self,
+        data: dict,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+    ):
+        response = requests.post(
+            url=f"{self.settings.base_url}/api/v1/audio/speech",
+            headers=self._get_headers(),
+            json=data,
+            timeout=self.timeout,
+        )
+        if self._speech_refused(response):
+            return
+
+        await self._note_substitution(
+            response.headers.get("x-voice-substituted"), wingman_name
+        )
+        await audio_player.play_with_effects(
+            input_data=response.content,
+            config=sound_config,
+            wingman_name=wingman_name,
+        )
 
     async def generate_image(
         self,
@@ -332,35 +474,10 @@ class WingmanSubscription:
             data = response.json().get("data") or [{}]
             return data[0].get("url", "")
 
-    def get_available_voices(self, locale: str = ""):
-        """OpenAI voices. They carry no locale or gender — the fields stay in the
-        answer because the settings UI reads them, they are simply empty now."""
-        response = requests.get(
-            url=f"{self.settings.base_url}/api/v1/voices",
-            params={"provider": "openai"},
-            timeout=self.timeout,
-            headers=self._get_headers(),
-        )
-        if response.status_code in (401, 403):
-            self.send_unauthorized_error(response)
-            return None
-        response.raise_for_status()
-
-        return [
-            {
-                "short_name": entry.get("voiceId", ""),
-                "name": entry.get("displayName", entry.get("voiceId", "")),
-                "local_name": entry.get("displayName", entry.get("voiceId", "")),
-                "locale": locale,
-                "gender": "Unknown",
-            }
-            for entry in response.json().get("voices", [])
-        ]
-
-    def get_available_inworld_voices(
-        self, filter_language: Optional[str] = None
+    def _get_voices(
+        self, provider: str, filter_language: Optional[str] = None
     ) -> list[VoiceInfo]:
-        params = {"provider": "inworld"}
+        params = {"provider": provider}
         if filter_language:
             params["language"] = filter_language
 
@@ -376,19 +493,34 @@ class WingmanSubscription:
         else:
             response.raise_for_status()
 
-        response_data = response.json()
         voices: list[VoiceInfo] = []
-        for voice in response_data.get("voices", []):
-            voice_name = voice.get("displayName", "")
+        for voice in response.json().get("voices", []):
             voice_id = voice.get("voiceId", "")
+            voice_name = voice.get("displayName", "")
             voices.append(
                 VoiceInfo(
                     id=voice_id,
                     name=voice_name or voice_id,
+                    gender=_voice_gender(voice.get("gender")),
+                    locale=voice.get("locale") or None,
                     languages=voice.get("languages", []),
+                    provider=provider,
+                    locked=bool(voice.get("locked", False)),
                 )
             )
         return voices
+
+    def get_available_azure_voices(
+        self, filter_language: Optional[str] = None
+    ) -> list[VoiceInfo]:
+        """Azure voices, every one of them, `locked` where the plan does not
+        include it."""
+        return self._get_voices("azure", filter_language)
+
+    def get_available_inworld_voices(
+        self, filter_language: Optional[str] = None
+    ) -> list[VoiceInfo]:
+        return self._get_voices("inworld", filter_language)
 
     def _get_headers(self):
         token = self.secret_keeper.secrets.get("wingman_pro", "")
@@ -426,19 +558,28 @@ class WingmanSubscriptionTts(TtsInterface):
         self._settings = settings
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
-        # One provider, so nothing to dispatch on. `wingman_pro.tts_provider`
-        # still exists and still says "inworld" — keeping the field means a
-        # second provider can come back without a config migration.
-        await self._ws.generate_inworld_speech(
-            text=text,
-            config=self._config.inworld,
-            sound_config=sound_config,
-            audio_player=audio_player,
-            wingman_name=wingman_name,
-            language=inworld_language(
-                self._settings.spoken_language, self._settings.other_language
-            ),
+        language = inworld_language(
+            self._settings.spoken_language, self._settings.other_language
         )
+        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+            await self._ws.generate_azure_speech(
+                text=text,
+                config=self._config.wingman_pro.azure,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+                language=language,
+            )
+        elif self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
+            await self._ws.generate_inworld_speech(
+                text=text,
+                config=self._config.inworld,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+                language=language,
+            )
+
 
 @llm_provider(ConversationProvider.WINGMAN_PRO)
 class WingmanSubscriptionLlm(LlmInterface):
