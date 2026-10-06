@@ -231,3 +231,21 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/no-mans-sky-assistant/mcp
     discoverable_by_default: false
+
+  - name: wingman_elite_dangerous
+    display_name: Elite Dangerous - Systems, Stations, Trade
+    description: Elite Dangerous community data. Star systems and their stations, services nearby like refuel, repair or a material trader, commodity prices and modules at a station, the best cargo between two stations, and the materials and engineers for ship engineering. Not for the pilot's own ship, cargo or missions.
+    discovery_keywords:
+      - Elite Dangerous
+      - ED
+      - station
+      - nearest
+      - refuel
+      - repair
+      - material trader
+      - commodity prices
+      - trade
+      - engineering
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/elite/mcp
+    discoverable_by_default: false
