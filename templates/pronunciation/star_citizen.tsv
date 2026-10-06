@@ -1,0 +1,102 @@
+# Star Citizen: game terms voices get wrong. written<TAB>spoken, optionally
+# <TAB>languages (comma-separated codes) when the spoken form only fits some.
+# Digits in the spoken form are fine: they are read in the spoken language
+# afterwards ("F 7 C" becomes "F sieben C" in German).
+# Name: Star Citizen
+# German voices would read "U E C" as German letters; players say these
+# terms in English, so the German lines spell the English sound. The first
+# matching line wins, so the German one comes first.
+# Only aUEC, QT and ATC are on for now: the other spelled-out letters broke
+# the flow of speech. Hyphens make the German voice say the letters as one
+# word instead of stressing each; without a rule it swallows ATC (heard 0 of
+# 6 times by Parakeet, 6 of 6 with "Ey-Tih-Ssi"; measured 2026-09-24).
+aUEC	Alpha Juh-Ih-Ssi	de
+aUEC	Alpha U E C
+# UEC	Juh Ih Ssi	de
+# UEC	U E C
+# SCU	Ess Ssi Juh	de
+# SCU	S C U
+QT	Quantum
+# Place, company and ship names German voices read by German rules
+# ("Kruhsahder", "Huhrstohn"). Spellings chosen by ear from candidates
+# spoken by the German model (2026-09-24); names it already says well enough
+# (Aegis, Drake, Freelancer, Hornet, Prospector, Reclaimer) are not listed.
+Crusader	Kruseider	de
+Hurston	Hörstn	de
+ArcCorp	Ark-Korp	de
+Arccorp	Ark-Korp	de
+microTech	Maikroteck	de
+MicroTech	Maikroteck	de
+Microtech	Maikroteck	de
+Stanton	Stänten	de
+Lorville	Lohr-Will	de
+New Babbage	Nju Bäbbitsch	de
+Orison	Orris'n	de
+Pyro	Pai-Ro	de
+Anvil	Änwil	de
+Origin	Orridschin	de
+Cutlass	Kattläss	de
+Carrack	Kärräck	de
+Constellation	Konstel-Läischen	de
+Vanguard	Wänngard	de
+Caterpillar	Kätterpiller	de
+# QD	Quantum Dampener
+# MFD	M F D
+ATC	Ey-Tih-Ssi	de
+# EVA	E V A
+# RSI	R S I
+# MISC	Misc
+# CRU-L1	Kruh-Ell-Wann	de
+# CRU-L1	Crew L 1
+# CRU-L4	Kruh-Ell-For	de
+# CRU-L4	Crew L 4
+# CRU-L5	Kruh-Ell-Faiv	de
+# CRU-L5	Crew L 5
+# HUR-L1	Hör-Ell-Wann	de
+# HUR-L1	Hur L 1
+# HUR-L2	Hör-Ell-Tuh	de
+# HUR-L2	Hur L 2
+# HUR-L3	Hör-Ell-Sri	de
+# HUR-L3	Hur L 3
+# HUR-L4	Hör-Ell-For	de
+# HUR-L4	Hur L 4
+# HUR-L5	Hör-Ell-Faiv	de
+# HUR-L5	Hur L 5
+# ARC-L1	Ark-Ell-Wann	de
+# ARC-L1	Arc L 1
+# ARC-L2	Ark-Ell-Tuh	de
+# ARC-L2	Arc L 2
+# ARC-L3	Ark-Ell-Sri	de
+# ARC-L3	Arc L 3
+# ARC-L4	Ark-Ell-For	de
+# ARC-L4	Arc L 4
+# ARC-L5	Ark-Ell-Faiv	de
+# ARC-L5	Arc L 5
+# MIC-L1	Mick-Ell-Wann	de
+# MIC-L1	Mick L 1
+# MIC-L2	Mick-Ell-Tuh	de
+# MIC-L2	Mick L 2
+# MIC-L3	Mick-Ell-Sri	de
+# MIC-L3	Mick L 3
+# MIC-L4	Mick-Ell-For	de
+# MIC-L4	Mick L 4
+# MIC-L5	Mick-Ell-Faiv	de
+# MIC-L5	Mick L 5
+# F7C	F 7 C
+# F7A	F 7 A
+# F8C	F 8 C
+# C2	C 2
+# M2	M 2
+# A2	A 2
+# 100i	100 i
+# 125a	125 a
+# 135c	135 c
+# 300i	300 i
+# 315p	315 p
+# 325a	325 a
+# 350r	350 r
+# 400i	400 i
+# 600i	600 i
+# 85X	85 X
+# C8X	C 8 X
+# C8R	C 8 R

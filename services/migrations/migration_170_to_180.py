@@ -10,8 +10,6 @@ Major changes:
 - Removes skill property overrides (description, examples, category, hint)
 """
 
-from typing import Optional
-
 from services.migrations.base_migration import BaseMigration
 
 
@@ -21,7 +19,7 @@ class Migration170To180(BaseMigration):
     old_version = "1_7_0"
     new_version = "1_8_0"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Migrate settings.yaml from 1.7.0 to 1.8.0."""
         # Migrate Wingman Pro region to base_url
         old_region = old["wingman_pro"]["region"]
@@ -44,7 +42,7 @@ class Migration170To180(BaseMigration):
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Migrate defaults.yaml from 1.7.0 to 1.8.0."""
         # Add OpenAI TTS properties
         old["openai"]["tts_model"] = "tts-1"
@@ -52,11 +50,24 @@ class Migration170To180(BaseMigration):
         self.log("- added new properties: openai.tts_model, openai.tts_speed")
 
         # Add Hume AI provider
-        old["hume"] = new["hume"]
+        old["hume"] = {
+            "description": "",
+            "voice": {
+                "name": "",
+                "id": "",
+                "provider": "",
+            },
+        }
         self.log("- added new property: hume")
 
         # Add OpenAI-compatible TTS
-        old["openai_compatible_tts"] = new["openai_compatible_tts"]
+        old["openai_compatible_tts"] = {
+            "api_key": "probably-not-needed",
+            "voice": "",
+            "model": "",
+            "base_url": "",
+            "speed": 1.0,
+        }
         self.log("- added new property: openai_compatible_tts")
 
         # Migrate Perplexity model
@@ -72,7 +83,7 @@ class Migration170To180(BaseMigration):
 
         return old
 
-    def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Migrate wingman configs from 1.7.0 to 1.8.0."""
         # Remove skill property overrides
         if old.get("skills"):

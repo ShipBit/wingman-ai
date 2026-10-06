@@ -1,13 +1,13 @@
 import os
+import re
 import json
 import datetime
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from api.enums import LogType
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class QuickCommands(Skill):
@@ -16,7 +16,7 @@ class QuickCommands(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
@@ -36,7 +36,7 @@ class QuickCommands(Skill):
             "quick_commands_learning_rule_count", errors
         )
 
-        self.threaded_execution(self._init_skill)
+        self.wingman.run_in_thread(self._init_skill)
         return errors
 
     def _get_rule_count(self) -> int:
@@ -59,7 +59,7 @@ class QuickCommands(Skill):
             added = True
 
         if added:
-            await self.wingman.save_commands()
+            await self.wingman.commands.save()
 
     async def _add_instant_activation_phrase(
         self, phrase: str, commands: list[str], save_wingman: bool = True
@@ -69,7 +69,9 @@ class QuickCommands(Skill):
         phrase_lower = phrase.lower()
 
         for command in commands:
-            command = self.wingman.get_command(command)
+            command = self.wingman.commands.get(command)
+            if not command:
+                continue
             if not command.instant_activation:
                 command.instant_activation = []
 
@@ -79,13 +81,13 @@ class QuickCommands(Skill):
                 changed = True
 
         if changed and save_wingman:
-            await self.wingman.save_commands()
+            await self.wingman.commands.save()
 
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Hook to start learning process."""
         if tool_calls:
-            self.threaded_execution(
-                self._process_messages, tool_calls, self.wingman.messages[-1]
+            self.wingman.run_in_thread(
+                self._process_messages, tool_calls, self.wingman.conversation.history()[-1]
             )
 
     async def _process_messages(self, tool_calls, last_message) -> None:
@@ -129,31 +131,28 @@ class QuickCommands(Skill):
 
     async def _cleanup_learning_data(self) -> None:
         """Cleanup learning data. (Remove for commands that are no loner available)"""
-        pops = []
+        pops = set()
         for phrase, commands in self.learning_learned.items():
             for command in commands:
-                if not self.wingman.get_command(command):
-                    pops.append(phrase)
-        if pops:
-            for phrase in pops:
-                self.learning_learned.pop(phrase)
+                if not self.wingman.commands.get(command):
+                    pops.add(phrase)
+        for phrase in pops:
+            self.learning_learned.pop(phrase, None)
 
-        pops = []
-        finished = []
-        for phrase in self.learning_data.keys():
-            commands = self.learning_data[phrase]["commands"]
-            for command in commands:
-                if not self.wingman.get_command(command):
-                    pops.append(phrase)
-                elif self.learning_data[phrase]["count"] >= self._get_rule_count():
-                    finished.append(phrase)
+        pops = set()
+        finished = set()
+        rule_count = self._get_rule_count()
+        for phrase, entry in self.learning_data.items():
+            for command in entry["commands"]:
+                if not self.wingman.commands.get(command):
+                    pops.add(phrase)
+                elif entry["count"] >= rule_count:
+                    finished.add(phrase)
 
-        if pops:
-            for phrase in pops:
-                self.learning_data.pop(phrase)
-        if finished:
-            for phrase in finished:
-                await self._finish_learning(phrase)
+        for phrase in pops:
+            self.learning_data.pop(phrase, None)
+        for phrase in finished - pops:
+            await self._finish_learning(phrase)
 
         await self._save_learning_data()
 
@@ -168,7 +167,7 @@ class QuickCommands(Skill):
 
         # get and check the command
         for command_name in command_names:
-            command = self.wingman.get_command(command_name)
+            command = self.wingman.commands.get(command_name)
             if not command:
                 # AI probably hallucinated
                 return
@@ -206,12 +205,11 @@ class QuickCommands(Skill):
         A gpt call will be made to check if the phrases makes sense.
         This will add the phrase to the learned phrases."""
 
+        if phrase not in self.learning_data:
+            return
         commands = self.learning_data[phrase]["commands"]
 
-        messages = [
-            {
-                "role": "system",
-                "content": """
+        system = """
                     I'll give you one or multiple commands and a phrase. You have to decide, if the commands fit to the phrase or not.
                     Return 'yes' if the commands fit to the phrase and 'no' if they dont.
 
@@ -222,22 +220,23 @@ class QuickCommands(Skill):
                     - Phrase: "Yes, please." Command: "enableShields" -> no
                     - Phrase: "We are being attacked by rockets." Command: "throwCountermessures" -> yes
                     - Phrase: "Its way too dark in here." Command: "toggleLight" -> yes
-                """,
-            },
-            {
-                "role": "user",
-                "content": f"Phrase: '{phrase}' Commands: '{', '.join(commands)}'",
-            },
-        ]
-        completion = await self.llm_call(messages)
-        answer = completion.choices[0].message.content or ""
-        if answer.lower() == "yes":
-            await self.printr.print_async(
+                """
+        try:
+            response = await self.wingman.ai.generate(
+                f"Phrase: '{phrase}' Commands: '{', '.join(commands)}'",
+                system=system,
+            )
+        except Exception as e:
+            # Keep the phrase in learning_data and retry on the next occurrence
+            self.log.warning(f"Could not check learned phrase: {e}", server_only=True)
+            return
+        answer = re.sub(r"[^\w\s]", "", (response or "").lower()).strip()
+        if answer.startswith("yes"):
+            self.log.info(
                 f"Instant activation phrase for '{', '.join(commands)}' learned.",
-                color=LogType.INFO,
             )
             self.learning_learned[phrase] = commands
-            self.learning_data.pop(phrase)
+            self.learning_data.pop(phrase, None)
             await self._add_instant_activation_phrase(phrase, commands)
         else:
             await self._add_to_blacklist(phrase)
@@ -246,19 +245,13 @@ class QuickCommands(Skill):
 
     async def _add_to_blacklist(self, phrase: str) -> None:
         """Add a phrase to the blacklist."""
-        await self.printr.print_async(
+        self.log.info(
             f"Added phrase to blacklist: '{phrase if len(phrase) <= 25 else phrase[:25]+'...'}'",
-            color=LogType.INFO,
         )
-        self.learning_blacklist.append(phrase)
-        self.learning_data.pop(phrase)
+        if phrase not in self.learning_blacklist:
+            self.learning_blacklist.append(phrase)
+        self.learning_data.pop(phrase, None)
         await self._save_learning_data()
-
-    async def _is_phrase_on_blacklist(self, phrase: str) -> bool:
-        """Check if a phrase is on the blacklist."""
-        if phrase in self.learning_blacklist:
-            return True
-        return False
 
     async def _load_learning_data(self):
         """Load the learning data file."""
@@ -269,34 +262,28 @@ class QuickCommands(Skill):
 
         # load the learning data
         with open(self.file_ipl, "r", encoding="utf-8") as file:
-            try:
-                data = json.load(file)
-            except json.JSONDecodeError:
-                await self.printr.print_async(
-                    "Could not read learning data file. Resetting learning data..",
-                    color=LogType.ERROR,
-                )
-                # if file wasnt empty, save it as backup
-                if file.read():
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-                    with open(
-                        self.file_ipl + f"_{timestamp}.backup", "w", encoding="utf-8"
-                    ) as backup_file:
-                        backup_file.write(file.read())
-                # reset learning data
-                with open(self.file_ipl, "w", encoding="utf-8") as file:
-                    file.write("{}")
-                data = {}
+            raw = file.read()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            self.log.error(
+                "Could not read learning data file. Resetting learning data..",
+            )
+            # if file wasnt empty, save it as backup
+            if raw.strip():
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+                with open(
+                    self.file_ipl + f"_{timestamp}.backup", "w", encoding="utf-8"
+                ) as backup_file:
+                    backup_file.write(raw)
+            # reset learning data
+            with open(self.file_ipl, "w", encoding="utf-8") as file:
+                file.write("{}")
+            data = {}
 
-            self.learning_data = (
-                data["learning_data"] if "learning_data" in data else {}
-            )
-            self.learning_blacklist = (
-                data["learning_blacklist"] if "learning_blacklist" in data else []
-            )
-            self.learning_learned = (
-                data["learning_learned"] if "learning_learned" in data else {}
-            )
+        self.learning_data = data.get("learning_data", {})
+        self.learning_blacklist = data.get("learning_blacklist", [])
+        self.learning_learned = data.get("learning_learned", {})
 
     async def _save_learning_data(self) -> None:
         """Save the learning data."""

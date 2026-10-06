@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 
@@ -434,7 +435,13 @@ class Vehicle(DataModel):
         return self.data["url_video"]
 
     def get_url_photos(self) -> list[str] | None:
-        return self.data["url_photos"]
+        photos = self.data["url_photos"]
+        if isinstance(photos, str):
+            try:
+                photos = json.loads(photos)
+            except (json.JSONDecodeError, TypeError):
+                photos = None
+        return photos
 
     def get_pad_type(self) -> str | None:
         return self.data["pad_type"]

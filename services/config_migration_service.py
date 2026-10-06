@@ -8,12 +8,13 @@ from api.enums import LogType
 from api.interface import NestedConfig, SettingsConfig
 from services.config_manager import (
     CONFIGS_DIR,
-    DEFAULT_PREFIX,
-    DELETED_PREFIX,
+    CONTEXT_FILE,
     ConfigManager,
+    deep_merge_configs,
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
 from services.migrations import discover_migrations
+from services.migrations.base_migration import strip_legacy_prefixes
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -60,6 +61,20 @@ class ConfigMigrationService:
 
         # If we found an old version to migrate from, proceed with migration
         if start_version:
+            # Resolve the full migration chain BEFORE touching anything.
+            # A migration module that failed to load (e.g. a dependency
+            # missing from the packaged build, like filecmp in 3.1.5) must
+            # abort while all configs are still intact - never after
+            # deletions that count on the migration filling the gap.
+            migration_chain = self.build_migration_chain(start_version)
+            if migration_chain is None:
+                self.err(
+                    f"No complete migration path from version {start_version.replace('_', '.')} "
+                    f"to {self.latest_version.replace('_', '.')}. Migration aborted without "
+                    "touching any configs; it will be retried on the next launch."
+                )
+                return
+
             self.log_highlight(
                 f"Starting migration from version {start_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}"
             )
@@ -86,17 +101,15 @@ class ConfigMigrationService:
             # Only check 1.8.1 and 1.8.2 (most users come from 1.8.1, 1.8.2 was dev-only)
             self.migrate_audio_library()
 
-            # Perform migrations
-            current_version = start_version
-            while current_version != self.latest_version:
-                next_version = self.find_next_version(current_version)
-                if next_version is None:
-                    self.err(
-                        f"No migration path found from version {current_version} to {self.latest_version}. Migration aborted."
-                    )
-                    break
-                self.perform_migration(current_version, next_version)
-                current_version = next_version
+            # Perform migrations along the pre-validated chain
+            for old_version, new_version in zip(
+                migration_chain, migration_chain[1:]
+            ):
+                try:
+                    self.perform_migration(old_version, new_version)
+                except Exception:
+                    self._cleanup_interrupted_step(new_version)
+                    raise
 
             # Warn about custom skills that need manual review
             if custom_skills:
@@ -109,9 +122,17 @@ class ConfigMigrationService:
                     )
                     self.log_message += f"{warning_message}\n"
 
+            self.audit_skill_availability()
+
             self.log_highlight(
                 f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}"
             )
+            # perform_migration() wrote the marker at the end of the last chain
+            # step, so everything after the chain - custom skill warnings, the
+            # skill audit, this line - only ever reached the terminal. Rewrite
+            # the marker with the full log so the file a user sends us is the
+            # whole story.
+            self._flush_migration_log()
             return
 
         # No old version found - check if this is an existing installation or fresh install
@@ -129,6 +150,92 @@ class ConfigMigrationService:
         self.log_highlight("No valid version directories found for migration.")
         self._apply_fresh_install_cuda_settings()
 
+    def _flush_migration_log(self) -> None:
+        """Rewrite the latest version's .migration marker with the full log."""
+        if not self.latest_config_path:
+            return
+        marker = path.join(self.latest_config_path, MIGRATION_LOG)
+        try:
+            with open(marker, "w", encoding="UTF-8") as stream:
+                stream.write(self.log_message)
+        except OSError as e:
+            self.printr.print(
+                f"Could not write the migration log to '{marker}': {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+
+    def audit_skill_availability(self) -> None:
+        """Report skills the migrated Wingmen reference but that aren't installed.
+
+        Custom skills live outside the version directories (custom_skills/),
+        so the migration never copies or checks them for anyone coming from
+        2.0.0 or newer. If the user upgraded without carrying that folder
+        along, ConfigManager silently drops the skill from the Wingman at load
+        time and the skill vanishes from the UI - the migration log, which is
+        what we read when a user reports something missing, said nothing at
+        all about it.
+
+        Two lists can point at a missing skill and they use different
+        identifiers: `skills` holds module paths ('skills.sc_log_reader.main')
+        and only carries settings, while `discoverable_skills` holds skill
+        names ('SC_LogReader') and is what the UI shows as switched on.
+        """
+        if not self.latest_config_path or not path.exists(self.latest_config_path):
+            return
+
+        missing_modules: dict[str, list[str]] = {}
+        missing_enabled: dict[str, list[str]] = {}
+        installed_names = set(self._get_all_skill_names())
+
+        def collect(config: Optional[dict], where: str) -> None:
+            for skill in (config or {}).get("skills") or []:
+                module = skill.get("module")
+                if not module:
+                    continue
+                if self.config_manager.find_skill_default_config_path(module):
+                    continue
+                skill_dir = module.replace(".main", "").split(".")[-1]
+                missing_modules.setdefault(skill_dir, []).append(where)
+            for name in (config or {}).get("discoverable_skills") or []:
+                if name not in installed_names:
+                    missing_enabled.setdefault(name, []).append(where)
+
+        defaults_file = path.join(self.latest_config_path, "defaults.yaml")
+        if path.exists(defaults_file):
+            collect(self.config_manager.read_config(defaults_file), "defaults.yaml")
+
+        for config_dir in sorted(os.listdir(self.latest_config_path)):
+            dir_path = path.join(self.latest_config_path, config_dir)
+            if not path.isdir(dir_path):
+                continue
+            for filename in sorted(os.listdir(dir_path)):
+                if not filename.endswith(".yaml") or filename.endswith(
+                    "template.yaml"
+                ):
+                    continue
+                collect(
+                    self.config_manager.read_config(path.join(dir_path, filename)),
+                    f"{config_dir}/{filename.removesuffix('.yaml')}",
+                )
+
+        if not missing_modules and not missing_enabled:
+            self.log("All skills referenced by the migrated Wingmen are installed.")
+            return
+
+        custom_skills_dir = get_custom_skills_dir()
+        for name, users in sorted(missing_enabled.items()):
+            self.log_warning(
+                f"Skill '{name}' is switched on for {', '.join(users)} but is not "
+                f"installed. Those Wingmen lose it until the skill is (re)installed "
+                f"to '{custom_skills_dir}'."
+            )
+        for skill_dir, users in sorted(missing_modules.items()):
+            self.log_warning(
+                f"Settings for the missing skill folder '{skill_dir}' were kept for "
+                f"{', '.join(users)}. They come back with the skill; nothing was deleted."
+            )
+
     def find_latest_migratable_version(self, users_dir):
         """Find the latest migratable version to start migration from.
 
@@ -145,6 +252,15 @@ class ConfigMigrationService:
         # Sort descending to get latest version first
         version_dirs.sort(key=lambda v: [int(n) for n in v.split("_")], reverse=True)
 
+        # Version dirs that are the target of a known migration step but never
+        # completed one (no .migration marker, written since 1.5.0) are partial
+        # artifacts of an interrupted or aborted migration - e.g. the
+        # template-only dir a broken update left behind. Never migrate FROM
+        # those while a completed version exists; the real data lives in an
+        # older dir. If they're all we have, use the newest one anyway.
+        migration_targets = {new for _, new, _ in self.migrations}
+        fallback = None
+
         for version in version_dirs:
             # Skip the target version
             if version == self.latest_version:
@@ -155,9 +271,22 @@ class ConfigMigrationService:
                     f"Ignoring legacy version {version.replace('_', '.')} (older than minimum supported {MINIMUM_SUPPORTED_VERSION.replace('_', '.')})"
                 )
                 continue
+            # Skip version dirs without configs - nothing to migrate from
+            if not path.exists(path.join(users_dir, version, CONFIGS_DIR)):
+                continue
+            if version in migration_targets and not path.exists(
+                path.join(users_dir, version, CONFIGS_DIR, MIGRATION_LOG)
+            ):
+                self.log_warning(
+                    f"Version {version.replace('_', '.')} never completed a migration - "
+                    "treating it as an interrupted-migration artifact, not as the migration source."
+                )
+                if fallback is None:
+                    fallback = version
+                continue
             return version
 
-        return None
+        return fallback
 
     def find_next_version(self, current_version):
         """Find the next version in the migration chain."""
@@ -165,6 +294,52 @@ class ConfigMigrationService:
             if old == current_version:
                 return new
         return None
+
+    def _cleanup_interrupted_step(self, new_version: str):
+        """Remove the partially-written configs of a crashed migration step.
+
+        The step's target configs only contain data copied from the previous
+        version (still fully intact), so deleting them is safe. Leaving them
+        behind would make find_latest_migratable_version pick the partial
+        version as the migration source on the next launch, silently skipping
+        the crashed step's conversion.
+        """
+        step_config_path = path.join(self.users_dir, new_version, CONFIGS_DIR)
+        if path.exists(step_config_path) and not path.exists(
+            path.join(step_config_path, MIGRATION_LOG)
+        ):
+            # An intermediate version dir is purely a product of the crashed
+            # step - remove it entirely so no empty shell survives. The latest
+            # version dir also holds templates/skills ConfigManager manages,
+            # so only its configs are removed (and restored on next launch).
+            if new_version == self.latest_version:
+                shutil.rmtree(step_config_path, ignore_errors=True)
+            else:
+                shutil.rmtree(
+                    path.join(self.users_dir, new_version), ignore_errors=True
+                )
+            self.err(
+                f"Migration step to {new_version.replace('_', '.')} was interrupted - "
+                "removed its partial configs so the next launch retries the step."
+            )
+
+    def build_migration_chain(self, start_version):
+        """Resolve the ordered list of versions from start_version to the latest.
+
+        Returns None if any link is missing, e.g. because a migration module
+        failed to load. Callers must not perform any destructive operations
+        before checking this.
+        """
+        chain = [start_version]
+        while chain[-1] != self.latest_version:
+            # a valid chain can't have more steps than there are migrations
+            if len(chain) > len(self.migrations):
+                return None
+            next_version = self.find_next_version(chain[-1])
+            if next_version is None:
+                return None
+            chain.append(next_version)
+        return chain
 
     def perform_migration(self, old_version, new_version):
         """Execute a single migration step."""
@@ -184,37 +359,21 @@ class ConfigMigrationService:
             # Instantiate and execute the migration
             migration = migration_class(self)
             migration.execute()
+
+            # Mark the step as completed only after execute() has fully run
+            # (incl. post-migrate hooks) so a crash mid-step causes a re-run
+            # on next launch instead of leaving the version half-migrated.
+            with open(
+                path.join(self.users_dir, new_version, CONFIGS_DIR, MIGRATION_LOG),
+                "w",
+                encoding="UTF-8",
+            ) as stream:
+                stream.write(self.log_message)
         else:
             self.err(f"No migration path found from {old_version} to {new_version}")
             raise ValueError(
                 f"No migration path found from {old_version} to {new_version}"
             )
-
-    def find_previous_version(self, users_dir, current_version):
-        versions = self.get_valid_versions(users_dir)
-        versions.sort(key=lambda v: [int(n) for n in v.split("_")])
-        index = versions.index(current_version)
-        return versions[index - 1] if index > 0 else None
-
-    def get_valid_versions(self, users_dir):
-        versions = next(os.walk(users_dir))[1]
-        return [
-            v
-            for v in versions
-            if self.is_valid_version(v) and not self.is_version_too_old(v)
-        ]
-
-    def find_latest_user_version(self, users_dir):
-        valid_versions = self.get_valid_versions(users_dir)
-        return max(
-            valid_versions,
-            default=None,
-            key=lambda v: [int(n) for n in v.split("_")],
-        )
-
-    def is_valid_version(self, version):
-        """Check if a version exists in the migration chain."""
-        return any(version in migration[:2] for migration in self.migrations)
 
     def is_version_too_old(self, version):
         """Check if a version is older than the minimum supported version."""
@@ -223,37 +382,18 @@ class ConfigMigrationService:
         return version_parts < min_parts
 
     def _apply_fresh_install_cuda_settings(self):
-        """Auto-detect CUDA availability and update FasterWhisper settings for fresh installs.
-
-        This ensures that fresh installations automatically use CUDA if available,
-        rather than defaulting to CPU.
-        """
+        """A fresh install runs Parakeet on the GPU when there is one."""
         cuda_available = self.system_manager.is_cuda_available()
         gpu_name = self.system_manager.get_gpu_name()
+        execution_provider = "cuda" if cuda_available else "cpu"
 
-        device = "cuda" if cuda_available else "cpu"
-        compute_type = "auto"
-
-        self.log(
-            "Fresh install detected - configuring FasterWhisper for optimal performance"
-        )
+        self.log("Fresh install detected - configuring speech-to-text")
         self.log(f"- detected GPU: {gpu_name or 'None'}")
-        self.log(
-            f"- setting voice_activation.fasterwhisper.device to '{device}' (CUDA {'available' if cuda_available else 'not available'})"
-        )
-        self.log(
-            f"- setting voice_activation.fasterwhisper.compute_type to '{compute_type}'"
-        )
+        self.log(f"- setting stt.parakeet.execution_provider to '{execution_provider}'")
 
-        # Update the settings config
         settings = self.config_manager.settings_config
-        if (
-            settings
-            and settings.voice_activation
-            and settings.voice_activation.fasterwhisper
-        ):
-            settings.voice_activation.fasterwhisper.device = device
-            settings.voice_activation.fasterwhisper.compute_type = compute_type
+        if settings and settings.stt and settings.stt.parakeet:
+            settings.stt.parakeet.execution_provider = execution_provider
             self.config_manager.save_settings_config()
             self.log("- settings saved successfully")
 
@@ -262,54 +402,6 @@ class ConfigMigrationService:
         with open(migration_file, "w") as f:
             f.write(f"Fresh install - Version {self.latest_version}\n")
         self.log("- migration marker created")
-
-    def reset_to_fresh_configs(self):
-        """Copy fresh configs from templates to the latest version directory.
-
-        Note: Skills are NO LONGER copied here. Built-in skills are loaded directly
-        from the bundled location. Custom skills persist in the non-versioned
-        custom_skills/ directory.
-        """
-        try:
-            configs_template = path.join(self.templates_dir, "configs")
-
-            latest_dir = path.join(self.users_dir, self.latest_version)
-
-            # Remove existing latest version directory contents, but preserve 'logs' directory
-            # because the log file may be locked by the logging system
-            if path.exists(latest_dir):
-                for item in os.listdir(latest_dir):
-                    item_path = path.join(latest_dir, item)
-                    if item == "logs":
-                        # Skip logs directory - it may contain open log files
-                        self.log("Preserving logs directory during reset")
-                        continue
-                    if path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                    else:
-                        os.remove(item_path)
-                self.log(
-                    f"Cleared existing {self.latest_version} directory (preserved logs)"
-                )
-
-            # Create the latest version directory
-            os.makedirs(latest_dir, exist_ok=True)
-
-            # Copy configs only (skills are now loaded from bundled location)
-            if path.exists(configs_template):
-                shutil.copytree(configs_template, path.join(latest_dir, CONFIGS_DIR))
-                self.log("Copied fresh configs from templates")
-
-            # Create migration log
-            migration_file = path.join(latest_dir, CONFIGS_DIR, MIGRATION_LOG)
-            with open(migration_file, "w", encoding="UTF-8") as stream:
-                stream.write(self.log_message)
-
-            self.log_highlight("Fresh configs installed successfully!")
-
-        except Exception as e:
-            self.err(f"Failed to reset to fresh configs: {str(e)}")
-            raise
 
     def migrate_audio_library(self) -> None:
         """Migrate audio library from versioned location to non-versioned location.
@@ -621,7 +713,7 @@ class ConfigMigrationService:
             path.join(
                 self.templates_dir,
                 "configs",
-                "_Star Citizen",
+                "Star Citizen",
                 f"{wingman_name}.template.yaml",
             ),
             path.join(
@@ -692,6 +784,33 @@ class ConfigMigrationService:
 
         return {}
 
+    def _deep_merge_over(self, base: dict, override: dict) -> dict:
+        """Recursively merge ``override`` into ``base``; override values win."""
+        return deep_merge_configs(base, override)
+
+    def backfill_from_template(self, template_filename: str, migrated: dict) -> dict:
+        """Deep-merge a migrated config over its current template.
+
+        Migration hooks only transform what they know about. A field that
+        became required in the models without a matching hook (hud_server,
+        pocket_tts, ...) would fail the final
+        validation and silently reset the user's whole file to the shipped
+        template. With the template as the base, every current field exists
+        while migrated user values always win.
+
+        INVARIANT: a key that a migration hook deliberately deletes must also
+        be absent from the template, otherwise this merge resurrects it with
+        the template value. Holds for all current hooks; keep it that way when
+        deprecating fields.
+        """
+        template_file = path.join(self.templates_dir, CONFIGS_DIR, template_filename)
+        if not path.exists(template_file):
+            return migrated
+        template = self.config_manager.read_config(template_file) or {}
+        if not isinstance(template, dict):
+            return migrated
+        return self._deep_merge_over(template, migrated or {})
+
     def log(self, message: str):
         """Log a normal message."""
         self._log_with_color(message, LogType.SYSTEM)
@@ -714,16 +833,8 @@ class ConfigMigrationService:
         self.log_message += f"{message}\n"
 
     def normalize_config_name(self, config_name: str) -> str:
-        """Remove DEFAULT_PREFIX and DELETED_PREFIX from config name for comparison.
-
-        This allows us to detect when '_Star Citizen' and 'Star Citizen' are the same config.
-        """
-        normalized = config_name
-        if normalized.startswith(DELETED_PREFIX):
-            normalized = normalized[len(DELETED_PREFIX) :]
-        if normalized.startswith(DEFAULT_PREFIX):
-            normalized = normalized[len(DEFAULT_PREFIX) :]
-        return normalized
+        """Remove the legacy state prefixes from a config name for comparison."""
+        return strip_legacy_prefixes(config_name)
 
     def remove_duplicate_template_configs(
         self, old_version: str, new_version: str
@@ -741,12 +852,16 @@ class ConfigMigrationService:
         if not path.exists(old_config_path) or not path.exists(new_config_path):
             return
 
-        # Get normalized config names from old version
+        # Get normalized config names from old version.
+        # Legacy-deleted dirs ('.Star Citizen') are included on purpose: the user
+        # had that config (deleted), so the fresh template must not survive either.
         old_config_normalized = set()
         for item in os.listdir(old_config_path):
             item_path = path.join(old_config_path, item)
-            if path.isdir(item_path) and not item.startswith("."):
+            if path.isdir(item_path):
                 normalized = self.normalize_config_name(item)
+                if not normalized:
+                    continue
                 old_config_normalized.add(normalized)
                 self.log(
                     f"Old config found for duplicate check: {item} (normalized: {normalized})"
@@ -774,15 +889,23 @@ class ConfigMigrationService:
 
         shutil.copyfile(old_file, new_file)
 
-        self.log_highlight(f"Copied file: {path.basename(new_file)}")
+        # Same reason as the Wingman lines: name the config dir for files that
+        # live in one, so 'Copied file: zRandom NPC.png' is traceable.
+        parent = path.basename(path.dirname(new_file))
+        label = (
+            path.basename(new_file)
+            if parent == CONFIGS_DIR
+            else path.join(parent, path.basename(new_file))
+        )
+        self.log_highlight(f"Copied file: {label}")
 
     def migrate(
         self,
         old_version: str,
         new_version: str,
-        migrate_settings: Callable[[dict, dict], dict],
-        migrate_defaults: Callable[[dict, dict], dict],
-        migrate_wingman: Callable[[dict, Optional[dict]], dict],
+        migrate_settings: Callable[[dict], dict],
+        migrate_defaults: Callable[[dict], dict],
+        migrate_wingman: Callable[[dict], dict],
         migrate_secrets: Optional[Callable[[dict], dict]] = None,
         migrate_mcp: Optional[Callable[[dict, dict], dict]] = None,
     ) -> None:
@@ -791,64 +914,87 @@ class ConfigMigrationService:
         new_config_path = path.join(users_dir, new_version, CONFIGS_DIR)
 
         if not path.exists(path.join(users_dir, new_version)):
-            migration_template_path = path.join(
-                self.templates_dir, "migration", new_version
-            )
-            if path.exists(migration_template_path):
-                # Get list of config directories from old version (normalized names)
-                # Include ALL configs regardless of their state (default, undefaulted, or deleted)
-                # because if ANY version exists, we should skip the template
-                old_config_normalized = set()
-                if path.exists(old_config_path):
-                    for item in os.listdir(old_config_path):
-                        item_path = path.join(old_config_path, item)
-                        if path.isdir(item_path) and not item.startswith("."):
-                            # Add ALL configs (including deleted ones) after normalizing
-                            normalized = self.normalize_config_name(item)
-                            old_config_normalized.add(normalized)
-                            self.log(
-                                f"Old config found: {item} (normalized: {normalized})"
+            os.makedirs(new_config_path, exist_ok=True)
+
+            # Build set of normalized old config names for deduplication.
+            # Includes legacy-deleted dirs ('.Star Citizen') so their templates
+            # are not recreated in the new version either.
+            old_config_normalized = set()
+            if path.exists(old_config_path):
+                for item in os.listdir(old_config_path):
+                    item_path = path.join(old_config_path, item)
+                    if path.isdir(item_path):
+                        normalized = self.normalize_config_name(item)
+                        if not normalized:
+                            continue
+                        old_config_normalized.add(normalized)
+                        self.log(
+                            f"Old config found: {item} (normalized: {normalized})"
+                        )
+
+            # Post-conversion (>= 3.1.4), deleted configs have no directory
+            # anymore - their tombstones live in context.yaml. Include them so
+            # a mid-chain rebuild doesn't resurrect deleted configs from
+            # templates.
+            old_context_file = path.join(old_config_path, CONTEXT_FILE)
+            if path.exists(old_context_file):
+                old_context = (
+                    self.config_manager.read_config(old_context_file) or {}
+                )
+                for name in old_context.get("deleted_template_configs", []):
+                    normalized = self.normalize_config_name(name)
+                    if normalized:
+                        old_config_normalized.add(normalized)
+                        self.log(
+                            f"Deleted config tombstone found: {name} - template will not be recreated"
+                        )
+
+            # Copy settings.yaml and defaults.yaml from old version
+            # (they'll be transformed by migration callbacks)
+            for config_file in ("settings.yaml", "defaults.yaml"):
+                old_file = path.join(old_config_path, config_file)
+                new_file = path.join(new_config_path, config_file)
+                if path.exists(old_file):
+                    shutil.copyfile(old_file, new_file)
+                    self.log(f"Copied {config_file} from old version")
+
+            # Copy wingman template configs and assets from current templates
+            # (templates/configs/) — only for wingmen the user doesn't already have
+            current_templates_path = path.join(self.templates_dir, CONFIGS_DIR)
+            if path.exists(current_templates_path):
+                for item in os.listdir(current_templates_path):
+                    src_path = path.join(current_templates_path, item)
+                    dst_path = path.join(new_config_path, item)
+                    if item.startswith("."):
+                        continue
+                    if path.isdir(src_path):
+                        # Wingman config directory — skip if user already has it
+                        normalized = self.normalize_config_name(item)
+                        if normalized in old_config_normalized:
+                            self.log_highlight(
+                                f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})"
                             )
-
-                # Copy migration template but skip configs that exist in old version (in any state)
-                template_config_path = path.join(migration_template_path, CONFIGS_DIR)
-                new_version_path = path.join(users_dir, new_version)
-
-                # First, copy the entire template structure
-                shutil.copytree(migration_template_path, new_version_path)
-                self.log(
-                    f"{new_version} configs not found during multi-step migration. Copied migration templates from {migration_template_path}."
-                )
-
-                # Now remove template configs that have any version in old configs
-                # (whether default, undefaulted, or deleted)
-                if path.exists(template_config_path):
-                    for item in os.listdir(template_config_path):
-                        item_path = path.join(template_config_path, item)
-                        new_item_path = path.join(new_version_path, CONFIGS_DIR, item)
-                        if path.isdir(item_path) and not item.startswith("."):
-                            normalized = self.normalize_config_name(item)
-                            if normalized in old_config_normalized:
-                                # This template config exists in old version (in some form)
-                                # Remove template to avoid duplicates - old version will be migrated
-                                if path.exists(new_item_path):
-                                    shutil.rmtree(new_item_path)
-                                    self.log_highlight(
-                                        f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})"
-                                    )
-                                # Also remove associated avatar if it exists
-                                avatar_path = path.join(
-                                    new_version_path,
-                                    CONFIGS_DIR,
-                                    item.replace(".yaml", ".png"),
+                            continue
+                        shutil.copytree(src_path, dst_path)
+                        # Stamp created_with_version on copied wingman configs
+                        for yaml_file in os.listdir(dst_path):
+                            if yaml_file.endswith(".yaml"):
+                                self.config_manager._stamp_created_with_version(
+                                    path.join(dst_path, yaml_file)
                                 )
-                                if path.exists(avatar_path):
-                                    os.remove(avatar_path)
-            else:
-                self.err(f"Migration template not found: {migration_template_path}")
-                raise FileNotFoundError(
-                    f"Migration template not found: {migration_template_path}"
-                )
+                        self.log(f"Copied new wingman template '{item}' from current templates")
+                    elif not path.isdir(src_path):
+                        # Non-directory files (mcp.template.yaml, default-wingman-avatar.png, etc.)
+                        # Skip settings/defaults — already copied from old version above
+                        if item in ("settings.yaml", "defaults.yaml"):
+                            continue
+                        shutil.copyfile(src_path, dst_path)
+                        self.log(f"Copied '{item}' from current templates")
+
+            self.log(
+                f"{new_version} configs not found during multi-step migration. "
+                f"Built from old version configs + current templates."
+            )
 
         already_migrated = path.exists(path.join(new_config_path, MIGRATION_LOG))
         if already_migrated:
@@ -890,28 +1036,55 @@ class ConfigMigrationService:
                 # settings
                 elif filename == "settings.yaml":
                     self.log_highlight("Migrating settings.yaml...")
-                    migrated_settings = migrate_settings(
-                        old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.read_config(new_file),
-                    )
-                    try:
-                        if new_config_path == self.latest_config_path:
-                            self.config_manager.settings_config = SettingsConfig(
-                                **migrated_settings
-                            )
-                        self.config_manager.save_settings_config()
-                    except ValidationError as e:
-                        self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
-                # defaults
-                elif filename == "defaults.yaml":
-                    self.log_highlight("Migrating defaults.yaml...")
-                    migrated_defaults = migrate_defaults(
-                        old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.read_config(new_file),
+                    migrated_settings = (
+                        migrate_settings(
+                            old=self.config_manager.read_config(old_file),
+                        )
+                        or {}
                     )
                     try:
                         # Only validate on final migration step (current schema may not match intermediate versions)
                         if new_config_path == self.latest_config_path:
+                            migrated_settings = self.backfill_from_template(
+                                "settings.yaml", migrated_settings
+                            )
+                            self.config_manager.settings_config = SettingsConfig(
+                                **migrated_settings
+                            )
+                            self.config_manager.save_settings_config()
+                        else:
+                            # Intermediate step - persist the migrated file so the
+                            # next chain step continues from it instead of the
+                            # untouched copy of the old version's file.
+                            self.config_manager.write_config(
+                                new_file, migrated_settings
+                            )
+                    except ValidationError as e:
+                        self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
+                        # Never leave the previous version's file in the new
+                        # version's folder: ConfigManager reads it on every
+                        # start, long after this step is marked done. The
+                        # template-backfilled dict has every current key; what
+                        # failed here are values, and those are the user's to
+                        # correct in Settings.
+                        self.config_manager.write_config(
+                            new_file, migrated_settings
+                        )
+                # defaults
+                elif filename == "defaults.yaml":
+                    self.log_highlight("Migrating defaults.yaml...")
+                    migrated_defaults = (
+                        migrate_defaults(
+                            old=self.config_manager.read_config(old_file),
+                        )
+                        or {}
+                    )
+                    try:
+                        # Only validate on final migration step (current schema may not match intermediate versions)
+                        if new_config_path == self.latest_config_path:
+                            migrated_defaults = self.backfill_from_template(
+                                "defaults.yaml", migrated_defaults
+                            )
                             self.config_manager.default_config = NestedConfig(
                                 **migrated_defaults
                             )
@@ -923,29 +1096,41 @@ class ConfigMigrationService:
                             )
                     except ValidationError as e:
                         self.err(f"Unable to migrate defaults.yaml:\n{str(e)}")
+                        self.config_manager.write_config(
+                            new_file, migrated_defaults
+                        )
                 # MCP
                 # NOTE: mcp.yaml is a top-level config file, not a wingman.
                 # It's handled after the main walk so we can create it from template
                 # when missing and optionally transform it via migrate_mcp.
                 elif filename == "mcp.yaml":
                     continue
+                # Config context state (introduced in 3.1.4): copy verbatim
+                elif filename == CONTEXT_FILE:
+                    self.copy_file(old_file, new_file)
+                    if new_config_path == self.latest_config_path:
+                        self.config_manager.context_state = (
+                            self.config_manager.load_context_state()
+                        )
                 # Wingmen
                 elif filename.endswith(".yaml"):
                     # Templates are not Wingman configs and may not validate.
                     if filename.endswith("template.yaml"):
                         self.copy_file(old_file, new_file)
                         continue
-                    self.log_highlight(f"Migrating Wingman {filename}...")
+                    # The config dir belongs in the line: users have the same
+                    # Wingman name in several configs (Xul's 'zRandom NPC'
+                    # exists three times), and a bare file name makes the log
+                    # unreadable exactly for the people with the most to lose.
+                    config_dir_name = path.basename(root)
+                    self.log_highlight(
+                        f"Migrating Wingman {config_dir_name}/{filename}..."
+                    )
                     # defaults are already migrated because the Wingman config is in a subdirectory
                     try:
                         default_config = self.config_manager.read_default_config()
                         migrated_wingman = migrate_wingman(
                             old=self.config_manager.read_config(old_file),
-                            new=(
-                                self.config_manager.read_config(new_file)
-                                if path.exists(new_file)
-                                else None
-                            ),
                         )
                         # validate the merged config
                         if new_config_path == self.latest_config_path:
@@ -958,23 +1143,6 @@ class ConfigMigrationService:
                         )
                         # save it
                         self.config_manager.write_config(new_file, wingman_diff)
-
-                        # The old file was logically deleted and a new one exists that isn't yet
-                        new_base_file = path.join(
-                            root.replace(old_config_path, new_config_path),
-                            filename.replace(DELETED_PREFIX, "", 1),
-                        )
-                        if filename.startswith(DELETED_PREFIX) and path.exists(
-                            new_base_file
-                        ):
-                            os.remove(new_base_file)
-
-                            avatar = new_base_file.replace(".yaml", ".png")
-                            if path.exists(avatar):
-                                os.remove(avatar)
-                            self.log(
-                                f"Logically deleting Wingman {filename} like in the previous version"
-                            )
                     except FileNotFoundError as e:
                         # Likely a custom skill that doesn't have templates
                         error_str = str(e)
@@ -1003,31 +1171,6 @@ class ConfigMigrationService:
                         continue
                 else:
                     self.copy_file(old_file, new_file)
-
-        # Handle directory deletions after processing all files
-        for root, _dirs, _files in walk(old_config_path):
-            # the old dir was logically deleted and a new one exists that isn't yet
-            new_base_dir = root.replace(old_config_path, new_config_path).replace(
-                DELETED_PREFIX, "", 1
-            )
-            new_undeleted_default_dir = root.replace(
-                old_config_path, new_config_path
-            ).replace(DELETED_PREFIX, DEFAULT_PREFIX, 1)
-
-            target_dir = (
-                new_undeleted_default_dir
-                if path.exists(new_undeleted_default_dir)
-                else new_base_dir if path.exists(new_base_dir) else None
-            )
-            if (
-                target_dir
-                and os.path.basename(root).startswith(DELETED_PREFIX)
-                and path.exists(target_dir)
-            ):
-                shutil.rmtree(target_dir)
-                self.log(
-                    f"Logically deleting config {root} like in the previous version"
-                )
 
         # Handle case where secrets.yaml doesn't exist in old version but we need to create it
         if migrate_secrets:
@@ -1110,8 +1253,8 @@ class ConfigMigrationService:
             server_only=True,
         )
         self.log_message += f"{success_message}\n"
-
-        with open(
-            path.join(new_config_path, MIGRATION_LOG), "w", encoding="UTF-8"
-        ) as stream:
-            stream.write(self.log_message)
+        # NOTE: the .migration marker is deliberately NOT written here.
+        # perform_migration() writes it after the whole step - including
+        # post-migrate hooks like the 3.1.4 context state conversion - has
+        # completed, so a crash mid-step leads to a re-run instead of a
+        # permanently half-migrated version directory.

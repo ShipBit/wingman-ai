@@ -5,10 +5,30 @@ Provides common utilities and decorators for migration implementations.
 
 from abc import ABC, abstractmethod
 from functools import wraps
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from services.config_migration_service import ConfigMigrationService
+
+# Legacy (pre-3.1.4) directory/file name prefixes that encoded config state.
+# Only used to interpret OLD version directories during migration.
+# Since 3.1.4, this state lives in configs/context.yaml instead.
+LEGACY_DELETED_PREFIX = "."
+LEGACY_DEFAULT_PREFIX = "_"
+
+
+def strip_legacy_prefixes(name: str) -> str:
+    """Remove the legacy state prefixes from a config name.
+
+    This allows us to detect that '_Star Citizen', '.Star Citizen' (and
+    corrupted combinations like '_.Star Citizen') all mean 'Star Citizen'.
+    """
+    while name and (
+        name.startswith(LEGACY_DELETED_PREFIX)
+        or name.startswith(LEGACY_DEFAULT_PREFIX)
+    ):
+        name = name[1:]
+    return name
 
 
 def log_step(step_name: str):
@@ -71,36 +91,33 @@ class BaseMigration(ABC):
     old_version: str
     new_version: str
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Transform settings.yaml from old to new version.
 
         Args:
             old: Old version settings config
-            new: New version template settings config
 
         Returns:
             Migrated settings config
         """
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Transform defaults.yaml from old to new version.
 
         Args:
             old: Old version defaults config
-            new: New version template defaults config
 
         Returns:
             Migrated defaults config
         """
         return old
 
-    def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Transform wingman config from old to new version.
 
         Args:
             old: Old version wingman config
-            new: New version template wingman config (if available)
 
         Returns:
             Migrated wingman config
@@ -187,12 +204,11 @@ class BaseMigration(ABC):
     # Utility methods
 
     @staticmethod
-    def no_op(old: dict, new: dict = None) -> dict:
+    def no_op(old: dict) -> dict:
         """Identity function for no-op transformations.
 
         Args:
             old: Config to pass through unchanged
-            new: Ignored
 
         Returns:
             The old config unchanged

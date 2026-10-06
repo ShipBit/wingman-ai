@@ -175,7 +175,7 @@ class SpaceStation(DataModel):
             "orbit": orbit.get_data_for_ai_minimal() if orbit else None,
             "faction": faction.get_data_for_ai_minimal() if faction else None,
             "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
-            "terminals": [terminal.get_data_for_ai_minimal() for terminal in terminals],
+            "terminals": [terminal.get_data_for_ai_minimal(embedded=True) for terminal in terminals],
             "pad_types": self.get_pad_types(),
             "properties": self.get_properties(),
             "offerings": self.get_offerings(),

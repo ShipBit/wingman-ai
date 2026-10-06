@@ -1,5 +1,11 @@
+from typing import TYPE_CHECKING
 from openai import OpenAI, APIStatusError
+from api.enums import ConversationProvider
+from providers.interfaces import LlmInterface, llm_provider
 from providers.open_ai import OpenAi
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 class XAi(OpenAi):
@@ -48,3 +54,16 @@ class XAi(OpenAi):
             }
             fixed_tools.append(fixed_tool)
         return fixed_tools
+
+
+@llm_provider(ConversationProvider.XAI)
+class XAiLlm(LlmInterface):
+    def __init__(self, xai_instance: "XAi", config: "WingmanConfig"):
+        self._xai = xai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._xai.ask(
+            messages=messages, tools=tools,
+            model=self._config.xai.conversation_model,
+        )

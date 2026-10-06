@@ -1,5 +1,6 @@
 module: skills.auto_screenshot.main
 name: AutoScreenshot
+api_version: 3
 display_name: Auto Screenshot
 author: teddybear082
 discoverable_by_default: false
@@ -23,7 +24,7 @@ custom_properties:
     property_type: number
     required: true
     value: 1
-  - hint: The default directory to put screenshots in. If left blank, it will default to your WingmanAI APPDATA directory in a subdirectory called "generated_files".
+  - hint: Defaults to your WingmanAI APPDATA directory in a subdirectory called "generated_files" if left blank.
     id: default_directory
     name: Default directory
     property_type: string

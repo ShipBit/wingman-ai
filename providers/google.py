@@ -1,8 +1,14 @@
 import re
+from typing import TYPE_CHECKING
 from google import genai
 from google.genai import types
 from openai import APIStatusError, OpenAI
+from api.enums import ConversationProvider
+from providers.interfaces import LlmInterface, llm_provider
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 printr = Printr()
 
@@ -17,6 +23,17 @@ class GoogleGenAI:
             api_key=api_key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
+
+    async def aclose(self):
+        """Close underlying HTTP clients to prevent 'Task was destroyed' warnings."""
+        try:
+            api_client = getattr(self.client, "_api_client", None)
+            if api_client and hasattr(api_client, "aclose"):
+                await api_client.aclose()
+            elif hasattr(self.client, "close"):
+                self.client.close()
+        except Exception:
+            pass
 
     def _handle_key_error(self):
         printr.toast_error(
@@ -128,3 +145,16 @@ class GoogleGenAI:
                 if action == "generateContent":
                     models.append(model)
         return models
+
+
+@llm_provider(ConversationProvider.GOOGLE)
+class GoogleLlm(LlmInterface):
+    def __init__(self, google_instance: "GoogleGenAI", config: "WingmanConfig"):
+        self._google = google_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._google.ask(
+            messages=messages, tools=tools,
+            model=self._config.google.conversation_model,
+        )

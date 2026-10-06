@@ -1,5 +1,4 @@
-import json
-
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -144,8 +143,6 @@ class CommodityInformation(Tool):
                 commodities = sorted(commodities, key=lambda x: x.get_profit_max(), reverse=True)
                 helper.get_handler_tool().add_note("Commodities are sorted by absolute profit per SCU DESC")
 
-        helper.get_handler_tool().add_note("Even though profit, profit margin and base profit may be given by this function, use uex_calculate_profit afterwards to calculate correct profit with user values.")
-
         if not commodities:
             helper.get_handler_tool().add_note(
                 "No matching commodities found. Please check filter criteria."
@@ -188,7 +185,7 @@ class CommodityInformation(Tool):
                 f"Found {len(commodities)} matching commodities. Filter criteria are too broad. (max 20 commodities for information about each commodity)"
             )
 
-        return json.dumps(commodities), ""
+        return compression.dumps(commodities), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}
@@ -245,7 +242,7 @@ class CommodityInformation(Tool):
         }
 
     def get_description(self) -> str:
-        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
+        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters."
 
     def get_prompt(self) -> str:
-        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory). If users gives specific buy or sell price and asks for profit margin, always use uex_calculate_profit function afterwards to calculate correct profit with user values."
+        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, price AND the stock/demand status (e.g. 'high stock' for buy options, 'no demand' for sell options). If users gives specific buy or sell price and asks for profit margin, always use uex_calculate_profit function afterwards to calculate correct profit with user values."

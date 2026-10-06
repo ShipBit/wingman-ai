@@ -2,39 +2,6 @@
 
 Official website: [https://www.wingman-ai.com](https://www.wingman-ai.com)
 
-Private fork: an [Elite Dangerous companion](docs/elite-dangerous.md) is under
-development using ordinary Wingman skills, MCP and profiles. Local observations
-cover ship status, inventories, missions, navigation, exploration and progression,
-including supported cargo transactions and independently dated ranks and engineer
-updates. Public-data tools provide dated system/station information, service
-candidates, trade comparisons and ship engineering recipes.
-
-The companion starts local monitoring automatically when its profile loads.
-[Game controls under acceptance](docs/elite-dangerous-controls.md) add physical-key input,
-single binding presses and supplemental bindings alongside HOTAS/gamepad controls.
-Shortcut checks include actions triggered by modifier keys; map commands confirm
-the observed map transition or report an unverified result without retrying.
-Recognized control phrases execute directly; on/off wording still presses toggle
-keys once per request. After execution, the configured AI composes a brief varied
-companion acknowledgment. [Supervised workflows](docs/elite-dangerous-workflows.md)
-cover travel, exploration, combat, SRV and on-foot assistance, with local cancellation
-and player checkpoints. Natural-language routing handles paraphrases, clarification,
-and conversation before input. The catalog has 108 action IDs across 151 vehicle/action
-combinations, including targeting, fighter orders, on-foot tools and contextual menus. Live
-evidence and remaining limits are recorded in [acceptance](docs/elite-dangerous-acceptance.md).
-Controls use friendly preset names and explicit action/state arguments; startup
-repairs duplicate template configurations with backups. See the
-[controls upgrade instructions](docs/elite-dangerous-controls.md#preset-changes-and-recovery).
-Gameplay and hardware acceptance results must be recorded before release.
-The [managed launch and audio recovery guide](docs/audio-recovery.md) explains the
-normal Wingman shortcut, preferred-device fallback/return, and live acceptance.
-
-The [setup guide](docs/elite-dangerous.md#repeatable-source-configuration) covers
-repeatable profile/MCP installation, AI-executable commands generated from active bindings,
-preflight and client/gameplay acceptance. See the
-[research and acceptance ledger](docs/elite-dangerous-research.md) for verified
-capabilities, limits and remaining work.
-
 [![Wingman AI Showreel](https://img.youtube.com/vi/qR8FjmQJRGE/0.jpg)](https://youtu.be/qR8FjmQJRGE 'Wingman AI Showreel')
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer. AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
@@ -81,7 +48,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration)
+  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Azure TTS
@@ -91,7 +58,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - Inworld
 - **Sound effects** that work with every supported TTS provider
 - **Audio markups (aka "emotions")** that work with every supported TTS provider
-- **Multilingual** by default
+- **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
+- **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT)
 - **Command recording & execution** (keyboard & mouse)
   - **AI-powered**: OpenAI decides when to execute commands based on user input. Users don't need to say exact phrases.
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
@@ -104,7 +72,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Typing Assistant**: Types text into any application
   - **Audio Device Changer**: Switch input/output devices
   - **API Request**: Make HTTP requests to external services
-  - **Image Generation**: AI-powered image creation
+  - **Image Generation**: Creates images in 13 style presets, in square, portrait or landscape, and can build on an earlier image or one you attach ("the same character, but ...")
   - **Timer**: Set timers and alarms
   - **Quick Commands**: Fast command execution shortcuts
   - **Radio Chatter**: Atmospheric radio effects
@@ -113,6 +81,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Control Windows**: Window management operations
   - **MSFS2020 Control**: Microsoft Flight Simulator 2020 integration
   - **ATS Telemetry**: American Truck Simulator data integration
+  - **Elite Dangerous**: reads the journal (ship, cargo, missions, route) and reacts to arrivals, dockings and finished missions
+  - **Elite Dangerous Controls**: turns the game's own key bindings into commands for ship, SRV and on foot
   - **UEX Corp**: Star Citizen trading data (UEX Corp API)
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers
@@ -226,7 +196,7 @@ XVASynth is also supported and installable via Steam.
 ### Windows
 
 - Download the installer of the latest version from [wingman-ai.com](https://www.wingman-ai.com).
-- **FasterWhisper with CUDA is now bundled!** If you have a CUDA-compatible NVIDIA GPU, GPU-accelerated speech-to-text will work automatically without additional installation steps.
+- **CUDA is bundled.** With an NVIDIA GPU from the GTX 16xx / RTX 20xx series or newer and driver 580 or newer, local speech recognition (Parakeet) runs on the GPU without extra installation steps. Older GPUs and drivers use the CPU.
 - Install it to a directory of your choice and start the client `Wingman AI.exe`.
   - The client will auto-start `Wingman AI Core.exe` in the background
 
@@ -237,6 +207,19 @@ If that doesn't work for some reason, try starting `Wingman AI Core.exe` manuall
 ### MacOS
 
 Wingman runs well on MacOS. While we don't offer a precompiled package for it, you can [run it from source](#develop-with-wingman-ai). Note that the TTS provider XVASynth is Windows-only and therefore not supported on MacOS.
+
+### Linux
+
+- Download the AppImage (x86_64) from [wingman-ai.com](https://www.wingman-ai.com), make it executable (`chmod +x WingmanAI_*.AppImage`) and start it.
+- It needs a distribution from 2024 or newer (glibc 2.39): Ubuntu 24.04, Fedora 40, Debian 13, current Arch, CachyOS, Nobara or newer.
+- Install PortAudio and the PipeWire ALSA plugin. Wingman uses the system's audio libraries, so your headset and the PipeWire/Pulse devices show up:
+  - Fedora, Nobara: `sudo dnf install portaudio pipewire-alsa`
+  - Ubuntu, Debian: `sudo apt install libportaudio2 pipewire-alsa libfuse2t64`
+  - Arch, CachyOS: `sudo pacman -S portaudio pipewire-alsa`
+- For hotkeys and push-to-talk, add yourself to the `input` group, then log out and back in: `sudo usermod -aG input $USER`. This works on X11 and Wayland.
+- Not available on Linux: the HUD overlay and XVASynth.
+
+If Wingman does not start, run the AppImage from a terminal. Core's messages, such as a missing PortAudio, are printed there.
 
 ## Who are these Wingmen?
 
@@ -293,7 +276,7 @@ Use these naming conventions to create different configurations for different ga
   - `_[name]` (underscore): marks the default configuration that is launched on start, e.g. `_Star Citizen`.
 - Inside of a configuration directory, you can create different `wingmen` by adding `[name].yaml` files. Do not use special characters.
   - `.[name].yaml` (dot): marks the Wingman as "hidden" and skips it in the UI and on start, e.g. `.Computer.yaml`.
-  - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`.
+  - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`. The client's avatar studio paints one from the backstory in a style of your choice and keeps every variant in `generated_files/AvatarStudio/[wingman name]/`.
 
 There are a couple of other files and directories in the config directory that you can use to configure Wingman AI.
 
@@ -323,6 +306,7 @@ Please follow our guides to setup your dev environment:
 
 - [Windows development](docs/develop-windows.md)
 - [MacOS development](docs/develop-macos.md)
+- [Linux development](docs/develop-linux.md)
 
 ### Creating Custom Skills
 
@@ -374,6 +358,7 @@ We would like to thank their creators for their great work and contributions to 
 - [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
 - [pedalboard](https://github.com/spotify/pedalboard) - GPL-3.0, © 2021-2023 Spotify AB
 - [pocket-tts](https://github.com/kyutai-labs/pocket-tts) - MIT
+- pocket-tts model weights - © Kyutai Labs, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), redistributed unmodified from [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Subject to Kyutai's acceptable-use terms: no voice cloning without explicit, lawful consent; no unlawful, harmful, deceptive or privacy-invasive use.
 - [platformdirs](https://github.com/platformdirs/platformdirs) - MIT, © 2010-202x plaformdirs developers
 - [pydantic](https://github.com/pydantic/pydantic) - MIT, © 2017 to present Pydantic Services Inc. and individual contributors
 - [pydirectinput-rgx](https://github.com/ReggX/pydirectinput_rgx) - MIT, © 2022 dev@reggx.eu, 2020 Ben Johnson
@@ -385,6 +370,176 @@ We would like to thank their creators for their great work and contributions to 
 - [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-present, Encode OSS Ltd. All rights reserved.
 - [whispercpp](https://github.com/ggerganov/whisper.cpp) - MIT, © 2023-2024 The ggml authors
 - [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) - MIT, © 2023 SYSTRAN
+
+### Voice recordings
+
+Pocket TTS clones voices from recordings of native speakers. Wingman ships short excerpts (about 10 seconds each) in `templates/pocket_tts/voices/`. We thank the readers of [LibriVox](https://librivox.org), who dedicate their recordings to the [public domain](https://librivox.org/pages/public-domain/), and Thorsten Müller for [Thorsten-Voice](https://www.thorsten-voice.de) (CC0 1.0). Where a reader goes by a user name, the voice has a first name of its own. The reader is named next to it.
+
+- **Felix** (de): [Felix, reading Der Schimmelreiter (Theodor Storm) for LibriVox, public domain](https://librivox.org/der-schimmelreiter-by-theodor-storm/)
+- **Markus** (de): [Markus Wachenheim, reading Die Verwandlung (Franz Kafka) for LibriVox, public domain](https://librivox.org/die-verwandlung-von-franz-kafka/)
+- **Rainer** (de): [Rainer, reading Die Leiden des jungen Werther (Goethe) for LibriVox, public domain](https://librivox.org/die-leiden-des-jungen-werthers-by-johann-wolfgang-von-goethe/)
+- **Stefan** (de): [Stefan Schmelz, reading Kleider machen Leute (Gottfried Keller) for LibriVox, public domain](https://librivox.org/kleider-machen-leute-by-gottfried-keller/)
+- **Thorsten** (de): [Thorsten Müller, Thorsten-Voice dataset (TV-2022.10-Neutral), CC0 1.0](https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full)
+- **Franziska** (de): [Franziska Nelson, reading Der kleine Häwelmann (Theodor Storm) for LibriVox, public domain](https://librivox.org/der-kleine-haewelmann-by-theodor-storm/)
+- **Gesine** (de): [Gesine, reading Über die Weiber (Arthur Schopenhauer) for LibriVox, public domain](https://librivox.org/ueber-die-weiber-by-arthur-schopenhauer/)
+- **Hokuspokus** (de): [Hokuspokus, reading Der Golem (Gustav Meyrink) for LibriVox, public domain](https://librivox.org/der-golem-by-gustav-meyrink/)
+- **Stephanie** (de): [Stephanie König, reading Heidi kann brauchen, was es gelernt hat (Johanna Spyri) for LibriVox, public domain](https://librivox.org/heidi-kann-brauchen-was-es-gelernt-hat-by-johanna-spyri/)
+- **Tabea** (de): [Tabea, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Mara** (de): [cathar maiden, reading Adventskalender 2017 for LibriVox, public domain](https://librivox.org/adventskalender-2017-by-various/)
+- **Jessi** (de): [Jessi, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Gaby** (de): [Gaby, reading Adventskalender 2016 for LibriVox, public domain](https://librivox.org/adventskalender-2016-by-various/)
+- **Kalynda** (de): [Kalynda, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Wilwarin** (de): [wilwarin, reading Sammlung kurzer deutscher Prosa 025 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-025-by-various/)
+- **Caroline** (de): [Caroline Sophie, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/)
+- **Claudia** (de): [Claudia Salto, reading Adventskalender 2016 for LibriVox, public domain](https://librivox.org/adventskalender-2016-by-various/)
+- **Dina** (de): [dineNa, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Julia** (de): [Julia Niedermaier, reading Sammlung kurzer deutscher Prosa 043 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-043-by-various/)
+- **Ekki** (de): [ekyale, reading Sammlung kurzer deutscher Prosa 002 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-002-by-various/)
+- **Christian** (de): [Christian Al-Kadi, reading Erzählungen for LibriVox, public domain](https://librivox.org/erzahlungen-by-edgar-allan-poe/)
+- **Karlsson** (de): [Karlsson, reading Sammlung kurzer deutscher Prosa 039 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-039-by-various/)
+- **Bruno** (de): [merendo07, reading Adventskalender 2021 for LibriVox, public domain](https://librivox.org/adventskalender-2021-by-various/)
+- **Max** (de): [Max Reichlich, reading Sammlung kurzer deutscher Prosa 054 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-054/)
+- **Rolf** (de): [Rolf Kaiser, reading Sammlung kurzer deutscher Prosa 012 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-012-by-various/)
+- **Claus** (de): [Claus Misfeldt, reading Adventskalender 2024 for LibriVox, public domain](https://librivox.org/adventskalender-2024-by-various/)
+- **Hans Otto** (de): [Hans Otto Kroeger, reading Schatzkästlein des Rheinischen Hausfreundes (Auswahl) for LibriVox, public domain](https://librivox.org/schatzkastlein-des-rheinischen-hausfreundes-auswahl-by-johann-peter-hebel/)
+- **Haiko** (de): [Haiaiel, reading Adventskalender 2021 for LibriVox, public domain](https://librivox.org/adventskalender-2021-by-various/)
+- **Sven** (de): [schrm, reading Sammlung kurzer deutscher Prosa 056 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-056-by-various/)
+- **Nele** (de): [Knubbel, reading Sammlung kurzer deutscher Prosa 030 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-030-by-various/)
+- **Biggi** (de): [Biggi Kaul, reading Sammlung kurzer deutscher Prosa 009 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various/)
+- **Marlene** (de): [muede, reading Adventskalender 2011 for LibriVox, public domain](https://librivox.org/adventskalender-2011-by-various/)
+- **Kristine** (de): [kristine, reading Sammlung kurzer deutscher Prosa 022 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-022-by-various/)
+- **Eva** (de): [Eva K., reading Sammlung kurzer deutscher Prosa 049 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-by-various-3/)
+- **Lissy** (de): [Lissy Schneider, reading Adventskalender 2019 for LibriVox, public domain](https://librivox.org/adventskalender-2019-by-various/)
+- **Ava** (de): [Availle, reading Adventskalender 2015 for LibriVox, public domain](https://librivox.org/adventskalender-2015-by-various/)
+- **Sonja** (de): [Sonja, reading Adventskalender 2009 for LibriVox, public domain](https://librivox.org/adventskalender-2009-by-various/)
+- **Eden** (de): [Eden, reading Sammlung kurzer deutscher Prosa 029 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-029-by-various/)
+- **Elisa** (de): [Elisa, reading Sammlung kurzer deutscher Prosa 052 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-052-by-various/)
+- **Wolfgang** (de): [Wolfgang, reading Sammlung kurzer deutscher Prosa 019 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-019-by-various/)
+- **Ibrahim** (de): [A. Ibrahim, reading Sammlung kurzer deutscher Prosa 028 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-028-by-various/)
+- **Johannes** (de): [Johannes Bergmann, reading Sammlung kurzer deutscher Prosa 037 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-037-by-various/)
+- **Tim** (de): [Tim Schöndorfer, reading Sammlung kurzer deutscher Prosa 021 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-021-by-various/)
+- **Boris** (de): [Boris, reading Adventskalender 2018 for LibriVox, public domain](https://librivox.org/adventskalender-2018-by-various/)
+- **Oliver** (de): [LordOider, reading Adventskalender 2014 for LibriVox, public domain](https://librivox.org/adventskalender-2014-by-various/)
+- **Malte** (de): [mahne, reading Adventskalender 2015 for LibriVox, public domain](https://librivox.org/adventskalender-2015-by-various/)
+- **Magnus** (de): [Magnus, reading Sammlung kurzer deutscher Prosa 060 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-060-by-various/)
+- **Joachim** (de): [yehoash, reading Sammlung kurzer deutscher Prosa 006 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutschsprachiger-texte-006-by-various/)
+- **Fynn** (de): [McFly, reading Sammlung kurzer deutscher Prosa 014 for LibriVox, public domain](https://librivox.org/sammlung-kurzer-deutscher-prosa-014-by-various/)
+- **Belinda** (en): [Belinda McReynolds, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Shelly** (en): [ShrimpPhish, reading Black Cat Vol. 05 No. 08 May 1900 for LibriVox, public domain](https://librivox.org/blackcat0508may1900-by-various/)
+- **Pamela** (en): [Pamela Nagami, reading Renaissance and the Reformation: A Textbook of European History 1494-1610 for LibriVox, public domain](https://librivox.org/the-renaissance-and-the-reformation-by-emmeline-tanner/)
+- **MaryAnn** (en): [MaryAnn, reading How to Pray for LibriVox, public domain](https://librivox.org/how-to-pray-by-reuben-archer-torrey/)
+- **Ann** (en): [Ann Boulais, reading Lives of the Queens of England Volume 11 for LibriVox, public domain](https://librivox.org/lives-of-the-queens-of-england-volume-11-by-agnes-strickland/)
+- **Dana** (en): [dc, reading Circe, Volume I for LibriVox, public domain](https://librivox.org/circe-by-mary-elizabeth-braddon/)
+- **Cynthia** (en): [cyndajm, reading Star Hyacinths for LibriVox, public domain](https://librivox.org/the-star-hyacinths-by-james-h-schmitz/)
+- **Leigh** (en): [mleigh, reading National Geographic Magazine Vol. 12 - 01. January 1901 for LibriVox, public domain](https://librivox.org/the-national-geographic-magazine-vol-12-01-january-1901-by-national-geographic-society/)
+- **Jenny** (en): [jenno, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Winnifred** (en): [Winnifred Assmann, reading Thrill Book Vol. II No. 2, July 15, 1919 for LibriVox, public domain](https://librivox.org/the-thrill-book-vol-ii-no-2-july-15-1919-by-murray-leinster/)
+- **Edward** (en): [E. Sharp, reading Last Words (Real and Traditional) of Distinguished Men and Women for LibriVox, public domain](https://librivox.org/the-last-words-real-and-traditional-of-distinguished-men-and-women-by-frederic-rowland-marvin/)
+- **Atul** (en): [Atul Sharma, reading Box Office Murders for LibriVox, public domain](https://librivox.org/the-box-office-murders-by-freeman-wills-crofts/)
+- **Aaron** (en): [Aaron Bennett, reading Magnificent Fight: Marines in the Battle for Wake Island for LibriVox, public domain](https://librivox.org/a-magnificent-fight-marines-in-the-battle-for-wake-island-by-robert-james-cressman/)
+- **Barry** (en): [Barry Eads, reading Wild Bill Hickok, the prince of pistoleers for LibriVox, public domain](https://librivox.org/wild-bill-hickok-the-prince-of-pistoleers-by-frank-j-wilstach/)
+- **Lee** (en): [LeeSalter, reading April Morning for LibriVox, public domain](https://librivox.org/april-morning-by-evaleen-stein/)
+- **Tom** (en): [Tom Shoesmith, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Manuel** (en): [mpinedag, reading Great Events by Famous Historians, Volume 15 for LibriVox, public domain](https://librivox.org/the-great-events-by-famous-historians-volume-15-by-charles-f-horne/)
+- **John** (en): [John, reading Flying Inn (Version 2) for LibriVox, public domain](https://librivox.org/the-flying-inn-version-2-by-g-k-chesterton/)
+- **Barnaby** (en): [Beeswaxcandle, reading Books and Reading for LibriVox, public domain](https://librivox.org/books-and-reading-by-noah-porter/)
+- **Edmund** (en): [Edmund Bloxam, reading Art of Music - Volume 03: Modern Music for LibriVox, public domain](https://librivox.org/the-art-of-music-volume-03-modern-music-by-the-national-society-of-music/)
+- **Ciufi** (en): [Ciufi Galeazzi, reading Daughter of the Seine for LibriVox, public domain](https://librivox.org/a-daughter-of-the-seine-by-jeanette-eaton/)
+- **Nadine** (fr): [Nadine Eckert-Boulet, reading Vampire for LibriVox, public domain](https://librivox.org/la-vampire-by-feval-paul-henry-corentin/)
+- **Mayah** (fr): [Mayah, reading Mystères de Paris - Tome 3 for LibriVox, public domain](https://librivox.org/les-mysteres-de-paris-tome-3-by-eugene-sue/)
+- **Agnès** (fr): [Agnes, reading Lecture, tome 6 for LibriVox, public domain](https://librivox.org/lecture06-by-various/)
+- **Claude** (fr): [Claude Covo-Farchi, reading Boule de suif for LibriVox, public domain](https://librivox.org/boule-de-suif-by-guy-de-maupassant-0904/)
+- **Noémie** (fr): [Naf, reading Horla for LibriVox, public domain](https://librivox.org/le-horla-by-guy-de-maupassant-1203/)
+- **Anne** (fr): [Anne, reading De l'esprit des lois, livres 01-13 for LibriVox, public domain](https://librivox.org/de-lesprit-des-lois-by-charles-louis-de-montesquieu-1004/)
+- **Gillian** (fr): [Gillian Hendrie, reading Introduction à la vie dévote for LibriVox, public domain](https://librivox.org/introduction-a-la-vie-devote-by-saint-francis-de-sales/)
+- **Sabine** (fr): [Saab, reading Misérables - tome 3 for LibriVox, public domain](https://librivox.org/les-miserables-tome-3-by-victor-hugo/)
+- **Clara** (fr): [Kitoune, reading Lecture, tome 4 for LibriVox, public domain](https://librivox.org/lecture-04-by-various/)
+- **Isabelle** (fr): [Isabelle Brasme, reading Germinal (French) for LibriVox, public domain](https://librivox.org/germinal-by-emile-zola/)
+- **Michaël** (fr): [Michaël Cadilhac, reading Vingt mille lieues sous les mers for LibriVox, public domain](https://librivox.org/20000-lieues-sous-les-mers-by-jules-verne/)
+- **Luc** (fr): [Gagnon Courchesne, reading Famille-Sans-Nom for LibriVox, public domain](https://librivox.org/famille-sans-nom-by-jules-verne/)
+- **Pierre** (fr): [pejuga, reading Bible (Fillion) 18: Livre de Job  (Chapitres sélectionnés) for LibriVox, public domain](https://librivox.org/la-bible-fillion-18-livre-de-job-by-louis-claude-fillion-bible/)
+- **Faris** (fr): [Faris, reading Liaisons dangereuses for LibriVox, public domain](https://librivox.org/les-liaisons-dangereuses-by-choderlos-de-laclos/)
+- **Bernard** (fr): [Bernard, reading Comédie Humaine: 07 - Scènes de la vie de province tome 3 (8-9-44) for LibriVox, public domain](https://librivox.org/scenes-de-la-vie-de-province-tome-iii-by-honore-de-balzac-1211/)
+- **Didier** (fr): [Didier, reading Boule de suif for LibriVox, public domain](https://librivox.org/boule-de-suif-by-guy-de-maupassant-0904/)
+- **Julien** (fr): [Kamisole, reading Laura. Voyages et impressions for LibriVox, public domain](https://librivox.org/laura-voyages-et-impressions-by-george-sand/)
+- **François** (fr): [Fao10rk, reading Confidences d'Arsène Lupin for LibriVox, public domain](https://librivox.org/les-confidences-darsene-lupin-by-maurice-leblanc/)
+- **Thomas** (fr): [Thomas Bouissaguet, reading Michel Strogoff for LibriVox, public domain](https://librivox.org/michel-strogoff-by-jules-verne/)
+- **Gilles** (fr): [Gilles G. Le Blanc, reading Misérables - tome 4 for LibriVox, public domain](https://librivox.org/les-miserables-tome-4-by-victor-hugo/)
+- **Lucía** (es): [Lu, reading Historia de un Pepe for LibriVox, public domain](https://librivox.org/historia-de-un-pepe-by-jose-milla-y-vidaurre/)
+- **Maritza** (es): [Maritza Mateo, reading Marianela for LibriVox, public domain](https://librivox.org/marianela-by-benito-perez-galdos/)
+- **Dolores** (es): [DreamVoz, reading Novelas Ejemplares for LibriVox, public domain](https://librivox.org/novelas-ejemplares-by-miguel-de-cervantes-saavedra/)
+- **Mónica** (es): [Mongope, reading David Copperfield o El sobrino de mi tía (español) for LibriVox, public domain](https://librivox.org/david-copperfield-espanol-by-charles-dickens/)
+- **Verla** (es): [Verla Viera, reading hermandad de los siete reyes for LibriVox, public domain](https://librivox.org/la-hermandad-de-los-siete-reyes-by-l-t-meade/)
+- **Catalina** (es): [CATIVAS, reading Literatura Americana for LibriVox, public domain](https://librivox.org/literatura-americana-by-antonio-batres-jauregui/)
+- **Enrique** (es): [EnriqueRendon, reading Mis mejores cuentos (novelas breves) for LibriVox, public domain](https://librivox.org/mis-mejores-cuentos-by-carmen-de-burgos/)
+- **Fernando** (es): [Fernando Falcoff, reading Cuentos bretones : cuentos populares de campesinos, pescadores y marineros for LibriVox, public domain](https://librivox.org/cuentos-bretones-cuentos-populares-de-campesinos-pescadores-y-marineros-by-paul-sebillot/)
+- **Paulino** (es): [paulino, reading Don Quijote 1 for LibriVox, public domain](https://librivox.org/don-quijote-vol-1-by-miguel-de-cervantes-saavedra/)
+- **Ernesto** (es): [Epachuko, reading Regenta (Tomo I) for LibriVox, public domain](https://librivox.org/la-regenta-tomo-i-by-leopoldo-garcia-alas/)
+- **Pablo** (es): [Pablocrdz, reading Periquillo Sarniento, tomos III y IV for LibriVox, public domain](https://librivox.org/el-periquillo-sarniento-tomos-iii-y-iv-by-jose-joaquin-fernandez-de-lizardi/)
+- **Antonio** (es): [Antonio Redondo, reading Aprendiz de Conspirador for LibriVox, public domain](https://librivox.org/el-aprendiz-de-conspirador-by-pio-baroja/)
+- **Arturo** (es): [arturo, reading Don Quijote 2 for LibriVox, public domain](https://librivox.org/don-quijote-volume-2-by-miguel-de-cervantes-saavedra/)
+- **Milton** (es): [MiltonFMH, reading María for LibriVox, public domain](https://librivox.org/maria-by-jorge-isaacs/)
+- **Mario** (es): [Marreran, reading casa de vapor for LibriVox, public domain](https://librivox.org/la-casa-de-vapor-by-jules-verne/)
+- **Titta** (it): [Titta, reading Novelle per un anno, vol. 06: In Silenzio for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-6-in-silenzio-by-luigi-pirandello/)
+- **Angelica** (it): [Angelica87, reading Avventure d'Alice nel Paese delle Meraviglie for LibriVox, public domain](https://librivox.org/le-avventure-dalice-nel-paese-delle-meraviglie-by-lewis-carroll/)
+- **Petula** (it): [Petula, reading Piacevoli Notti, Libro 2 for LibriVox, public domain](https://librivox.org/le-piacevoli-notti-libro-2-by-giovanni-francesco-straparola/)
+- **Luisa** (it): [luisamajo, reading Novelle per un anno, vol. 03: La Rallegrata for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-3-la-rallegrata-by-luigi-pirandello/)
+- **Marzia** (it): [Marzia Marianera, reading Piacevoli Notti, Libro 1 for LibriVox, public domain](https://librivox.org/le-piacevoli-notti-by-giovanni-francesco-straparola/)
+- **Annalisa** (it): [Annalisa Minunni, reading Novelle per un anno, vol. 03: La Rallegrata for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-3-la-rallegrata-by-luigi-pirandello/)
+- **Allie** (it): [Allie Cingi, reading Novelle per un Anno, vol. 11: La Giara for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-11-la-giara-by-luigi-pirandello/)
+- **Emilia** (it): [Gioemily, reading Novelle per un Anno, vol. 08: Dal Naso Al Cielo for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-8-dal-naso-al-cielo-by-luigi-pirandello/)
+- **Nicoletta** (it): [Nicoross, reading Avventure d'Alice nel Paese delle Meraviglie for LibriVox, public domain](https://librivox.org/le-avventure-dalice-nel-paese-delle-meraviglie-by-lewis-carroll/)
+- **Diana** (it): [Diana Majlinger, reading Novelle per un anno, vol. 02: La Vita Nuda for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-2-la-vita-nuda-by-luigi-pirandello/)
+- **Daniele** (it): [Daniele, reading Piacevoli Notti, Libro 2 for LibriVox, public domain](https://librivox.org/le-piacevoli-notti-libro-2-by-giovanni-francesco-straparola/)
+- **Sergio** (it): [Sergio Bersanetti, reading Novelle per un anno, vol. 05: La Mosca for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-5-la-mosca-by-luigi-pirandello/)
+- **Paolo** (it): [Paolo Fedi, reading Favole di Jean de La Fontaine: Libro 10 for LibriVox, public domain](https://librivox.org/favole-libro-10-by-jean-de-la-fontaine-pf/)
+- **Vito** (it): [Vito Marangelli, reading Dialogo dei Massimi Sistemi for LibriVox, public domain](https://librivox.org/dialogo-dei-massimi-sistemi-by-galileo-galilei/)
+- **Davide** (it): [Daniele, reading Vagabondaggio for LibriVox, public domain](https://librivox.org/vagabondaggio-by-giovanni-verga/)
+- **Simone** (it): [Simosito, reading Vagabondaggio for LibriVox, public domain](https://librivox.org/vagabondaggio-by-giovanni-verga/)
+- **Filippo** (it): [Filippo Gioachin, reading Piacevoli Notti, Libro 1 for LibriVox, public domain](https://librivox.org/le-piacevoli-notti-by-giovanni-francesco-straparola/)
+- **Mirko** (it): [Mirko Lamberti, reading Novelle per un anno, vol. 07: Tutt'E Tre for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-7-tutte-tre-by-luigi-pirandello/)
+- **Lorenzo** (it): [Lorenzo, reading Dialogo dei Massimi Sistemi for LibriVox, public domain](https://librivox.org/dialogo-dei-massimi-sistemi-by-galileo-galilei/)
+- **Abraham** (it): [Abraham Zapruder, reading Novelle per un anno, vol. 07: Tutt'E Tre for LibriVox, public domain](https://librivox.org/novelle-per-un-anno-vol-7-tutte-tre-by-luigi-pirandello/)
+- **Leni** (pt): [Leni, reading Vida vertiginosa for LibriVox, public domain](https://librivox.org/vida-vertiginosa-by-joao-do-rio/)
+- **Cristina** (pt): [Cristina Luiz, reading Freira no Subterrâneo for LibriVox, public domain](https://librivox.org/a-freira-no-subterraneo/)
+- **Etel** (pt): [Etel Buss, reading Noites de insomnia, offerecidas a quem não póde dormir, volume 2 for LibriVox, public domain](https://librivox.org/noites-de-insomnia-2-by-camilo-castelo-branco/)
+- **Carina** (pt): [Carina Pereira, reading Contos for LibriVox, public domain](https://librivox.org/contos-by-jose-maria-de-eca-de-queiros/)
+- **Katarina** (pt): [Katarina K. Müller, reading Cidade do Vício for LibriVox, public domain](https://librivox.org/a-cidade-do-vicio-by-fialho-de-almeida/)
+- **Ana** (pt): [Ana Simão, reading Contos Fluminenses e Histórias da Meia-Noite for LibriVox, public domain](https://librivox.org/contos-fluminenses-e-historias-da-meia-noite-by-joaquim-maria-machado-de-assis/)
+- **Rachel** (pt): [Rachel Moraes, reading Negrinha for LibriVox, public domain](https://librivox.org/negrinha-by-monteiro-lobato/)
+- **Maria** (pt): [mariawhite, reading Ancia Eterna for LibriVox, public domain](https://librivox.org/ancia-eterna-by-julia-lopes-de-almeida/)
+- **Mayah** (pt): [Mayah, reading Dom Casmurro for LibriVox, public domain](https://librivox.org/dom-casmurro-by-machado-de-assis/)
+- **Monica** (pt): [Monica Hinrichs-Mayer, reading Relíquias de Casa Velha for LibriVox, public domain](https://librivox.org/reliquias-de-casa-velha-by-machado-de-assis/)
+- **Rogério** (pt): [RogerioM, reading Páginas Recolhidas for LibriVox, public domain](https://librivox.org/paginas-recolhidas-by-joaquim-maria-machado-de-assis/)
+- **Miguel** (pt): [MickyMe, reading Canaã for LibriVox, public domain](https://librivox.org/canaa-by-jose-pereira-da-graca-aranha/)
+- **Pier** (pt): [Pier, reading Papéis Avulsos for LibriVox, public domain](https://librivox.org/papeis-avulsos-by-machado-de-assis/)
+- **Evandro** (pt): [Evandro Cunha, reading Noite na Taverna: contos phantásticos for LibriVox, public domain](https://librivox.org/a-noite-na-taverna-by-alvares-de-azevedo/)
+- **Lucas** (pt): [Lucas M., reading Coleção LibriVox de Contos Brasileiros 001 for LibriVox, public domain](https://librivox.org/colecao-librivox-de-contos-brasileiros-001/)
+- **José** (pt): [zaaf, reading Lusíadas for LibriVox, public domain](https://librivox.org/os-lusiadas-by-luis-vaz-de-camoes/)
+- **Dyefferson** (pt): [Dyefferson Azevedo, reading Contos selectos das Mil e uma noites for LibriVox, public domain](https://librivox.org/contos-selectos-das-mil-e-uma-noites/)
+- **Paulo** (pt): [Pontedura, reading Contos, volume 2 for LibriVox, public domain](https://librivox.org/contos-volume-2-de-artur-de-azevedo/)
+- **Marcos** (pt): [Miramontes, reading Triste Fim de Policarpo Quaresma for LibriVox, public domain](https://librivox.org/triste-fim-de-policarpo-quaresma-by-lima-barreto/)
+- **Felipe** (pt): [Felipe Vale da Silva, reading Canaã for LibriVox, public domain](https://librivox.org/canaa-by-jose-pereira-da-graca-aranha/)
+- **Eva** (nl): [Availle, reading Korte Verhalen van Louis Couperus for LibriVox, public domain](https://librivox.org/korte-verhalen-van-louis-couperus-by-louis-couperus/)
+- **Edith** (nl): [Edith van der Have-Raats, reading Falklandjes for LibriVox, public domain](https://librivox.org/falklandjes-by-herman-heijermans-jr/)
+- **Alexandra** (nl): [Alexandra N, reading Falklandjes for LibriVox, public domain](https://librivox.org/falklandjes-by-herman-heijermans-jr/)
+- **Petra** (nl): [Paezra, reading Sprookjes Verzameld door de Gebroeders Grimm, deel twee for LibriVox, public domain](https://librivox.org/sprookjes-verzameld-door-de-gebroeders-grimm-deel-twee-by-wilhelm-grimm/)
+- **Daphne** (nl): [dutchie, reading Alles Zingt for LibriVox, public domain](https://librivox.org/alles-zingt-by-pieter-louwerse/)
+- **Hanny** (nl): [Hanny Gunnink, reading Falklandjes for LibriVox, public domain](https://librivox.org/falklandjes-by-herman-heijermans-jr/)
+- **Nora** (nl): [Narana, reading Sprookjes Verzameld door de Gebroeders Grimm, deel twee for LibriVox, public domain](https://librivox.org/sprookjes-verzameld-door-de-gebroeders-grimm-deel-twee-by-wilhelm-grimm/)
+- **Julie** (nl): [Julie VW, reading Camera Obscura for LibriVox, public domain](https://librivox.org/camera-obscura/)
+- **Anna** (nl): [Anna Vos, reading Sprookjes Verzameld door de Gebroeders Grimm, deel twee for LibriVox, public domain](https://librivox.org/sprookjes-verzameld-door-de-gebroeders-grimm-deel-twee-by-wilhelm-grimm/)
+- **Dini** (nl): [Dini Steyn, reading Alles Zingt for LibriVox, public domain](https://librivox.org/alles-zingt-by-pieter-louwerse/)
+- **Jozef** (nl): [Jozef van Giel, reading Ontstaan der Soorten for LibriVox, public domain](https://librivox.org/het-ontstaan-der-soorten-door-charles-darwin/)
+- **Marcel** (nl): [Marcel Coenders, reading Camera Obscura for LibriVox, public domain](https://librivox.org/camera-obscura/)
+- **Dominique** (nl): [Dominique van de Vorle, reading Divina commedia - Hel for LibriVox, public domain](https://librivox.org/divina-commedia-hel-by-dante-alighieri/)
+- **Branko** (nl): [Branko Collin, reading Onder Moeders Vleugels for LibriVox, public domain](https://librivox.org/onder-moeders-vleugels/)
+- **Bart** (nl): [Bart de Leeuw, reading Andersens Sproken en vertellingen for LibriVox, public domain](https://librivox.org/andersens-sproken-en-vertellingen-door-hans-christian-andersen/)
+- **Jack** (nl): [Jack Hielema, reading Nederigheid for LibriVox, public domain](https://librivox.org/nederigheid/)
+- **Rolf** (nl): [Rolf den Otter, reading Julia for LibriVox, public domain](https://librivox.org/julia-by-rhijnvis-feith/)
+- **Herman** (nl): [Herman Roskams, reading Falklandjes for LibriVox, public domain](https://librivox.org/falklandjes-by-herman-heijermans-jr/)
+- **Sjors** (nl): [Sjors Houkes, reading Alles Zingt for LibriVox, public domain](https://librivox.org/alles-zingt-by-pieter-louwerse/)
+- **Wiggert** (nl): [Wiggert Loonstra, reading Kabouters in het Bosch for LibriVox, public domain](https://librivox.org/kabouters-in-het-bosch-by-kees-valkenstein/)
 
 ### Individual persons
 

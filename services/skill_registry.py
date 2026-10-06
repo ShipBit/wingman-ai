@@ -61,7 +61,7 @@ class SkillManifest:
         # Get tool info
         tool_names = []
         tool_summaries = []
-        for tool_name, tool_def in skill.get_tools():
+        for tool_name, tool_def in skill.get_enabled_tools():
             tool_names.append(tool_name)
             # Extract description from tool definition
             if isinstance(tool_def, dict):
@@ -152,7 +152,7 @@ class SkillRegistry:
         self._manifests[skill.name] = manifest
 
         # Map tool names to this skill
-        for tool_name, _ in skill.get_tools():
+        for tool_name, _ in skill.get_enabled_tools():
             self._tool_to_skill[tool_name] = skill.name
 
         # Auto-activate if configured
@@ -163,6 +163,23 @@ class SkillRegistry:
                 color=LogType.SKILL,
                 server_only=True,
             )
+
+    def refresh_skill(self, skill: "Skill") -> None:
+        """Rebuild a registered skill's manifest and tool map in place.
+
+        Used when the wingman's disabled tools change. Activation state is kept:
+        a skill the model already activated stays active, it just offers a
+        different set of tools from now on.
+        """
+        if skill.name not in self._skills:
+            return
+        old = self._manifests.get(skill.name)
+        if old:
+            for tool_name in old.tool_names:
+                self._tool_to_skill.pop(tool_name, None)
+        self._manifests[skill.name] = SkillManifest.from_skill(skill)
+        for tool_name, _ in skill.get_enabled_tools():
+            self._tool_to_skill[tool_name] = skill.name
 
     def unregister_skill(self, skill_name: str) -> None:
         """Remove a skill from the registry."""
@@ -306,7 +323,7 @@ class SkillRegistry:
         for skill_name in all_active:
             skill = self._skills.get(skill_name)
             if skill:
-                tools.extend(skill.get_tools())
+                tools.extend(skill.get_enabled_tools())
         return tools
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:

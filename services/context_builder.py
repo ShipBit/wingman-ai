@@ -1,0 +1,302 @@
+"""System prompt assembly from template, skill prompts, TTS prompts, memory injection."""
+
+import re
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
+
+from api.enums import (
+    LogSource,
+    LogType,
+    TtsProvider,
+    WingmanProTtsProvider,
+)
+from services.printr import Printr
+from services.spoken_language import language_name
+from services.token_utils import count_tokens, truncate_to_tokens
+
+if TYPE_CHECKING:
+    from api.interface import SettingsConfig, WingmanConfig
+    from services.persistent_memory import PersistentMemoryService
+    from services.skill_registry import SkillRegistry
+    from skills.skill_base import Skill
+
+printr = Printr()
+
+
+def fill_system_prompt(template: str, **values) -> str:
+    """Fills the system prompt's placeholders.
+
+    The shipped template escapes literal braces as ``{{ }}``. A prompt the
+    user edited may not: a JSON example in it made ``str.format`` raise on
+    every turn, and the Wingman stopped answering. Then only the known
+    placeholders are replaced and everything else stays as written.
+    """
+    try:
+        return template.format(**values)
+    except (KeyError, IndexError, ValueError):
+        for name, value in values.items():
+            template = template.replace("{" + name + "}", str(value))
+        return template
+
+
+class ContextBuilder:
+    def __init__(
+        self,
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+        wingman_name: str,
+    ):
+        self._config = config
+        self._settings = settings
+        self._wingman_name = wingman_name
+        self._last_compiled_context: str = ""
+        # The "Memory: N facts loaded" line goes out once per session.
+        self._memory_loaded_notified: bool = False
+
+    async def build(
+        self,
+        skills: list["Skill"],
+        skill_registry: "SkillRegistry",
+        conversation_summary: str,
+        persistent_memory_service: Optional["PersistentMemoryService"],
+        messages: list,
+        config_dir_name: Optional[str] = None,
+    ) -> str:
+        """Build the context and return it as a string.
+
+        With progressive disclosure, only includes prompts from ACTIVATED skills.
+        Skill prompts are auto-generated from @tool descriptions if no custom prompt is set.
+        """
+        skill_prompts = ""
+        active_skill_names = skill_registry.active_skill_names
+
+        for skill in skills:
+            # Only include prompts from activated skills (in progressive mode)
+            if skill.name not in active_skill_names:
+                continue
+
+            # Get custom prompt if set
+            prompt = await skill.get_prompt()
+
+            # Auto-generate prompt from tool descriptions if no custom prompt
+            if not prompt:
+                tools_desc = skill.get_tools_description()
+                if tools_desc:
+                    prompt = f"Available tools:\n{tools_desc}"
+
+            if prompt:
+                skill_prompts += "\n\n" + skill.name + "\n\n" + prompt
+
+        # Get TTS prompt based on active TTS provider and user preference
+        tts_prompt = ""
+        if self._config.features.tts_provider == TtsProvider.ELEVENLABS:
+            if (
+                self._config.elevenlabs.use_tts_prompt
+                and self._config.elevenlabs.tts_prompt
+            ):
+                tts_prompt = self._config.elevenlabs.tts_prompt
+        elif self._config.features.tts_provider in (
+            TtsProvider.INWORLD,
+            # The subscription speaks through Inworld, so it takes the same prompt.
+            TtsProvider.WINGMAN_PRO,
+        ):
+            if self._config.inworld.use_tts_prompt and self._config.inworld.tts_prompt:
+                tts_prompt = self._config.inworld.tts_prompt
+                # Steering instructions ("[calm and measured]") only work on
+                # inworld-tts-2; the flash model ignores them, and the shipped
+                # prompt says so. The delivery block is appended for tts-2 only,
+                # so a user's edited prompt stays one text and still gets it.
+                if (self._config.inworld.model_id or "").strip() == "inworld-tts-2":
+                    from services.file import get_prompt
+
+                    tts_prompt = tts_prompt.rstrip() + "\n\n" + get_prompt("inworld-tts2-delivery")
+        elif self._config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE:
+            if (
+                self._config.openai_compatible_tts.use_tts_prompt
+                and self._config.openai_compatible_tts.tts_prompt
+            ):
+                tts_prompt = self._config.openai_compatible_tts.tts_prompt
+
+        # Add TTS header only if there's a prompt
+        if tts_prompt:
+            tts_prompt = "# TEXT-TO-SPEECH\n" + tts_prompt
+
+        # Build user context with environment metadata
+        user_context = self.build_user_context(config_dir_name=config_dir_name)
+
+        # Sanity check: truncate if someone bypasses the client's 2048-token limit
+        MAX_BACKSTORY_TOKENS = 2048
+        backstory = self._config.prompts.backstory
+
+        if backstory and count_tokens(backstory) > MAX_BACKSTORY_TOKENS:
+            original_tokens = count_tokens(backstory)
+            backstory = truncate_to_tokens(backstory, MAX_BACKSTORY_TOKENS)
+            await printr.print_async(
+                f"[{self._wingman_name}] Backstory will be truncated to {MAX_BACKSTORY_TOKENS} tokens for conversations (is {original_tokens}). "
+                f"Your saved backstory is unchanged. Consider shortening it.",
+                color=LogType.WARNING,
+                source_name=self._wingman_name,
+                source=LogSource.SYSTEM,
+            )
+
+        # Build conversation summary section
+        conversation_summary_section = ""
+        if conversation_summary:
+            conversation_summary_section = (
+                "# CONVERSATION SUMMARY\n"
+                "The following is a summary of earlier parts of this conversation. "
+                "Treat it as factual context — the user and you discussed these topics previously.\n\n"
+                + conversation_summary
+            )
+
+        # Persistent memory: one block with every fact and the recent
+        # episodes. It sits in the system prompt because it only changes at a
+        # checkpoint, every twenty minutes at most, so the provider's prompt
+        # cache keeps covering it. A per-message lookup used to sit behind the
+        # history instead, and changed on every turn.
+        memory_block = ""
+        if persistent_memory_service:
+            try:
+                memory_block = persistent_memory_service.memory_block()
+                if memory_block and not self._memory_loaded_notified:
+                    self._memory_loaded_notified = True
+                    facts, episodes = persistent_memory_service.block_stats()
+                    parts = []
+                    if facts:
+                        parts.append(f"{facts} {'fact' if facts == 1 else 'facts'}")
+                    if episodes:
+                        parts.append(f"{episodes} {'session' if episodes == 1 else 'sessions'}")
+                    await printr.print_async(
+                        f"Memory: {' and '.join(parts)} loaded",
+                        color=LogType.MEMORY,
+                        source_name=self._wingman_name,
+                    )
+            except Exception:
+                pass  # Don't let memory failures break conversation
+
+        language_instruction = (
+            f"- Always respond in "
+            f"{language_name(self._settings.spoken_language, self._settings.other_language)}"
+        )
+
+        context = fill_system_prompt(
+            self._config.prompts.system_prompt,
+            backstory=backstory,
+            skills=skill_prompts,
+            ttsprompt=tts_prompt,
+            user_context=user_context,
+            conversation_summary=conversation_summary_section,
+            language_instruction=language_instruction,
+        )
+
+        # If the system prompt template doesn't include {conversation_summary},
+        # append the summary at the end so it's never lost.
+        if (
+            conversation_summary_section
+            and "{conversation_summary}" not in self._config.prompts.system_prompt
+        ):
+            context += "\n\n" + conversation_summary_section
+
+        if memory_block:
+            context += "\n\n" + memory_block
+
+        # Persistent memory tool instructions
+        if persistent_memory_service:
+            context += (
+                "\n\n# PERSISTENT MEMORY\n"
+                "You have persistent memory. What you know about the user from earlier "
+                "sessions is listed in the MEMORY section above (if any). "
+                "Call `memory_remember` right away when the user tells you something that should "
+                "still hold next month: how to address them, which language to answer in, a "
+                "standing instruction, what they own, who they play with, what they like or "
+                "dislike, a goal. Do not store where they are, what they are doing right now, a "
+                "status, or a mood. Use `memory_recall` only when the user asks what you know "
+                "about them, and `memory_forget` when they ask you to forget something. Never "
+                "call a memory tool for a question about the world or the game. Everything else "
+                "said in a session is picked up automatically."
+            )
+
+        self._last_compiled_context = context
+        return context
+
+    def get_last_context(self) -> str:
+        """The last compiled system context, as the model saw it."""
+        return self._last_compiled_context
+
+    def build_user_context(
+        self,
+        config_dir_name: Optional[str] = None,
+    ) -> str:
+        """Build user context metadata for the system prompt.
+
+        Includes timezone, config context, username, and wingman name.
+        """
+        context_parts = []
+        backstory = self._config.prompts.backstory or ""
+        backstory_lower = backstory.lower()
+
+        # Date and timezone information
+        try:
+            now = datetime.now().astimezone()
+            local_tz = now.tzinfo
+            tz_name = str(local_tz)
+            # Get UTC offset in a readable format
+            utc_offset = now.strftime("%z")
+            # Format as +HH:MM or -HH:MM
+            if len(utc_offset) >= 5:
+                utc_offset = f"{utc_offset[:3]}:{utc_offset[3:]}"
+            # Include current date for relative date references ("last Sunday", "tomorrow", etc.)
+            current_date = now.strftime(
+                "%A, %B %d, %Y"
+            )  # e.g., "Tuesday, December 09, 2025"
+            context_parts.append(f"- Current date: {current_date}")
+            context_parts.append(f"- Timezone: {tz_name} (UTC{utc_offset})")
+        except Exception:
+            context_parts.append("- Timezone: Unknown")
+
+        # Config/context name (e.g., "Star Citizen", "Elite Dangerous")
+        # This helps the LLM understand which game/context tools are relevant for
+        if config_dir_name:
+            context_parts.append(f"- Active context: {config_dir_name}")
+
+        # Username (only if not explicitly named in backstory)
+        if self._settings.user_name:
+            # Check if username is mentioned in backstory as a standalone word
+            name_pattern = r"\b" + re.escape(self._settings.user_name.lower()) + r"\b"
+            if not re.search(name_pattern, backstory_lower):
+                context_parts.append(
+                    f"- User's name (default): {self._settings.user_name}"
+                )
+
+        # Wingman name - always include as it's useful context
+        # The system prompt already tells LLM to prioritize backstory names
+        if self._wingman_name:
+            context_parts.append(f"- Your name (default): {self._wingman_name}")
+
+        if context_parts:
+            return "\n".join(context_parts)
+        return "No additional context available."
+
+    async def add_context(self, messages: list, context: str) -> None:
+        """Insert the compiled context as the system message at the start of messages."""
+        messages.insert(0, {"role": "system", "content": context})
+
+    def reset_memory_notification(self) -> None:
+        """The next build says again what was loaded (new session, reset)."""
+        self._memory_loaded_notified = False
+
+    @staticmethod
+    def _extract_text_content(content) -> str:
+        """Extract text from message content, handling both string and multimodal list formats."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            # Multimodal content: extract text parts only
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return " ".join(parts)
+        return ""

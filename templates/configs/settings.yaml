@@ -1,40 +1,84 @@
 debug_mode: false
 audio: {}
 streamer_mode: false
+show_token_count: false
+filler_responses: true
+# How the text is rewritten before a voice reads it: abbreviations, units and
+# numbers are spelled out in the spoken language. Your own rules win; presets
+# are bundled lists per game (templates/pronunciation).
+pronunciation:
+  rules: []
+  presets:
+    - star_citizen
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null
+stt:
+  # Which provider transcribes what you say: parakeet (on this machine, or
+  # on a server of yours) or wingman_pro (the subscription's cloud service).
+  # One choice for every wingman and for both ways of talking.
+  provider: parakeet
+  # Special words no speech model knows; every transcript is corrected
+  # against them. The Settings page can fill this from your configuration.
+  vocabulary: []
+  # Bundled name lists switched on in Settings.
+  presets:
+    - star_citizen
+  preset_overrides: {}
+  parakeet:
+    run_locally: true
+    execution_provider: cpu
+    # Only read when run_locally is off: the Parakeet server of yours.
+    # Empty until you fill it in.
+    host: ""
+    port: 9876
+  parakeet_config:
+    temperature: 0.0
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
-  energy_threshold: 0.01
-  stt_provider: fasterwhisper
-  azure:
-    region: westeurope
-    languages:
-      - en-US
-      - de-DE
-  whispercpp:
-    host: http://127.0.0.1
-    port: 8080
-    enable: false
-  whispercpp_config:
-    temperature: 0.0
-  fasterwhisper:
-    model_size: base
-    device: cpu
-    compute_type: auto
-  fasterwhisper_config:
-    beam_size: 1
-    best_of: 2
-    temperature: 0
-    no_speech_threshold: 0.7
-    language_detection_threshold: 0.5
-    multilingual: false
-    hotwords: []
-    additional_hotwords: []
+  # How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+  # whisper. Applies to push-to-talk too, where it trims silence off the clip.
+  sensitivity: 0.5
+  # Silence that ends an utterance.
+  end_pause_ms: 500
+  # Emergency stop for a microphone that never goes quiet: cut here even
+  # mid-sentence and send what was said. Set high on purpose - a cut lands in
+  # the middle of a word, which costs a second LLM call and garbles numbers.
+  # Shorten end_pause_ms instead if you want faster commands.
+  max_utterance_s: 160
+  min_speech_ms: 200
+  pre_roll_ms: 300
+  # Keep listening while a wingman speaks: "stop" stops it, talking on skips
+  # the answer. With speakers the wingman's own voice is filtered by text.
+  listen_while_speaking: false
+  # Said alone, these stop a wingman mid-sentence and are not answered.
+  stop_words:
+    - "stop"
+    - "stopp"
+    - "stop it"
+    - "stop please"
+    - "shut up"
+    - "be quiet"
+    - "silence"
+    - "enough"
+    - "halt"
+    - "sei still"
+    - "ruhe"
+    - "schluss"
+    - "bitte stopp"
+    - "okay stop"
+    - "basta"
+    - "silencio"
+    - "para"
+    - "cállate"
+    - "callate"
+    - "arrête"
+    - "arrete"
+    - "tais-toi"
+    - "assez"
+    - "stop s'il te plaît"
 wingman_pro:
-  base_url: https://wingman-api-europe.azurewebsites.net
-  region: europe
+  base_url: https://api.wingman-ai.com
 xvasynth:
   enable: false
   host: http://127.0.0.1
@@ -43,7 +87,45 @@ xvasynth:
   process_device: cpu
 pocket_tts:
   enable: true
-  custom_model_path: ""
+  run_locally: true
+  # standard (6 layers) or high (24 layers). The model itself follows
+  # spoken_language.
+  quality: standard
+  # A YAML config from the Pocket TTS models folder, used instead of the
+  # built-in model for spoken_language.
+  custom_model: null
+  host: "localhost"
+  port: 5002
+llama_cpp:
+  # cloud | local | server — where the support model runs. Cloud is the default:
+  # it costs the user no RAM and no CPU while a game is running.
+  mode: cloud
+  # Empty means the plan's default support model. A gateway id like
+  # google/gemini-2.5-flash-lite picks a specific one.
+  support_cloud_model: ""
+  gpu_backend: cpu
+  support_model: "Qwen3.5-4B-Q4_K_M.gguf"
+  embed_model: "nomic-embed-text-v1.5.f16.gguf"
+  n_ctx: 4096
+  n_threads: 0
+  support_remote_host: "http://127.0.0.1"
+  support_remote_port: 49152
+  embed_remote_host: "http://127.0.0.1"
+  embed_remote_port: 49153
+system_one:
+  # The decision model in front of the main model: faster, cheaper and unable
+  # to answer outside the options it is given. Which model serves it comes from
+  # the subscription. Off means every decision is taken the way it was before.
+  enabled: true
+  # Ask which command a request means before the main model is asked anything.
+  # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
+  # command costs 0.46 s and changes nothing.
+  commands: true
+# The one language you and your Wingmen speak: en, de, fr, es, it or pt,
+# or "other" with the language in other_language (code, name, english_name).
+# Answer language, voice model and speech recognition all follow it.
+spoken_language: en
+other_language: null
 hud_server:
   enabled: false
   host: "127.0.0.1"
@@ -52,3 +134,9 @@ hud_server:
   layout_margin: 20
   layout_spacing: 15
   screen: 1
+# Core reads Star Citizen's Game.log live and hands the events to skills.
+# Switch it off if you do not play Star Citizen. On, it waits for a Game.log
+# at almost no cost. game_path is the folder that holds LIVE, PTU and so on.
+sc_gamelog:
+  enabled: true
+  game_path: "C:\\Program Files\\Roberts Space Industries\\StarCitizen"

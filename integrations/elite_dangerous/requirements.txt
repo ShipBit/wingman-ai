@@ -1,4 +1,0 @@
-# Same SDK version as Wingman Core; stdlib handles the provider/cache.
-mcp==1.26.0
-# Native profile/MCP setup and keyboard binding tools.
-PyYAML==6.0.3

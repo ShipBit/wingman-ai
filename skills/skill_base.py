@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-import threading
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -25,7 +24,25 @@ from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
+
+
+class SkillLog:
+    """Friendly logging for skills. Wraps Printr. server_only=True keeps a line out of the
+    client toast/log and only in the server console."""
+
+    def __init__(self, name: str) -> None:
+        self._printr = Printr()
+        self._name = name
+
+    def info(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.INFO, server_only=server_only)
+
+    def warning(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.WARNING, server_only=server_only)
+
+    def error(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.ERROR, server_only=server_only)
 
 
 # Type mapping from Python types to JSON Schema types
@@ -264,12 +281,109 @@ def tool(
     return decorator
 
 
+# Parameter types renderable as static command-action inputs.
+_ALLOWED_COMMAND_ACTION_JSON_TYPES = {"string", "integer", "number", "boolean"}
+
+
+def _validate_command_action_params(func: Callable, schema: dict) -> None:
+    """Raise ValueError if any parameter isn't a UI-renderable scalar / Literal enum."""
+    props = schema.get("function", {}).get("parameters", {}).get("properties", {})
+    for param_name, param_schema in props.items():
+        json_type = param_schema.get("type")
+        if json_type not in _ALLOWED_COMMAND_ACTION_JSON_TYPES:
+            raise ValueError(
+                f"@command_action '{func.__qualname__}': parameter '{param_name}' has "
+                f"unsupported type for a command action (got JSON type '{json_type}'). "
+                f"Allowed: str, int, float, bool, Literal[...]."
+            )
+
+
+# Where a @command_action's return value goes:
+#   "ai"    -> handed to the AI (it voices/uses it, may paraphrase or chain)
+#   "speak" -> spoken verbatim via TTS (and also given to the AI)
+CommandActionRespond = Literal["ai", "speak"]
+
+
+class CommandActionDefinition:
+    """Metadata for a method registered via @command_action."""
+
+    def __init__(
+        self,
+        func: Callable,
+        label: Optional[str] = None,
+        description: Optional[str] = None,
+        respond: CommandActionRespond = "ai",
+    ):
+        if respond not in ("ai", "speak"):
+            raise ValueError(
+                f"@command_action '{func.__qualname__}': respond must be 'ai' or 'speak', "
+                f"got {respond!r}."
+            )
+        self.func = func
+        self.name = func.__name__
+        self.label = label or func.__name__
+        self.description = description
+        self.respond = respond
+        # UI hint for the command editor: does this action voice a result verbatim?
+        self.speaks = respond == "speak"
+        self.is_async = asyncio.iscoroutinefunction(func)
+        _name, schema = _generate_tool_schema(func, name=self.name, description=description)
+        _validate_command_action_params(func, schema)
+        self.parameters_schema = schema["function"]["parameters"]
+
+    async def execute(self, parameters: dict, skill_instance: "Skill"):
+        # Only pass parameters this function actually declares. Stale/extra keys — e.g. left
+        # over in the command config after switching the selected function in the editor — are
+        # dropped so they can't crash the call with "unexpected keyword argument".
+        allowed = set(self.parameters_schema.get("properties", {}).keys())
+        filtered = {k: v for k, v in (parameters or {}).items() if k in allowed}
+        if self.is_async:
+            return await self.func(skill_instance, **filtered)
+        return self.func(skill_instance, **filtered)
+
+
+def command_action(
+    label: Optional[str] = None,
+    description: Optional[str] = None,
+    respond: CommandActionRespond = "ai",
+):
+    """Decorator: expose a skill method as a user-bindable Command action.
+
+    Distinct from @tool (a function may carry both). Parameters must be scalars
+    (str/int/float/bool) or Literal[...] enums — rendered as static inputs in the command editor.
+
+    Your function returns a plain string (or None); ``respond`` decides where that string goes:
+
+    - ``respond="ai"`` (default): the return is handed to the AI, which voices/uses it (it may
+      paraphrase or chain). Pair with a command's static ``responses`` for a fixed acknowledgment.
+    - ``respond="speak"``: the return is spoken VERBATIM via TTS (no AI roundtrip on instant
+      activation) and also given to the AI. Use for a dynamic, input-dependent spoken reply.
+
+    Returning ``None`` -> the command falls through to its usual "OK" acknowledgment
+    (fire-and-forget), exactly like a keyboard command.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        func._command_action_definition = CommandActionDefinition(
+            func=func, label=label, description=description, respond=respond
+        )
+        return func
+
+    return decorator
+
+
 class Skill:
     """
     Base class for all Wingman AI skills.
 
     DO NOT cache wingman.config or other wingman properties in your skill!
     Access them when needed using self.wingman.config.property_name.
+
+    Skill API contract (v3):
+        Declare `api_version: 3` in your default_config.yaml manifest.
+        Do NOT perform any work at import / module-load time (no network, no file I/O,
+        no global side effects at module scope). All setup belongs in __init__, validate(),
+        or prepare(). Core import-probes your module during catalog scan without instantiating it.
 
     Tool Registration:
         Skills can define tools in two ways:
@@ -295,16 +409,21 @@ class Skill:
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         self.config = config
-        self.settings = settings
         self.wingman = wingman
-
-        self.secret_keeper = SecretKeeper()
-        # Note: secret_events subscription moved to prepare() to avoid listener accumulation
         self.name = self.__class__.__name__
-        self.printr = Printr()
+
+        # Read-only view of app settings; change devices via self.wingman.audio.set_output_device(...)
+        from wingmen.facade import ReadOnlyConfigView
+        self.settings = ReadOnlyConfigView(settings)
+
+        # Private — skills retrieve via self.wingman.secrets.retrieve(...)
+        # Note: secret_events subscription moved to prepare() to avoid listener accumulation
+        self.__secret_keeper = SecretKeeper()
+        self.log = SkillLog(self.name)
+        self.printr = Printr()  # internal/back-compat for base-class logging only
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
@@ -321,6 +440,14 @@ class Skill:
         # Collect @tool decorated methods
         self._decorated_tools: dict[str, ToolDefinition] = {}
         self._collect_decorated_tools()
+
+        # Tool names the wingman has switched off for this skill. Set by the
+        # skill manager from the wingman's `disabled_skill_tools`; the framework
+        # reads tools through `get_enabled_tools`, so these never reach the model.
+        self.disabled_tools: set[str] = set()
+
+        self._command_actions: dict[str, CommandActionDefinition] = {}
+        self._collect_command_actions()
 
     def needs_activation(self) -> bool:
         """Check if this skill still needs validation and preparation.
@@ -387,6 +514,22 @@ class Skill:
                     self._decorated_tools[tool_def.tool_name] = tool_def
             except Exception:
                 # Skip attributes that can't be inspected
+                pass
+
+    def _collect_command_actions(self) -> None:
+        """Discover @command_action-decorated methods."""
+        for attr_name in dir(self):
+            if attr_name.startswith("_"):
+                continue
+            try:
+                attr = getattr(self, attr_name, None)
+                if attr is None:
+                    continue
+                func = getattr(attr, "__func__", attr)
+                if hasattr(func, "_command_action_definition"):
+                    cad: CommandActionDefinition = func._command_action_definition
+                    self._command_actions[cad.name] = cad
+            except Exception:
                 pass
 
     async def validate(self) -> list[WingmanInitializationError]:
@@ -486,7 +629,7 @@ class Skill:
 
         # Safely unsubscribe - the handler may not be subscribed if prepare() was never called
         try:
-            self.secret_keeper.secret_events.unsubscribe(
+            self.__secret_keeper.secret_events.unsubscribe(
                 "secrets_saved", self.secret_changed
             )
         except ValueError:
@@ -500,7 +643,7 @@ class Skill:
         Subscribe to events here, not in __init__.
         """
         # Subscribe to secret changes - will be unsubscribed in unload()
-        self.secret_keeper.secret_events.subscribe("secrets_saved", self.secret_changed)
+        self.__secret_keeper.secret_events.subscribe("secrets_saved", self.secret_changed)
 
     def get_tools(self) -> list[tuple[str, dict]]:
         """
@@ -538,6 +681,20 @@ class Skill:
             tools.append((tool_def.tool_name, tool_def.tool_schema))
         return tools
 
+    def get_enabled_tools(self) -> list[tuple[str, dict]]:
+        """The skill's tools minus the ones the wingman switched off.
+
+        This is what the framework registers and hands to the model. `get_tools`
+        stays the full list, so the UI can show every tool with its switch.
+        """
+        if not self.disabled_tools:
+            return self.get_tools()
+        return [
+            (name, schema)
+            for name, schema in self.get_tools()
+            if name not in self.disabled_tools
+        ]
+
     def get_tools_description(self) -> str:
         """
         Auto-generate a prompt section describing all tools in this skill.
@@ -549,7 +706,7 @@ class Skill:
         Returns:
             A formatted string listing all tools and their descriptions.
         """
-        tools = self.get_tools()
+        tools = self.get_enabled_tools()
         if not tools:
             return ""
 
@@ -578,6 +735,43 @@ class Skill:
         Override this method to add dynamic data to context.
         """
         return self.config.prompt or None
+
+    async def execute_command_action(
+        self, function_name: str, parameters: dict
+    ) -> tuple[str, str]:
+        """Execute a @command_action by name. Returns (function_response, instant_response).
+
+        Routing depends on the action's ``respond`` mode:
+        - ``respond="ai"``    -> the return goes to the AI (function_response); nothing spoken verbatim.
+        - ``respond="speak"`` -> the return is spoken verbatim (instant_response) AND given to the AI.
+
+        Returning ``None`` -> ('', '') so the command falls through to its usual "OK"
+        acknowledgment. Returns ('', '') if the function name is unknown.
+        """
+        cad = self._command_actions.get(function_name)
+        if not cad:
+            return "", ""
+        result = await cad.execute(parameters or {}, self)
+        if result is None:
+            return "", ""
+        text = str(result)
+        if cad.respond == "speak":
+            return text, text  # spoken verbatim + the AI is told what was said
+        return text, ""        # respond="ai": hand it to the AI
+
+    def list_command_actions(self) -> list[dict]:
+        """Describe this skill's command-actions for the client editor."""
+        return [
+            {
+                "skill_name": self.name,
+                "function_name": cad.name,
+                "label": cad.label,
+                "description": cad.description,
+                "speaks": cad.speaks,
+                "parameters_schema": cad.parameters_schema,
+            }
+            for cad in self._command_actions.values()
+        ]
 
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
@@ -660,34 +854,6 @@ class Skill:
             return self._decorated_tools[tool_name].wait_response
         return False
 
-    async def llm_call(self, messages, tools: list[dict] = None) -> any:
-        return any
-
-    async def retrieve_secret(
-        self,
-        secret_name: str,
-        errors: list[WingmanInitializationError],
-        hint: str = None,
-    ):
-        """Use this method to retrieve secrets like API keys from the SecretKeeper.
-        If the key is missing, the user will be prompted to enter it.
-        """
-        secret = await self.secret_keeper.retrieve(
-            requester=self.name,
-            key=secret_name,
-            prompt_if_missing=True,
-        )
-        if not secret:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.name,
-                    message=f"Missing secret '{secret_name}'. {hint or ''}",
-                    error_type=WingmanInitializationErrorType.MISSING_SECRET,
-                    secret_name=secret_name,
-                )
-            )
-        return secret
-
     def retrieve_custom_property_value(
         self,
         property_id: str,
@@ -709,11 +875,6 @@ class Skill:
             )
             return None
         return p.value
-
-    def threaded_execution(self, function, *args) -> threading.Thread:
-        """Execute a function in a separate thread."""
-        self.printr.print(f"[{self.__class__.__name__}] Threaded execution called before it was ready.", LogType.WARNING, server_only=True)
-        pass
 
     def get_generated_files_dir(self) -> str:
         """Get the path to this skill's generated files directory.

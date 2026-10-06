@@ -16,7 +16,6 @@ cmd = [
     "--paths",
     "venv/Lib/site-packages",
     "--add-data",
-    f"venv/Lib/site-packages/azure/cognitiveservices/speech{os.pathsep}azure/cognitiveservices/speech",
     "--add-data",
     f"assets{os.pathsep}assets",
     "--add-data",
@@ -29,8 +28,6 @@ cmd = [
     f"skills{os.pathsep}skills",  # Bundle skills directly (not via templates)
     "--add-data",
     f"templates/configs{os.pathsep}templates/configs",  # Config templates only
-    "--add-data",
-    f"templates/migration{os.pathsep}templates/migration",  # Migration templates
     "--add-data",
     f"audio_samples{os.pathsep}audio_samples",
     "--add-data",

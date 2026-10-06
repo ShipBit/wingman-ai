@@ -1,5 +1,6 @@
 import base64
 from os import path
+from typing import TYPE_CHECKING
 import aiofiles
 from hume.client import AsyncHumeClient
 from hume.tts import (
@@ -7,16 +8,21 @@ from hume.tts import (
     PostedUtteranceVoiceWithId,
     PostedContextWithGenerationId,
 )
+from api.enums import TtsProvider
 from api.interface import (
     HumeConfig,
     SoundConfig,
     VoiceInfo,
     WingmanInitializationError,
 )
+from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "hume.mp3"
@@ -106,3 +112,34 @@ class Hume:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(audio_data)
         return file_path
+
+
+@tts_provider(TtsProvider.HUME)
+class HumeTts(TtsInterface):
+    def __init__(self, hume_instance: "Hume", config: "WingmanConfig"):
+        self._hume = hume_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        try:
+            await self._hume.play_audio(
+                text=text,
+                config=self._config.hume,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                await self._hume.play_audio(
+                    text=text,
+                    config=self._config.hume,
+                    sound_config=sound_config,
+                    audio_player=audio_player,
+                    wingman_name=wingman_name,
+                )
+            else:
+                raise

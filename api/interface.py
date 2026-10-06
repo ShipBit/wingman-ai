@@ -2,20 +2,23 @@ from typing import Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
-    AzureApiVersion,
-    AzureRegion,
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
+    ImageStyle,
+    LocalAiMode,
+    PocketTtsQuality,
+    ScGameLogRulesProblem,
+    SkillRequirement,
+    SpokenLanguage,
+    McpAuthType,
     McpTransportType,
     CustomPropertyType,
     TtsVoiceGender,
     SoundEffect,
     SttProvider,
     TtsProvider,
-    VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
 )
@@ -23,15 +26,17 @@ from api.enums import (
 
 class WingmanConfigFileInfo(BaseModel):
     name: str
-    """"The "friendly" name of this config used to display in the UI/Terminal without prefixes or file extension.
+    """"The name of this config used to display in the UI/Terminal, without file extension.
 
     Examples: Board Computer"""
     file: str
-    """The actual name of the file in the file system. May include meta prefixes and always includes file extension.
+    """The actual name of the file in the file system (name + file extension).
 
-    Examples: Board Computer.yaml or .Board Computer.yaml"""
+    Examples: Board Computer.yaml"""
     is_deleted: bool
-    """Whether this file is logically deleted."""
+    """Deprecated - always False. Deleted wingman configs no longer exist in the
+    file system; deletion state is tracked in configs/context.yaml.
+    Kept for API client compatibility."""
 
     avatar: Annotated[str, Base64Str]
     """The avatar of the wingman or the default avatar if none is set. Encoded as base64 string."""
@@ -39,32 +44,58 @@ class WingmanConfigFileInfo(BaseModel):
 
 class ConfigDirInfo(BaseModel):
     name: str
-    """"The "friendly" name of this config used to display in the UI/Terminal.
+    """"The name of this config used to display in the UI/Terminal.
 
     Examples: Star Citizen
     """
     directory: str
-    """The actual name of the directory in the file system. May include meta prefixes.
+    """The actual name of the directory in the file system. Always equals name.
 
-    Examples: Star Citizen or _Star Citizen or .Star Citizen"""
+    Kept separate for API client compatibility."""
     is_default: bool
-    """Whether this config is the default config that is used on launch."""
+    """Whether this config is the default config that is used on launch
+    (as tracked in configs/context.yaml)."""
     is_deleted: bool
-    """Whether this directory is logically deleted."""
+    """Deprecated - always False. Deleted config dirs no longer exist in the
+    file system; deletion state is tracked in configs/context.yaml.
+    Kept for API client compatibility."""
     # TODO: icon(?)
 
 
 class SystemCore(TypedDict):
     version: str
-    latest_version: str
-    is_latest: bool
     cuda_available: bool
     gpu_name: Optional[str]
+    is_dev: bool
+    """True when Core runs from source (not a bundled/frozen build)."""
 
 
 class SystemInfo(BaseModel):
     os: str
     core: SystemCore
+
+
+class ErrorReportingState(BaseModel):
+    enabled: Optional[bool]
+    """None until the user has chosen. Core sends nothing before that."""
+
+
+class ChangelogEntry(BaseModel):
+    """One published changelog entry, proxied from the public Canny RSS feed."""
+
+    version: str
+    """Entry title — our changelog entries are titled with the release version."""
+    category: Optional[str] = None
+    """Canny entry type: new, improved or fixed."""
+    published_at: Optional[str] = None
+    """Publication date as ISO string (YYYY-MM-DD)."""
+    url: Optional[str] = None
+    """Link to the full entry on Canny."""
+    html: str
+    """Entry body as HTML, authored on Canny."""
+    unstable_only: bool = False
+    """True for entries titled with an "(unstable)" marker on Canny — dev-build
+    notes that clients only show to testers on the unstable update channel."""
 
 
 class WingmanInitializationError(BaseModel):
@@ -79,6 +110,34 @@ class CoreStatusResponse(BaseModel):
 
     state: CoreState
     """The current lifecycle state of Wingman AI Core."""
+    message: Optional[str] = None
+    """Human-readable sub-step detail for the current state."""
+    progress: Optional[float] = None
+    """0.0–1.0 progress for operations with known duration."""
+
+
+class MicStatusResponse(BaseModel):
+    """Current microphone / voice-activation state, published as the payload of the
+    AudioPlayer.voice_events "changed" event (skill facade: audio.mic_status)."""
+
+    state: str
+    """off | muted | armed | held | paused. The one field that says it all; the
+    booleans below are derived from it."""
+    listening: bool
+    """True when voice activation is on and the mic is not muted (nor paused for playback)."""
+    muted: bool = False
+    """True only when the user muted the mic (switch or hotkey). A held
+    push-to-talk key or a speaking wingman does not count."""
+    voice_activation_enabled: bool
+    """Whether voice activation (vs push-to-talk) is configured."""
+    playing: bool
+    """True while a wingman is currently playing back audio (the mic is paused then)."""
+    recording: bool
+    """True while a push-to-talk / mouse / joystick key is held or a GUI mic toggle is active."""
+    recording_wingman: Optional[str] = None
+    """Name of the wingman currently being recorded, or None when not recording."""
+    recording_wingman_avatar: Optional[str] = None
+    """Local file path to the recording wingman's avatar (PNG), or None when not recording."""
 
 
 class VoiceInfo(BaseModel):
@@ -88,6 +147,8 @@ class VoiceInfo(BaseModel):
     locale: Optional[str] = None
     languages: Optional[list[str]] = None
     provider: Optional[str] = None
+    description: Optional[str] = None
+    """A short line on how the voice sounds, e.g. "ruhig, gemächlich"."""
 
 
 # from sounddevice lib
@@ -117,22 +178,6 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppSettings(BaseModel):
-    enable: bool
-    host: str
-    port: int
-
-
-class FasterWhisperSettings(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-    """tiny, tiny.en, base, base.en, small, small.en, distil-small.en, medium, medium.en, distil-medium.en, large-v1, large-v2, large-v3, large, distil-large-v2, distil-large-v3, large-v3-turbo, or turbo"""
-    model_size: str
-    """default (model original), auto (fastest available on device), int8, int8_float16 etc. - see https://opennmt.net/CTranslate2/quantization.html#quantize-on-model-conversion"""
-    compute_type: str
-    """cpu, cuda, auto"""
-    device: str
-
-
 class XVASynthSettings(BaseModel):
     enable: bool
     host: str
@@ -145,68 +190,40 @@ class XVASynthSettings(BaseModel):
 
 class PocketTTSSettings(BaseModel):
     enable: bool
-    custom_model_path: Optional[str] = None
+    run_locally: bool = True
+    quality: PocketTtsQuality
+    """Size of the model for `spoken_language`. The model itself follows the
+    language and is not a setting of its own (services/spoken_language.py)."""
+    custom_model: Optional[str] = None
+    """A YAML config from the Pocket TTS models folder to load instead of the
+    built-in model. None loads the built-in model for `spoken_language`."""
+    host: str
+    port: int
 
 
-class WhispercppSttConfig(BaseModel):
+class PocketTTSPreloadResult(BaseModel):
+    ok: bool
+    voice: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class ParakeetSettings(BaseModel):
+    run_locally: bool = True
+    execution_provider: str
+    """cpu, directml (Windows, any GPU) or cuda (NVIDIA). Picked on the first
+    start: cuda when nvidia-smi finds a GPU, else cpu."""
+    host: str = ""
+    """Where a Parakeet server runs when `run_locally` is off. Empty until
+    the user fills it in; nothing is contacted before that."""
+    port: int = 9876
+
+
+class ParakeetSttConfig(BaseModel):
     temperature: float
 
 
-class FasterWhisperSttConfig(BaseModel):
-    beam_size: int
-    language: Optional[str] = None
-    hotwords: list[str]
-    additional_hotwords: list[str]
-    best_of: int
-    temperature: float
-    no_speech_threshold: float
-    multilingual: bool
-    language_detection_threshold: float
-
-
-class WhispercppTranscript(BaseModel):
+class ParakeetTranscript(BaseModel):
     text: str
-
-
-class FasterWhisperTranscript(BaseModel):
-    text: str
-    language: str
-    language_probability: float
-
-
-class AzureInstanceConfig(BaseModel):
-    api_base_url: str
-    """https://xxx.openai.azure.com/"""
-
-    api_version: AzureApiVersion
-    """The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference"""
-
-    deployment_name: str
-    """The deployment name e.g. 'whisper'"""
-
-
-class AzureTtsConfig(BaseModel):
-    region: AzureRegion
-    voice: str
-    output_streaming: bool
-
-
-class AzureSttConfig(BaseModel):
-    region: AzureRegion
-    languages: list[str]
-
-
-class AzureConfig(BaseModel):
-    """Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
-
-    If you configured some providers above to use Azure, you need to provide your Azure settings here.
-    Please also provide your Azure API keys in the secrets.yaml.
-    """
-
-    whisper: AzureInstanceConfig
-    conversation: AzureInstanceConfig
-    tts: AzureTtsConfig
-    stt: AzureSttConfig
 
 
 class ElevenlabsLanguage(BaseModel):
@@ -480,15 +497,23 @@ class LocalLlmConfig(BaseModel):
 
 
 class WingmanProConfig(BaseModel):
-    stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    conversation_deployment: str
-    # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
+
+    conversation_deployment: str = ""
+    """Gateway id of the chat model, or empty to follow the plan's default.
+
+    Empty is the normal case. The backend resolves it to whatever the plan lists
+    as default at that moment, so changing the default in /admin reaches every
+    user without a release and without a migration. A concrete id here is a
+    deliberate pick by the user; if the plan stops offering it, the backend
+    serves its default instead of failing.
+    """
+
 
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    region: str
+    """Wingman backend. One region, so there is no endpoint to choose."""
 
 
 class SoundConfig(BaseModel):
@@ -506,7 +531,9 @@ class SoundConfig(BaseModel):
 
 
 class VoiceActivationSettings(BaseModel):
-    """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
+    """Hands-free listening. Off means the user holds a wingman's record key.
+    Which provider transcribes is not decided here but in ``SttSettings``:
+    push-to-talk and voice activation share it."""
 
     enabled: bool
     """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
@@ -516,16 +543,113 @@ class VoiceActivationSettings(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
-    energy_threshold: float
-    """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
+    sensitivity: float = 0.5
+    """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
+    whisper. Applies to push-to-talk too, where it trims silence off the clip."""
 
-    stt_provider: VoiceActivationSttProvider
+    end_pause_ms: int = 500
+    """Silence that ends an utterance."""
 
-    azure: AzureSttConfig
-    whispercpp: WhispercppSettings
-    fasterwhisper: FasterWhisperSettings
-    whispercpp_config: WhispercppSttConfig
-    fasterwhisper_config: FasterWhisperSttConfig
+    max_utterance_s: float = 160.0
+    """Cut here even mid-sentence and send what was said; the rest becomes the
+    next utterance. Keeps commands quick for people who never stop talking."""
+
+    min_speech_ms: int = 200
+    """Shorter bursts of speech are noise."""
+
+    pre_roll_ms: int = 300
+    """Audio kept from before the detector noticed speech."""
+
+    listen_while_speaking: bool = False
+    """Whether the microphone stays open while a wingman speaks, so "stop"
+    cuts it off and talking on skips the answer. For headsets: through
+    speakers the microphone hears the wingman itself, and the wingman then
+    answers its own words or stops itself. Off means deaf while speaking."""
+
+    stop_words: list[str] = ['stop', 'stopp', 'stop it', 'stop please', 'shut up', 'be quiet', 'silence', 'enough', 'halt', 'sei still', 'ruhe', 'schluss', 'bitte stopp', 'okay stop', 'basta', 'silencio', 'para', 'cállate', 'callate', 'arrête', 'arrete', 'tais-toi', 'assez', "stop s'il te plaît"]
+    """Phrases that stop a wingman mid-sentence and are not answered. An
+    utterance counts when every word in it comes from these phrases, so
+    "okay stop please" works with "okay stop" and "stop please" listed."""
+
+
+class PronunciationRule(BaseModel):
+    """How to say something the voice gets wrong: "aUEC" -> "Alpha U E C"."""
+
+    written: str
+    spoken: str
+    """Digits are fine: they are read in the spoken language afterwards."""
+
+
+class PronunciationSettings(BaseModel):
+    """How the text handed to the voice is rewritten, for every TTS provider
+    (services/speech_text.py). The chat keeps what the Wingman wrote."""
+
+    rules: list[PronunciationRule]
+    """The user's own rules. They win over every bundled one."""
+    presets: list[str]
+    """Bundled lists switched on, by id ("star_citizen")."""
+
+
+class PronunciationPreset(BaseModel):
+    """A bundled pronunciation list, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
+class VocabularyPreset(BaseModel):
+    """A bundled word list for the speech correction, one per game."""
+
+    id: str
+    name: str
+    count: int
+
+
+class PresetOverride(BaseModel):
+    """The user's edits to a bundled list, kept apart from it so an update of
+    the bundled file still reaches them."""
+
+    added: list[str] = []
+    removed: list[str] = []
+
+
+class SttTestResult(BaseModel):
+    """What the microphone test in Settings heard."""
+
+    text: str
+    duration_s: float
+    """Length of the recorded clip."""
+    transcribe_ms: int = 0
+    """How long the provider took to turn the clip into text."""
+    level: float
+    """Peak level of the clip, 0..1."""
+    best_score: float
+    """Best speech probability the detector saw, 0..1."""
+    threshold: float
+
+
+class SttSettings(BaseModel):
+    """Speech-to-text, configured once for every wingman and for both ways of
+    talking (record key and voice activation)."""
+
+    provider: SttProvider
+
+    vocabulary: list[str] = []
+    """Special words no speech model knows: place names, ship names, people.
+    Every transcript is corrected against them afterwards, whatever the
+    provider. The names of the active wingmen count without being listed."""
+
+    presets: list[str] = ["star_citizen"]
+    """Bundled word lists that apply on top of the user's own, by id
+    ("star_citizen"). Switched on in Settings; the words stay in the bundled
+    file and never enter the user's list."""
+
+    preset_overrides: dict[str, PresetOverride] = {}
+    """Per preset id: what the user added to and removed from the bundled list."""
+
+    parakeet: ParakeetSettings
+    parakeet_config: ParakeetSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -535,11 +659,14 @@ class FeaturesConfig(BaseModel):
     """
 
     tts_provider: TtsProvider
-    stt_provider: SttProvider
     conversation_provider: ConversationProvider
-    remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
-    use_generic_instant_responses: bool
+    condense_conversation: bool
+    """Shorten the conversation once a request passes its history limit (64,000
+    tokens, or half of a smaller model's window): old tool responses are cleared
+    first, then older turns are summarized by the support model. Below the limit
+    nothing is touched. Off, the history is only shortened when a request would
+    not fit the model at all. See docs/context-and-shortening.md."""
 
 
 class AudioFile(BaseModel):
@@ -615,6 +742,15 @@ class CommandJoystickConfig(BaseModel):
     """The joystick GUID to use. Optional."""
 
 
+class CommandSkillActionConfig(BaseModel):
+    skill_name: str
+    """The Skill class name that owns the @command_action function (e.g. 'Timer')."""
+    function_name: str
+    """The @command_action method name to invoke."""
+    parameters: Optional[dict] = None
+    """Static parameter values for the function, keyed by parameter name."""
+
+
 class CommandActionConfig(BaseModel):
     keyboard: Optional[CommandKeyboardConfig] = None
     """The keyboard configuration for this action. Optional."""
@@ -634,6 +770,9 @@ class CommandActionConfig(BaseModel):
     joystick: Optional[CommandJoystickConfig] = None
     """The joystick configuration for this action. Optional."""
 
+    skill_action: Optional[CommandSkillActionConfig] = None
+    """Invoke a skill's @command_action function with static parameters. Optional."""
+
 
 class CommandCategoryConfig(BaseModel):
     """Configuration for a command category."""
@@ -652,6 +791,22 @@ class CommandConfig(BaseModel):
     We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
     If the Wingman doesn't call your command, try to rephrase the name here.
     """
+    description: Optional[str] = None
+    """What this command does, in one line, for the models that have to pick it.
+
+    Optional, and empty is normal: a command the user recorded themselves has
+    no description until they write one, and the name alone is usually enough.
+    It earns its keep where two commands are easy to confuse — "Autoland",
+    "Autodock", "Toggle Landing System" and "Landing Sequence" all read as
+    "land the ship", and the name cannot say which is which.
+
+    Measured 2026-09-20 on the shipped Star Citizen config, 152 spoken
+    transcripts: descriptions took the chat model from 0.884 to 0.952 and the
+    System One model from 0.863 to 0.973. They cost nothing in latency. Say
+    what the command does and, where a neighbour could be mistaken for it,
+    what it is NOT for.
+    """
+
     category_id: Optional[str] = None
     """Optional category ID to group commands."""
     is_system_command: Optional[bool] = False
@@ -719,6 +874,7 @@ class CustomProperty(BaseModel):
         | int
         | float
         | bool
+        | list[int | float]
         | VoiceSelection
         | list[VoiceSelection]
         | AudioFileConfig
@@ -755,6 +911,10 @@ class SkillConfig(CustomClassConfig):
     examples: Optional[list[LocalizedMetadata]] = None
     platforms: Optional[list[str]] = None
     """List of supported platforms: 'windows', 'darwin' (macOS), 'linux'. If None, skill works on all platforms."""
+    requires: Optional[list[SkillRequirement]] = None
+    """Core services that must be switched on in the settings, like the HUD or
+    the Star Citizen log reader. The client greys the skill out until they are.
+    None means the skill needs none."""
     auto_activate: Optional[bool] = False
     """If True, this skill's tools are always available without LLM activation.
     Use for event-driven skills or skills that should always be active when enabled.
@@ -778,6 +938,13 @@ class SkillConfig(CustomClassConfig):
     - ['screenshots', 'OCR', 'image analysis', 'text recognition']
     - ['flight simulator', 'altitude', 'speed', 'autopilot', 'navigation']
     """
+    api_version: Optional[int] = None
+    """Skill API contract version. Declares which version of the Skill base class +
+    WingmanContext facade this skill targets. Independent of the Wingman app version —
+    it only changes when the skill-facing contract makes a breaking change. Skills
+    without this field are treated as legacy (pre-v3) and are not loaded. Current: 3."""
+    version: Optional[str] = None
+    """Optional skill release version (free-form, e.g. '2.0.1'). Used for telemetry only."""
 
 
 class SkillToolInfo(BaseModel):
@@ -818,6 +985,43 @@ class WingmanSkillState(BaseModel):
     """Whether the skill is enabled for this wingman (in discoverable_skills list)."""
 
 
+class SkillVerdictInfo(BaseModel):
+    """What the SkillCatalog decided about one skill on this boot.
+
+    Same payload as the `skill_registered` WebSocket command, offered as a
+    snapshot: the broadcast happens once while the tower initializes, so a
+    client that connects or reloads later would never learn why a skill is off.
+    """
+
+    skill: str
+    """Name of the skill."""
+    origin: str
+    """Where the skill came from: 'bundled' | 'custom'."""
+    outcome: str
+    """'ok' | 'failed' | 'quarantined' | 'legacy_v2'."""
+    id_hash: str
+    """Hash of the skill's identity."""
+    version: Optional[str] = None
+    """Skill version if available."""
+    api_version: Optional[int] = None
+    """Skill API version if available."""
+
+
+class MissingSkillInfo(BaseModel):
+    """A skill a Wingman is configured for that is not installed on this system.
+
+    Core knows nothing about it beyond the name the Wingman config stores, so it
+    cannot appear in the normal skill list. The client renders it as a disabled
+    row instead of letting it disappear without a word.
+    """
+
+    name: str
+    """The skill name as stored in the Wingman's discoverable_skills."""
+
+    module: Optional[str] = None
+    """The module path from the Wingman's skills list, if the config has one."""
+
+
 # ─────────────────────────────── MCP Configuration ─────────────────────────────── #
 
 
@@ -842,6 +1046,38 @@ class McpServerConfig(BaseModel):
 
     headers: Optional[dict[str, str]] = None
     """Optional headers for HTTP requests. API keys should use SecretKeeper with 'mcp_<name>' prefix."""
+
+    auth: McpAuthType = McpAuthType.API_KEY
+    """How to authenticate against this server.
+
+    Defaults to API_KEY, which is what every server did before 3.2.1 and costs
+    nothing when no secret is stored: the bearer header is only added if the
+    secret `mcp_<name>` exists. OAUTH runs an authorization code grant instead.
+    """
+
+    oauth_client_id: Optional[str] = None
+    """OAuth client id to use instead of registering one dynamically.
+
+    Leave empty for servers that support Dynamic Client Registration (RFC 7591) —
+    the usual case, and Wingman registers itself on first use. Set it for servers
+    that have no registration endpoint, such as ElevenLabs, which expects a
+    client id metadata document URL here.
+    """
+
+    oauth_scopes: Optional[list[str]] = None
+    """OAuth scopes to request. Empty means whatever the server grants by default."""
+
+    disabled_tools: Optional[list[str]] = None
+    """Tool names (as the server reports them) that are hidden from the model.
+
+    Every tool a server offers is still listed in the UI, but a disabled one is
+    left out of the prompt and cannot be called. Empty means everything is on.
+
+    This matters for size: a server's tool definitions go into the prompt in
+    full once the server is activated, and some servers are far too large for
+    that. ElevenLabs offers 111 tools whose schemas come to roughly 222,000
+    tokens; the seven a voice assistant needs come to about 6,800.
+    """
 
     # STDIO transport settings
     command: Optional[str] = None
@@ -901,6 +1137,9 @@ class McpToolInfo(BaseModel):
     input_schema: Optional[dict] = None
     """JSON Schema for the tool's input parameters."""
 
+    is_enabled: bool = True
+    """False when the tool is in the server's `disabled_tools` list."""
+
 
 class McpServerState(BaseModel):
     """MCP server info with connection state for a specific wingman."""
@@ -919,6 +1158,69 @@ class McpServerState(BaseModel):
 
     error: Optional[str] = None
     """Error message if connection failed."""
+
+    oauth: Optional["McpOAuthStatus"] = None
+    """OAuth state, present only for servers whose auth is 'oauth'."""
+
+
+class McpOAuthStatus(BaseModel):
+    """Whether Wingman holds a usable OAuth token for an MCP server."""
+
+    server_name: str
+    """The MCP server this status belongs to."""
+
+    is_authorized: bool
+    """True when a token is stored. It may still be expired — see `is_expired`."""
+
+    is_expired: bool = False
+    """True when the stored access token has passed its expiry.
+
+    Not fatal on its own: a refresh token, when the server issued one, renews it
+    silently on the next request.
+    """
+
+    can_refresh: bool = False
+    """True when a refresh token is stored, so an expired token renews itself."""
+
+    scopes: Optional[list[str]] = None
+    """Scopes the server granted, as reported in the token response."""
+
+    expires_at: Optional[float] = None
+    """Unix timestamp the access token expires at, if the server said."""
+
+
+class McpOAuthStartResult(BaseModel):
+    """Result of asking Core to begin an OAuth flow."""
+
+    success: bool
+    """False when the URL could not be built — see `error`."""
+
+    server_name: str
+    """The MCP server the flow belongs to."""
+
+    authorization_url: Optional[str] = None
+    """The consent page to open in the user's browser."""
+
+    error: Optional[str] = None
+    """Why the flow could not be started."""
+
+
+# McpServerState refers to McpOAuthStatus before it exists, so the reference has
+# to be resolved once both are defined.
+McpServerState.model_rebuild()
+
+
+class TestConnectionResult(BaseModel):
+    """Result of testing a provider connection."""
+
+    success: bool
+    """Whether the connection test succeeded."""
+
+    provider: str
+    """The provider/secret name that was tested."""
+
+    error: Optional[str] = None
+    """Error message if the test failed."""
 
 
 class McpConnectResult(BaseModel):
@@ -964,11 +1266,8 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     hume: HumeConfig
     inworld: InworldConfig
-    azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     pocket_tts: PocketTTSConfig
-    whispercpp: WhispercppSttConfig
-    fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     xai: XaiConfig
@@ -988,6 +1287,14 @@ class NestedConfig(BaseModel):
     This is a whitelist - only MCP servers in this list are available at runtime.
     Empty list means no MCP servers are discoverable.
     Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
+
+    disabled_skill_tools: list[str] = []
+    """Skill tool names this wingman hides from the model.
+
+    A skill stays enabled, but a tool listed here is left out of the prompt and
+    cannot be called. Tool names are unique across skills, so no skill prefix is
+    needed. Empty means every tool of every enabled skill is on.
+    """
 
 
 class WingmanConfig(NestedConfig):
@@ -1019,6 +1326,8 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
+    persistent_memory: bool = True
+    """Enable persistent memory — automatically remember and recall facts across sessions using local AI."""
     created_with_version: Optional[str] = None
     """The version of Wingman AI that created this configuration. Used to detect configs that may benefit from restoring updated defaults."""
 
@@ -1030,6 +1339,25 @@ class Config(NestedConfig):
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
     """The Wingmen in this config. You can add as many as you want!"""
+
+
+class MemoryEntryResponse(BaseModel):
+    """A persistent memory entry returned from the API."""
+
+    id: int
+    collection: str
+    entry_type: str
+    content: str
+    source_wingman: Optional[str] = None
+    session_id: Optional[str] = None
+    created_at: float
+    updated_at: float
+
+
+class MemoryUpdateRequest(BaseModel):
+    """Request to update a memory entry's content."""
+
+    content: str
 
 
 class ConfigsInfo(BaseModel):
@@ -1063,6 +1391,13 @@ class DuplicateWingmanResult(BaseModel):
     wingman_file: WingmanConfigFileInfo
 
 
+class DuplicateConfigRequest(BaseModel):
+    """Request payload for duplicating an entire config/context."""
+
+    source_config_dir: ConfigDirInfo
+    new_name: str
+
+
 class HudServerSettings(BaseModel):
     """HUD Server settings for global configuration."""
 
@@ -1088,20 +1423,243 @@ class HudServerSettings(BaseModel):
     """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
 
 
+class DetectContextSizeRequest(BaseModel):
+    host: str
+    port: int
+
+
+class PlaygroundChatRequest(BaseModel):
+    system_message: str
+    user_message: str
+    temperature: float = 1.0
+    top_p: float = 1.0
+    top_k: int = 20
+    presence_penalty: float = 2.0
+    reasoning: bool = False
+    iterations: int = 1
+
+
+class MemorySuiteRequest(BaseModel):
+    scenario_id: str
+    samples: int = 1
+
+
+class LlamaCppSettings(BaseModel):
+    mode: LocalAiMode = LocalAiMode.CLOUD
+    """Where the support model runs: on our backend, on this machine, or on a
+    llama-server the user runs elsewhere. Replaced the old `run_locally` flag,
+    which could only say local or remote."""
+    support_cloud_model: str = ""
+    """Gateway id of the cloud support model, empty means the plan's default.
+
+    Deliberately free text rather than an enum: the list lives in the backend and
+    changes without a Wingman release. An id the plan no longer offers is not an
+    error — the backend answers with the plan default and says so."""
+    gpu_backend: str = "cpu"
+    """GPU backend for llama-server: 'cpu' (default), 'vulkan' (works on all GPUs), 'cuda' (NVIDIA only, fastest)."""
+    support_model: str = "Qwen3.5-4B-Q4_K_M.gguf"
+    embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
+    n_ctx: int
+    """Context window size for the local support model. Minimum 2048."""
+    n_threads: int
+    """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
+    support_remote_host: str
+    support_remote_port: int
+    embed_remote_host: str
+    embed_remote_port: int
+
+    @property
+    def run_locally(self) -> bool:
+        """Whether llama.cpp runs on this machine.
+
+        True for LOCAL, and also for CLOUD: the embedding model stays here even
+        when the support model does not, because the vector database it feeds is
+        local and vectors from a different model would not be comparable.
+        """
+        return self.mode != LocalAiMode.SERVER
+
+
+class SystemOneSettings(BaseModel):
+    """The System One model: a decision layer in front of the main model.
+
+    A System One model answers typed questions instead of writing text — which
+    command was asked for, which skills a turn needs, whether the microphone
+    heard a request at all, whether a heard word is a game name. It answers in
+    about 300 ms where a chat model takes over a second, and it cannot return
+    a value outside the options it was given.
+
+    Which model that is comes from the subscription, not from here: it is a
+    fixed role like transcription and speech, so it can be changed in /admin
+    without a Wingman release. The user's choice is whether to use one at all.
+    """
+
+    enabled: bool
+    """Whether any of Core's decisions may go to the System One model.
+
+    The master switch. The decisions it takes are spread over the turn —
+    before the main model, during transcription, inside skills — and a toggle
+    per place would be a settings page nobody could reason about. Off means
+    every one of those places decides the way it did before, which is always
+    a working path and never an error."""
+
+    commands: bool
+    """Whether the model is asked which command a request means, before the
+    main model is asked anything.
+
+    Its own switch because it is the one decision that runs on spec. Every
+    other use waits until there is something to resolve — a name the speech
+    model mangled, a title said differently — and costs nothing when there is
+    not. This one asks on every request, including the ones that were never
+    going to be a command.
+
+    Measured 2026-09-21 against gpt-4.1-mini on the shipped Star Citizen
+    config: the keypress happens after 0.48 s instead of 1.13 s, and the
+    spoken confirmation after 1.49 s instead of 2.13 s. A request that is not
+    a command costs 0.46 s and changes nothing. For someone who only talks to
+    their Wingman, that is all it ever does."""
+
+
+class OtherLanguageSetting(BaseModel):
+    """A language beyond the six Wingman supports end to end."""
+
+    code: Optional[str] = None
+    """ISO 639 code, e.g. "nl"; None when the language has none (Klingon
+    has "tlh", a made-up one has nothing)."""
+    name: str
+    """The language's name in itself, e.g. "Nederlands"."""
+    english_name: str
+    """Its English name, e.g. "Dutch", for the conversation model."""
+
+
+class ScGameLogSettings(BaseModel):
+    """Core reads Star Citizen's Game.log live and hands the events to skills
+    (services/sc_gamelog, `self.wingman.sc_gamelog`)."""
+
+    enabled: bool
+    """Off for someone who does not play Star Citizen. On, the reader waits
+    for a Game.log at almost no cost."""
+    game_path: str
+    """The StarCitizen folder that holds LIVE, PTU and the other environments."""
+
+
+class ScGameLogMaintainer(BaseModel):
+    """Who maintains the Game.log rules, to contact when they break."""
+
+    name: str
+    discord: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ScGameLogStatus(BaseModel):
+    """What the Star Citizen log reader is doing, for the settings page."""
+
+    running: bool
+    game_path: str
+    game_path_found: bool
+    """Whether the StarCitizen folder exists."""
+    environments: list[str]
+    """Environments with a Game.log right now, e.g. ["LIVE"]."""
+    active_environment: Optional[str] = None
+    """The environment with the newest event."""
+    rules_version: str
+    rules_revision: int
+    rules_downloaded: bool
+    """False while the reader uses the rules shipped with Wingman."""
+    rules_last_success: Optional[float] = None
+    """Unix time GitHub last answered with usable rules."""
+    rules_problem: Optional[ScGameLogRulesProblem] = None
+    rules_problem_detail: Optional[str] = None
+    maintainer: ScGameLogMaintainer
+    error: Optional[str] = None
+    """Why the reader cannot run, e.g. its database cannot be opened."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
+    stt: SttSettings
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
+    llama_cpp: LlamaCppSettings
+    system_one: SystemOneSettings
     hud_server: HudServerSettings
+    sc_gamelog: ScGameLogSettings
     debug_mode: bool
     streamer_mode: bool
+    show_token_count: bool
+    """Show token counts on Wingman messages and in the conversation status
+    bar. Off by default: most users do not know what a token is, and the
+    number means nothing to them."""
+    filler_responses: bool
+    """Speak a short line, written by the support model in the user's language,
+    while a slow tool runs and the Wingman has not said anything yet."""
+    pronunciation: PronunciationSettings
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
+    spoken_language: SpokenLanguage
+    """The one language the user and their Wingmen speak. Every
+    language-specific provider setting is derived from it."""
+    other_language: Optional[OtherLanguageSetting] = None
+    """The language when `spoken_language` is OTHER; None otherwise. The
+    default keeps a settings.yaml from before 3.2.4 loadable even where the
+    migration did not run (a missing required field stopped Core in 3.2.2)."""
+
+
+class OtherLanguageOption(BaseModel):
+    """One entry of the searchable list of other languages."""
+
+    code: str
+    native: str
+    en: str
+    de: str
+    fr: str
+    es: str
+    aliases: list[str]
+    """Other names people use ("Holländisch"), for the search."""
+    parakeet: bool
+    """Parakeet transcribes it."""
+
+
+class OtherLanguageReport(BaseModel):
+    """What works and what Wingman changed after an other language was set."""
+
+    language: OtherLanguageSetting
+    stt_provider: str
+    """"parakeet", "parakeet_remote" or "wingman_pro"."""
+    stt_supported: bool
+    """Parakeet transcribes the language (the subscription detects any)."""
+    inworld_supported: bool
+    """Inworld has voices for the language."""
+    tts_provider: Optional[str] = None
+    """The provider the Wingmen were switched to; None when none fits."""
+    switched_wingmen: list[str] = []
+    """"config/wingman" of each Wingman moved to `tts_provider`."""
+
+
+class SubscriptionModel(BaseModel):
+    id: str
+    name: str
+
+
+class SubscriptionRoutes(BaseModel):
+    """The models behind the plan's fixed roles, decided in /admin, so the
+    client asks rather than assumes. None means the plan has no such access."""
+
+    stt: Optional[SubscriptionModel] = None
+    """Transcription."""
+    tts: Optional[SubscriptionModel] = None
+    """Speech."""
+    image: Optional[SubscriptionModel] = None
+    """Image generation."""
+    systemone: Optional[SubscriptionModel] = None
+    """The decision model. None means the plan has no System One access, and
+    the client then says so rather than naming a model that will not answer."""
+    downgraded: Optional[SubscriptionModel] = None
+    """What chat falls back to once the allowance is used up."""
 
 
 class BenchmarkResult(BaseModel):
@@ -1112,3 +1670,77 @@ class BenchmarkResult(BaseModel):
 
 
 BenchmarkResult.model_rebuild()
+
+
+class TokenUsage(BaseModel):
+    """What one Wingman turn used, as the provider counted it.
+
+    A turn with tool calls asks the model two or three times, and each of those
+    requests sends the whole conversation again, so every field is the sum over
+    all requests of the turn. Only token counts, never money: the backend
+    strips the cost before Core sees an answer.
+    """
+
+    input_tokens: int
+    """Tokens sent to the model, summed over every request of the turn."""
+    cached_tokens: int
+    """The part of ``input_tokens`` the provider served from its prompt cache.
+    0 when the provider does not report it."""
+    output_tokens: int
+    """Tokens the model wrote, summed over every request of the turn."""
+
+
+class AvatarPromptRequest(BaseModel):
+    """Lets the wingman's model write the prompt for a new avatar variant."""
+
+    wingman_name: str
+    style: ImageStyle
+    """The art style preset. Its text opens the prompt."""
+    wishes: str
+    """What the user wants, in any language. May be empty: then the backstory
+    alone decides. With `refine` it says what should change."""
+    refine: bool
+    """True when the image will be built on a reference image. Then the
+    prompt says what changes instead of describing the whole character."""
+
+
+class AvatarPrompt(BaseModel):
+    prompt: str
+    """The complete prompt: style, character description and framing."""
+
+
+class ImageStylePrompt(BaseModel):
+    """What a style preset adds to an image prompt."""
+
+    style: ImageStyle
+    prompt: str
+    """Empty for NONE."""
+
+
+class AvatarGenerationRequest(BaseModel):
+    """One new avatar variant from the avatar studio."""
+
+    wingman_name: str
+    prompt: str
+    """The complete prompt. Core sends it to the image model as is."""
+    style: ImageStyle
+    """The style preset the prompt was written with. Stored with the variant,
+    so the studio selects it again when the user goes back to it."""
+    reference: Optional[str] = None
+    """File name of an earlier variant, or an uploaded image as data URL. The
+    new image keeps its character. None generates from scratch."""
+
+
+class AvatarVariant(BaseModel):
+    """A generated avatar, kept on disk until the user deletes it."""
+
+    file_name: str
+    url: str
+    """Path on Core that serves the image, relative to Core's base URL."""
+    path: str
+    """Absolute file path, for "show in folder"."""
+    prompt: str
+    """The complete prompt the image was made from."""
+    style: ImageStyle
+    created: float
+    """Unix timestamp."""

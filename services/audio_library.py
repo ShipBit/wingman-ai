@@ -171,6 +171,11 @@ class AudioLibrary:
             audio_player = status[1]
             volume = status[2]
             if audio_player:
+                # Detach the player's "finished" callback up front. We're about
+                # to notify + pop synchronously, so any natural completion that
+                # races with fade_out (or arrives during it) must not re-enter
+                # AudioLibrary.on_playback_finish with a stale/missing entry.
+                audio_player.on_playback_finished = None
                 if fade_out_time > 0:
                     self.__threaded_execution(
                         self.fade_out,
@@ -181,7 +186,6 @@ class AudioLibrary:
                         not remove_playback,
                     )
                 else:
-                    audio_player.on_playback_finished = None
                     await audio_player.stop_playback()
 
                 self.notify_playback_finished(self.__get_playback_key(file))
@@ -224,18 +228,23 @@ class AudioLibrary:
         self.current_playbacks.pop(file_path, None)
 
     def notify_playback_started(self, file_path: str):
-        if self.callback_playback_started:
-            # Give the callback the audio file that started playing and current volume
-            audio_file = self.current_playbacks[file_path][2]
-            audio_player = self.current_playbacks[file_path][0]
-            volume = self.current_playbacks[file_path][1][0]
-            self.callback_playback_started(audio_file, audio_player, volume)
+        if not self.callback_playback_started:
+            return
+        # Entry can be gone by the time this fires: stop_playback pops
+        # synchronously while the player thread may still emit one last event.
+        playback = self.current_playbacks.get(file_path)
+        if playback is None:
+            return
+        audio_player, volume_list, audio_file = playback[0], playback[1], playback[2]
+        self.callback_playback_started(audio_file, audio_player, volume_list[0])
 
     def notify_playback_finished(self, file_path: str):
-        if self.callback_playback_finished:
-            # Give the callback the audio file that finished playing
-            audio_file = self.current_playbacks[file_path][2]
-            self.callback_playback_finished(audio_file)
+        if not self.callback_playback_finished:
+            return
+        playback = self.current_playbacks.get(file_path)
+        if playback is None:
+            return
+        self.callback_playback_finished(playback[2])
 
     ###############################
     ### Audio Library functions ###

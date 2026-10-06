@@ -1,12 +1,8 @@
-import sys
-import os
+import asyncio
 import uuid
 
 from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
-
-# add skill to sys path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
@@ -14,7 +10,7 @@ from skills.skill_base import Skill
 from skills.uexcorp.uexcorp.helper import Helper
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class UEXCorp(Skill):
@@ -24,15 +20,15 @@ class UEXCorp(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         self.random_seed = uuid.uuid4()
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.__helper: Helper = Helper.get_instance()
-        self.__helper.prepare(self.threaded_execution, self.wingman)
+        self.__helper.prepare(self.wingman.run_in_thread, self.wingman)
         self.__invalid_session = False
         self.__initialized = False
-        wingman.threaded_execution(self.threaded_prepare, True)
+        wingman.run_in_thread(self.threaded_prepare, True)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -76,15 +72,16 @@ class UEXCorp(Skill):
                 "Skill is still in preload phase, skipping initial import on load and removing preload flag.",
             )
         else:
-            self.threaded_execution(self.threaded_prepare)
-        self.threaded_execution(self.loop_master)
+            self.wingman.run_in_thread(self.threaded_prepare)
+        self.wingman.run_in_thread(self.loop_master)
 
     async def unload(self) -> None:
         await super().unload()
         if self.__invalid_session or not self.__helper:
             return
         self.__helper.set_loaded(False)
-        Helper.destroy_instance()
+        # destroy() may wait up to 60 s for a running import
+        await asyncio.to_thread(Helper.destroy_instance)
 
     def loop_master(self):
         cycle = 600

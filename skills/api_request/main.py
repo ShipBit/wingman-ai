@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import random
 import asyncio
@@ -7,27 +8,19 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 import yaml
 import aiohttp
 from aiohttp import ClientError
-from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 DEFAULT_HEADERS = {
-    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "X-Frame-Options": "DENY",
-    "X-Content-Type-Options": "nosniff",
-    "X-XSS-Protection": "1; mode=block",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Content-Security-Policy": "default-src 'self'",
     "Cache-Control": "no-cache, no-store, must-revalidate",
-    "Content-Type": "application/json",
     "Accept": "application/json",
-    "Access-Control-Allow-Origin": "http://localhost",
-    "Access-Control-Allow-Methods": "*",
-    "Access-Control-Allow-Headers": "*",
 }
+
+# Max characters of a text response handed back to the model
+MAX_RESPONSE_CHARS = 8000
 
 # Content-Type to file extension mapping
 CONTENT_TYPE_EXTENSIONS = {
@@ -40,18 +33,21 @@ CONTENT_TYPE_EXTENSIONS = {
     "application/pdf": ".pdf",
 }
 
-# Content types that should be saved as binary files
+# Content types that should be saved as binary files (prefix match)
 BINARY_CONTENT_TYPES = [
     "application/octet-stream",
-    "application/",
-    "audio/mpeg",
-    "audio/wav",
-    "audio/ogg",
-    "image/jpeg",
-    "image/png",
-    "video/mp4",
     "application/pdf",
+    "application/zip",
+    "application/gzip",
+    "application/x-",
+    "application/vnd.",
+    "image/",
+    "audio/",
+    "video/",
 ]
+
+# application/* subtypes that are text although they match a binary prefix
+TEXT_SUBTYPE_HINTS = ("json", "xml", "javascript", "yaml", "x-www-form-urlencoded")
 
 
 class APIRequest(Skill):
@@ -61,9 +57,9 @@ class APIRequest(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
-        self.default_headers = DEFAULT_HEADERS
+        self.default_headers = dict(DEFAULT_HEADERS)
 
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.api_keys_dictionary = self.get_api_keys()
@@ -126,29 +122,34 @@ class APIRequest(Skill):
         headers = parameters.get("headers", {})
         if not isinstance(headers, dict):
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"Headers is not a dictionary. Type is {type(headers)}. Using empty dict.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
             headers = {}
 
         # Merge with default headers if configured
         if self._get_use_default_headers():
-            merged_headers = {**headers, **self.default_headers}
-            headers = merged_headers
+            user_keys = {str(k).lower() for k in headers}
+            defaults = {
+                k: v
+                for k, v in self.default_headers.items()
+                if k.lower() not in user_keys
+            }
+            headers = {**defaults, **headers}
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     "Default headers merged for API call.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
 
         # Validate and prepare params
         params = parameters.get("params", {})
         if not isinstance(params, dict):
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"Params is not a dictionary. Type is {type(params)}. Using empty dict.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
             params = {}
 
@@ -156,35 +157,45 @@ class APIRequest(Skill):
         body = parameters.get("data", {})
         if not isinstance(body, dict):
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"Data is not a dictionary. Type is {type(body)}. Using empty dict.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
             body = {}
 
-        # Serialize body to JSON
-        try:
-            data = json.dumps(body)
-        except (TypeError, ValueError) as e:
-            if self.settings.debug_mode:
-                await self.printr.print_async(
+        # Serialize body to JSON. GET/HEAD without data send no body.
+        method = str(parameters["method"]).upper()
+        data = None
+        if body or method not in ("GET", "HEAD"):
+            try:
+                data = json.dumps(body)
+            except (TypeError, ValueError) as e:
+                self.log.warning(
                     f"Cannot convert data to JSON: {e}. Using empty object.",
-                    color=LogType.WARNING,
+                    server_only=True,
                 )
-            data = json.dumps({})
+                data = json.dumps({})
+            if self._get_use_default_headers() and not any(
+                str(k).lower() == "content-type" for k in headers
+            ):
+                headers = {**headers, "Content-Type": "application/json"}
 
-        # Try request up to max number of retries
-        max_retries = self._get_max_retries()
+        timeout = self._get_request_timeout()
+        if not isinstance(timeout, aiohttp.ClientTimeout):
+            timeout = aiohttp.ClientTimeout(total=timeout)
+
+        # Try request up to max number of retries (at least one attempt)
+        max_retries = max(1, int(self._get_max_retries() or 1))
         for attempt in range(1, max_retries + 1):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.request(
-                        method=parameters["method"],
+                        method=method,
                         url=parameters["url"],
                         headers=headers,
                         params=params,
                         data=data,
-                        timeout=self._get_request_timeout(),
+                        timeout=timeout,
                     ) as response:
                         response.raise_for_status()
                         return await self._process_response(response)
@@ -192,9 +203,9 @@ class APIRequest(Skill):
             except (ClientError, asyncio.TimeoutError) as e:
                 if attempt < max_retries:
                     if self.settings.debug_mode:
-                        await self.printr.print_async(
+                        self.log.info(
                             f"Retrying API request (attempt {attempt}/{max_retries}) due to: {e}",
-                            color=LogType.INFO,
+                            server_only=True,
                         )
                     retry_delay = self._get_retry_delay()
                     delay = retry_delay * (2 ** (attempt - 1)) + random.uniform(
@@ -202,36 +213,47 @@ class APIRequest(Skill):
                     )
                     await asyncio.sleep(delay)
                 else:
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"API request failed after {max_retries} attempts: {e}",
-                            color=LogType.WARNING,
-                        )
+                    self.log.warning(
+                        f"API request failed after {max_retries} attempts: {e}",
+                        server_only=True,
+                    )
                     return f"Error, could not complete API request. Exception was: {e}."
             except Exception as e:
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Unexpected error with API request: {e}",
-                        color=LogType.WARNING,
-                    )
+                self.log.warning(
+                    f"Unexpected error with API request: {e}", server_only=True
+                )
                 return f"Error, could not complete API request. Reason was {e}."
 
         return "Error, could not complete API request after all retries."
+
+    @staticmethod
+    def _cap_text(text: str) -> str:
+        if len(text) > MAX_RESPONSE_CHARS:
+            return (
+                text[:MAX_RESPONSE_CHARS]
+                + f"\n[Response truncated: showing {MAX_RESPONSE_CHARS} of {len(text)} characters]"
+            )
+        return text
 
     async def _process_response(self, response: aiohttp.ClientResponse) -> str:
         """Process API response based on content type."""
         content_type = response.headers.get("Content-Type", "").lower()
 
-        # Handle JSON responses
-        if "application/json" in content_type:
-            return await response.text()
-
-        # Handle binary content types
-        if any(ct in content_type for ct in BINARY_CONTENT_TYPES):
+        subtype = content_type.split(";")[0].strip()
+        is_text_like = subtype.startswith("text/") or any(
+            hint in subtype for hint in TEXT_SUBTYPE_HINTS
+        )
+        if not is_text_like and any(
+            subtype.startswith(ct) for ct in BINARY_CONTENT_TYPES
+        ):
             return await self._save_binary_response(response, content_type)
 
-        # Default to text response
-        return await response.text()
+        return self._cap_text(await response.text())
+
+    @staticmethod
+    def _write_bytes(path: str, content: bytes) -> None:
+        with open(path, "wb") as file:
+            file.write(content)
 
     async def _save_binary_response(
         self, response: aiohttp.ClientResponse, content_type: str
@@ -254,13 +276,16 @@ class APIRequest(Skill):
         if "Content-Disposition" in response.headers:
             disposition = response.headers["Content-Disposition"]
             if "filename=" in disposition:
-                file_name = disposition.split("filename=")[1].strip('"')
+                raw_name = disposition.split("filename=")[1].split(";")[0].strip(' "\'')
+                raw_name = os.path.basename(raw_name.replace("\\", "/"))
+                safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", raw_name).strip(" .")
+                if safe_name:
+                    file_name = safe_name
 
         # Save file
         files_directory = self.get_generated_files_dir()
         file_path = os.path.join(files_directory, file_name)
-        with open(file_path, "wb") as file:
-            file.write(file_content)
+        await asyncio.to_thread(self._write_bytes, file_path, file_content)
 
         return f"File returned from API saved as {file_path}"
 

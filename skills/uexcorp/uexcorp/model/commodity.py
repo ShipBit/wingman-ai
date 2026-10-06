@@ -105,22 +105,26 @@ class Commodity(DataModel):
         from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
         from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
+        # Units (aUEC / %) are documented once in the tool help prompt; values
+        # here stay numeric to save tokens. None/0 is stripped as "unknown".
         information = {
             "name": self.get_name(),
             "weight_scu": self.get_weight_scu() or "unknown",
             "properties": self.get_properties(),
-            "profit_per_scu_min": f"{self.get_profit_min()} aUEC" if self.get_profit_min() else "N/A",
-            "profit_per_scu_max": f"{self.get_profit_max()} aUEC" if self.get_profit_max() else "N/A",
-            "profit_margin_min": f"{self.get_profit_margin_min()}%" if self.get_profit_min() else "N/A",
-            "profit_margin_max": f"{self.get_profit_margin_max()}%" if self.get_profit_max() else "N/A",
-            "base_profit_min": f"{self.get_base_profit_min()}%" if self.get_profit_min() else "N/A",
-            "base_profit_max": f"{self.get_base_profit_max()}%" if self.get_profit_max() else "N/A",
+            "profit_per_scu_min": self.get_profit_min() or None,
+            "profit_per_scu_max": self.get_profit_max() or None,
+            "profit_margin_min": self.get_profit_margin_min() if self.get_profit_min() else None,
+            "profit_margin_max": self.get_profit_margin_max() if self.get_profit_max() else None,
+            "base_profit_min": self.get_base_profit_min() if self.get_profit_min() else None,
+            "base_profit_max": self.get_base_profit_max() if self.get_profit_max() else None,
             "buy_sell_options": [],
         }
 
-        if self.get_id_parent():
+        if self.get_id_parent() and self.get_id_parent() != self.get_id():
             parent = Commodity(self.get_id_parent(), load=True)
-            information["parent"] = parent.get_data_for_ai_minimal()
+            # Name only: the parent's own view would drag in all of its
+            # buy/sell options across every terminal.
+            information["parent"] = str(parent)
 
         if self.get_is_buyable() or self.get_is_sellable():
             prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
@@ -129,7 +133,7 @@ class Commodity(DataModel):
 
             prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price_raw in prices_raw:
-                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal())
+                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal(show_commodity_information=False))
 
         return information
 
@@ -140,9 +144,9 @@ class Commodity(DataModel):
         information = {
             "name": self.get_name(),
             "properties": self.get_properties(),
-            "profit_per_scu_max": f"{self.get_profit_max()} aUEC" if self.get_profit_max() else "N/A",
-            "profit_margin_max": f"{self.get_profit_margin_max()}%" if self.get_profit_max() else "N/A",
-            "base_profit_max": f"{self.get_base_profit_max()}%" if self.get_profit_max() else "N/A",
+            "profit_per_scu_max": self.get_profit_max() or None,
+            "profit_margin_max": self.get_profit_margin_max() if self.get_profit_max() else None,
+            "base_profit_max": self.get_base_profit_max() if self.get_profit_max() else None,
             "buy_sell_options": [],
         }
 
@@ -151,13 +155,32 @@ class Commodity(DataModel):
             information["parent"] = str(parent)
 
         if self.get_is_buyable() or self.get_is_sellable():
+            # Many terminals share the same price, so options are grouped by
+            # price ("Sell for X at: A, B, C") instead of one line per terminal.
+            from skills.uexcorp.uexcorp import compression
+
+            buy_groups = {}
+            sell_groups = {}
             prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price in prices:
-                information["buy_sell_options"].append(str(price))
+                if price.get_price_buy():
+                    buy_groups.setdefault(price.get_price_buy(), []).append(price.get_terminal_name())
+                if price.get_price_sell():
+                    sell_groups.setdefault(price.get_price_sell(), []).append(price.get_terminal_name())
 
+            raw_sell_groups = {}
             prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price_raw in prices_raw:
-                information["buy_sell_options"].append(str(price_raw))
+                if price_raw.get_price_sell():
+                    raw_sell_groups.setdefault(price_raw.get_price_sell(), []).append(price_raw.get_terminal_name())
+
+            options = information["buy_sell_options"]
+            for value in sorted(buy_groups):  # cheapest buy first
+                options.append(f"Buy for {compression.number(value)} at: {', '.join(buy_groups[value])}")
+            for value in sorted(sell_groups, reverse=True):  # best sell first
+                options.append(f"Sell for {compression.number(value)} at: {', '.join(sell_groups[value])}")
+            for value in sorted(raw_sell_groups, reverse=True):
+                options.append(f"Sell (raw) for {compression.number(value)} at: {', '.join(raw_sell_groups[value])}")
 
         return information
 

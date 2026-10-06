@@ -1,0 +1,420 @@
+"""WingmanSkillManager — skill discovery, lifecycle, and state.
+
+Owns ``skills``, ``tool_skills``, and ``skill_tools``; the parent ``Wingman``
+exposes them as read-through properties.
+"""
+
+import traceback
+from typing import TYPE_CHECKING
+
+from api.interface import (
+    SkillConfig,
+    SettingsConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
+from api.enums import (
+    LogSource,
+    LogType,
+    WingmanInitializationErrorType,
+)
+from services.module_manager import ModuleManager
+from services.platform_utils import normalize_platform
+from services.printr import Printr
+from services.skill_registry import SkillRegistry
+from skills.skill_base import Skill
+from wingmen.wingman_context import WingmanContext
+
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
+
+printr = Printr()
+
+
+def _get_skill_folder_from_module(module: str) -> str:
+    """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
+    return module.replace(".main", "").replace(".", "/").split("/")[1]
+
+
+class WingmanSkillManager:
+    """Manages skill discovery, loading, preparation, enable/disable, and teardown."""
+
+    def __init__(
+        self,
+        wingman: "Wingman",
+        config: WingmanConfig,
+        settings: SettingsConfig,
+        skill_registry: SkillRegistry,
+    ):
+        self._wingman = wingman
+        self.config = config
+        self.settings = settings
+        self.skill_registry = skill_registry
+
+        # Manager owns skill state
+        self.skills: list[Skill] = []
+        self.tool_skills: dict[str, Skill] = {}
+        self.skill_tools: list[dict] = []
+        # (skill_name, function_name) -> Skill, for @command_action dispatch
+        self.command_action_skills: dict[tuple[str, str], Skill] = {}
+
+    # ──────────────────────────── Private helpers ─────────────────────────────── #
+
+    def _sync_conversation_skill_context(self) -> None:
+        """Push current skill state into the conversation manager.
+
+        Called after every mutation (init/enable/disable/unload) so that
+        ConversationManager does not need per-call skill kwargs.
+        """
+        self._wingman.conversation.set_skill_context(
+            self.skills, self.skill_registry, self.tool_skills
+        )
+
+    def _build_user_skill_configs(self) -> dict[str, SkillConfig]:
+        """Map folder name → user SkillConfig for each entry in wingman config."""
+        result: dict[str, SkillConfig] = {}
+        if self.config.skills:
+            for skill_config in self.config.skills:
+                folder_name = _get_skill_folder_from_module(skill_config.module)
+                result[folder_name] = skill_config
+        return result
+
+    def _load_skill_config(
+        self,
+        skill_folder_name: str,
+        skill_config_path: str,
+        user_skill_configs: dict[str, SkillConfig],
+    ) -> SkillConfig | None:
+        """Read yaml config + merge user overrides; return SkillConfig or None."""
+        skill_config_dict = ModuleManager.read_config(skill_config_path)
+        if not skill_config_dict:
+            return None
+
+        if skill_folder_name in user_skill_configs:
+            user_config = user_skill_configs[skill_folder_name]
+            if user_config.custom_properties:
+                skill_config_dict["custom_properties"] = [
+                    prop.model_dump() for prop in user_config.custom_properties
+                ]
+            if user_config.prompt:
+                skill_config_dict["prompt"] = user_config.prompt
+
+        return SkillConfig(**skill_config_dict)
+
+    def _check_platform_supported(
+        self, skill_config: SkillConfig
+    ) -> tuple[bool, str]:
+        """Return (ok, reason) for whether the skill supports the current platform."""
+        if not skill_config.platforms:
+            return True, ""
+        normalized = normalize_platform()
+        if normalized not in skill_config.platforms:
+            return (
+                False,
+                f"Skill '{skill_config.name}' is not supported on {normalized}.",
+            )
+        return True, ""
+
+    def _instantiate_skill(self, skill_config: SkillConfig) -> Skill | None:
+        """Create WingmanContext, call ModuleManager.load_skill, bind helpers."""
+        context = WingmanContext(self._wingman)
+        skill = ModuleManager.load_skill(
+            config=skill_config,
+            settings=self.settings,
+            wingman=context,
+        )
+        if skill:
+            skill.threaded_execution = self._wingman.threaded_execution
+            skill.disabled_tools = self._disabled_tools_for(skill)
+        return skill
+
+    def _disabled_tools_for(self, skill: Skill) -> set[str]:
+        """The wingman's disabled tool names that this skill actually has."""
+        disabled = set(self.config.disabled_skill_tools or [])
+        if not disabled:
+            return set()
+        return {name for name, _ in skill.get_tools() if name in disabled}
+
+    async def apply_disabled_tools(self, config: WingmanConfig) -> None:
+        """Re-apply `disabled_skill_tools` after the wingman's config changed.
+
+        Touches only skills whose disabled set actually differs, and never
+        unloads one: the tool maps and the registry manifest are rebuilt, the
+        skill instance and its activation state stay.
+        """
+        self.config = config
+        changed = False
+        for skill in self.skills:
+            desired = self._disabled_tools_for(skill)
+            if desired == skill.disabled_tools:
+                continue
+            changed = True
+            all_names = {name for name, _ in skill.get_tools()}
+            for tool_name in all_names:
+                self.tool_skills.pop(tool_name, None)
+            self.skill_tools = [
+                t
+                for t in self.skill_tools
+                if t.get("function", {}).get("name") not in all_names
+            ]
+            skill.disabled_tools = desired
+            for tool_name, tool in skill.get_enabled_tools():
+                self.tool_skills[tool_name] = skill
+                self.skill_tools.append(tool)
+            self.skill_registry.refresh_skill(skill)
+        if changed:
+            self._sync_conversation_skill_context()
+
+    # ──────────────────────────── Public API ─────────────────────────────────── #
+
+    async def init_skills(self) -> list[WingmanInitializationError]:
+        if self.skills:
+            await self.unload_skills()
+
+        errors = []
+        self.skills = []
+
+        from services.skill_catalog import SkillCatalog
+        catalog = SkillCatalog()
+
+        user_skill_configs = self._build_user_skill_configs()
+        available_skills = ModuleManager.read_available_skill_configs()
+        discoverable_skills = self.config.discoverable_skills
+
+        for (
+            skill_folder_name,
+            skill_config_path,
+            _is_custom,
+            _is_local,
+        ) in available_skills:
+            try:
+                skill_config = self._load_skill_config(
+                    skill_folder_name, skill_config_path, user_skill_configs
+                )
+                if not skill_config:
+                    continue
+
+                if skill_config.name not in discoverable_skills:
+                    continue
+
+                if not catalog.is_eligible(skill_folder_name):
+                    # Quarantined/legacy/invalid — never instantiate. Catalog already logged it.
+                    continue
+
+                ok, reason = self._check_platform_supported(skill_config)
+                if not ok:
+                    printr.print(
+                        f"Skipping skill - {reason}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    continue
+
+                skill = self._instantiate_skill(skill_config)
+                if skill:
+                    self.skills.append(skill)
+                    await self.prepare_skill(skill)
+
+            except Exception as e:
+                skill_name = skill_folder_name
+                error_msg = f"Error loading skill '{skill_name}': {str(e)}"
+                await printr.print_async(
+                    error_msg,
+                    color=LogType.ERROR,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self._wingman.name,
+                        message=error_msg,
+                        error_type=WingmanInitializationErrorType.SKILL_INITIALIZATION_FAILED,
+                    )
+                )
+                catalog.record_runtime_failure(skill_folder_name, str(e))
+
+        if self.skills:
+            skill_names = [s.config.name for s in self.skills]
+            await printr.print_async(
+                f"Discoverable skills ({len(skill_names)}): {', '.join(skill_names)}",
+                color=LogType.WINGMAN,
+                source=LogSource.WINGMAN,
+                source_name=self._wingman.name,
+                server_only=not self.settings.debug_mode,
+            )
+
+        self._sync_conversation_skill_context()
+        return errors
+
+    async def prepare_skill(self, skill: Skill):
+        registered_tool_names: list[str] = []
+        try:
+            for tool_name, tool in skill.get_enabled_tools():
+                self.tool_skills[tool_name] = skill
+                self.skill_tools.append(tool)
+                registered_tool_names.append(tool_name)
+
+            self.skill_registry.register_skill(skill)
+
+            for fn_name in getattr(skill, "_command_actions", {}):
+                self.command_action_skills[(skill.name, fn_name)] = skill
+
+            if skill.config.auto_activate:
+                success, message = await skill.ensure_activated()
+                if not success:
+                    raise RuntimeError(f"auto-activation failed: {message}")
+        except Exception as e:
+            # Roll back any partial registration so no half-dead skill lingers.
+            for tool_name in registered_tool_names:
+                self.tool_skills.pop(tool_name, None)
+                self.skill_tools = [
+                    t for t in self.skill_tools
+                    if t.get("function", {}).get("name") != tool_name
+                ]
+            try:
+                self.skill_registry.unregister_skill(skill.name)
+            except Exception:
+                pass
+            self.command_action_skills = {
+                k: v for k, v in self.command_action_skills.items() if k[0] != skill.name
+            }
+            if skill in self.skills:
+                self.skills.remove(skill)
+            await printr.print_async(
+                f"Skill '{skill.name}' failed during prepare/activate and was removed: {e}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            from services.skill_catalog import SkillCatalog
+            folder = _get_skill_folder_from_module(skill.config.module)
+            SkillCatalog().record_runtime_failure(folder, str(e))
+
+        # Raw self.llm_call is no longer injected; skills use the capped, sanctioned
+        # ctx.ai.generate(...) side-call (see Skill.llm_call below for the guidance error).
+
+    async def unprepare_skill(self, skill: Skill):
+        try:
+            for tool_name, _ in skill.get_tools():
+                # The full list on purpose: a tool switched off after prepare
+                # would otherwise stay in the maps.
+                self.tool_skills.pop(tool_name, None)
+                self.skill_tools = [
+                    t
+                    for t in self.skill_tools
+                    if t.get("function", {}).get("name") != tool_name
+                ]
+            self.skill_registry.unregister_skill(skill.name)
+        except Exception as e:
+            await printr.print_async(
+                f"Error while unpreparing skill '{skill.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        self.command_action_skills = {
+            k: v for k, v in self.command_action_skills.items() if k[0] != skill.name
+        }
+        self._sync_conversation_skill_context()
+
+    async def enable_skill(self, skill_name: str) -> tuple[bool, str]:
+        for existing_skill in self.skills:
+            if existing_skill.config.name == skill_name:
+                return True, f"Skill '{skill_name}' is already enabled."
+
+        available_skills = ModuleManager.read_available_skill_configs()
+        user_skill_configs = self._build_user_skill_configs()
+
+        for (
+            skill_folder_name,
+            skill_config_path,
+            _is_custom,
+            _is_local,
+        ) in available_skills:
+            try:
+                skill_config = self._load_skill_config(
+                    skill_folder_name, skill_config_path, user_skill_configs
+                )
+                if not skill_config:
+                    continue
+
+                if skill_config.name != skill_name:
+                    continue
+
+                from services.skill_catalog import SkillCatalog
+                if not SkillCatalog().is_eligible(skill_folder_name):
+                    return False, f"Skill '{skill_name}' is not compatible with this version of Wingman."
+
+                ok, reason = self._check_platform_supported(skill_config)
+                if not ok:
+                    return False, reason
+
+                skill = self._instantiate_skill(skill_config)
+                if skill:
+                    self.skills.append(skill)
+                    await self.prepare_skill(skill)
+                    self._sync_conversation_skill_context()
+
+                    printr.print(
+                        f"Skill '{skill_name}' activated (loaded and made discoverable).",
+                        color=LogType.POSITIVE,
+                        server_only=True,
+                    )
+                    return True, f"Skill '{skill_name}' activated successfully."
+
+            except Exception as e:
+                error_msg = f"Error activating skill '{skill_name}': {str(e)}"
+                await printr.print_async(error_msg, color=LogType.ERROR)
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+                return False, error_msg
+
+        return False, f"Skill '{skill_name}' not found."
+
+    async def disable_skill(self, skill_name: str) -> tuple[bool, str]:
+        skill_to_remove = None
+        for skill in self.skills:
+            if skill.config.name == skill_name:
+                skill_to_remove = skill
+                break
+
+        if not skill_to_remove:
+            return True, f"Skill '{skill_name}' is already deactivated."
+
+        try:
+            await skill_to_remove.unload()
+            self.skills.remove(skill_to_remove)
+            await self.unprepare_skill(skill_to_remove)
+
+            printr.print(
+                f"Skill '{skill_name}' deactivated (unloaded and removed from discoverable skills).",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return True, f"Skill '{skill_name}' deactivated successfully."
+
+        except Exception as e:
+            error_msg = f"Error deactivating skill '{skill_name}': {str(e)}"
+            await printr.print_async(error_msg, color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False, error_msg
+
+    async def unload_skills(self):
+        for skill in self.skills:
+            if not skill.is_prepared:
+                continue
+            try:
+                await skill.unload()
+            except Exception as e:
+                await printr.print_async(
+                    f"Error unloading skill '{skill.name}': {str(e)}",
+                    color=LogType.ERROR,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+        self.tool_skills = {}
+        self.skill_tools = []
+        self.command_action_skills = {}
+        self.skill_registry.clear()
+        self._sync_conversation_skill_context()

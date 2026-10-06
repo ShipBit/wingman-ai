@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -26,6 +26,7 @@ class CommodityRoute(Tool):
         filter_start_location: str | None = None,
         filter_destination_location: str | None = None,
         filter_location_blacklist: list[str] | None = None,
+        filter_require_auto_load: bool | None = None,
     ) -> (str, str):
         from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
@@ -110,6 +111,25 @@ class CommodityRoute(Tool):
             for terminal in terminal_data_access.load():
                 end_terminals_ids.append(terminal.get_id())
 
+        if filter_require_auto_load:
+            # Route rows have no is_auto_load; constrain both ends via terminal ids.
+            auto_load_terminal_ids = []
+            auto_load_terminal_data_access = TerminalDataAccess()
+            auto_load_terminal_data_access.add_filter_by_is_auto_load(True)
+            auto_load_terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
+            auto_load_terminal_data_access.add_filter_by_is_available(True)
+            for terminal in auto_load_terminal_data_access.load():
+                auto_load_terminal_ids.append(terminal.get_id())
+
+            if not auto_load_terminal_ids:
+                helper.get_handler_tool().add_note(
+                    "No available commodity terminals support ship hangar auto load/unload."
+                )
+                return compression.dumps([]), ""
+
+            commodity_route_data_access.add_filter_by_id_terminal_origin(auto_load_terminal_ids)
+            commodity_route_data_access.add_filter_by_id_terminal_destination(auto_load_terminal_ids)
+
         if terminal_ids_exclude:
             commodity_route_data_access.add_filter_by_id_terminal_origin(terminal_ids_exclude, operation="NOT IN")
             commodity_route_data_access.add_filter_by_id_terminal_destination(terminal_ids_exclude, operation="NOT IN")
@@ -143,7 +163,7 @@ class CommodityRoute(Tool):
         routes = commodity_route_data_access.load(debug=True) # TODO remove debug=True
 
         routes = [route.get_data_for_ai() for route in routes]
-        return json.dumps(routes), ""
+        return compression.dumps(routes), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}
@@ -224,6 +244,10 @@ class CommodityRoute(Tool):
                     "for_trading": True
                 },
                 prompt="Shows only trade routes starting at this location. eg \"Pyro\" or \"Crusader\". Can be anything from a star system to a terminal.",
+            ),
+            "filter_require_auto_load": Validator(
+                Validator.VALIDATE_BOOL,
+                prompt="If true, only routes where both origin and destination terminals support ship hangar auto load and unload (no manual load/unload).",
             ),
 
             # Currently used unreliably by AI

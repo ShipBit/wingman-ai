@@ -1,0 +1,148 @@
+"""Migration from version 2.1.1 to 3.0.0."""
+
+from services.migrations.base_migration import BaseMigration
+
+
+class Migration211To300(BaseMigration):
+    """Migration from 2.1.1 to 3.0.0."""
+
+    old_version = "2_1_1"
+    new_version = "3_0_0"
+
+    def migrate_settings(self, old: dict) -> dict:
+        """Migrate settings.yaml from 2.1.1 to 3.0.0."""
+        # Add Local AI (llama.cpp) settings
+        if "llama_cpp" not in old:
+            old["llama_cpp"] = {
+                "run_locally": True,
+                "gpu_backend": "cpu",
+                "support_model": "Qwen3.5-2B-Q4_K_M.gguf",
+                "embed_model": "nomic-embed-text-v1.5.f16.gguf",
+                "n_ctx": 4096,
+                "n_threads": 0,
+                "reasoning_effort": 0,
+                "temperature": 0.3,
+                "top_p": 1.0,
+                "support_remote_host": "http://127.0.0.1",
+                "support_remote_port": 49152,
+                "embed_remote_host": "http://127.0.0.1",
+                "embed_remote_port": 49153,
+            }
+            self.log("- added new setting: llama_cpp (local AI)")
+
+        # Upgrade default summarize model from 0.8B to 2B
+        llama = old.get("llama_cpp", {})
+        if llama.get("summarize_model") == "Qwen3.5-0.8B-Q4_K_M.gguf":
+            llama["summarize_model"] = "Qwen3.5-2B-Q4_K_M.gguf"
+            self.log("- upgraded summarize model: Qwen3.5-0.8B \u2192 Qwen3.5-2B")
+
+        # Rename summarize_* fields to support_*
+        if "summarize_model" in llama:
+            llama["support_model"] = llama.pop("summarize_model")
+            self.log("- renamed llama_cpp.summarize_model \u2192 support_model")
+        if "summarize_remote_host" in llama:
+            llama["support_remote_host"] = llama.pop("summarize_remote_host")
+            self.log("- renamed llama_cpp.summarize_remote_host \u2192 support_remote_host")
+        if "summarize_remote_port" in llama:
+            llama["support_remote_port"] = llama.pop("summarize_remote_port")
+            self.log("- renamed llama_cpp.summarize_remote_port \u2192 support_remote_port")
+
+        # Add Parakeet STT settings.
+        # Parakeet replaces FasterWhisper, so its execution provider has to be
+        # decided the same way 1.8.2 -> 2.0.0 decided FasterWhisper's: by asking
+        # the machine. `hardware_scan_performed` is already True for everyone
+        # coming from 2.x (it was set for FasterWhisper), so the boot-time
+        # hardware scan never runs again and would leave every GPU owner
+        # transcribing on the CPU.
+        cuda_available = self.system_manager.is_cuda_available()
+        gpu_name = self.system_manager.get_gpu_name()
+        execution_provider = "cuda" if cuda_available else "cpu"
+
+        va = old.get("voice_activation", {})
+        if "parakeet" not in va:
+            va["parakeet"] = {
+                "enable": False,
+                "run_locally": True,
+                "model_variant": "v3",
+                "execution_provider": execution_provider,
+                "host": "http://127.0.0.1",
+                "port": 9876,
+            }
+            self.log("- added new voice activation setting: parakeet")
+        else:
+            va["parakeet"]["execution_provider"] = execution_provider
+        self.log(f"- detected GPU: {gpu_name or 'None'}")
+        self.log(
+            f"- set parakeet.execution_provider to '{execution_provider}' "
+            f"(CUDA {'available' if cuda_available else 'not available'})"
+        )
+        if "parakeet_config" not in va:
+            va["parakeet_config"] = {
+                "temperature": 0.0,
+            }
+            self.log("- added new voice activation setting: parakeet_config")
+
+        # Ensure existing Parakeet configs have the run_locally field
+        parakeet = va.get("parakeet", {})
+        if parakeet and "run_locally" not in parakeet:
+            parakeet["run_locally"] = True
+            self.log("- added parakeet.run_locally = true")
+
+        # Ensure existing PocketTTS configs have run_locally, host, port fields
+        pocket_tts = old.get("pocket_tts", {})
+        if pocket_tts:
+            if "run_locally" not in pocket_tts:
+                pocket_tts["run_locally"] = True
+                self.log("- added pocket_tts.run_locally = true")
+            if "host" not in pocket_tts:
+                pocket_tts["host"] = "localhost"
+                self.log("- added pocket_tts.host = localhost")
+            if "port" not in pocket_tts:
+                pocket_tts["port"] = 5002
+                self.log("- added pocket_tts.port = 5002")
+
+        return old
+
+    def migrate_defaults(self, old: dict) -> dict:
+        """Migrate defaults.yaml from 2.1.1 to 3.0.0."""
+        # Add per-wingman Parakeet STT config
+        if "parakeet" not in old:
+            old["parakeet"] = {
+                "temperature": 0.0,
+            }
+            self.log("- added new default: parakeet (STT config)")
+
+        # Add conversation optimization features
+        features = old.setdefault("features", {})
+        if "condense_conversation" not in features:
+            features["condense_conversation"] = True
+            self.log("- added new feature: condense_conversation = true")
+        if "compress_tool_responses" not in features:
+            features["compress_tool_responses"] = True
+            self.log("- added new feature: compress_tool_responses = true")
+
+        # Add persistent memory (enabled by default)
+        if "persistent_memory" not in old:
+            old["persistent_memory"] = True
+            self.log("- added new default: persistent_memory = true")
+
+        return old
+
+    def migrate_wingman(self, old: dict) -> dict:
+        """Migrate wingman configs from 2.1.1 to 3.0.0."""
+        # Add conversation optimization features if wingman has feature overrides
+        features = old.get("features")
+        if features is not None:
+            if "condense_conversation" not in features:
+                features["condense_conversation"] = True
+                self.log("- added new feature: condense_conversation = true")
+            if "compress_tool_responses" not in features:
+                features["compress_tool_responses"] = True
+                self.log("- added new feature: compress_tool_responses = true")
+
+        # Add persistent memory (enabled by default)
+        if "persistent_memory" not in old:
+            old["persistent_memory"] = True
+            self.log("- added new setting: persistent_memory = true")
+
+        return old

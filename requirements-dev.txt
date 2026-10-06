@@ -1,0 +1,2 @@
+# Development only: the test suite. Never part of the PyInstaller build.
+pytest==9.1.1

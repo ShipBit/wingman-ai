@@ -29,6 +29,8 @@ class HudMessage:
     props: Optional[dict[str, Any]] = None
     timestamp: float = field(default_factory=time.time)
     duration: Optional[float] = None
+    title_icon: Optional[str] = None
+    """Local file path to an icon shown in front of the title (e.g. a wingman avatar)."""
 
 
 @dataclass
@@ -91,6 +93,7 @@ class GroupState:
                 "props": self.current_message.props,
                 "timestamp": self.current_message.timestamp,
                 "duration": self.current_message.duration,
+                "title_icon": self.current_message.title_icon,
             } if self.current_message else None,
             "items": {
                 title: {
@@ -147,6 +150,7 @@ class GroupState:
                 props=msg_data.get("props"),
                 timestamp=msg_data.get("timestamp", time.time()),
                 duration=msg_data.get("duration"),
+                title_icon=msg_data.get("title_icon"),
             )
 
         # Restore items
@@ -324,7 +328,8 @@ class HudManager:
         color: Optional[str] = None,
         tools: Optional[list[dict]] = None,
         props: Optional[dict[str, Any]] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        title_icon: Optional[str] = None
     ) -> bool:
         """Show a message in a group."""
         key = self._make_key(group_name, element)
@@ -338,7 +343,8 @@ class HudManager:
                 color=color,
                 tools=tools or [],
                 props=props,
-                duration=duration
+                duration=duration,
+                title_icon=title_icon
             )
 
             # Build props dict for overlay
@@ -356,6 +362,7 @@ class HudManager:
                 "color": color,
                 "tools": tools,
                 "props": overlay_props,
+                "title_icon": title_icon,
             })
 
             return True
@@ -386,6 +393,7 @@ class HudManager:
                     "color": state.current_message.color,
                     "tools": state.current_message.tools,
                     "props": overlay_props,
+                    "title_icon": state.current_message.title_icon,
                 })
 
             return True

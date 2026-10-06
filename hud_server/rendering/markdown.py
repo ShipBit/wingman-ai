@@ -6,6 +6,8 @@ This implementation uses ONLY:
 - Win32 API for window management
 """
 
+import base64
+import binascii
 import copy
 import os
 import re
@@ -32,6 +34,8 @@ try:
         MAX_INLINE_TOKEN_CACHE_SIZE,
         MAX_TEXT_WRAP_CACHE_SIZE,
         MAX_TEXT_SIZE_CACHE_SIZE,
+        MAX_BASE64_IMAGE_BYTES,
+        DEFAULT_BORDER_COLOR,
     )
 except ImportError:
     # Fallback defaults for standalone testing
@@ -39,6 +43,11 @@ except ImportError:
     MAX_INLINE_TOKEN_CACHE_SIZE = 100
     MAX_TEXT_WRAP_CACHE_SIZE = 200
     MAX_TEXT_SIZE_CACHE_SIZE = 2000
+    MAX_BASE64_IMAGE_BYTES = 8 * 1024 * 1024
+    DEFAULT_BORDER_COLOR = (55, 62, 74)
+
+# data:image/<type>;base64,<data> URIs
+_DATA_URI_RE = re.compile(r'^data:image/[a-zA-Z0-9.+-]+;base64,(.+)$', re.DOTALL)
 
 
 class MarkdownRenderer:
@@ -100,7 +109,8 @@ class MarkdownRenderer:
         self.colors = {'text': text, 'accent': accent, 'bg': bg}
 
     def _load_image(self, url: str, max_width: int) -> Image.Image:
-        """Load an image from URL or file path, resize to fit max_width while keeping aspect ratio.
+        """Load an image from a local path, URL, or base64 source, resize to fit max_width
+        while keeping aspect ratio.
 
         Returns None if loading fails.
         """
@@ -109,7 +119,7 @@ class MarkdownRenderer:
         if cache_key in self._image_cache:
             return self._image_cache[cache_key]
 
-        # Check if we already failed to load this URL
+        # Check if we already failed to load this source
         if url in self._image_load_failures:
             return None
 
@@ -130,6 +140,21 @@ class MarkdownRenderer:
                 with urllib.request.urlopen(req, timeout=5) as response:
                     img_data = response.read()
                     img = Image.open(io.BytesIO(img_data))
+            else:
+                # data:image/<type>;base64,<data> URI, or a raw base64 string
+                data_uri_match = _DATA_URI_RE.match(url)
+                b64_payload = data_uri_match.group(1) if data_uri_match else url
+
+                try:
+                    decoded = base64.b64decode(b64_payload, validate=True)
+                except (binascii.Error, ValueError):
+                    decoded = None
+
+                if decoded is not None:
+                    if len(decoded) > MAX_BASE64_IMAGE_BYTES:
+                        self._image_load_failures.add(url)
+                        return None
+                    img = Image.open(io.BytesIO(decoded))
 
             if img is None:
                 self._image_load_failures.add(url)
@@ -428,9 +453,10 @@ class MarkdownRenderer:
         while i < len(text):
             start_pos = i
 
-            # Image ![alt](url)
+            # Image ![alt](url). The URL allows one level of balanced parens so local
+            # paths like .../Wingman (Beta)/icon.png aren't truncated at the first ).
             if text[i:i+2] == '![':
-                m = re.match(r'!\[([^]]*)]\(([^)]+)\)', text[i:])
+                m = re.match(r'!\[([^]]*)]\(((?:[^()]|\([^()]*\))+)\)', text[i:])
                 if m:
                     full_len = len(m.group(0))
                     # Content is "alt" which starts at i+2, ends before ]
@@ -1603,7 +1629,7 @@ class MarkdownRenderer:
                 if ci < num_cols - 1:
                     sep_x = cell_x + cell_w
                     draw.line([(sep_x, current_y + 4), (sep_x, current_y + row_h - 4)],
-                             fill=(55, 62, 74), width=1)
+                             fill=DEFAULT_BORDER_COLOR, width=1)
 
                 cell_x += cell_w
 
@@ -1612,7 +1638,7 @@ class MarkdownRenderer:
 
         # Outer border (only around visible portion)
         if visible_rows > 0:
-            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=(55, 62, 74), width=1)
+            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=DEFAULT_BORDER_COLOR, width=1)
 
         return last_visible_y + 10 if visible_rows > 0 else y
 

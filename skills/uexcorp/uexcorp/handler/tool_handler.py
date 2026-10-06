@@ -47,14 +47,14 @@ class ToolHandler:
                     await self.__helper.get_handler_debug().write_async(
                         f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Giving it 5 more seconds ..", True
                     )
-                    self.__helper.wait(5)
+                    await self.__helper.wait_async(5)
                     if self.__helper.get_handler_import().get_imported_percent() not in [100, 0]:
                         await self.__helper.get_handler_debug().write_async(
                             f"UEX skill is still loading after 5s: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Deciding to retry later.",
                             True
                         )
                         function_response = (
-                            f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Inform user, this will take a moment. User should initiate request again in a moment."
+                            f"UEX data is still loading ({self.__helper.get_handler_import().get_imported_percent()}%). Ask the user to retry in a moment."
                         )
                         self.__helper.set_request_while_not_loaded(True)
                         return function_response, instant_response
@@ -70,7 +70,7 @@ class ToolHandler:
                 invalid_parameters = {}
                 for key, value in parameters.items():
                     if key not in mandatory_fields and key not in optional_fields:
-                        invalid_parameters[key] = f"a parameter '{key}' is not valid for this function."
+                        invalid_parameters[key] = f"unknown parameter '{key}'"
                         continue
 
                     if key in mandatory_fields:
@@ -79,7 +79,7 @@ class ToolHandler:
                         validated_value = await optional_fields[key].validate(value)
 
                     if validated_value is None or validated_value == (None, None):
-                        invalid_parameters[key] = f"value '{value}' of parameter '{key}' could not be mapped to a known value, see additional notes."
+                        invalid_parameters[key] = f"'{key}': value '{value}' not recognized, see notes"
                     else:
                         valid_parameters[key] = validated_value
 
@@ -89,11 +89,15 @@ class ToolHandler:
                         missing_parameters.append(key)
 
                 if invalid_parameters or missing_parameters:
-                    function_response = f"The following errors occurred while validating the parameters for '{tool_name}':"
+                    function_response = f"Parameter errors for '{tool_name}':"
                     for key, value in invalid_parameters.items():
                         function_response += f"\n- {value}"
                     for key in missing_parameters:
-                        function_response += f"\n- parameter '{key}' is mandatory, but missing."
+                        function_response += f"\n- '{key}' is mandatory, but missing"
+
+                    notes = self.get_notes(clear=True)
+                    if notes:
+                        function_response += "\n\nNotes:\n-" + '\n-'.join(dict.fromkeys(notes))
 
                     self.__helper.get_handler_debug().write(function_response)
                     return function_response, instant_response
@@ -116,9 +120,9 @@ class ToolHandler:
 
                 notes = self.get_notes(clear=True)
                 if notes:
-                    notes = '\n-'.join(notes)
-                    function_response = str(function_response) + f"\n\nImportant information for user:\n-{notes}"
-                    function_response_pretty = str(function_response_pretty) + f"\n\nImportant information for user:\n-{notes}"
+                    notes = '\n-'.join(dict.fromkeys(notes))
+                    function_response = str(function_response) + f"\n\nRelay to user:\n-{notes}"
+                    function_response_pretty = str(function_response_pretty) + f"\n\nRelay to user:\n-{notes}"
 
                 self.__helper.get_handler_debug().write(
                     f"Execution of '{tool_name}' took {self.__helper.end_timer(tool_name)} ms."
@@ -162,7 +166,6 @@ class ToolHandler:
                                     }
                                 },
                                 "required": list(tool.get_mandatory_fields().keys()),
-                                "optional": list(tool.get_optional_fields().keys()),
                             },
                         },
                     }
@@ -176,14 +179,18 @@ class ToolHandler:
             if self.__helper.get_handler_config().is_tool_enabled(tool_name):
                 tool_prompts.append(f"- {tool.TOOL_NAME}: {tool.get_prompt()}")
             else:
-                tool_prompts.append(f"- (DISABLED BY USER) {tool.TOOL_NAME}: {tool.get_prompt()}")
+                # No full prompt for disabled tools - it would cost tokens on
+                # every request for a function the LLM must not use anyway.
+                tool_prompts.append(f"- {tool.TOOL_NAME}: DISABLED BY USER")
 
         if not tool_prompts:
             return ""
 
-        prompt = "=== Start of \"Available uex function descriptions\" ===\n"
+        prompt = "=== UEX functions ===\n"
+        prompt += "Note on uex function responses: omitted fields mean \"unknown / not available\", not zero. Prices and profits are in aUEC, margins and inventory statuses in percent. A response may start with a \"keys\" object mapping shortened keys to full field names for the \"data\" part.\n"
+        prompt += "Trade direction - every buy/sell field is from the PLAYER's perspective: buy_* = the player buys FROM the terminal, sell_* = the player sells TO the terminal. In answers, never present the terminal as the actor (no 'terminal X buys/sells') - phrase it as 'you can buy <commodity> at <terminal> for <buy price>' / 'you can sell <commodity> at <terminal> for <sell price>'. Buy options report the terminal's stock (more stock = better to buy), sell options report the terminal's demand (more demand = better to sell); relay these statuses as given.\n"
         prompt += "\n".join(tool_prompts)
-        prompt += "\n=== End of \"Available uex function descriptions\" ==="
+        prompt += "\n=== End of UEX functions ==="
         return prompt
 
     def get_notes(self, clear: bool = False) -> list[str]:

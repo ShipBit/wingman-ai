@@ -1,0 +1,86 @@
+module: skills.mic_status.main
+api_version: 3
+name: MicStatus
+display_name: Microphone Status
+author: JayMatthew
+auto_activate: true
+discoverable_by_default: false
+platforms:
+  - windows
+requires:
+  - hud_server
+tags:
+  - Utility
+  - Overlay
+description:
+  en: Shows a small microphone icon on the HUD that reflects the live mic state - unmuted when voice activation is on and listening, muted when in push-to-talk mode or muted. While a push-to-talk key is held it shows the recording wingman's avatar with a red recording dot. Requires the HUD server to be enabled in the global settings.
+  de: Zeigt ein kleines Mikrofon-Symbol im HUD, das den aktuellen Mikrofonstatus widerspiegelt - aktiv, wenn die Sprachaktivierung eingeschaltet ist und zuhört, stummgeschaltet im Push-to-Talk-Modus oder wenn stummgeschaltet. Während eine Push-to-Talk-Taste gedrückt gehalten wird, zeigt es das Avatar-Bild des aufnehmenden Wingman mit einem roten Aufnahmepunkt. Erfordert, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
+hint:
+  en: Please make sure the HUD server in the global settings is enabled.
+  de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
+custom_properties:
+  - id: layout_mode
+    name: Placement
+    hint: "Auto: snap to the chosen position. Manual: free placement at the X/Y offset below (position is ignored)."
+    property_type: single_select
+    value: "auto"
+    required: false
+    options:
+      - label: "Auto (anchor)"
+        value: "auto"
+      - label: "Manual (free X/Y)"
+        value: "manual"
+
+  - id: anchor
+    name: Position
+    hint: Screen position for the mic icon (used when Placement is Auto).
+    property_type: single_select
+    value: "top_right"
+    required: false
+    options:
+      - label: "Top Left"
+        value: "top_left"
+      - label: "Top Center"
+        value: "top_center"
+      - label: "Top Right"
+        value: "top_right"
+      - label: "Left Center"
+        value: "left_center"
+      - label: "Center"
+        value: "center"
+      - label: "Right Center"
+        value: "right_center"
+      - label: "Bottom Left"
+        value: "bottom_left"
+      - label: "Bottom Center"
+        value: "bottom_center"
+      - label: "Bottom Right"
+        value: "bottom_right"
+
+  - id: pos_x
+    name: X Position
+    hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: pos_y
+    name: Y Position
+    hint: Vertical offset in pixels from the upper-left corner of the screen. Only used when Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: icon_size
+    name: Icon Size
+    hint: Size (width in pixels) of the mic icon.
+    property_type: slider
+    options:
+      - label: "min"
+        value: 48
+      - label: "max"
+        value: 256
+      - label: "step"
+        value: 2
+    value: 72
+    required: false

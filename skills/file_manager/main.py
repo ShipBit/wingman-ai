@@ -1,18 +1,19 @@
+import asyncio
 import os
 import json
 import zipfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from api.enums import LogType
-from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 from showinfm import show_in_file_manager
 from pdfminer.high_level import extract_text
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 DEFAULT_MAX_TEXT_SIZE = 24000
+MAX_FOLDER_TOTAL_CHARS = 20000
+MAX_FOLDER_FILES = 30
 SUPPORTED_FILE_EXTENSIONS = [
     "adoc",
     "android",
@@ -59,7 +60,6 @@ SUPPORTED_FILE_EXTENSIONS = [
     "md",
     "mk",
     "pdf",
-    "pyd",
     "plist",
     "pl",
     "po",
@@ -101,7 +101,7 @@ SUPPORTED_FILE_EXTENSIONS = [
 class FileManager(Skill):
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.allowed_file_extensions = SUPPORTED_FILE_EXTENSIONS
@@ -133,7 +133,8 @@ class FileManager(Skill):
 
     def get_text_from_file(
         self, file_path: str, file_extension: str, pdf_page_number: int = None
-    ) -> str:
+    ) -> Optional[str]:
+        """Return the file text, or None if the file cannot be read."""
         try:
             if file_extension.lower() == "pdf":
                 return (
@@ -176,10 +177,17 @@ class FileManager(Skill):
 
         file_path = os.path.join(directory_path, file_name)
         try:
-            file_content = self.get_text_from_file(
-                file_path, file_extension, pdf_page_number_to_load
+            if not os.path.isfile(file_path):
+                return f"File '{file_name}' not found in '{directory_path}'."
+            file_content = await asyncio.to_thread(
+                self.get_text_from_file,
+                file_path,
+                file_extension,
+                pdf_page_number_to_load,
             )
-            if len(file_content) < 3 or not file_content:
+            if file_content is None:
+                return f"Failed to read file '{file_name}' at {file_path}. It may be unreadable or not valid text."
+            if len(file_content) < 3:
                 return f"File at {file_path} appears not to have any content. If file is a .pdf it may be an image format that cannot be read."
             elif len(file_content) > self.max_text_size:
                 return f"File content at {file_path} exceeds the maximum allowed size."
@@ -303,6 +311,8 @@ class FileManager(Skill):
 
         full_path = os.path.join(directory_path, folder_name)
         try:
+            if not os.path.isdir(full_path):
+                return f"Folder '{folder_name}' does not exist in '{directory_path}'."
             show_in_file_manager(full_path)
             return f"Folder '{folder_name}' opened in '{directory_path}'."
         except Exception as e:
@@ -334,7 +344,7 @@ class FileManager(Skill):
 
         # First check if there's text content, if so, just play that as the user just wants the AI to say something in its TTS voice
         if text_content:
-            await self.wingman.play_to_user(text_content)
+            await self.wingman.tts.speak(text_content)
             return "Provided text read aloud."
         # Otherwise, check to see if a valid file has been passed, if so, read its text as long as it does not exceed max content length
         # If not a valid file location, double check whether the AI accidentally put text content in file name and play that
@@ -344,23 +354,27 @@ class FileManager(Skill):
             else:
                 file_path = os.path.join(directory_path, file_name)
                 if not os.path.isfile(file_path):
-                    await self.wingman.play_to_user(file_path)
-                    return "Provided text read aloud."
+                    return f"File '{file_name}' not found in '{directory_path}'. To read text aloud, provide it as text_content."
                 else:
                     file_extension = file_name.split(".")[-1]
                     if file_extension.lower() not in self.allowed_file_extensions:
                         return f"Unsupported file extension: {file_extension}"
                     else:
                         try:
-                            file_content = self.get_text_from_file(
-                                file_path, file_extension, pdf_page_number_to_load
+                            file_content = await asyncio.to_thread(
+                                self.get_text_from_file,
+                                file_path,
+                                file_extension,
+                                pdf_page_number_to_load,
                             )
-                            if len(file_content) < 3 or not file_content:
+                            if file_content is None:
+                                return f"Failed to read file '{file_name}' at {file_path}, so could not read it aloud."
+                            if len(file_content) < 3:
                                 return f"File at {file_path} appears not to have any content so could not read it aloud. If file is a .pdf it may be an image format that cannot be read."
                             elif len(file_content) > self.max_text_size:
                                 return f"File content at {file_path} exceeds the maximum allowed size so could not read it aloud."
                             else:
-                                await self.wingman.play_to_user(file_content)
+                                await self.wingman.tts.speak(file_content)
                                 return f"File content from {file_path} read aloud."
                         except Exception as e:
                             return f"There was an error trying to read aloud '{file_name}' in '{directory_path}'.  The error was {str(e)}."
@@ -373,38 +387,63 @@ class FileManager(Skill):
         Args:
             folder_path: The absolute path of the folder to read contents from.
         """
-        skipped_files = []
+        if not os.path.isdir(folder_path):
+            return f"Folder '{folder_path}' does not exist."
         try:
-            absolute_paths = []
-            contents_of_files = ""
-
-            for root, _, files in os.walk(folder_path):
-                for file in files:
-                    absolute_path = os.path.abspath(os.path.join(root, file))
-                    absolute_paths.append(absolute_path)
-
-            for file_path in absolute_paths:
-                file_extension = file_path.split(".")[-1]
-                if file_extension.lower() not in self.allowed_file_extensions:
-                    skipped_files.append(f"Unsupported file extension: {file_path}")
-                else:
-                    file_contents = self.get_text_from_file(file_path, file_extension)
-                    if len(file_contents) > self.max_text_size:
-                        skipped_files.append(
-                            f"File content exceeds max size: {file_path}"
-                        )
-                    else:
-                        contents_of_files += (
-                            f"\n\n##File path: {file_path}##\n{file_contents}\n\n"
-                        )
-
-            if skipped_files:
-                return f"Some files were skipped: {', '.join(skipped_files)}\nLoaded content: {contents_of_files}"
-            else:
-                return f"Loaded content: {contents_of_files}"
-
+            return await asyncio.to_thread(self._load_folder, folder_path)
         except Exception as e:
             return f"Error in reading folder contents in '{folder_path}': {str(e)}"
+
+    def _load_folder(self, folder_path: str) -> str:
+        contents_of_files = ""
+        loaded_count = 0
+        unsupported_count = 0
+        unreadable = []
+        too_large = []
+        over_budget = []
+
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.abspath(os.path.join(root, file))
+                file_extension = file_path.split(".")[-1]
+                if file_extension.lower() not in self.allowed_file_extensions:
+                    unsupported_count += 1
+                    continue
+                if loaded_count >= MAX_FOLDER_FILES:
+                    over_budget.append(file_path)
+                    continue
+                file_contents = self.get_text_from_file(file_path, file_extension)
+                if file_contents is None:
+                    unreadable.append(file_path)
+                    continue
+                if len(file_contents) > self.max_text_size:
+                    too_large.append(file_path)
+                    continue
+                entry = f"\n\n##File path: {file_path}##\n{file_contents}\n\n"
+                if len(contents_of_files) + len(entry) > MAX_FOLDER_TOTAL_CHARS:
+                    over_budget.append(file_path)
+                    # Total budget reached, no more files will be read
+                    loaded_count = MAX_FOLDER_FILES
+                    continue
+                contents_of_files += entry
+                loaded_count += 1
+
+        notes = []
+        if unsupported_count:
+            notes.append(f"{unsupported_count} files with unsupported extensions")
+        if unreadable:
+            notes.append(f"unreadable: {', '.join(unreadable[:10])}")
+        if too_large:
+            notes.append(
+                f"content exceeds max size: {', '.join(too_large[:10])}"
+            )
+        if over_budget:
+            notes.append(
+                f"{len(over_budget)} files not loaded because the folder content limit ({MAX_FOLDER_FILES} files / {MAX_FOLDER_TOTAL_CHARS} characters) was reached: {', '.join(over_budget[:10])}"
+            )
+        if notes:
+            return f"Some files were skipped: {'; '.join(notes)}\nLoaded content: {contents_of_files}"
+        return f"Loaded content: {contents_of_files}"
 
     @tool(
         description="Combine and compress specified folders or files into a .zip file. Use when user wants to compress, archive, or bundle files for sharing or backup."
@@ -429,6 +468,8 @@ class FileManager(Skill):
             directory_path = default_dir
 
         full_zip_path = os.path.join(directory_path, zip_file_name)
+        if os.path.exists(full_zip_path) and not self._get_allow_overwrite_existing():
+            return f"Zip file '{full_zip_path}' already exists and overwrite is not allowed."
         try:
             if not isinstance(files_to_compress, list):
                 files_to_compress = [files_to_compress]
@@ -509,6 +550,15 @@ class FileManager(Skill):
         """
         try:
             with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+                if not self._get_allow_overwrite_existing():
+                    existing = [
+                        name
+                        for name in zip_ref.namelist()
+                        if not name.endswith("/")
+                        and os.path.exists(os.path.join(target_directory, name))
+                    ]
+                    if existing:
+                        return f"Extraction cancelled: {len(existing)} files already exist in {target_directory} (e.g. {existing[0]}) and overwrite is not allowed."
                 zip_ref.extractall(path=target_directory)
                 return f"Extracted {zip_file_path} contents to {target_directory}"
 

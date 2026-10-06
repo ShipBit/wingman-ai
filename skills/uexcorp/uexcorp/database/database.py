@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 import time
 import os
 from typing import TYPE_CHECKING
@@ -18,9 +19,17 @@ class Database:
         self.version = version
         self.cursor = None
         self.connection = None
-        self.__inuse = False
+        # The connection is opened with check_same_thread=False and is reached
+        # from multiple threads (tool execution, imports). A single sqlite3
+        # connection/cursor is NOT safe for concurrent use -- two threads inside
+        # execute()/fetch()/commit() at once corrupt SQLite's heap and crash the
+        # whole process with a native SIGSEGV. This reentrant lock serializes ALL
+        # connection access; it replaces the previous self.__inuse flag, which
+        # was a non-atomic best-effort guard that could not actually prevent the
+        # race. Reentrant so atomic helpers (execute_fetchall etc.) can call the
+        # locked execute() while already holding it.
+        self._lock = threading.RLock()
         self.__set_db_name_current()
-        self.__queue_wait_time_max = 30  # in seconds
         self.__init_connection()
         self.__init_database()
 
@@ -54,8 +63,10 @@ class Database:
             self.recreate_database()
             return
 
-        self.cursor.execute("SELECT value FROM skill WHERE key = 'version'")
-        if not self.cursor.fetchone()[0] == self.version:
+        rows = self.execute_fetchmany(
+            "SELECT value FROM skill WHERE key = 'version'", (), 1
+        )
+        if not rows or not rows[0][0] == self.version:
             self.helper.get_handler_debug().write(
                 "Skill version mismatch, recreating database.."
             )
@@ -68,44 +79,48 @@ class Database:
         self.cursor = self.connection.cursor()
 
     def recreate_database(self) -> None:
-        self.connection.close()
+        with self._lock:
+            self.connection.close()
 
-        # For error prevention on multiple instances, we will always create a completely new database.
-        # So we will delete all old ones that are no longer needed.
-        # But as they might still be used by another process, we wrap it in a try-except block.
-        # No elegant solution, but it works.
-        db_files = [f for f in os.listdir(self.db_path) if f.endswith(".db")]
-        for db_file in db_files:
-            try:
-                os.remove(os.path.join(self.db_path, db_file))
-            except Exception:
-                self.helper.get_handler_debug().write(
-                    f"Failed to remove database file '{os.path.join(self.db_path, db_file)}'."
-                )
+            # For error prevention on multiple instances, we will always create a completely new database.
+            # So we will delete all old ones that are no longer needed.
+            # But as they might still be used by another process, we wrap it in a try-except block.
+            # No elegant solution, but it works.
+            db_files = [f for f in os.listdir(self.db_path) if f.endswith(".db")]
+            for db_file in db_files:
+                try:
+                    os.remove(os.path.join(self.db_path, db_file))
+                except Exception:
+                    self.helper.get_handler_debug().write(
+                        f"Failed to remove database file '{os.path.join(self.db_path, db_file)}'."
+                    )
 
-        self.__set_db_name_new()
-        self.__init_connection()
+            self.__set_db_name_new()
+            self.__init_connection()
 
-        with open(
-            os.path.join(os.path.dirname(__file__), "init.sql"), "r", encoding="UTF-8"
-        ) as file:
-            self.executescript(file.read())
+            with open(
+                os.path.join(os.path.dirname(__file__), "init.sql"), "r", encoding="UTF-8"
+            ) as file:
+                self.executescript(file.read())
 
-        # update version
-        self.execute(
-            "INSERT INTO skill (key, value) VALUES (?, ?)", ("version", self.version)
-        )
-        self.connection.commit()
+            # update version
+            self.execute(
+                "INSERT INTO skill (key, value) VALUES (?, ?)", ("version", self.version)
+            )
+            self.connection.commit()
 
     def table_exists(self, table: str) -> bool:
-        self.execute(
-            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'"
+        rows = self.execute_fetchmany(
+            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'",
+            (),
+            1,
         )
-        return self.cursor.fetchone() is not None
+        return len(rows) > 0
 
     def table_clear(self, table: str) -> None:
-        self.execute(f"DELETE FROM {table}")
-        self.connection.commit()
+        with self._lock:
+            self.execute(f"DELETE FROM {table}")
+            self.connection.commit()
 
     def get_connection(self) -> sqlite3.Connection:
         return self.connection
@@ -114,65 +129,66 @@ class Database:
         return self.cursor
 
     def execute(self, sql: str, parameters: tuple | dict | list = ()) -> bool:
-        self.__wait_for_database_capacity()
-
-        self.__inuse = True
-        if not self.get_cursor():
-            self.helper.get_handler_debug().write(
-                f"Skipped SQL: {sql} with parameters: {parameters}. No active cursor found. Probably old instance."
-            )
-            self.__inuse = False
-            return False
-        else:
+        with self._lock:
+            if not self.cursor:
+                self.helper.get_handler_debug().write(
+                    f"Skipped SQL: {sql} with parameters: {parameters}. No active cursor found. Probably old instance."
+                )
+                return False
             try:
-                self.get_cursor().execute(sql, parameters)
+                self.cursor.execute(sql, parameters)
             except Exception as e:
                 self.helper.get_handler_error().write(
                     "database.execute", [sql, parameters], e
                 )
-                self.__inuse = False
                 raise e
-        self.__inuse = False
-        return True
+            return True
 
     def executescript(self, sql: str) -> bool:
-        self.__wait_for_database_capacity()
-
-        self.__inuse = True
-        try:
-            self.get_cursor().executescript(sql)
-        except Exception as e:
-            self.helper.get_handler_error().write(
-                "database.executescript", [sql], e
-            )
-            self.__inuse = False
-            raise e
-        self.__inuse = False
-        return True
-
-    def __wait_for_database_capacity(self) -> None:
-        if self.__inuse:
-            self.helper.get_handler_debug().write(
-                "Database is currently in use, waiting for it to be free..."
-            )
-
-            for _ in range(int(self.__queue_wait_time_max / 0.1)):
-                if not self.__inuse:
-                    self.helper.get_handler_debug().write(
-                        "Database is now free, proceeding with the action."
-                    )
-                    break
-                time.sleep(0.1)
-
-            if self.__inuse:
-                self.helper.get_handler_debug().write(
-                    f"Database is still in use after waiting {self.__queue_wait_time_max}s, forcing inuse state of false."
+        with self._lock:
+            try:
+                self.cursor.executescript(sql)
+            except Exception as e:
+                self.helper.get_handler_error().write(
+                    "database.executescript", [sql], e
                 )
-                self.__inuse = False
+                raise e
+            return True
+
+    def commit(self) -> None:
+        """Commit the current transaction (serialized against all DB access)."""
+        with self._lock:
+            if self.connection:
+                self.connection.commit()
+
+    def execute_fetchall(
+        self, sql: str, parameters: tuple | dict | list = ()
+    ) -> list:
+        """Run a query and fetch all rows atomically.
+
+        The connection exposes a single shared cursor, so the execute and the
+        fetch MUST happen under one lock acquisition -- otherwise another
+        thread's execute() could move the cursor between them (wrong rows, or a
+        crash). Reentrant lock lets us reuse the locked execute().
+        """
+        with self._lock:
+            if not self.execute(sql, parameters):
+                return []
+            return self.cursor.fetchall()
+
+    def execute_fetchmany(
+        self, sql: str, parameters: tuple | dict | list = (), size: int = 1
+    ) -> list:
+        """Run a query and fetch up to `size` rows atomically. See execute_fetchall."""
+        with self._lock:
+            if not self.execute(sql, parameters):
+                return []
+            return self.cursor.fetchmany(size)
 
     def destroy(self) -> None:
         """Close the database connection."""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-            self.cursor = None
+        with self._lock:
+            if self.connection:
+                self.connection.close()
+                self.connection = None
+                self.cursor = None

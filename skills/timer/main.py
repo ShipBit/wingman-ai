@@ -5,15 +5,10 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Optional
 from api.interface import SettingsConfig, SkillConfig
-from api.enums import (
-    LogSource,
-    LogType,
-)
-from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class ActualTimer:
@@ -123,7 +118,7 @@ class Timer(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
@@ -134,7 +129,7 @@ class Timer(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.active = True
-        self.threaded_execution(self.start_timer_worker)
+        self.wingman.run_in_thread(self.start_timer_worker)
 
     async def unload(self) -> None:
         await super().unload()
@@ -168,29 +163,22 @@ class Timer(Skill):
             loop_counts: Number of loops (-1 for infinite).
             silent: Whether to suppress output.
         """
-        if delay < 0:
+        if delay <= 0:
             return "Error: Delay must be greater than 0."
 
         if "." in function_name:
             function_name = function_name.split(".")[1]
 
-        # check if tool call exists
-        tool_call = next(
-            (
-                tool
-                for tool in self.wingman.build_tools()
-                if tool.get("function", {}).get("name", False) == function_name
-            ),
-            None,
-        )
+        # check if a tool with this name exists
+        is_known = self.wingman.tools.has(function_name)
 
-        # if not valid it might be a command
-        if not tool_call and self.wingman.get_command(function_name):
+        # if not a tool, it might be a command
+        if not is_known and self.wingman.commands.get(function_name):
             function_arguments_json = json.dumps({"command_name": function_name})
             function_name = "execute_command"
-            tool_call = True  # Mark as found
+            is_known = True
 
-        if not tool_call:
+        if not is_known:
             return f"Error: Function '{function_name}' does not exist."
 
         try:
@@ -200,7 +188,7 @@ class Timer(Skill):
 
         # set timer
         timer = ActualTimer(
-            delay=int(delay),
+            delay=max(1, int(delay)),
             is_loop=is_loop,
             loops=loop_counts,
             silent=silent,
@@ -275,7 +263,7 @@ class Timer(Skill):
 
         timer = self.timers[id]
         if delay is not None:
-            timer.delay = int(delay)
+            timer.delay = max(1, int(delay))
         if is_loop is not None:
             timer.is_loop = bool(is_loop)
         if loops is not None:
@@ -302,18 +290,26 @@ class Timer(Skill):
         while self.active:
             await asyncio.sleep(2)
             timers_to_delete = []
-            for timer_id, timer in self.timers.items():
-                if (timer.is_loop and timer.loops == 0) or timer.deleted:
-                    timer.deleted = True
-                    timers_to_delete.append(timer_id)
-                    continue
+            for timer_id, timer in list(self.timers.items()):
+                try:
+                    if (timer.is_loop and timer.loops == 0) or timer.deleted:
+                        timer.deleted = True
+                        timers_to_delete.append(timer_id)
+                        continue
 
-                if time.time() - timer.last_run >= timer.delay:
-                    await self.execute_timer(timer_id)
+                    if time.time() - timer.last_run >= timer.delay:
+                        await self.execute_timer(timer_id)
+                except Exception as e:
+                    self.log.error(f"Timer {timer_id} failed: {e}", server_only=True)
+                    # Do not retry a failing timer every 2 seconds
+                    if timer.is_loop:
+                        timer.update_last_run()
+                    else:
+                        timer.deleted = True
 
             # delete timers marked for deletion
             for timer_id in timers_to_delete:
-                del self.timers[timer_id]
+                self.timers.pop(timer_id, None)
 
         # clear timers after unload
         self.timers = {}
@@ -323,25 +319,20 @@ class Timer(Skill):
             return
 
         timer = self.timers[timer_id]
-        function_response, instant_response, used_skill, tool_label = (
-            await self.wingman.execute_command_by_function_call(
-                timer.function_name, timer.function_arguments
-            )
+        result = await self.wingman.tools.invoke(
+            timer.function_name, timer.function_arguments
         )
 
-        response = instant_response or function_response
+        response = result.instant_response or result.response
         if response:
             summary = await self._summarize_timer_execution(timer, response)
+            if not summary and not timer.silent:
+                # Summary failed, speak the plain message instead of staying silent
+                summary = str(response)
             if summary:
-                await self.wingman.add_assistant_message(summary)
-                await self.printr.print_async(
-                    f"{summary}",
-                    color=LogType.POSITIVE,
-                    source=LogSource.WINGMAN,
-                    source_name=self.wingman.name,
-                    skill_name=self.name,
-                )
-                await self.wingman.play_to_user(summary, True)
+                await self.wingman.conversation.add_assistant(summary)
+                self.log.info(summary)
+                await self.wingman.tts.speak(summary, interrupt=False)
 
         if not timer.is_loop or timer.loops == 1:
             # we cant delete it here, because we are iterating over the timers in a separate thread
@@ -357,30 +348,30 @@ class Timer(Skill):
     ) -> str | None:
         if timer.silent:
             return None
-        messages = self.wingman.messages
-        messages.append(
-            {
-                "role": "user",
-                "content": f"""
+        history = self.wingman.conversation.history()
+        # Only plain text content of the last few messages (no image parts)
+        conversation = "\n".join(
+            f"{message.get('role', '')}: {message.get('content')}"
+            for message in history[-6:]
+            if isinstance(message.get("content"), str)
+        )
+        prompt = f"""
                     Timed "{timer.function_name}" with "{timer.function_arguments}" was executed.
                     Create a small summary of what was executed.
                     Dont mention it was a function call, go by the meaning.
                     For example dont say command 'LandingGearUp' was executed, say 'Landing gear retracted'.
-                    The summary language must be in the same language as the previous user message.
+                    Write the summary in {self.wingman.language.name}.
                     The function response:
                     ```
                     {response}
                     ```
-                """,
-            },
-        )
+                """
         try:
-            completion = await self.llm_call(messages)
-            answer = (
-                completion.choices[0].message.content
-                if completion and completion.choices
-                else ""
+            summary = await self.wingman.ai.generate(
+                prompt,
+                data=conversation,
+                auto_shorten=True,
             )
-            return answer
+            return summary
         except Exception:
             return None

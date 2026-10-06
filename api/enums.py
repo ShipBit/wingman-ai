@@ -16,6 +16,9 @@ class LogType(Enum):
     SKILL = "skill"  # Dedicated color for Skills-related messages (system-level)
     COMMAND = "command"  # Dedicated color for Command execution messages
     WINGMAN = "wingman"  # Dedicated color for Wingman-specific status messages
+    LOCALMODEL = "localmodel"  # Messages from the local support/embedding model — not part of conversation history
+    MEMORY = "memory"  # Persistent memory operations (recall, store, forget)
+    FILLER = "filler"  # Short line spoken while a slow tool runs — not part of conversation history
 
     # Conversation messages
     USER = "user"  # Pink/Purple - user speech/input
@@ -85,16 +88,7 @@ class CustomPropertyType(Enum):
     AUDIO_FILES = "audio_files"
     AUDIO_DEVICE = "audio_device"
     COLOR = "color"
-
-
-class AzureApiVersion(Enum):
-    A2023_12_01_PREVIEW = "2023-12-01-preview"
-    A2024_02_15_PREVIEW = "2024-02-15-preview"
-
-
-class AzureRegion(Enum):
-    WESTEUROPE = "westeurope"
-    NORTHCENTRALUS = "northcentralus"
+    RANGE_SLIDER = "range_slider"
 
 
 class TtsVoiceGender(Enum):
@@ -129,7 +123,6 @@ class TtsProvider(Enum):
     OPENAI = "openai"
     ELEVENLABS = "elevenlabs"
     EDGE_TTS = "edge_tts"
-    AZURE = "azure"
     XVASYNTH = "xvasynth"
     WINGMAN_PRO = "wingman_pro"
     OPENAI_COMPATIBLE = "openai_compatible"
@@ -139,22 +132,97 @@ class TtsProvider(Enum):
 
 
 class SttProvider(Enum):
-    OPENAI = "openai"
-    AZURE = "azure"
-    AZURE_SPEECH = "azure_speech"
-    WHISPERCPP = "whispercpp"
-    FASTER_WHISPER = "fasterwhisper"
+    """Parakeet on this machine or on a server of the user's; the
+    subscription's cloud transcription otherwise."""
+
+    PARAKEET = "parakeet"
     WINGMAN_PRO = "wingman_pro"
-    GROQ = "groq"
 
 
-class VoiceActivationSttProvider(Enum):
-    OPENAI = "openai"
-    AZURE = "azure"
-    WHISPERCPP = "whispercpp"
-    FASTER_WHISPER = "fasterwhisper"
-    WINGMAN_PRO = "wingman_pro"
-    GROQ = "groq"
+class SpokenLanguage(Enum):
+    """The one language the user and their Wingmen speak.
+
+    Only languages every voice provider handles: Parakeet v3 transcribes them,
+    Pocket TTS has a model for each, Inworld speaks them at its highest tier.
+    Everything language-specific - the answer language, the Pocket TTS model,
+    the transcription and speech language hints - is derived from it (see
+    services/spoken_language.py), so no combination can be set that does not
+    work together.
+
+    OTHER is any other language, named in settings.other_language. Wingman
+    then passes no language to speech recognition, names it to the
+    conversation model and speaks through a provider that has voices for it
+    (services/other_language.py).
+    """
+
+    EN = "en"
+    DE = "de"
+    FR = "fr"
+    ES = "es"
+    IT = "it"
+    PT = "pt"
+    NL = "nl"
+    OTHER = "other"
+
+
+class PocketTtsQuality(Enum):
+    """Which size of the Pocket TTS model for the spoken language is loaded.
+
+    STANDARD is the 6-layer model, about 6x faster than real time on a laptop
+    CPU. HIGH is the 24-layer model: better voices, about 2x real time. A
+    language with only one size uses it for both.
+    """
+
+    STANDARD = "standard"
+    HIGH = "high"
+
+
+class ScGameLogRulesProblem(Enum):
+    """Why the Star Citizen log rules may be out of date.
+
+    The rules live on GitHub, maintained by a community member, because the
+    game changes its log wording more often than Wingman ships. The reader
+    keeps working with the rules it has in every case.
+    """
+
+    UNREACHABLE = "unreachable"
+    """GitHub did not answer, or answered with an error."""
+    INVALID = "invalid"
+    """The published rules do not validate. The maintainer has to fix them."""
+    NEEDS_UPDATE = "needs_update"
+    """The published rules need a newer Wingman."""
+
+
+class SkillRequirement(Enum):
+    """A Core service a skill needs switched on in the settings.
+
+    Declared in a skill's manifest under `requires`. The client greys the
+    skill out and tells the user which setting to turn on first.
+    """
+
+    HUD_SERVER = "hud_server"
+    """The HUD (settings.hud_server). Runs on Windows only."""
+    SC_GAMELOG = "sc_gamelog"
+    """The Star Citizen log reader (settings.sc_gamelog)."""
+
+
+class LocalAiMode(Enum):
+    """Where the support model runs.
+
+    CLOUD is the default: the model behind memory, summarisation and tool-response
+    compression runs on our backend, which costs the user no RAM and no CPU while
+    a game is running. LOCAL is llama.cpp managed by Core on this machine. SERVER
+    is a llama-server the user runs somewhere else.
+
+    Embeddings follow: SERVER puts them on the remote llama-server, the other two
+    keep them on this machine. The vector database is local either way, and an
+    embedding computed by a different model would not be comparable to the ones
+    already stored.
+    """
+
+    CLOUD = "cloud"
+    LOCAL = "local"
+    SERVER = "server"
 
 
 class ConversationProvider(Enum):
@@ -163,7 +231,6 @@ class ConversationProvider(Enum):
     GROQ = "groq"
     OPENROUTER = "openrouter"
     LOCAL_LLM = "local_llm"
-    AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
     GOOGLE = "google"
     CEREBRAS = "cerebras"
@@ -174,6 +241,32 @@ class ConversationProvider(Enum):
 class ImageGenerationProvider(Enum):
     OPENAI = "openai"
     WINGMAN_PRO = "wingman_pro"
+
+
+class ImageStyle(Enum):
+    """Art style presets for generated images. services/image_generation.py
+    holds the text each one adds to the prompt. NONE adds nothing."""
+
+    NONE = "none"
+    CINEMATIC = "cinematic"
+    PHOTO = "photo"
+    ANIME = "anime"
+    GHIBLI = "ghibli"
+    PIXAR = "pixar"
+    CARTOON = "cartoon"
+    COMIC = "comic"
+    OIL_PAINTING = "oil_painting"
+    PIXEL_ART = "pixel_art"
+    SYNTHWAVE = "synthwave"
+    RETRO_SCIFI = "retro_scifi"
+    CLAYMATION = "claymation"
+    SKETCH = "sketch"
+
+
+class ImageAspect(Enum):
+    SQUARE = "square"
+    PORTRAIT = "portrait"
+    LANDSCAPE = "landscape"
 
 
 class KeyboardRecordingType(Enum):
@@ -188,14 +281,10 @@ class RecordingDevice(Enum):
     JOYSTICK = "joystick"
 
 
-class WingmanProSttProvider(Enum):
-    WHISPER = "whisper"
-    AZURE_SPEECH = "azure_speech"
-
-
 class WingmanProTtsProvider(Enum):
-    AZURE = "azure"
-    OPENAI = "openai"
+    # One provider since 2026-09-11. OpenAI's voices cost 15 dollars per million
+    # characters against Inworld's 5, and the reason they were kept — Inworld
+    # having two poor German voices — went away when Inworld shipped 17.
     INWORLD = "inworld"
 
 
@@ -205,6 +294,20 @@ class McpTransportType(Enum):
     HTTP = "http"
     STDIO = "stdio"
     SSE = "sse"
+
+
+class McpAuthType(Enum):
+    """How Wingman authenticates against an MCP server.
+
+    NONE is the default and sends nothing. API_KEY is what Wingman did before
+    3.2.1: the secret `mcp_<name>` goes out as a bearer header. OAUTH runs an
+    authorization code grant with PKCE and sends the resulting access token,
+    refreshing it when it expires.
+    """
+
+    NONE = "none"
+    API_KEY = "api_key"
+    OAUTH = "oauth"
 
 
 # Pydantic models for enums
@@ -240,14 +343,6 @@ class CustomPropertyTypeEnumModel(BaseEnumModel):
     property_type: CustomPropertyType
 
 
-class AzureApiVersionEnumModel(BaseEnumModel):
-    api_version: AzureApiVersion
-
-
-class AzureRegionEnumModel(BaseEnumModel):
-    region: AzureRegion
-
-
 class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
@@ -268,16 +363,20 @@ class SttProviderEnumModel(BaseEnumModel):
     stt_provider: SttProvider
 
 
-class VoiceActivationSttProviderEnumModel(BaseEnumModel):
-    stt_provider: VoiceActivationSttProvider
-
-
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
 
 
 class ImageGenerationProviderEnumModel(BaseEnumModel):
     image_generation_provider: ImageGenerationProvider
+
+
+class ImageStyleEnumModel(BaseEnumModel):
+    image_style: ImageStyle
+
+
+class ImageAspectEnumModel(BaseEnumModel):
+    image_aspect: ImageAspect
 
 
 class KeyboardRecordingTypeModel(BaseEnumModel):
@@ -288,16 +387,32 @@ class RecordingDeviceModel(BaseEnumModel):
     recording_device: RecordingDevice
 
 
-class WingmanProSttProviderModel(BaseEnumModel):
-    stt_provider: WingmanProSttProvider
-
-
 class WingmanProTtsProviderModel(BaseEnumModel):
     tts_provider: WingmanProTtsProvider
 
 
 class CoreStateEnumModel(BaseEnumModel):
     core_state: CoreState
+
+
+class ScGameLogRulesProblemEnumModel(BaseEnumModel):
+    sc_gamelog_rules_problem: ScGameLogRulesProblem
+
+
+class SkillRequirementEnumModel(BaseEnumModel):
+    skill_requirement: SkillRequirement
+
+
+class LocalAiModeEnumModel(BaseEnumModel):
+    local_ai_mode: LocalAiMode
+
+
+class SpokenLanguageEnumModel(BaseEnumModel):
+    spoken_language: SpokenLanguage
+
+
+class PocketTtsQualityEnumModel(BaseEnumModel):
+    pocket_tts_quality: PocketTtsQuality
 
 
 # Add all additional Pydantic models for enums as needed
@@ -311,20 +426,23 @@ ENUM_TYPES = {
     "WingmanInitializationErrorType": WingmanInitializationErrorTypeModel,
     "CommandTag": CommandTagEnumModel,
     "CustomPropertyType": CustomPropertyTypeEnumModel,
-    "AzureApiVersion": AzureApiVersionEnumModel,
-    "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
-    "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
-    "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "PerplexityModel": PerplexityModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
+    "LocalAiMode": LocalAiModeEnumModel,
+    "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
+    "SkillRequirement": SkillRequirementEnumModel,
+    "SpokenLanguage": SpokenLanguageEnumModel,
+    "PocketTtsQuality": PocketTtsQualityEnumModel,
+    "ImageStyle": ImageStyleEnumModel,
+    "ImageAspect": ImageAspectEnumModel,
     # Add new enums here as key-value pairs
 }
 

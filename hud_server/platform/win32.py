@@ -32,6 +32,7 @@ LWA_ALPHA = 0x00000002
 LWA_COLORKEY = 0x00000001
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
+SWP_HIDEWINDOW = 0x0080
 SWP_SHOWWINDOW = 0x0040
 SWP_NOACTIVATE = 0x0010
 SWP_ASYNCWINDOWPOS = 0x4000
@@ -39,12 +40,21 @@ SRCCOPY = 0x00CC0020
 DIB_RGB_COLORS = 0
 BI_RGB = 0
 
+# UpdateLayeredWindow - true per-pixel alpha compositing (vs. the binary
+# LWA_COLORKEY / uniform LWA_ALPHA supported by SetLayeredWindowAttributes)
+ULW_COLORKEY = 0x00000001
+ULW_ALPHA = 0x00000002
+ULW_OPAQUE = 0x00000004
+AC_SRC_OVER = 0x00
+AC_SRC_ALPHA = 0x01
+
 # Function pointers
 # Use fresh WinDLL instances to isolate argtypes from other modules sharing windll
 user32 = ctypes.WinDLL("user32.dll", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32.dll", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
 
+SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 HWND_TOPMOST = wintypes.HWND(-1)
 
@@ -107,6 +117,15 @@ class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3)]
 
 
+class BLENDFUNCTION(ctypes.Structure):
+    _fields_ = [
+        ("BlendOp", ctypes.c_ubyte),
+        ("BlendFlags", ctypes.c_ubyte),
+        ("SourceConstantAlpha", ctypes.c_ubyte),
+        ("AlphaFormat", ctypes.c_ubyte),
+    ]
+
+
 # Setup Function Prototypes
 user32.DefWindowProcW.argtypes = [wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
 user32.DefWindowProcW.restype = LRESULT
@@ -125,9 +144,90 @@ user32.UpdateLayeredWindow.argtypes = [
     wintypes.HDC,
     ctypes.POINTER(wintypes.POINT),
     wintypes.COLORREF,
-    ctypes.POINTER(RGBQUAD),
+    ctypes.POINTER(BLENDFUNCTION),
     wintypes.DWORD,
 ]
+user32.UpdateLayeredWindow.restype = wintypes.BOOL
+
+# Handle-returning functions MUST have an explicit restype. Without one, ctypes
+# defaults to a signed 32-bit c_int, which silently truncates and can sign-corrupt
+# 64-bit handles (e.g. a handle whose low 32 bits have the high bit set becomes a
+# negative Python int, then gets sign-extended into a bogus 64-bit pointer the next
+# time it's passed into another API call) - this previously caused UpdateLayeredWindow
+# to fail with ERROR_INVALID_PARAMETER despite every argument "looking" correct.
+user32.CreateWindowExW.argtypes = [
+    wintypes.DWORD,
+    wintypes.LPCWSTR,
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.HWND,
+    wintypes.HMENU,
+    wintypes.HINSTANCE,
+    wintypes.LPVOID,
+]
+user32.CreateWindowExW.restype = wintypes.HWND
+
+kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+
+user32.GetDC.argtypes = [wintypes.HWND]
+user32.GetDC.restype = wintypes.HDC
+
+user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+user32.ReleaseDC.restype = ctypes.c_int
+
+gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+gdi32.CreateCompatibleDC.restype = wintypes.HDC
+
+gdi32.DeleteDC.argtypes = [wintypes.HDC]
+gdi32.DeleteDC.restype = wintypes.BOOL
+
+gdi32.CreateDIBSection.argtypes = [
+    wintypes.HDC,
+    ctypes.POINTER(BITMAPINFO),
+    wintypes.UINT,
+    ctypes.POINTER(ctypes.c_void_p),
+    wintypes.HANDLE,
+    wintypes.DWORD,
+]
+gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+
+gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+gdi32.SelectObject.restype = wintypes.HGDIOBJ
+
+gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+gdi32.DeleteObject.restype = wintypes.BOOL
+
+user32.DestroyWindow.argtypes = [wintypes.HWND]
+user32.DestroyWindow.restype = wintypes.BOOL
+
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
+
+user32.SetWindowPos.argtypes = [
+    wintypes.HWND,
+    wintypes.HWND,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.UINT,
+]
+user32.SetWindowPos.restype = wintypes.BOOL
+
+user32.MoveWindow.argtypes = [
+    wintypes.HWND,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.BOOL,
+]
+user32.MoveWindow.restype = wintypes.BOOL
 
 # Multi-monitor support - define types first
 MONITORINFOF_PRIMARY = 1

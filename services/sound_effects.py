@@ -16,7 +16,11 @@ from api.enums import SoundEffect
 from api.interface import SoundConfig
 
 
-def get_azure_workaround_gain_boost(effect: SoundEffect):
+def get_streaming_gain_boost(effect: SoundEffect):
+    """Extra gain for radio effects when the audio arrives as a streamed PCM
+    chunk rather than a finished file. Every streaming provider needs it:
+    PocketTTS, Inworld, OpenAI and the Wingman backend all pass use_gain_boost.
+    """
     if effect == SoundEffect.LOW_QUALITY_RADIO:
         return 70.0
     elif effect == SoundEffect.MEDIUM_QUALITY_RADIO:
@@ -79,7 +83,7 @@ class SoundEffects(Enum):
             Gain(gain_db=2),
         ]
     )
-    # Azure streaming workaround
+    # Streaming needs the extra gain, see get_streaming_gain_boost
     LOW_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=-65),
@@ -88,11 +92,11 @@ class SoundEffects(Enum):
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
             Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
             Gain(
-                gain_db=get_azure_workaround_gain_boost(SoundEffect.LOW_QUALITY_RADIO)
+                gain_db=get_streaming_gain_boost(SoundEffect.LOW_QUALITY_RADIO)
             ),
         ]
     )
-    # Azure streaming workaround
+    # Streaming needs the extra gain, see get_streaming_gain_boost
     MEDIUM_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=-74),
@@ -102,13 +106,13 @@ class SoundEffects(Enum):
             Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
             Compressor(threshold_db=-18, ratio=4),
             Gain(
-                gain_db=get_azure_workaround_gain_boost(
+                gain_db=get_streaming_gain_boost(
                     SoundEffect.MEDIUM_QUALITY_RADIO
                 )
             ),
         ]
     )
-    # Azure streaming workaround
+    # Streaming needs the extra gain, see get_streaming_gain_boost
     HIGH_END_RADIO_GAIN_BOOST = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
@@ -116,7 +120,7 @@ class SoundEffects(Enum):
             Compressor(threshold_db=-10, ratio=2),
             Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
             Resample(target_sample_rate=44100),
-            Gain(gain_db=get_azure_workaround_gain_boost(SoundEffect.HIGH_END_RADIO)),
+            Gain(gain_db=get_streaming_gain_boost(SoundEffect.HIGH_END_RADIO)),
         ]
     )
 

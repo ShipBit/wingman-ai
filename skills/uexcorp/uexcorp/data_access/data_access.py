@@ -41,7 +41,7 @@ class DataAccess :
         self.additional_cols.append((col, alias))
         return self
 
-    def __select(self, debug: bool = False) -> None:
+    def __select(self, debug: bool = False) -> tuple[str, dict]:
         def resolve_additional_cols() -> str:
             cols = ""
             for col, alias in self.additional_cols:
@@ -66,15 +66,17 @@ class DataAccess :
                     resolved_sql = resolved_sql.replace(f":{key}", repr(value))
             self.helper.get_handler_debug().write(resolved_sql)
 
-        self.database.execute(sql, self.filter.get_bind())
+        return sql, self.filter.get_bind()
 
     def _fetch_one(self, debug: bool = False) -> list[dict[str, any]]:
-        self.__select(debug)
-        return self.database.get_cursor().fetchmany(1)
+        # Atomic execute+fetch: the shared cursor must not be moved by another
+        # thread between the query and the fetch.
+        sql, bind = self.__select(debug)
+        return self.database.execute_fetchmany(sql, bind, 1)
 
     def _fetch_all(self, debug: bool = False) -> list[dict[str, any]]:
-        self.__select(debug)
-        return self.database.get_cursor().fetchall()
+        sql, bind = self.__select(debug)
+        return self.database.execute_fetchall(sql, bind)
 
     def load_one(self) -> DataModel | None:
         data = self._fetch_one()

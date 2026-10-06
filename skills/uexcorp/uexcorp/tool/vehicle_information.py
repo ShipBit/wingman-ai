@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -61,7 +61,16 @@ class VehicleInformation(Tool):
                 vehicle_data_access.offset(offset)
 
         vehicles = vehicle_data_access.load(debug=True) # TODO remove debug=True
-        return json.dumps([vehicle.get_data_for_ai() for vehicle in vehicles]), ""
+
+        data = [vehicle.get_data_for_ai() for vehicle in vehicles]
+
+        if filter_vehicles:
+            for entry, vehicle in zip(data, vehicles):
+                photos = vehicle.get_url_photos()
+                if photos:
+                    entry["image_url"] = photos[0]
+
+        return compression.dumps(data), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}
@@ -102,4 +111,8 @@ class VehicleInformation(Tool):
         return "Holds information about all vehicles. May be filtered by at least one filter option."
 
     def get_prompt(self) -> str:
-        return "Holds all information's about all vehicles, filterable. (eg incl. rent/buy options per ship, cargo sizes, ...)."
+        return (
+            "Holds all information's about all vehicles, filterable. (eg incl. rent/buy options per ship, cargo sizes, ...). "
+            "When filter_vehicles is used, each result may include an 'image_url' with a photo of that ship, "
+            "you may include it as a markdown image or link in your response."
+        )

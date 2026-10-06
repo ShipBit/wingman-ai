@@ -5,6 +5,7 @@ import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     ClientLoggedOutCommand,
+    CoreStateChangedCommand,
     RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
@@ -13,7 +14,7 @@ from api.commands import (
     WebSocketCommandModel,
     ClientLoggedInCommand,
 )
-from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
+from api.enums import CoreState, KeyboardRecordingType, LogSource, RecordingDevice, ToastType
 from api.interface import (
     CommandActionConfig,
     CommandJoystickConfig,
@@ -22,6 +23,7 @@ from api.interface import (
     ConfigWithDirInfo,
 )
 from mouse import mouse
+from services import error_reporting
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -74,6 +76,10 @@ class CommandHandler:
                 await self.handle_client_logged_in(
                     ClientLoggedInCommand(**command), websocket
                 )
+            elif command_name == "client_logged_out":
+                await self.handle_client_logged_out(
+                    ClientLoggedOutCommand(**command), websocket
+                )
             else:
                 raise ValueError("Unknown command")
         except Exception as e:
@@ -86,6 +92,15 @@ class CommandHandler:
 
     async def handle_client_ready(self, websocket: WebSocket):
         await self.connection_manager.client_ready(websocket)
+
+        # Send current core state so late-connecting clients get the right status
+        # (core_state_changed is not queued when no clients are connected)
+        state_command = CoreStateChangedCommand(
+            state=self.core.core_state,
+            message=self.core.core_state_message,
+            progress=self.core.core_state_progress,
+        )
+        await self.connection_manager.send_to(state_command, websocket)
 
     # todo: make this a POST request - was just a demo for commands with params
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):
@@ -274,9 +289,22 @@ class CommandHandler:
     async def handle_client_logged_in(
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
+        # Before the early return: a second account signing in on the same
+        # machine arrives as a keepalive too.
+        error_reporting.set_user(command.user_id)
+
         if self.core.is_client_logged_in:
-            # retrieved keepalive / token refresh from Azure but Tower is still initialized
+            # keepalive / token refresh, but the Tower is already initialized
             return
+
+        # Wait until config is loaded before proceeding — the server now starts
+        # before startup completes, so this command may arrive early.
+        while self.core.core_state in (
+            CoreState.STARTING,
+            CoreState.MIGRATING,
+            CoreState.LOADING_CONFIG,
+        ):
+            await asyncio.sleep(0.1)
 
         self.core.is_client_logged_in = True
         self.core.client_plan = command.plan
@@ -284,6 +312,8 @@ class CommandHandler:
 
         # Store username in settings for wingman access
         self.core.config_manager.settings_config.user_name = command.account_name
+        # ...and into the speech vocabulary, so the wingmen spell it right
+        self.core.settings_service.seed_vocabulary()
 
         self.printr.print(
             f"User {command.account_name} logged in ({command.plan})",
@@ -302,7 +332,10 @@ class CommandHandler:
     async def handle_client_logged_out(
         self, command: ClientLoggedOutCommand, websocket: WebSocket
     ):
+        # Read the name before clearing it, so the log line says who left.
+        name = self.core.client_account_name
         self.core.is_client_logged_in = False
+        error_reporting.set_user(None)
         self.core.client_plan = "Free"
         self.core.client_account_name = ""
 
@@ -310,7 +343,7 @@ class CommandHandler:
         self.core.config_manager.settings_config.user_name = None
 
         self.printr.print(
-            "User {command.account_name} logged out",
+            f"User {name or 'unknown'} logged out",
             toast=ToastType.NORMAL,
             source=LogSource.SYSTEM,
             source_name=self.source_name,

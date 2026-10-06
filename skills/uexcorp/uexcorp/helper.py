@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import threading
 import time
@@ -16,7 +17,7 @@ from skills.uexcorp.uexcorp.api.llm import Llm
 
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 printr = Printr()
 
@@ -41,7 +42,7 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_skill: str = 'v2.1.3-20251230'
+        self.__version_skill: str = 'v2.2.0-20260524'
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()
@@ -64,9 +65,10 @@ class Helper:
             "secrets_saved", self.on_secret_changed
         )
         self.__request_while_not_ready = False
+        self.__data_pool_recreated = False
         self.__wingman = None
 
-    def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
+    def prepare(self, threaded_execution: callable, wingman: "WingmanContext"):
         from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
@@ -100,6 +102,7 @@ class Helper:
             )
             self.set_ready(True)
             self.get_database().recreate_database()
+            self.__data_pool_recreated = True
         elif force_check:
             self.__handler_debug.write(
                 f"Version parity is still given. Skill: {old_version_skill} | UEX: {old_version_uex}"
@@ -113,13 +116,19 @@ class Helper:
         self.get_handler_config().sync_blacklists()
         self.__version_uex = self.get_handler_import().get_version_uex()
         self.set_ready(True)
+        if self.__data_pool_recreated:
+            self.__data_pool_recreated = False
+            self.__handler_debug.write(
+                f"UEX/Skill version parity restored. UEX functions are available again.",
+                True,
+            )
 
     def sync_fasterwhisper_hotwords(self, unload: bool = False):
         if not self.get_handler_config().get_behavior_use_fasterwhisper_hotwords():
             return
 
         self.__handler_debug.write(
-            f"{'Unloading' if unload else 'Syncing'} UEX unique names with FasterWhisper hotword list..."
+            f"{'Unloading' if unload else 'Syncing'} UEX unique names with the hotword list..."
         )
         from skills.uexcorp.uexcorp.data_access.city_data_access import (
             CityDataAccess,
@@ -171,10 +180,6 @@ class Helper:
             VehicleDataAccess(),
         ]
 
-        wingman = self.get_wingmen()
-        wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords or []
-        original_hotwords_count = len(wingman_hotwords)
-
         uex_hotwords = ["UEX"]
         for data_access in data_access_instances:
             data = data_access.load()
@@ -184,29 +189,30 @@ class Helper:
                     uex_hotwords.append(item_name)
         uex_hotwords = list(set(uex_hotwords)) # remove duplicates
 
+        stt = self.get_wingmen().stt
         if unload:
-            wingman_hotwords = [word for word in wingman_hotwords if word not in uex_hotwords]
+            hotword_change = -stt.remove_hotwords(uex_hotwords)
         else:
-            wingman_hotwords.extend(uex_hotwords)
-            wingman_hotwords = list(set(wingman_hotwords))
-
-        self.get_wingmen().config.fasterwhisper.additional_hotwords = wingman_hotwords
-        hotword_change = len(wingman_hotwords) - original_hotwords_count
+            hotword_change = stt.add_hotwords(uex_hotwords)
         if hotword_change < 0:
             self.__handler_debug.write(
-                f"Removed {abs(hotword_change)} hotwords from FasterWhisper."
+                f"Removed {abs(hotword_change)} UEX hotwords."
             )
         elif hotword_change > 0:
             self.__handler_debug.write(
-                f"Synced {hotword_change} new hotwords with FasterWhisper."
+                f"Synced {hotword_change} new UEX hotwords."
             )
         else:
             self.__handler_debug.write(
-                "No new hotwords synced with FasterWhisper."
+                "No new UEX hotwords to sync."
             )
 
     def wait(self, seconds: int):
+        """Blocking wait, for worker threads only."""
         time.sleep(seconds)
+
+    async def wait_async(self, seconds: float):
+        await asyncio.sleep(seconds)
 
     def is_ready(self) -> bool:
         return self.__is_ready
@@ -215,13 +221,13 @@ class Helper:
         self.__is_ready = ready
 
         async def add_loaded_message():
-            await self.get_wingmen().add_assistant_message(
+            await self.get_wingmen().conversation.add_assistant(
                 "UEX skill is now loaded and ready to use."
             )
 
         if ready and self.get_request_while_not_ready():
             self.__handler_debug.write("UEX functions are available now.", True)
-            self.threaded_execution(add_loaded_message)
+            self.run_in_thread(add_loaded_message)
             self.set_request_while_not_loaded(False)
 
     def is_loaded(self) -> bool:
@@ -314,10 +320,10 @@ class Helper:
             context += "\n\n" + "\n".join(self.__additional_context)
         return context
 
-    def threaded_execution(self, function, *args) -> threading.Thread:
+    def run_in_thread(self, function, *args) -> threading.Thread:
         if not self.__threaded_execution:
             raise Exception("Threaded execution not prepared")
-        return self.__threaded_execution(function, args)
+        return self.__threaded_execution(function, *args)
 
     def get_llm(self) -> Llm:
         return self.__llm
@@ -325,7 +331,7 @@ class Helper:
     def get_default_thread_ident(self) -> int:
         return self.__default_thread
 
-    def get_wingmen(self) -> "OpenAiWingman":
+    def get_wingmen(self) -> "WingmanContext":
         return self.__wingman
 
     def toast(self, message: str):

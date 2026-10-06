@@ -1,9 +1,14 @@
 module: skills.hud.main
 name: HUD
+api_version: 3
 display_name: HUD Overlay
 auto_activate: true
 discoverable_by_default: false
 author: JayMatthew
+platforms:
+  - windows
+requires:
+  - hud_server
 tags:
   - Utility
   - Overlay
@@ -14,6 +19,30 @@ hint:
   en: Please make sure the HUD server in the global settings is enabled.
   de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
 custom_properties:
+  - id: chat_layout_mode
+    name: Chat Window Placement
+    hint: "Auto: stack at the chosen anchor. Manual: free placement at the X/Y offset below (anchor is ignored)."
+    property_type: single_select
+    value: "auto"
+    required: false
+    options:
+      - label: "Auto (anchor)"
+        value: "auto"
+      - label: "Manual (free X/Y)"
+        value: "manual"
+
+  - id: persistent_layout_mode
+    name: Info Panel Placement
+    hint: "Auto: stack at the chosen anchor. Manual: free placement at the X/Y offset below (anchor is ignored)."
+    property_type: single_select
+    value: "auto"
+    required: false
+    options:
+      - label: "Auto (anchor)"
+        value: "auto"
+      - label: "Manual (free X/Y)"
+        value: "manual"
+
   - id: chat_anchor
     name: Chat Window Position
     hint: Screen position/anchor for the chat window.
@@ -66,6 +95,41 @@ custom_properties:
       - label: "Bottom Right"
         value: "bottom_right"
 
+  - id: font_size
+    name: Font Size
+    hint: Text font size in pixels.
+    property_type: number
+    value: 16
+    required: false
+
+  - id: chat_x
+    name: Chat Window X
+    hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Chat Window Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: persistent_x
+    name: Info Panel X
+    hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Info Panel Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: chat_y
+    name: Chat Window Y
+    hint: Vertical offset in pixels from the upper-left corner of the screen. Only used when Chat Window Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: persistent_y
+    name: Info Panel Y
+    hint: Vertical offset in pixels from the upper-left corner of the screen. Only used when Info Panel Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
   - id: chat_priority
     name: Chat Window Priority
     hint: Stacking priority for the chat window. Higher values appear closer to the anchor point.
@@ -108,16 +172,9 @@ custom_properties:
     value: 600
     required: false
 
-  - id: font_size
-    name: Font Size
-    hint: Text font size in pixels.
-    property_type: number
-    value: 16
-    required: false
-
   - id: font_family
     name: Font Family
-    hint: "Font family for HUD text. Available options: Segoe UI, Arial, Verdana, Tahoma, Trebuchet MS, Calibri, Consolas, Courier New, Open Sans."
+    hint: Font family for HUD text.
     property_type: single_select
     value: "Segoe UI"
     required: false
@@ -153,6 +210,20 @@ custom_properties:
     value: "#1e212b"
     required: false
 
+  - id: bg_opacity
+    name: Background Opacity
+    hint: Transparency of just the background box (0 = fully transparent, 100 = fully opaque). Independent of the overall Opacity setting, which also fades text and borders.
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0
+      - label: "max"
+        value: 100
+      - label: "step"
+        value: 1
+    value: 100
+    required: false
+
   - id: text_color
     name: Text Color
     hint: Main text color (hex format).
@@ -175,8 +246,8 @@ custom_properties:
     required: false
 
   - id: max_display_time
-    name: Audio Wait Time
-    hint: Maximum time in seconds to wait for audio playback before auto-hiding messages. If audio doesn't start within this time, the message will be hidden.
+    name: Audio Wait Time (sec)
+    hint: Time to wait for audio playback before auto-hiding messages.
     property_type: number
     value: 5
     required: false

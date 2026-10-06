@@ -1,7 +1,8 @@
 import base64
+import os
 from enum import Enum
 import json
-from os import makedirs, path, remove, walk
+from os import makedirs, path, remove, replace, walk
 import copy
 import shutil
 import re
@@ -15,19 +16,19 @@ from api.enums import LogSource, LogType
 from api.interface import (
     Config,
     ConfigDirInfo,
+    CustomProperty,
     McpConfig,
     NestedConfig,
     NewWingmanTemplate,
     SettingsConfig,
+    SkillConfig,
     WingmanConfig,
     WingmanConfigFileInfo,
 )
+from services.config_sanitizer import sanitize
 from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
-from services.config_repair import config_name, repair_config_directories
-from services.elite_runtime_identity import capture as capture_elite_module
-
-capture_elite_module(__file__)
+from services.system_manager import LOCAL_VERSION
 
 TEMPLATES_DIR = "templates"
 CONFIGS_DIR = "configs"
@@ -40,11 +41,53 @@ SECRETS_FILE = "secrets.yaml"
 DEFAULT_WINGMAN_AVATAR = "default-wingman-avatar.png"
 DEFAULT_SKILLS_CONFIG = "default_config.yaml"
 
-DELETED_PREFIX = "."
-DEFAULT_PREFIX = "_"
+CONTEXT_FILE = "context.yaml"
+SHIPPED_DEFAULT_CONFIG = "Star Citizen"
+FALLBACK_CONFIG = "General"
+"""Takes over when the default config is gone, so deleting Star Citizen lands
+on General and not on whichever shipped config sorts first."""
 
 
 _WINGMAN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 -]*$")
+
+
+def deep_merge_configs(base: dict, override: dict) -> dict:
+    """Recursively merge ``override`` into ``base``; override values win.
+
+    Used to fill a config that predates the current models with the shipped
+    template's keys without losing a single user value.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = deep_merge_configs(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+class ConfigContextState(BaseModel):
+    """State of the user's config directories, stored in configs/context.yaml.
+
+    Historically this state was encoded in directory/file name prefixes
+    ("_" = default, "." = logically deleted), which caused sync bugs whenever
+    names and state drifted apart. Directory names are now immutable identity;
+    all state lives here.
+
+    - default_config: name of the config that is loaded on start.
+    - deleted_template_configs: template config names the user deleted.
+      They are not recreated from templates on start.
+    - deleted_template_wingmen: per template config name, wingman names the
+      user deleted. They are not recreated from templates on start.
+    """
+
+    default_config: str = SHIPPED_DEFAULT_CONFIG
+    deleted_template_configs: list[str] = []
+    deleted_template_wingmen: dict[str, list[str]] = {}
 
 
 class ConfigValidationError(ValueError):
@@ -61,9 +104,13 @@ class ConfigManager:
         self.log_source_name = "ConfigManager"
         self.printr = Printr()
 
+        self.app_root_path = app_root_path
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
         self.config_dir = get_writable_dir(CONFIGS_DIR)
         self.skills_dir = get_writable_dir(SKILLS_DIR)
+
+        self.context_state_path = path.join(self.config_dir, CONTEXT_FILE)
+        self.context_state = self.load_context_state()
 
         self.copy_templates()
 
@@ -139,9 +186,7 @@ class ConfigManager:
 
             if err_type == "missing":
                 field = loc[-1] if loc else "?"
-                lines.append(
-                    f"  • {path_str}: required field '{field}' is missing"
-                )
+                lines.append(f"  • {path_str}: required field '{field}' is missing")
             else:
                 lines.append(f"  • {path_str}: {raw_msg}")
 
@@ -153,53 +198,175 @@ class ConfigManager:
             + "\n".join(lines)
         )
 
-    def find_default_config(self) -> ConfigDirInfo:
-        """Find a top-level, enabled default, with deterministic fallback selection."""
-        count_default = 0
-        fallback: Optional[ConfigDirInfo] = None
-        default_dir: Optional[ConfigDirInfo] = None
-        for config in self.get_config_dirs():
-            if not config.is_deleted:
-                d = config.directory
-                if d.startswith(DEFAULT_PREFIX):
-                    count_default += 1
-                    if not default_dir:
-                        default_dir = ConfigDirInfo(
-                            directory=d,
-                            name=config.name,
-                            is_default=True,
-                            is_deleted=False,
-                        )
-                # TODO: actually make fallback the new default by renaming it (?)
-                elif not fallback:
-                    fallback = ConfigDirInfo(
-                        directory=d,
-                        name=d,
-                        is_default=False,
-                        is_deleted=False,
-                    )
+    # Context state (configs/context.yaml):
 
-        if count_default == 0:
+    def load_context_state(self) -> ConfigContextState:
+        """Load the config context state, creating it with defaults if missing.
+
+        A broken state file is preserved as '<file>.broken' for inspection and
+        replaced with defaults, so the file on disk always matches the state
+        the app actually runs with.
+        """
+        if not path.exists(self.context_state_path):
+            state = ConfigContextState()
+            self.write_config(self.context_state_path, state)
+            return state
+
+        parsed = self.read_config(self.context_state_path)
+        if parsed is not None:
+            try:
+                # model_validate (unlike **-unpacking) also rejects non-mapping
+                # YAML like a list or a plain string with a ValidationError.
+                return ConfigContextState.model_validate(parsed)
+            except ValidationError as e:
+                self.printr.print(
+                    f"Invalid context state '{self.context_state_path}', falling back to defaults:\n{str(e)}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
+
+        state = ConfigContextState()
+        try:
+            broken_path = f"{self.context_state_path}.broken"
+            replace(self.context_state_path, broken_path)
+            self.write_config(self.context_state_path, state)
             self.printr.print(
-                f"No default config found. Using: {fallback.directory if fallback else 'none'}.",
-                color=LogType.ERROR,
+                f"Preserved the broken context state as '{broken_path}' and started over with defaults.",
+                color=LogType.WARNING,
+                server_only=True,
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
-                server_only=True,
             )
-            return fallback
-
-        if count_default > 1:
+        except OSError as e:
             self.printr.print(
-                f"Multiple default configs found. Picking the first found: {default_dir.directory}.",
+                f"Could not quarantine the broken context state '{self.context_state_path}':\n{str(e)}",
+                color=LogType.ERROR,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        return state
+
+    def save_context_state(self) -> bool:
+        return self.write_config(self.context_state_path, self.context_state)
+
+    def is_template_config_deleted(self, config_name: str) -> bool:
+        return config_name in self.context_state.deleted_template_configs
+
+    def mark_template_config_deleted(self, config_name: str, save: bool = True):
+        if config_name not in self.context_state.deleted_template_configs:
+            self.context_state.deleted_template_configs.append(config_name)
+            if save:
+                self.save_context_state()
+
+    def unmark_template_config_deleted(self, config_name: str):
+        """Clear the deletion tombstone (and stale wingman tombstones) of a template config."""
+        changed = False
+        if config_name in self.context_state.deleted_template_configs:
+            self.context_state.deleted_template_configs.remove(config_name)
+            changed = True
+        if config_name in self.context_state.deleted_template_wingmen:
+            del self.context_state.deleted_template_wingmen[config_name]
+            changed = True
+        if changed:
+            self.save_context_state()
+
+    def is_template_wingman_deleted(self, config_name: str, wingman_name: str) -> bool:
+        return wingman_name in self.context_state.deleted_template_wingmen.get(
+            config_name, []
+        )
+
+    def mark_template_wingman_deleted(self, config_name: str, wingman_name: str):
+        deleted = self.context_state.deleted_template_wingmen.setdefault(
+            config_name, []
+        )
+        if wingman_name not in deleted:
+            deleted.append(wingman_name)
+            self.save_context_state()
+
+    def unmark_template_wingman_deleted(self, config_name: str, wingman_name: str):
+        deleted = self.context_state.deleted_template_wingmen.get(config_name)
+        if deleted and wingman_name in deleted:
+            deleted.remove(wingman_name)
+            if not deleted:
+                del self.context_state.deleted_template_wingmen[config_name]
+            self.save_context_state()
+
+    @staticmethod
+    def _fallback_config(config_dirs: list[ConfigDirInfo]) -> ConfigDirInfo:
+        """General if it is there, otherwise the first config by name."""
+        return next((c for c in config_dirs if c.name == FALLBACK_CONFIG), config_dirs[0])
+
+    def find_default_config(self) -> ConfigDirInfo:
+        """Find the default config (as stored in the context state) or a fallback."""
+        config_dirs = self.get_config_dirs()
+
+        if not config_dirs:
+            # The user deleted everything - restore the shipped templates.
+            self.printr.print(
+                "No configs found. Restoring shipped configs from templates.",
                 color=LogType.WARNING,
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
                 server_only=True,
             )
-        return default_dir
+            self.context_state.deleted_template_configs = []
+            self.context_state.deleted_template_wingmen = {}
+            self.save_context_state()
+            self.copy_templates()
+            config_dirs = self.get_config_dirs()
+
+        if not config_dirs:
+            # copy_templates() produced nothing - the installation is broken.
+            raise FileNotFoundError(
+                f"No Wingman configs found in '{self.config_dir}' and the shipped "
+                f"templates could not be restored from '{self.templates_dir}'. "
+                "Please reinstall Wingman AI."
+            )
+
+        for config_dir in config_dirs:
+            if config_dir.is_default:
+                return config_dir
+
+        # The stored default doesn't exist (anymore) - fall back and self-heal.
+        fallback = self._fallback_config(config_dirs)
+        self.printr.print(
+            f"Default config '{self.context_state.default_config}' not found. Picking '{fallback.name}' as new default.",
+            color=LogType.WARNING,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+            server_only=True,
+        )
+        self.context_state.default_config = fallback.name
+        self.save_context_state()
+        fallback.is_default = True
+        return fallback
+
+    def validate_config_dir_name(self, config_name: str) -> Optional[str]:
+        """Returns an error message if the given config directory name is invalid.
+
+        Directory names are identity (state lives in the context state), so
+        hidden/prefixed names and path separators must never reach the disk:
+        '.'-prefixed directories are invisible to get_config_dirs().
+        """
+        if not config_name or not config_name.strip():
+            return "The config name must not be empty."
+        if config_name.startswith(".") or config_name.startswith("_"):
+            return "The config name must not start with '.' or '_'."
+        if "/" in config_name or "\\" in config_name:
+            return "The config name must not contain path separators."
+        return None
 
     def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
+        name_error = self.validate_config_dir_name(config_name)
+        if name_error:
+            self.printr.toast_error(
+                f"Unable to create config '{config_name}'. {name_error}"
+            )
+            raise ValueError(name_error)
+
         new_dir = get_writable_dir(path.join(self.config_dir, config_name))
 
         if template:
@@ -208,13 +375,51 @@ class ConfigManager:
             ):
                 for filename in files:
                     if filename.endswith("template.yaml"):
-                        shutil.copyfile(
-                            path.join(root, filename),
-                            path.join(new_dir, filename.replace(".template", "")),
-                        )
+                        target = path.join(new_dir, filename.replace(".template", ""))
+                        shutil.copyfile(path.join(root, filename), target)
+                        self._stamp_created_with_version(target)
+
+        # Only an explicit re-creation from its own template clears the deletion
+        # tombstone. A config that merely shares a template's name (created empty
+        # or from another template) keeps it, so copy_templates() won't inject
+        # the template's wingmen into it on the next launch.
+        if template and template.name == config_name:
+            self.unmark_template_config_deleted(config_name)
+
         return ConfigDirInfo(
             name=config_name,
             directory=config_name,
+            is_default=False,
+            is_deleted=False,
+        )
+
+    def duplicate_config(self, source_config_dir: ConfigDirInfo, new_name: str) -> ConfigDirInfo:
+        name_error = self.validate_config_dir_name(new_name)
+        if name_error:
+            self.printr.toast_error(
+                f"Unable to duplicate '{source_config_dir.name}' as '{new_name}'. {name_error}"
+            )
+            raise ValueError(name_error)
+
+        source_path = path.join(self.config_dir, source_config_dir.directory)
+        if not path.isdir(source_path):
+            raise FileNotFoundError(
+                f"Source config directory not found: {source_config_dir.directory}"
+            )
+
+        dest_path = path.join(self.config_dir, new_name)
+        if path.exists(dest_path):
+            raise FileExistsError(f"Config '{new_name}' already exists.")
+
+        shutil.copytree(source_path, dest_path)
+
+        # NOTE: a deletion tombstone on new_name is deliberately kept - the
+        # duplicate is not the template config, so the template's wingmen must
+        # not be topped up into it by copy_templates() on the next launch.
+
+        return ConfigDirInfo(
+            name=new_name,
+            directory=new_name,
             is_default=False,
             is_deleted=False,
         )
@@ -227,17 +432,13 @@ class ConfigManager:
     def copy_templates(self, force: bool = False):
         """Copy templates to the user's config directory.
 
-        Note: Skills are NO LONGER copied from templates. Built-in skills are now
-        loaded directly from the bundled location (_internal/skills/ in release).
-        Custom skills go in APPDATA/WingmanAI/custom_skills/ (not versioned).
+        Config directories and wingman files that the user deleted (tracked in
+        configs/context.yaml) are not recreated unless force is True.
 
-        This method now only copies config templates (configs/, migration/*/configs/).
-        Skills directories are skipped entirely.
+        Note: Skills are NOT copied from templates. Built-in skills are loaded
+        directly from the bundled location (_internal/skills/ in release).
+        Custom skills go in APPDATA/WingmanAI/custom_skills/ (not versioned).
         """
-        backup = repair_config_directories(self.config_dir, Path(self.templates_dir) / CONFIGS_DIR)
-        if backup:
-            self.printr.print(f"Repaired duplicate configuration directories. Backup: {backup}",
-                              server_only=True, color=LogType.WARNING)
         for root, dirs, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
             path_parts = relative_path.split(path.sep)
@@ -246,28 +447,32 @@ class ConfigManager:
             # e.g., "skills/...", "migration/1_8_0/skills/...", etc.
             if "skills" in path_parts:
                 continue
+            # Read straight from the bundle, never from a copy here: voice
+            # recordings (PocketTTS copies them into the custom voices folder,
+            # providers/pocket_tts_voices.py) and the pronunciation lists
+            # (services/speech_text.py). A copy per Wingman version would only
+            # take up space.
+            if path_parts[0] in ("pocket_tts", "pronunciation"):
+                continue
 
-            # Only live config directories follow the user's selected identity.
-            # Migration snapshots always retain their own relative paths.
-            if len(path_parts) >= 2 and path_parts[0] == CONFIGS_DIR:
-                template_name = path_parts[1]
-                config_dir = self.get_config_dir(config_name(template_name))
-                if not force and config_dir and config_dir.is_deleted:
-                    dirs[:] = []
+            # A wingman config template directory, e.g. "configs/Star Citizen"
+            config_name: Optional[str] = None
+            if len(path_parts) == 2 and path_parts[0] == CONFIGS_DIR:
+                config_name = path_parts[1]
+                if not force and self.is_template_config_deleted(config_name):
+                    self.printr.print(
+                        f"Skipping creation of config '{config_name}' because the user deleted it.",
+                        color=LogType.INFO,
+                        server_only=True,
+                        source=LogSource.SYSTEM,
+                        source_name=self.log_source_name,
+                    )
                     continue
-                if config_dir:
-                    path_parts[1] = config_dir.directory
-                elif template_name.startswith(DEFAULT_PREFIX) and any(c.is_default for c in self.get_config_dirs()):
-                    path_parts[1] = config_name(template_name)
-                relative_path = path.join(*path_parts)
 
             # Create the same relative path in the target directory
             target_path = get_writable_dir(
                 relative_path if relative_path != "." else ""
             )
-
-            if not path.exists(target_path):
-                makedirs(target_path)
 
             for filename in files:
                 if filename == ".DS_Store":
@@ -276,22 +481,28 @@ class ConfigManager:
                 if filename.endswith(".yaml"):
                     new_filename = filename.replace(".template", "")
                     new_filepath = path.join(target_path, new_filename)
-                    already_exists = path.exists(new_filepath)
-                    # don't recreate Wingmen configs starting with "." (logical deleted)
-                    logical_deleted = path.exists(
-                        path.join(target_path, f".{new_filename}")
-                    )
-                    if logical_deleted:
+
+                    wingman_name = new_filename.removesuffix(".yaml")
+                    if (
+                        not force
+                        and config_name
+                        and self.is_template_wingman_deleted(
+                            config_name, wingman_name
+                        )
+                    ):
                         self.printr.print(
-                            f"Skipping creation of {new_filepath} because it is marked as deleted.",
-                            color=LogType.WARNING,
+                            f"Skipping creation of {new_filepath} because the user deleted it.",
+                            color=LogType.INFO,
                             server_only=True,
                             source=LogSource.SYSTEM,
                             source_name=self.log_source_name,
                         )
+                        continue
 
-                    if force or (not already_exists and not logical_deleted):
+                    if force or not path.exists(new_filepath):
                         shutil.copyfile(path.join(root, filename), new_filepath)
+                        if filename.endswith("template.yaml"):
+                            self._stamp_created_with_version(new_filepath)
                         self.printr.print(
                             f"Created config {new_filepath} from template.",
                             color=LogType.INFO,
@@ -301,8 +512,7 @@ class ConfigManager:
                         )
                 else:
                     new_filepath = path.join(target_path, filename)
-                    already_exists = path.exists(new_filepath)
-                    if force or not already_exists:
+                    if force or not path.exists(new_filepath):
                         shutil.copyfile(path.join(root, filename), new_filepath)
                         self.printr.print(
                             f"Created file {new_filepath} from template.",
@@ -314,72 +524,41 @@ class ConfigManager:
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
-        return self.__get_dirs_info(self.config_dir)
+        return self.__get_dirs_info(
+            self.config_dir, default_name=self.context_state.default_config
+        )
 
     def get_config_template_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config template dirs."""
         return self.__get_dirs_info(path.join(self.templates_dir, CONFIGS_DIR))
 
-    def __get_template_dir(self, config_dir: ConfigDirInfo) -> Optional[ConfigDirInfo]:
-        """Gets the template directory for a given config directory."""
-        template_dir = path.join(self.templates_dir, CONFIGS_DIR, config_dir.directory)
-        if not path.exists(template_dir):
-            # check if "defaulted" template dir exists
-            default_template_dir = path.join(
+    def __get_dirs_info(
+        self, configs_path: str, default_name: Optional[str] = None
+    ) -> list[ConfigDirInfo]:
+        return [
+            ConfigDirInfo(
+                directory=name,
+                name=name,
+                is_default=name == default_name,
+                is_deleted=False,
+            )
+            for name in self.__get_dir_names(configs_path)
+        ]
+
+    def has_template_config(self, config_name: str) -> bool:
+        """Whether a shipped template exists for the given config name."""
+        return path.isdir(path.join(self.templates_dir, CONFIGS_DIR, config_name))
+
+    def has_template_wingman(self, config_name: str, wingman_name: str) -> bool:
+        """Whether a shipped template exists for the given wingman in the given config."""
+        return path.exists(
+            path.join(
                 self.templates_dir,
                 CONFIGS_DIR,
-                f"{DEFAULT_PREFIX}{config_dir.directory}",
+                config_name,
+                f"{wingman_name}.template.yaml",
             )
-            if path.exists(default_template_dir):
-                return ConfigDirInfo(
-                    name=config_dir.name,
-                    directory=default_template_dir,
-                    is_default=True,
-                    is_deleted=False,
-                )
-            return None
-        return ConfigDirInfo(
-            name=config_dir.name,
-            directory=config_dir.directory,
-            is_default=config_dir.is_default,
-            is_deleted=False,
         )
-
-    def __get_template(
-        self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
-    ) -> Tuple[Optional[ConfigDirInfo], Optional[WingmanConfigFileInfo]]:
-        template_dir = self.__get_template_dir(config_dir)
-        if not template_dir:
-            return (None, None)
-
-        for root, dirs, files in walk(
-            path.join(self.templates_dir, CONFIGS_DIR, config_dir.directory)
-        ):
-            for filename in files:
-                # templates are never logically deleted
-                base_file_name = filename.replace(".template", "")
-                if (
-                    filename.endswith("template.yaml")
-                    # but the given wingman config might be logically deleted
-                    and base_file_name == wingman_file.file
-                    or (
-                        wingman_file.file.startswith(DELETED_PREFIX)
-                        and base_file_name == wingman_file.file[1:]
-                    )
-                ):
-                    file_info = WingmanConfigFileInfo(
-                        file=base_file_name,
-                        name=base_file_name,
-                        is_deleted=False,
-                        avatar=self.__load_image_as_base64(
-                            self.get_wingman_avatar_path(template_dir, base_file_name)
-                        ),
-                    )
-                    return (
-                        template_dir,
-                        file_info,
-                    )
-        return (None, None)
 
     def __load_image_as_base64(self, file_path: str):
         with open(file_path, "rb") as image_file:
@@ -457,7 +636,9 @@ class ConfigManager:
                 if filename.endswith(".yaml") and not filename.startswith("."):
                     wingman_config = self.read_config(path.join(root, filename))
                     try:
-                        merged_config = self.merge_configs(default_config, wingman_config)
+                        merged_config = self.merge_configs(
+                            default_config, wingman_config
+                        )
                     except ConfigValidationError as e:
                         # Re-raise with the source YAML file name prepended so the
                         # user immediately knows which file to open and fix.
@@ -487,17 +668,15 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
             return None
-        if new_name.startswith(DEFAULT_PREFIX) or new_name.startswith(DELETED_PREFIX):
+        name_error = self.validate_config_dir_name(new_name)
+        if name_error:
             self.printr.toast_error(
-                f"Unable to rename '{config_dir.name}' to '{new_name}'. The name must not start with '{DEFAULT_PREFIX}' or '{DELETED_PREFIX}'."
+                f"Unable to rename '{config_dir.name}' to '{new_name}'. {name_error}"
             )
             return None
 
         old_path = path.join(self.config_dir, config_dir.directory)
-        new_dir_name = (
-            new_name if not config_dir.is_default else f"{DEFAULT_PREFIX}{new_name}"
-        )
-        new_path = path.join(self.config_dir, new_dir_name)
+        new_path = path.join(self.config_dir, new_name)
 
         if path.exists(new_path):
             self.printr.toast_error(
@@ -505,103 +684,80 @@ class ConfigManager:
             )
             return None
 
-        if self.__get_template_dir(config_dir):
-            # if we'd rename this, Wingman will recreate it on next launch -
-            # so we create the new one and rename the old dir to ".<name>" .
-            shutil.copytree(old_path, new_path)
-            shutil.move(
-                old_path,
-                path.join(self.config_dir, f"{DELETED_PREFIX}{config_dir.name}"),
-            )
+        shutil.move(old_path, new_path)
 
-            self.printr.print(
-                f"Logically deleted config '{config_dir.name}' and created new config '{new_name}'.",
-                color=LogType.INFO,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
-            )
-        else:
-            shutil.move(path.join(self.config_dir, config_dir.directory), new_path)
-            self.printr.print(
-                f"Renamed config '{config_dir.directory}' to '{new_dir_name}'.",
-                color=LogType.INFO,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
-            )
+        # Prevent the template with the old name from being recreated on next
+        # launch. A tombstone on the new name is deliberately kept - the renamed
+        # config is not the template config, so the template's wingmen must not
+        # be topped up into it by copy_templates().
+        state_changed = False
+        if self.has_template_config(config_dir.name):
+            self.mark_template_config_deleted(config_dir.name, save=False)
+            state_changed = True
+
+        if self.context_state.default_config == config_dir.name:
+            self.context_state.default_config = new_name
+            state_changed = True
+
+        if state_changed:
+            self.save_context_state()
+
+        self.printr.print(
+            f"Renamed config '{config_dir.name}' to '{new_name}'.",
+            color=LogType.INFO,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
         return ConfigDirInfo(
             name=new_name,
-            directory=new_dir_name,
-            is_default=new_dir_name.startswith(DEFAULT_PREFIX),
-            is_deleted=new_dir_name.startswith(DELETED_PREFIX),
+            directory=new_name,
+            is_default=self.context_state.default_config == new_name,
+            is_deleted=False,
         )
 
-    def delete_config(self, config_dir: ConfigDirInfo, force: bool = False):
+    def delete_config(self, config_dir: ConfigDirInfo):
         config_path = path.join(self.config_dir, config_dir.directory)
-        if config_dir.is_deleted:
-            self.printr.print(
-                f"Skip delete config {config_dir.name} because it is already marked as deleted.",
-                color=LogType.WARNING,
-                server_only=True,
-                source=LogSource.SYSTEM,
-                source_name=self.log_source_name,
+
+        if not path.exists(config_path):
+            self.printr.toast_error(
+                f"Unable to delete '{config_path}'. The path does not exist."
             )
             return False
 
-        if path.exists(config_path):
-            if not force and self.__get_template_dir(config_dir):
-                # if we'd delete this, Wingman would recreate it on next launch -
-                # so we rename it to ".<name>" and interpret this as "logical delete" later.
-                shutil.move(
-                    config_path,
-                    path.join(
-                        self.config_dir,
-                        f"{DELETED_PREFIX}{config_dir.name}",
-                    ),
-                )
-                config_dir.is_deleted = True
-                self.printr.print(
-                    f"Renamed config '{config_dir.name}' to '{DELETED_PREFIX}{config_dir.name}' (logical delete).",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
-            else:
-                shutil.rmtree(config_path)
-                self.printr.print(
-                    f"Deleted config {config_path}.",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
-
-            if config_dir.is_default:
-                # will return the first normal config found because we already deleted the default one
-                new_default = self.find_default_config()
-                self.set_default_config(new_default)
-
-                self.printr.print(
-                    f"Deleted config {config_path} was marked as default. Picked a new default config: {new_default.name}.",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
-            return True
-
-        self.printr.toast_error(
-            f"Unable to delete '{config_path}'. The path does not exist."
+        shutil.rmtree(config_path)
+        self.printr.print(
+            f"Deleted config {config_path}.",
+            color=LogType.INFO,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
         )
-        return False
+
+        # Prevent the template from being recreated on next launch.
+        if self.has_template_config(config_dir.name):
+            self.mark_template_config_deleted(config_dir.name)
+
+        if self.context_state.default_config == config_dir.name:
+            remaining = self.get_config_dirs()
+            if remaining:
+                fallback = self._fallback_config(remaining)
+                self.set_default_config(fallback)
+                self.printr.print(
+                    f"Deleted config {config_dir.name} was the default. Picked a new default config: {fallback.name}.",
+                    color=LogType.INFO,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
+            # if nothing remains, find_default_config() will self-heal on next access
+        return True
 
     def set_default_config(self, config_dir: ConfigDirInfo):
         """Sets a config as the new default config (and unsets the old one)."""
-        if config_dir.is_deleted:
+        if not path.exists(path.join(self.config_dir, config_dir.directory)):
             self.printr.print(
-                f"Unable to set deleted config {config_dir.name} as default config.",
+                f"Unable to set missing config {config_dir.name} as default config.",
                 color=LogType.ERROR,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -609,12 +765,7 @@ class ConfigManager:
             )
             return False
 
-        configs = self.get_config_dirs()
-        selected = next((c for c in configs if c.directory == config_dir.directory and not c.is_deleted), None)
-        if selected is None:
-            raise ValueError("Configuration selection changed; reload the configuration list")
-        defaults = [c for c in configs if c.is_default]
-        if selected.is_default and len(defaults) == 1:
+        if self.context_state.default_config == config_dir.name:
             self.printr.print(
                 f"Config {config_dir.name} is already the default config.",
                 color=LogType.WARNING,
@@ -624,29 +775,8 @@ class ConfigManager:
             )
             return False
 
-        root = Path(self.config_dir).resolve()
-        moves = [(root / c.directory, root / c.name) for c in defaults if c.directory != selected.directory]
-        new_name = f"{DEFAULT_PREFIX}{selected.name}"
-        if selected.directory != new_name:
-            moves.append((root / selected.directory, root / new_name))
-        for source, target in moves:
-            if source.resolve().parent != root or target.resolve().parent != root or source.is_symlink():
-                raise ValueError("Invalid configuration directory")
-            if target.exists():
-                raise ValueError("Configuration destination already exists; repair duplicate configurations first")
-        completed = []
-        try:
-            for source, target in moves:
-                if target.exists():
-                    raise ValueError("Configuration changed while selecting the default")
-                source.rename(target)
-                completed.append((source, target))
-        except Exception:
-            for source, target in reversed(completed):
-                target.rename(source)
-            raise
-        config_dir.directory = new_name
-        config_dir.name = selected.name
+        self.context_state.default_config = config_dir.name
+        self.save_context_state()
         config_dir.is_default = True
 
         self.printr.print(
@@ -664,12 +794,12 @@ class ConfigManager:
         wingmen: list[WingmanConfigFileInfo] = []
         for _, _, files in walk(config_path):
             for filename in files:
-                if filename.endswith(".yaml"):
-                    base_file_name = filename.replace(".yaml", "").replace(".", "", 1)
+                if filename.endswith(".yaml") and not filename.startswith("."):
+                    base_file_name = filename.removesuffix(".yaml")
                     wingman_file = WingmanConfigFileInfo(
                         file=filename,
                         name=base_file_name,
-                        is_deleted=filename.startswith(DELETED_PREFIX),
+                        is_deleted=False,
                         avatar=self.__load_image_as_base64(
                             self.get_wingman_avatar_path(config_dir, base_file_name)
                         ),
@@ -703,7 +833,6 @@ class ConfigManager:
         """Check whether a wingman name already exists in the target context.
 
         Treats case-insensitive collisions as existing (important on macOS/Windows).
-        Also treats logically-deleted '.Name.yaml' as existing.
         """
 
         target_path = path.join(self.config_dir, config_dir.directory)
@@ -711,13 +840,10 @@ class ConfigManager:
 
         for _, _, files in walk(target_path):
             for filename in files:
-                if not filename.endswith(".yaml"):
+                if not filename.endswith(".yaml") or filename.startswith("."):
                     continue
 
-                base_file_name = filename.replace(".yaml", "")
-                if base_file_name.startswith(DELETED_PREFIX):
-                    base_file_name = base_file_name.replace(DELETED_PREFIX, "", 1)
-                if base_file_name.casefold() == wanted:
+                if filename.removesuffix(".yaml").casefold() == wanted:
                     return True
 
         return False
@@ -735,11 +861,6 @@ class ConfigManager:
         but writes them under a new filename and sets the internal 'name' field to match.
         Also copies the avatar PNG if present.
         """
-
-        if source_wingman_file.is_deleted or source_wingman_file.file.startswith(
-            DELETED_PREFIX
-        ):
-            raise ValueError("Cannot duplicate a deleted/hidden Wingman.")
 
         cleaned_name = self._validate_wingman_name(new_name)
 
@@ -780,6 +901,9 @@ class ConfigManager:
             raise OSError(
                 f"Failed to write duplicated Wingman config to '{target_config_path}'."
             )
+
+        # The user explicitly created a wingman under this name, so clear any tombstone.
+        self.unmark_template_wingman_deleted(target_config_dir.name, cleaned_name)
 
         new_wingman_file = WingmanConfigFileInfo(
             name=cleaned_name,
@@ -823,7 +947,7 @@ class ConfigManager:
         # Return the canonical file info as it will appear to the client.
         wingmen = self.get_wingmen_configs(target_config_dir)
         created = next(
-            (w for w in wingmen if w.name == cleaned_name and not w.is_deleted), None
+            (w for w in wingmen if w.name == cleaned_name), None
         )
         return created if created else new_wingman_file
 
@@ -870,18 +994,11 @@ class ConfigManager:
                 self.config_dir, config_dir.directory, wingman_file.file
             )
 
-            # check if there is a template for the old name
-            tpl, wng = self.__get_template(config_dir, wingman_file)
-            if tpl and wng:
-                # leave a .[OLD] file so that it won't be recreated next time
-                shutil.copyfile(
-                    old_config_path,
-                    path.join(
-                        self.config_dir,
-                        config_dir.directory,
-                        f"{DELETED_PREFIX}{wng.file}",
-                    ),
-                )
+            # if there is a template for the old name, prevent it from being
+            # recreated on next launch
+            if self.has_template_wingman(config_dir.name, wingman_file.name):
+                self.mark_template_wingman_deleted(config_dir.name, wingman_file.name)
+            self.unmark_template_wingman_deleted(config_dir.name, wingman_config.name)
 
             # move the config
             shutil.move(
@@ -951,15 +1068,52 @@ class ConfigManager:
                     stripped_skills.append(stripped_skill)
             wingman_config_dict["skills"] = stripped_skills if stripped_skills else None
 
+        # Preserve on-disk entries of skills that are not installed on this
+        # system: merge_configs skips them at load time, so a config that was
+        # loaded and saved back would silently drop them from the YAML. Skills
+        # the user deliberately removed are never affected - only installed
+        # skills show up in the UI and can be removed there.
+        existing_skills = []
+        if path.exists(config_path):
+            try:
+                existing_skills = (self.read_config(config_path) or {}).get(
+                    "skills"
+                ) or []
+            except Exception:
+                existing_skills = []
+        if existing_skills:
+            saved_modules = {
+                skill.get("module")
+                for skill in (wingman_config_dict.get("skills") or [])
+                if isinstance(skill, dict)
+            }
+            preserved_skills = [
+                entry
+                for entry in existing_skills
+                if isinstance(entry, dict)
+                and entry.get("module")
+                and entry["module"] not in saved_modules
+                and not self.find_skill_default_config_path(entry["module"])
+            ]
+            if preserved_skills:
+                wingman_config_dict["skills"] = (
+                    wingman_config_dict.get("skills") or []
+                ) + preserved_skills
+
         wingman_config_diff = self.deep_diff(default_config, wingman_config_dict)
 
-        return self.write_config(config_path, wingman_config_diff)
+        written = self.write_config(config_path, wingman_config_diff)
+        if written:
+            # A config file exists under this name now, so it's not deleted.
+            self.unmark_template_wingman_deleted(config_dir.name, wingman_file.name)
+        return written
 
     def save_wingman_commands(
         self,
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         commands: list,
+        command_categories: Optional[list] = None,
     ):
         """Save only the commands section of a wingman config.
 
@@ -971,6 +1125,8 @@ class ConfigManager:
             config_dir: The config directory info
             wingman_file: The wingman file info
             commands: The commands list from wingman.config.commands
+            command_categories: wingman.config.command_categories. None leaves
+                the categories in the file untouched.
         """
         config_path = path.join(
             self.config_dir,
@@ -1002,6 +1158,16 @@ class ConfigManager:
             # Remove commands key if it matches defaults (keep config minimal)
             del existing_yaml["commands"]
 
+        # Commands point at their category by id, so a category a skill made
+        # has to be written with them or the command loses it on restart.
+        if command_categories is not None:
+            if command_categories:
+                existing_yaml["command_categories"] = [
+                    self.convert_to_dict(category) for category in command_categories
+                ]
+            elif "command_categories" in existing_yaml:
+                del existing_yaml["command_categories"]
+
         # Write back the YAML with only commands changed
         return self.write_config(config_path, existing_yaml)
 
@@ -1018,6 +1184,14 @@ class ConfigManager:
             avatar_path if create or path.exists(avatar_path) else default_avatar_path
         )
 
+    def _stamp_created_with_version(self, yaml_path: str) -> None:
+        """Stamp a wingman config file with the current Core version."""
+        with open(yaml_path, "r", encoding="UTF-8") as f:
+            data = yaml.safe_load(f) or {}
+        data["created_with_version"] = LOCAL_VERSION
+        with open(yaml_path, "w", encoding="UTF-8") as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
     def restore_wingman_from_template(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
     ) -> None:
@@ -1028,9 +1202,6 @@ class ConfigManager:
 
         This performs a full replace of the Wingman YAML file.
         """
-
-        if wingman_file.is_deleted or wingman_file.file.startswith(DELETED_PREFIX):
-            raise ValueError("Cannot restore defaults for a deleted/hidden Wingman.")
 
         template_yaml_path, template_dir_name = self._resolve_wingman_template_yaml(
             config_dir=config_dir, wingman_name=wingman_file.name
@@ -1048,6 +1219,10 @@ class ConfigManager:
 
         # Full replace.
         shutil.copyfile(template_yaml_path, target_yaml_path)
+
+        # Stamp with the current Core version so migrations treat it as fresh.
+        self._stamp_created_with_version(target_yaml_path)
+
         self.printr.print(
             f"Restored Wingman '{wingman_file.name}' in '{config_dir.name}' from template.",
             color=LogType.INFO,
@@ -1088,9 +1263,6 @@ class ConfigManager:
     ) -> bool:
         """Return True if a shipped template exists for this Wingman in this context."""
 
-        if wingman_file.is_deleted or wingman_file.file.startswith(DELETED_PREFIX):
-            return False
-
         template_yaml_path, _ = self._resolve_wingman_template_yaml(
             config_dir=config_dir, wingman_name=wingman_file.name
         )
@@ -1099,57 +1271,16 @@ class ConfigManager:
     def _resolve_wingman_template_yaml(
         self, config_dir: ConfigDirInfo, wingman_name: str
     ) -> Tuple[Optional[str], Optional[str]]:
-        """Resolve the shipped template YAML path for a Wingman.
+        """Resolve the shipped template YAML path for a Wingman."""
 
-        This scans the template directory in the Wingman AI installation (or repo
-        when running from source) and supports default-prefixed template folders
-        such as '_Star Citizen'.
-        """
-
-        templates_root = path.join(self.templates_dir, CONFIGS_DIR)
-        if not path.exists(templates_root):
-            return (None, None)
-
-        candidates: list[str] = []
-
-        # Prefer exact matches first.
-        preferred = [
-            config_dir.directory,
+        template_yaml_path = path.join(
+            self.templates_dir,
+            CONFIGS_DIR,
             config_dir.name,
-            f"{DEFAULT_PREFIX}{config_dir.name}",
-        ]
-        for d in preferred:
-            # Defensive: some legacy code paths may accidentally set `directory` to an
-            # absolute path. We only accept plain directory names here.
-            if not d or path.isabs(d) or path.sep in d:
-                continue
-
-            if path.exists(path.join(templates_root, d)) and d not in candidates:
-                candidates.append(d)
-
-        # Then add any other template dirs whose normalized name matches.
-        try:
-            _, dirs, _ = next(walk(templates_root))
-        except StopIteration:
-            dirs = []
-
-        def normalize_dir_name(dir_name: str) -> str:
-            return dir_name.replace(DELETED_PREFIX, "", 1).replace(
-                DEFAULT_PREFIX, "", 1
-            )
-
-        for d in dirs:
-            if normalize_dir_name(d) == config_dir.name and d not in candidates:
-                candidates.append(d)
-
-        template_filename = f"{wingman_name}.template.yaml"
-        for template_dir_name in candidates:
-            template_yaml_path = path.join(
-                templates_root, template_dir_name, template_filename
-            )
-            if path.exists(template_yaml_path):
-                return (template_yaml_path, template_dir_name)
-
+            f"{wingman_name}.template.yaml",
+        )
+        if path.exists(template_yaml_path):
+            return (template_yaml_path, config_dir.name)
         return (None, None)
 
     def delete_wingman_config(
@@ -1167,6 +1298,11 @@ class ConfigManager:
                 remove(avatar_path)
 
             remove(config_path)
+
+            # Prevent the template with this name from being recreated on next launch.
+            if self.has_template_wingman(config_dir.name, wingman_file.name):
+                self.mark_template_wingman_deleted(config_dir.name, wingman_file.name)
+
             self.printr.print(
                 f"Deleted config {config_path}.",
                 color=LogType.INFO,
@@ -1191,8 +1327,24 @@ class ConfigManager:
         return False
 
     def read_default_config(self):
+        """The defaults every wingman inherits from, already repaired.
+
+        Sanitising here rather than at each caller is what makes it reliable:
+        `parse_config` hands this very dict to `Config(**default_config)`, so a
+        copy fixed somewhere downstream does not help. That is exactly what
+        happened on 2026-09-11 — the per-wingman merge logged a repair, and
+        startup still failed on the untouched original.
+        """
         config = self.read_config(self.default_config_path)
         config["wingmen"] = {}
+        for change in sanitize(NestedConfig, config):
+            self.printr.print(
+                f"defaults: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
         return config
 
     def read_config(self, file_path: str):
@@ -1306,50 +1458,155 @@ class ConfigManager:
                 )
         return False
 
-    def __get_dirs_info(self, configs_path: str) -> list[ConfigDirInfo]:
-        return [
-            ConfigDirInfo(
-                directory=name,
-                name=config_name(name),
-                is_default=name.startswith(DEFAULT_PREFIX),
-                is_deleted=name.startswith(DELETED_PREFIX),
-            )
-            for name in sorted(next(walk(configs_path), (None, [], []))[1], key=str.casefold)
-        ]
+    def __get_dir_names(self, configs_path: str) -> list[str]:
+        """List config directory names, sorted for deterministic order.
+
+        Dot-directories are skipped (hidden/legacy leftovers). A missing
+        configs_path yields an empty list instead of an error.
+        """
+        return sorted(
+            (
+                name
+                for name in next(walk(configs_path), (None, [], None))[1]
+                if not name.startswith(".")
+            ),
+            key=str.casefold,
+        )
 
     def get_config_dir(self, config_name: str) -> Optional[ConfigDirInfo]:
         """Gets a config dir by name."""
-        matches = [c for c in self.get_config_dirs() if c.name.casefold() == config_name.casefold()]
-        return min(matches, key=lambda c: (c.is_deleted, not c.is_default, c.directory.casefold()), default=None)
+        for config in self.get_config_dirs():
+            if config.name == config_name:
+                return config
+        return None
 
     # Settings config:
 
     def create_settings_config(self):
+        """Make sure settings.yaml exists, with the shipped defaults in it.
+
+        copy_templates() normally does this; this is the net for the case where
+        it could not. It writes the template rather than an empty file: an
+        empty settings.yaml has no value for any required field and used to
+        end the process on the next line.
+        """
         if not path.exists(self.settings_config_path):
             try:
-                with open(self.settings_config_path, "w", encoding="UTF-8"):
-                    return True  # just create an empty file
+                template_file = path.join(
+                    self.templates_dir, CONFIGS_DIR, SETTINGS_CONFIG_FILE
+                )
+                if path.exists(template_file):
+                    shutil.copyfile(template_file, self.settings_config_path)
+                else:
+                    with open(self.settings_config_path, "w", encoding="UTF-8"):
+                        pass
+                return True
             except OSError as e:
                 self.printr.toast_error(
                     f"Could not create ({SETTINGS_CONFIG_FILE})\n{str(e)}"
                 )
         return False
 
+    def read_template_config(self, filename: str) -> dict:
+        """The shipped template for one of the top-level config files."""
+        template_file = path.join(self.templates_dir, CONFIGS_DIR, filename)
+        if not path.exists(template_file):
+            return {}
+        parsed = self.read_config(template_file)
+        return parsed if isinstance(parsed, dict) else {}
+
     def load_settings_config(self):
-        """Load and validate Settings config"""
+        """Load and validate Settings config, repairing what is missing.
+
+        The file on disk can be older than the models. ConfigManager runs
+        before the migration that would update it, and a migration that broke
+        off halfway leaves the previous version's file in the new version's
+        folder - that is how a 3.2.1 settings.yaml ended up in a 3_2_2 install,
+        without the `stt` block 3.2.2 requires. Keys the file does not have are
+        filled from the shipped template, the user's values always win, and the
+        repaired file is written back.
+
+        Nothing here may raise. It runs in ConfigManager's constructor, so an
+        exception ends Core on line one of main.py - before the migration that
+        would have fixed the file, which is why every following start hit the
+        same wall.
+        """
         parsed = self.read_config(self.settings_config_path)
-        if parsed:
-            try:
-                validated = SettingsConfig(**parsed)
-                return validated
-            except ValidationError as e:
-                self.printr.toast_error(
-                    f"Invalid config '{self.settings_config_path}':\n{str(e)}"
-                )
-        return SettingsConfig()
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        # Same net as the wingman configs: `stt.provider` can still hold a
+        # value carried over from an old settings.yaml.
+        for change in sanitize(SettingsConfig, parsed):
+            self.printr.print(
+                f"settings: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+
+        try:
+            validated = SettingsConfig(**parsed)
+        except ValidationError as error:
+            file_error = error
+        else:
+            return self._apply_backend_override(validated)
+
+        template = self.read_template_config(SETTINGS_CONFIG_FILE)
+        try:
+            validated = SettingsConfig(**deep_merge_configs(template, parsed))
+        except ValidationError:
+            # Values, not missing keys: nobody can guess what the user meant.
+            # Their file stays on disk untouched and Core comes up on the
+            # shipped defaults, so Settings is there to correct it in.
+            self.printr.toast_error(
+                f"Invalid config '{self.settings_config_path}':\n{str(file_error)}"
+            )
+            return self._apply_backend_override(SettingsConfig(**template))
+
+        self.write_config(self.settings_config_path, validated)
+        self.printr.print(
+            f"'{self.settings_config_path}' was missing settings that "
+            f"{LOCAL_VERSION} needs; they were added from the defaults and "
+            "your own values were kept.",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        return self._apply_backend_override(validated)
+
+    def _apply_backend_override(self, settings: SettingsConfig) -> SettingsConfig:
+        """Lets `WINGMAN_BACKEND_URL` point Core at a different backend.
+
+        Editing `settings.yaml` by hand to test against a local backend is easy
+        to do and easy to forget, and a forgotten one means the next real run
+        talks to localhost and fails with nothing obvious to look at. An
+        environment variable is scoped to the shell that set it, and Core says
+        out loud which backend it uses.
+
+        The value is not written back to the file: the override lasts exactly as
+        long as the variable does.
+        """
+        override = os.environ.get("WINGMAN_BACKEND_URL", "").strip()
+        if not override:
+            return settings
+
+        settings.wingman_pro.base_url = override.rstrip("/")
+        self.printr.print(
+            f"WINGMAN_BACKEND_URL is set: talking to {settings.wingman_pro.base_url} "
+            f"instead of the live backend",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        return settings
 
     def load_defaults_config(self, silent_on_error: bool = False):
         """Load and validate Defaults config"""
+        # `read_default_config` has already repaired unknown enum values.
         parsed = self.read_default_config()
         if parsed:
             try:
@@ -1395,8 +1652,7 @@ class ConfigManager:
 
         changes = False
         if system_manager.is_cuda_available():
-            self.settings_config.voice_activation.fasterwhisper.device = "cuda"
-            self.settings_config.voice_activation.fasterwhisper.compute_type = "auto"
+            self.settings_config.stt.parakeet.execution_provider = "cuda"
             self.printr.print(
                 f"- GPU detected: {system_manager.get_gpu_name()}",
                 color=LogType.STARTUP,
@@ -1405,7 +1661,7 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
             self.printr.print(
-                "- Auto-configured FasterWhisper to use CUDA",
+                "- Auto-configured Parakeet to use CUDA",
                 color=LogType.STARTUP,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -1413,8 +1669,9 @@ class ConfigManager:
             )
             changes = True
         else:
+            self.settings_config.stt.parakeet.execution_provider = "cpu"
             self.printr.print(
-                "- No NVIDIA GPU detected, keeping current STT settings",
+                "- No NVIDIA GPU detected, STT providers will use CPU",
                 color=LogType.STARTUP,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -1637,6 +1894,95 @@ class ConfigManager:
         # Convert merged commands back to a list since that's the expected format
         return list(merged_commands.values())
 
+    @staticmethod
+    def _skill_dir_from_module(skill_module: str) -> str:
+        """Extract the skill directory name from a module path.
+
+        e.g. 'skills.vision_ai.main' -> 'vision_ai'
+        """
+        return skill_module.replace(".main", "").replace(".", "/").split("/")[-1]
+
+    def find_skill_default_config_path(self, skill_module: str) -> Optional[str]:
+        """Locate a skill's default_config.yaml, or None if the skill is not installed.
+
+        Searched in order:
+        1. Bundled skills directory (set by main.py)
+        2. Custom skills directory (non-versioned)
+        3. Legacy: versioned APPDATA skills directory
+        """
+        from services.module_manager import get_bundled_skills_dir
+
+        skill_dir = self._skill_dir_from_module(skill_module)
+
+        search_dirs = []
+        bundled_dir = get_bundled_skills_dir()
+        if bundled_dir:
+            search_dirs.append(bundled_dir)
+        search_dirs.append(get_custom_skills_dir())
+        search_dirs.append(self.skills_dir)
+
+        for base_dir in search_dirs:
+            candidate = path.join(base_dir, skill_dir, DEFAULT_SKILLS_CONFIG)
+            if path.exists(candidate):
+                return candidate
+        return None
+
+    def _drop_orphaned_skill_properties(
+        self, skill_dir: str, skill_manifest: dict, wingman_skill: dict
+    ) -> dict:
+        """Drop stored skill properties the installed skill no longer defines.
+
+        A saved Wingman stores only `{id, value}` per custom property; `name`,
+        `property_type` and the rest come from the skill's default_config.yaml.
+        When a skill update removes a property, the stored entry has nothing
+        left to complete it, so the merged Wingman fails validation - and
+        because parse_config re-raises, ONE stale key stops Core from starting
+        at all. The manifest owns the shape: a value with no property behind it
+        is dropped here (the YAML on disk keeps it untouched).
+
+        An entry that carries the full property itself is kept, so a skill that
+        ships its metadata in the Wingman config still works.
+        """
+        stored = wingman_skill.get("custom_properties")
+        if not stored:
+            return wingman_skill
+
+        known_ids = {
+            prop["id"]
+            for prop in (skill_manifest or {}).get("custom_properties") or []
+            if isinstance(prop, dict) and "id" in prop
+        }
+
+        kept = []
+        dropped = []
+        for prop in stored:
+            if not isinstance(prop, dict) or prop.get("id") in known_ids:
+                kept.append(prop)
+                continue
+            try:
+                CustomProperty(**prop)
+            except ValidationError:
+                dropped.append(prop.get("id"))
+                continue
+            kept.append(prop)
+
+        if not dropped:
+            return wingman_skill
+
+        self.printr.print(
+            f"Skill '{skill_dir}': dropped setting(s) {dropped} - the installed "
+            "version of the skill does not have them (any more). The values stay "
+            "in the Wingman file and are used again if the skill brings the "
+            "setting back.",
+            color=LogType.WARNING,
+            server_only=True,
+            source=LogSource.SYSTEM,
+            source_name=self.log_source_name,
+        )
+        wingman_skill = dict(wingman_skill)
+        wingman_skill["custom_properties"] = kept
+        return wingman_skill
+
     def merge_configs(self, default: Config, wingman):
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
@@ -1657,9 +2003,6 @@ class ConfigManager:
             "elevenlabs",
             "hume",
             "inworld",
-            "azure",
-            "whispercpp",
-            "fasterwhisper",
             "xvasynth",
             "pocket_tts",
             "wingman_pro",
@@ -1686,55 +2029,38 @@ class ConfigManager:
         if "skills" in wingman:
             merged_skills = []
             for skill_config_wingman in wingman["skills"]:
-                skill_dir = (
+                skill_dir = self._skill_dir_from_module(
                     skill_config_wingman["module"]
-                    .replace(".main", "")
-                    .replace(".", "/")
-                    .split("/")[1]
                 )
-
-                # Look for skill default_config.yaml in multiple locations:
-                # 1. Bundled skills directory (set by main.py)
-                # 2. Custom skills directory (non-versioned)
-                # 3. Legacy: versioned APPDATA skills directory
-                from services.module_manager import get_bundled_skills_dir
-
-                skill_default_config_path = None
-                search_paths = []
-
-                # 1. Bundled skills
-                bundled_dir = get_bundled_skills_dir()
-                if bundled_dir:
-                    bundled_path = path.join(
-                        bundled_dir, skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(bundled_path)
-                    if path.exists(bundled_path):
-                        skill_default_config_path = bundled_path
-
-                # 2. Custom skills (non-versioned)
-                if not skill_default_config_path:
-                    custom_path = path.join(
-                        get_custom_skills_dir(), skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(custom_path)
-                    if path.exists(custom_path):
-                        skill_default_config_path = custom_path
-
-                # 3. Legacy: versioned APPDATA (for migration compatibility)
-                if not skill_default_config_path:
-                    legacy_path = path.join(
-                        self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(legacy_path)
-                    if path.exists(legacy_path):
-                        skill_default_config_path = legacy_path
+                skill_default_config_path = self.find_skill_default_config_path(
+                    skill_config_wingman["module"]
+                )
 
                 if skill_default_config_path:
                     skill_config = self.read_config(skill_default_config_path)
+                    skill_config_wingman = self._drop_orphaned_skill_properties(
+                        skill_dir, skill_config, skill_config_wingman
+                    )
                     skill_config = self.__deep_merge(skill_config, skill_config_wingman)
                 else:
-                    # Custom skill without default_config.yaml - use wingman config as-is
+                    # Custom skill without default_config.yaml - the wingman
+                    # config alone is only usable if it carries the full skill
+                    # metadata itself (legacy configs did). Otherwise the skill
+                    # is not installed on this system: skip it so the wingman
+                    # still loads. The entry stays untouched in the YAML on
+                    # disk and comes back once the skill is (re)installed.
+                    try:
+                        SkillConfig(**skill_config_wingman)
+                    except ValidationError:
+                        self.printr.print(
+                            f"Custom skill '{skill_dir}' is not installed - skipping it. "
+                            f"Reinstall the skill to '{get_custom_skills_dir()}' to get it back.",
+                            color=LogType.WARNING,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
+                        continue
                     skill_config = skill_config_wingman
                     self.printr.print(
                         f"Custom skill '{skill_dir}' has no default_config.yaml, using wingman configuration only.",
@@ -1753,6 +2079,20 @@ class ConfigManager:
         # discoverable_mcps - inherit from default if not overridden in wingman config
         if "discoverable_mcps" not in wingman and "discoverable_mcps" in default:
             merged["discoverable_mcps"] = default["discoverable_mcps"]
+
+        # A provider or model the config names may not exist any more — Azure is
+        # the current example, but the same happens whenever a vendor retires a
+        # model. Pydantic would refuse the whole wingman over one stale word, so
+        # unknown enum values are swapped for known ones first, preferring what
+        # the default config has at the same place.
+        for change in sanitize(WingmanConfig, merged, default):
+            self.printr.print(
+                f"{merged.get('name', 'wingman')}: {change}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
 
         try:
             return WingmanConfig(**merged)

@@ -47,7 +47,7 @@ class DataModel:
             self.helper.get_handler_error().write("data_model.persist", [sql], e)
             return False
         if not skip_commit:
-            self.helper.get_database().get_connection().commit()
+            self.helper.get_database().commit()
         return True
 
     def get_data(self) -> dict:
@@ -92,8 +92,7 @@ class DataModel:
             else:
                 sql += f" AND `{key_two}` IS NULL"
 
-        self.helper.get_database().execute(sql, parameters)
-        result = self.helper.get_database().get_cursor().fetchmany(1)
+        result = self.helper.get_database().execute_fetchmany(sql, parameters, 1)
 
         if not result:
             return False

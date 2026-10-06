@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
@@ -90,7 +90,7 @@ class LocationInformation(Tool):
             )
             locations = []
 
-        return json.dumps(locations), ""
+        return compression.dumps(locations), ""
 
     def __get_star_systems(self) -> list[DataModel]:
         from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess

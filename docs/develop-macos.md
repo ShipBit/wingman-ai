@@ -6,7 +6,7 @@ You need **Python 3.11.7** and some dependencies to run Wingman AI Core. We reco
 
 ```bash
 brew update && brew upgrade                             # upgrade all packages
-brew install pyenv portaudio pyobjc-framework-Quartz    # install dependencies
+brew install pyenv portaudio                            # install dependencies
 pyenv install 3.11.7                                    # install Python with pyenv
 pyenv global 3.11.7                                     # set your global Python version
 ```

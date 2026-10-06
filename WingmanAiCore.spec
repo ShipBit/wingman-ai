@@ -4,21 +4,22 @@ PyInstaller spec file for WingmanAI Core
 
 This spec file bundles:
 - The WingmanAI Core Python application
-- NVIDIA CUDA libraries for GPU-accelerated speech recognition (FasterWhisper/ctranslate2)
+- NVIDIA CUDA libraries for GPU-accelerated speech recognition (Parakeet via onnxruntime-gpu)
 - All required data files and dependencies
 
-NVIDIA CUDA Libraries:
-- nvidia-cublas-cu12: cuBLAS for matrix operations
-- nvidia-cudnn-cu12: cuDNN for deep learning primitives
-- nvidia-cuda-runtime-cu12: CUDA runtime
-- nvidia-cuda-nvrtc-cu12: NVRTC for runtime compilation
+NVIDIA CUDA 13 Libraries (nvidia/cu13/ and nvidia/cudnn/):
+- nvidia-cublas: cuBLAS for matrix operations
+- nvidia-cudnn-cu13: cuDNN for deep learning primitives
+- nvidia-cuda-runtime: CUDA runtime
+- nvidia-cuda-nvrtc: NVRTC for runtime compilation
+- nvidia-cufft, nvidia-curand (Linux): linked by onnxruntime-gpu's CUDA provider
 
 These libraries enable GPU acceleration without requiring users to install CUDA separately.
 """
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, collect_all, copy_metadata
 
 # Determine the venv site-packages path based on the platform
 if sys.platform == 'win32':
@@ -32,20 +33,40 @@ else:
 # ============================================================================
 # Format: (source, destination_folder)
 datas = [
-    # Azure Speech SDK
-    (f'{SITE_PACKAGES}/azure/cognitiveservices/speech', 'azure/cognitiveservices/speech'),
+    # The Azure Speech SDK used to be bundled here. It went out with the provider
+    # on 2026-09-11 and `azure-cognitiveservices-speech` is no longer in
+    # requirements.txt. Leaving the entry would have failed the first CI build:
+    # PyInstaller aborts on an --add-data source that does not exist, and CI
+    # installs the venv from requirements.txt, so the path is simply not there.
+    # It survived locally only because the old package is still in the dev venv.
 
     # Application assets and resources
     ('assets', 'assets'),
     ('services', 'services'),
     ('wingmen', 'wingmen'),
-    ('skills', 'skills'),
-    ('integrations/elite_dangerous', 'integrations/elite_dangerous'),
     ('templates/configs', 'templates/configs'),
-    ('templates/migration', 'templates/migration'),
+    # Vocabulary presets for the speech correction, one text file per game.
+    ('templates/vocabulary', 'templates/vocabulary'),
+    ('templates/pronunciation', 'templates/pronunciation'),
+    ('templates/pocket_tts', 'templates/pocket_tts'),
     ('audio_samples', 'audio_samples'),
+    # Silero VAD, runs on the onnxruntime that Parakeet already needs.
+    ('audio_models', 'audio_models'),
+    ('prompts', 'prompts'),
     ('LICENSE', '.'),
 ]
+
+# Bundled skills, file by file: a skill's own tests/ folder (and Python's
+# caches) stay out of the build. The test suite in tests/ is never bundled.
+def collect_skills():
+    found = []
+    for dirpath, dirnames, filenames in os.walk('skills'):
+        dirnames[:] = [d for d in dirnames if d not in ('tests', '__pycache__')]
+        found += [(os.path.join(dirpath, name), dirpath) for name in filenames]
+    return found
+
+
+datas += collect_skills()
 
 # Automatically bundle all contents from explicit_deps/
 # Add any dependencies that need manual bundling to explicit_deps/ and they'll be copied to _internal/
@@ -68,29 +89,39 @@ if os.path.exists('lib/python3.dll'):
 # ============================================================================
 binaries = []
 
-# Collect NVIDIA CUDA DLLs for GPU support
-# These are installed via pip from nvidia-* packages
-nvidia_packages = [
-    'nvidia.cublas',
-    'nvidia.cuda_runtime',
-    'nvidia.cudnn',
-    'nvidia.nvrtc',
-    'nvidia.cuda_nvrtc',
-]
+# Collect NVIDIA CUDA DLLs for GPU support (Windows/Linux only — macOS uses Metal)
+#
+# The CUDA 13 wheels are namespace packages without __init__.py, which
+# collect_dynamic_libs does not handle, so walk the folders. Each library keeps
+# its path below site-packages (nvidia/cu13/bin/x86_64/cublas64_13.dll,
+# nvidia/cu13/lib/libcublas.so.13, nvidia/cudnn/...): onnxruntime's
+# preload_dlls() looks for them there, relative to its own package.
+def collect_nvidia_libraries(*folders):
+    import nvidia
 
-for pkg in nvidia_packages:
-    try:
-        binaries += collect_dynamic_libs(pkg)
-        print(f"Collected DLLs from {pkg}")
-    except Exception as e:
-        print(f"Warning: Could not collect {pkg} DLLs: {e}")
+    found = []
+    for base in nvidia.__path__:
+        site_packages = os.path.dirname(base)
+        for folder in folders:
+            for dirpath, _, files in os.walk(os.path.join(base, folder)):
+                for name in files:
+                    if name.endswith('.dll') or '.so' in name:
+                        found.append(
+                            (os.path.join(dirpath, name), os.path.relpath(dirpath, site_packages))
+                        )
+    return found
 
-# Collect ctranslate2 binaries
-try:
-    binaries += collect_dynamic_libs('ctranslate2')
-    print("Collected DLLs from ctranslate2")
-except Exception as e:
-    print(f"Warning: Could not collect ctranslate2 DLLs: {e}")
+
+if sys.platform != 'darwin':
+    nvidia_binaries = collect_nvidia_libraries('cu13', 'cudnn')
+    cublas = 'cublas64_13.dll' if sys.platform == 'win32' else 'libcublas.so.13'
+    if not any(os.path.basename(src) == cublas for src, _ in nvidia_binaries):
+        raise SystemExit(
+            f"{cublas} not found under site-packages/nvidia/cu13 — refusing to ship a "
+            "build whose Parakeet cannot use CUDA."
+        )
+    binaries += nvidia_binaries
+    print(f"Collected {len(nvidia_binaries)} NVIDIA libraries")
 
 # ============================================================================
 # HIDDEN IMPORTS
@@ -171,7 +202,7 @@ hiddenimports = [
     'truck_telemetry',
     'pyproj',
 
-    # FasterWhisper / STT dependencies
+    # STT dependencies
     'numba',
     'llvmlite',
     'tokenizers',
@@ -180,14 +211,7 @@ hiddenimports = [
 
     # NVIDIA packages (ensure they're included even if DLL collection fails)
     'nvidia',
-    'nvidia.cublas',
-    'nvidia.cuda_runtime',
-    'nvidia.cudnn',
-    'nvidia.cuda_nvrtc',
 
-    # ctranslate2 for FasterWhisper
-    'ctranslate2',
-	
 	# for pocket-tts
 	'engineio.async_drivers.threading',
     'torch',
@@ -216,9 +240,57 @@ except Exception as e:
 
 # Collect all pocket-tts
 ptts_datas, ptts_binaries, ptts_hidden = collect_all('pocket_tts')
+# Its dist-info, so importlib.metadata can tell the UI which version runs.
+ptts_datas += copy_metadata('pocket-tts')
 datas += ptts_datas
 binaries += ptts_binaries
 hiddenimports += ptts_hidden
+
+# Collect tiktoken encoding data (e.g. cl100k_base BPE ranks)
+tiktoken_datas, tiktoken_binaries, tiktoken_hidden = collect_all('tiktoken')
+datas += tiktoken_datas
+binaries += tiktoken_binaries
+hiddenimports += tiktoken_hidden
+
+# Collect tiktoken_ext (namespace package that registers encodings like cl100k_base)
+tiktoken_ext_datas, tiktoken_ext_binaries, tiktoken_ext_hidden = collect_all('tiktoken_ext')
+datas += tiktoken_ext_datas
+binaries += tiktoken_ext_binaries
+hiddenimports += tiktoken_ext_hidden
+hiddenimports += ['tiktoken_ext.openai_public']
+
+# rapidfuzz picks its compiled module (plain, AVX2) at import time inside a
+# try/except. The static analysis usually sees through that, but the wingman
+# name match in services/tower.py must not depend on "usually".
+rf_datas, rf_binaries, rf_hidden = collect_all('rapidfuzz')
+datas += rf_datas
+binaries += rf_binaries
+hiddenimports += rf_hidden
+
+# Collect all onnx-asr (Parakeet STT)
+onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
+datas += onnx_asr_datas
+binaries += onnx_asr_binaries
+hiddenimports += onnx_asr_hidden
+
+# Config migration modules (services/migrations/migration_*.py) are discovered
+# from the filesystem and imported via importlib at runtime, so static analysis
+# never traces them — or anything only they import. 3.1.5 shipped without the
+# stdlib module 'filecmp' (imported only by migration_313_to_314), which broke
+# the 3.1.3 -> 3.1.5 upgrade chain in every packaged build while working fine
+# from source. Feed every migration module to the analysis so its imports are
+# bundled like normal code.
+migration_hidden = sorted(
+    f"services.migrations.{mig_file[:-3]}"
+    for mig_file in os.listdir(os.path.join('services', 'migrations'))
+    if mig_file.startswith('migration_') and mig_file.endswith('.py')
+)
+if len(migration_hidden) < 14:
+    raise SystemExit(
+        f"Migration module enumeration looks incomplete ({len(migration_hidden)} found, "
+        "expected at least 14) — refusing to ship a bundle that cannot migrate user configs."
+    )
+hiddenimports += migration_hidden
 
 # ============================================================================
 # ANALYSIS
@@ -236,6 +308,34 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# Verify the analyzed module graph contains every migration module and the one
+# dependency that has already bitten us. A module missing here means the frozen
+# build would fail to load a migration at runtime and break the upgrade chain.
+pure_names = {entry[0] for entry in a.pure}
+missing_migration_modules = [
+    mod for mod in migration_hidden + ['filecmp'] if mod not in pure_names
+]
+if missing_migration_modules:
+    raise SystemExit(
+        "Migration modules/dependencies missing from the analyzed bundle: "
+        f"{', '.join(missing_migration_modules)} — refusing to ship a build "
+        "that cannot migrate user configs."
+    )
+
+# Linux: leave the audio stack to the system. Our libasound.so.2 comes from the
+# Ubuntu build machine and looks for its plugins in Ubuntu's directory, so on
+# Fedora, Arch and others it never finds the PipeWire/Pulse plugin and offers
+# only raw hw: devices; USB headsets were missing. PortAudio and JACK link
+# against it. sounddevice finds PortAudio through ldconfig, which never saw our
+# copy anyway: without a system PortAudio Core did not start at all. The
+# vendored copies inside pygame.libs etc. carry a hash in their name and stay.
+if sys.platform.startswith('linux'):
+    SYSTEM_AUDIO_LIBS = ('libasound.so', 'libportaudio.so', 'libjack.so')
+    a.binaries = [
+        entry for entry in a.binaries
+        if not os.path.basename(entry[0]).startswith(SYSTEM_AUDIO_LIBS)
+    ]
 
 # ============================================================================
 # PACKAGING

@@ -1,5 +1,6 @@
 module: skills.control_windows.main
 name: ControlWindows
+api_version: 3
 display_name: Control Windows
 author: teddybear082
 platforms:

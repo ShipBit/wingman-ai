@@ -1,37 +1,40 @@
 module: skills.elite_dangerous.main
 name: EliteDangerous
-display_name: Elite Dangerous Companion
-author: Private fork
-tags:
-  - Game
-  - Elite Dangerous
+api_version: 3
+display_name: Elite Dangerous
+author: S-Foxx
+version: 1.0.0
 auto_activate: true
 discoverable_by_default: false
 platforms:
   - windows
-  - darwin
   - linux
-description:
-  en: Read your Elite Dangerous journal for ship, cargo, materials, missions, navigation, exploration, local market, planning and Odyssey suit/backpack observations. Monitor new arrivals and dockings automatically while this companion is loaded.
-discovery_keywords:
+  - darwin
+tags:
+  - Game
   - Elite Dangerous
+description:
+  en: Your Wingman reads your Elite Dangerous journal. It knows your ship, cargo, materials, missions, route and exploration, and reacts in character when you arrive in a system, dock or finish a mission.
+  de: Dein Wingman liest dein Elite Dangerous Journal. Er kennt Schiff, Fracht, Materialien, Missionen, Route und Erkundung und reagiert in seiner Rolle, wenn du in einem System ankommst, andockst oder eine Mission abschließt.
+discovery_keywords:
+  - elite dangerous
   - commander status
   - ship loadout
+  - cargo
   - engineering materials
   - missions
   - exploration
-  - plotted route and fuel
-  - Odyssey suit and backpack
+  - route and fuel
 custom_properties:
   - id: journal_directory
-    name: Journal directory
-    hint: Leave empty to find Windows Saved Games automatically. On other systems, select a mounted or copied Elite journal directory.
+    name: Journal folder
+    hint: Leave empty to find it by itself. On Linux it looks in the Steam Proton folder of the game. On a Mac, point it at a copy of the journal folder.
     value: ""
     required: false
     property_type: string
   - id: announce_events
-    name: Announce gameplay events
-    hint: While the companion is loaded, speak fresh arrivals, dockings and mission completions through your Wingman's voice, at most once per 30 seconds. Historical events are silent.
+    name: React to arrivals, dockings and missions
+    hint: The Wingman says one sentence when you arrive in a system, dock or finish a mission. At most once every 30 seconds.
     value: true
-    required: true
+    required: false
     property_type: boolean

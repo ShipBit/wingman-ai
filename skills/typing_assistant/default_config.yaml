@@ -1,5 +1,6 @@
 module: skills.typing_assistant.main
 name: TypingAssistant
+api_version: 3
 display_name: Typing Assistant
 author: teddybear082
 tags:

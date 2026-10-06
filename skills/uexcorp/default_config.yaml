@@ -1,5 +1,6 @@
 module: skills.uexcorp.main
 name: UEXCorp
+api_version: 3
 display_name: UEXCorp
 author: JayMatthew
 tags:
@@ -41,7 +42,7 @@ prompt: |
   - Use efficient filtering to provide targeted results
 
   **Response Management:**
-  - Always include terminal status (Out of Stock, Full Inventory) for commodities
+  - Always include the stock/demand status for commodities (e.g. "high stock" when buying, "no demand" when selling)
   - Limit lists to 5 entries max, indicate total available results
   - Provide summaries first, offer detailed information on request
   - Display negative values as "negative/minus X%" for TTS compatibility
@@ -53,7 +54,7 @@ prompt: |
 
   #### SPECIAL CONSIDERATIONS
   - Some ships (Hull-C) require loading docks, not just freight elevators
-  - Show "Important information for user" messages in condensed form
+  - Show "Relay to user" messages in condensed form
   - Focus on essential information, keep responses concise
   - Present data efficiently for voice synthesis and readability
 
@@ -104,7 +105,6 @@ custom_properties:
 
   - id: commodity_route_default_count
     name: Default trade route count
-    hint: Set this option to the amount of trade routes you want to show at default.
     value: 1
     required: true
     property_type: number
@@ -135,8 +135,8 @@ custom_properties:
 
   ### FasterWhisper Start ###
   - id: add_fasterwhisper_hotwords
-    name: Add FasterWhisper hotwords (Experimental)
-    hint: Add common names fetched from UEXCorp as FasterWhisper hotwords. Voice detection might be improved but bias towards Star Citizen content in the detection is possible.
+    name: Add UEX names as hotwords (Experimental)
+    hint: Add common names fetched from UEXCorp as hotwords, so misheard Star Citizen names in what you say are corrected. The bundled Star Citizen list in Settings > Speech-to-text covers most of them already.
     value: false
     required: true
     property_type: boolean

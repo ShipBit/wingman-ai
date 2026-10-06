@@ -176,12 +176,16 @@ whispercpp-models/
 faster-whisper-models/
 pocket-tts-models/
 pocket-tts-voices/
-
-
+.superpowers/
+.worktrees/
+docs/superpowers/**/**
+docs/backend-migration/**/**
+# Internal engineering tooling: measured model costs, candidate models
+# and the reasoning behind the catalogue.
+evals/
+# Local Serena config and cache.
+.serena/
 
 .claude/settings.json
 
-# Isolated Elite integration tests and local provider caches
-.venv-elite/
-.venv-core/
-.elite-local/
+scripts/mic_check.wav

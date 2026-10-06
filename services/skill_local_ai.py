@@ -1,0 +1,654 @@
+"""SkillLocalAI — stable facade for skill developers to access local AI capabilities.
+
+Skills access this via ``self.local_ai`` on SkillBase. The facade wraps
+``LocalAiService`` and ``PersistentMemoryService`` behind a safe, documented API.
+Skills never see exceptions — errors are logged to the client automatically and
+methods return predictable failure values (None, [], "", False).
+"""
+
+import asyncio
+from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING
+
+from api.enums import LogSource, LogType
+from services.printr import Printr
+
+if TYPE_CHECKING:
+    from services.local_ai_service import TokenBudget
+    from wingmen.wingman_context import WingmanContext
+
+printr = Printr()
+
+
+# ── Facade types ──────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SupportResponse:
+    """Result from a local AI support model call."""
+
+    text: str | None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class MemorySearchResult:
+    """A memory entry returned from search."""
+
+    id: int
+    content: str
+    entry_type: str
+    source_wingman: str | None
+    created_at: float
+
+
+class SamplingPreset(Enum):
+    """Named sampling presets for the Qwen3.5 local AI model.
+
+    Based on the Qwen3.5 HuggingFace recommended sampling parameters.
+    Use these when calling ``generate()`` or ``generate_sync()`` to get
+    sensible values without tuning them yourself.
+    Manual arguments take precedence over any preset.
+
+    Attributes (temperature, top_p, top_k, presence_penalty):
+        PRECISE:   (0.1, 0.95, 20, 0.5) — Extraction, structured data, JSON. Near
+                   deterministic: at temp 0.6 the old 2B dropped/duplicated facts
+                   ~33% of the time; at 0.1 it was ~98% reliable (measured in the
+                   internal eval suite). Use for any parse/transform.
+        BALANCED:  (1.0, 0.95, 20, 1.5) — Summaries, condensation, paraphrasing.
+        CREATIVE:  (1.0, 1.0, 20, 2.0) — Greetings, flavor text, roleplay, dialogue.
+    """
+
+    PRECISE = (0.1, 0.95, 20, 0.5)
+    BALANCED = (1.0, 0.95, 20, 1.5)
+    CREATIVE = (1.0, 1.0, 20, 2.0)
+
+    def __init__(self, temperature: float, top_p: float, top_k: int = 20, presence_penalty: float = 2.0):
+        self._temperature = temperature
+        self._top_p = top_p
+        self._top_k = top_k
+        self._presence_penalty = presence_penalty
+
+    @property
+    def temperature(self) -> float:
+        return self._temperature
+
+    @property
+    def top_p(self) -> float:
+        return self._top_p
+
+    @property
+    def top_k(self) -> int:
+        return self._top_k
+
+    @property
+    def presence_penalty(self) -> float:
+        return self._presence_penalty
+
+
+class MemoryType(str, Enum):
+    """Type-safe enum for memory entry types."""
+
+    FACT = "fact"
+    EPISODE = "episode"
+    SESSION_SUMMARY = "session_summary"  # older databases
+
+
+# ── Facade ────────────────────────────────────────────────────────
+
+
+class SkillLocalAI:
+    """Stable facade exposing local AI capabilities to skill developers.
+
+    Wraps ``LocalAiService`` (support model, embeddings) and
+    ``PersistentMemoryService`` (memory storage) behind a safe API.
+
+    Every method follows the same pattern:
+    1. Check service availability — return failure value if unavailable
+    2. Try the operation
+    3. On exception: log to client, return failure value
+    4. On success: convert internal types to facade types and return
+    """
+
+    def __init__(self, wingman: "WingmanContext"):
+        self._wingman = wingman
+
+    # ── Availability ──────────────────────────────────────────────
+
+    @property
+    def available(self) -> bool:
+        """Whether the support model can answer — locally or in the cloud."""
+        svc = self._wingman.local_ai_service
+        return svc is not None and svc.is_ready()
+
+    @property
+    def embed_available(self) -> bool:
+        """Whether the embedding model is loaded and ready.
+
+        Its own check since the two models can now be in different places: in
+        cloud mode the support model answers over the network while embeddings
+        still run here, so one can be up while the other is not.
+        """
+        svc = self._wingman.local_ai_service
+        return svc is not None and svc.embed_ready()
+
+    @property
+    def memory_available(self) -> bool:
+        """Whether persistent memory is available (requires local AI + wingman config)."""
+        return self._wingman.persistent_memory_service is not None
+
+    # ── Error logging ─────────────────────────────────────────────
+
+    async def _log_error(self, method: str, error: Exception):
+        await printr.print_async(
+            f"[SkillLocalAI] {method}() failed: {error}",
+            color=LogType.ERROR,
+            source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
+            source=LogSource.WINGMAN,
+        )
+
+    def _log_error_sync(self, method: str, error: Exception):
+        printr.print(
+            f"[SkillLocalAI] {method}() failed: {error}",
+            color=LogType.ERROR,
+            source_name=self._wingman.name,
+            wingman_name=self._wingman.name,
+            source=LogSource.WINGMAN,
+        )
+
+    # ── Sampling helpers ──────────────────────────────────────────
+
+    @staticmethod
+    def _resolve_sampling(
+        preset: SamplingPreset | None,
+        temperature: float | None,
+        top_p: float | None,
+        top_k: int | None = None,
+        presence_penalty: float | None = None,
+    ) -> tuple[float | None, float | None, int | None, float | None]:
+        """Merge preset and manual overrides. Manual values win."""
+        t = temperature
+        p = top_p
+        k = top_k
+        pp = presence_penalty
+        if preset is not None:
+            if t is None:
+                t = preset.temperature
+            if p is None:
+                p = preset.top_p
+            if k is None:
+                k = preset.top_k
+            if pp is None:
+                pp = preset.presence_penalty
+        return t, p, k, pp
+
+    # ── Support model ─────────────────────────────────────────────
+
+    async def generate(
+        self,
+        text: str,
+        system_prompt: str = "",
+        preset: SamplingPreset | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        presence_penalty: float | None = None,
+        reasoning: bool | None = None,
+    ) -> SupportResponse | None:
+        """Run text through the local support model.
+
+        Returns SupportResponse with text and token usage, or None on failure.
+
+        Use ``preset`` for a named configuration (e.g. ``SamplingPreset.CREATIVE``)
+        or pass sampling params directly for manual control.
+        Manual values take precedence over preset values.
+        Both are optional — omitting everything uses the Qwen3.5 defaults.
+
+        ``reasoning`` overrides the model's thinking mode for this call:
+        ``True``/``False`` force it on/off, ``None`` (default) uses the user's
+        global setting. Turn it on for background quality work and leave it off
+        on anything the user waits for — thinking adds latency.
+
+        Example::
+
+            # Use a preset
+            result = await self.local_ai.generate(text, preset=SamplingPreset.CREATIVE)
+
+            # Manual override
+            result = await self.local_ai.generate(text, temperature=1.0, presence_penalty=2.0)
+
+            # Force reasoning on for a background analysis task
+            result = await self.local_ai.generate(text, reasoning=True)
+        """
+        t, p, k, pp = self._resolve_sampling(preset, temperature, top_p, top_k, presence_penalty)
+        if not self.available:
+            return None
+        try:
+            result = await asyncio.to_thread(
+                self._wingman.local_ai_service.support,
+                text=text,
+                system_prompt=system_prompt,
+                temperature=t,
+                top_p=p,
+                top_k=k,
+                presence_penalty=pp,
+                reasoning=reasoning,
+            )
+            if result is None:
+                return None
+            return SupportResponse(
+                text=result.text,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                truncated=result.truncated,
+            )
+        except Exception as e:
+            await self._log_error("support", e)
+            return None
+
+    def generate_sync(
+        self,
+        text: str,
+        system_prompt: str = "",
+        preset: SamplingPreset | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        presence_penalty: float | None = None,
+        reasoning: bool | None = None,
+    ) -> SupportResponse | None:
+        """Sync version of support(). See support() for parameter details."""
+        t, p, k, pp = self._resolve_sampling(preset, temperature, top_p, top_k, presence_penalty)
+        if not self.available:
+            return None
+        try:
+            result = self._wingman.local_ai_service.support(
+                text=text,
+                system_prompt=system_prompt,
+                temperature=t,
+                top_p=p,
+                top_k=k,
+                presence_penalty=pp,
+                reasoning=reasoning,
+            )
+            if result is None:
+                return None
+            return SupportResponse(
+                text=result.text,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                truncated=result.truncated,
+            )
+        except Exception as e:
+            self._log_error_sync("support_sync", e)
+            return None
+
+    # ── Summarize ─────────────────────────────────────────────────
+
+    async def summarize(
+        self,
+        text: str,
+        instruction: str = "",
+        preset: SamplingPreset | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        reasoning: bool | None = None,
+    ) -> SupportResponse | None:
+        """Summarize text, automatically chunking if it exceeds the context window.
+
+        For small text: single support() call with instruction as system prompt.
+        For large text: chunks, summarizes each via ToolResponseCompressor, merges.
+
+        Accepts the same ``preset`` / ``temperature`` / ``top_p`` / ``reasoning``
+        overrides as ``support()``.
+        """
+        if not self.available:
+            return None
+        try:
+            svc = self._wingman.local_ai_service
+            budget = svc.get_token_budget(instruction)
+            from services.token_utils import count_tokens
+
+            text_tokens = count_tokens(text)
+
+            if text_tokens <= budget.max_input_tokens:
+                # Fits in one call
+                return await self.generate(
+                    text, system_prompt=instruction,
+                    preset=preset, temperature=temperature, top_p=top_p,
+                    reasoning=reasoning,
+                )
+
+            # Too large — compress first, then apply instruction in a final pass
+            from services.tool_response_cache import ToolResponseCompressor
+
+            compressor = ToolResponseCompressor()
+            compressed = await compressor.compress(
+                response_text=text,
+                local_ai_service=svc,
+                wingman_name=self._wingman.name,
+                tool_name="summarize",
+            )
+            # The compressed text should now fit; run a final pass with the
+            # caller's instruction so it's not silently dropped.
+            return await self.generate(
+                compressed, system_prompt=instruction,
+                preset=preset, temperature=temperature, top_p=top_p,
+                reasoning=reasoning,
+            )
+        except Exception as e:
+            await self._log_error("summarize", e)
+            return None
+
+    def summarize_sync(
+        self,
+        text: str,
+        instruction: str = "",
+        preset: SamplingPreset | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        reasoning: bool | None = None,
+    ) -> SupportResponse | None:
+        """Sync version of summarize().
+
+        Sync version handles large text via truncation rather than chunked
+        summarization (ToolResponseCompressor is async-only). Use async
+        summarize() for full chunked summarization of large text.
+
+        Accepts the same ``preset`` / ``temperature`` / ``top_p`` / ``reasoning``
+        overrides as ``generate()``.
+        """
+        if not self.available:
+            return None
+        try:
+            svc = self._wingman.local_ai_service
+            budget = svc.get_token_budget(instruction)
+            from services.token_utils import count_tokens, truncate_to_tokens
+
+            text_tokens = count_tokens(text)
+
+            if text_tokens <= budget.max_input_tokens:
+                return self.generate_sync(
+                    text, system_prompt=instruction,
+                    preset=preset, temperature=temperature, top_p=top_p,
+                    reasoning=reasoning,
+                )
+
+            # Too large for sync — truncate and mark as truncated
+            truncated_text = truncate_to_tokens(text, budget.max_input_tokens)
+            printr.print(
+                f"A skill's summarize() input was cut from ~{text_tokens:,} to "
+                f"~{budget.max_input_tokens:,} tokens to fit the support model.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            result = self.generate_sync(
+                truncated_text, system_prompt=instruction,
+                preset=preset, temperature=temperature, top_p=top_p,
+                reasoning=reasoning,
+            )
+            if result is None:
+                return None
+            return SupportResponse(
+                text=result.text,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                truncated=True,
+            )
+        except Exception as e:
+            self._log_error_sync("summarize_sync", e)
+            return None
+
+    # ── Embeddings ────────────────────────────────────────────────
+
+    async def embed(self, texts: list[str]) -> list[list[float]] | None:
+        """Generate embeddings for a list of texts. Returns None on failure."""
+        if not self.embed_available:
+            return None
+        try:
+            return await asyncio.to_thread(
+                self._wingman.local_ai_service.embed, texts
+            )
+        except Exception as e:
+            await self._log_error("embed", e)
+            return None
+
+    def embed_sync(self, texts: list[str]) -> list[list[float]] | None:
+        """Sync version of embed()."""
+        if not self.embed_available:
+            return None
+        try:
+            return self._wingman.local_ai_service.embed(texts)
+        except Exception as e:
+            self._log_error_sync("embed_sync", e)
+            return None
+
+    # ── Memory: Remember ──────────────────────────────────────────
+
+    async def remember_fact(
+        self,
+        content: str,
+        entry_type: MemoryType = MemoryType.FACT,
+    ) -> int | None:
+        """Add a memory. Facts are auto-deduplicated (>90% similarity updates existing).
+
+        Returns entry ID on success, None on failure.
+        """
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return None
+        try:
+            return await mem.add_memory(
+                entry_type=entry_type.value,
+                content=content,
+            )
+        except Exception as e:
+            await self._log_error("remember_fact", e)
+            return None
+
+    def remember_fact_sync(
+        self,
+        content: str,
+        entry_type: MemoryType = MemoryType.FACT,
+    ) -> int | None:
+        """Sync version of remember_fact()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return None
+        try:
+            return mem.add_memory_sync(
+                entry_type=entry_type.value,
+                content=content,
+            )
+        except Exception as e:
+            self._log_error_sync("remember_fact_sync", e)
+            return None
+
+    # ── Memory: Recall ────────────────────────────────────────────
+
+    async def recall_memory(
+        self,
+        query: str,
+        limit: int = 5,
+        entry_type: MemoryType | None = None,
+    ) -> list[MemorySearchResult]:
+        """Search memories by semantic similarity. Returns matches sorted by relevance.
+
+        Returns empty list on failure — safe to iterate without None checks.
+        """
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return []
+        try:
+            entries = await mem.search(
+                query_text=query,
+                limit=limit,
+                entry_type=entry_type.value if entry_type else None,
+            )
+            return [
+                MemorySearchResult(
+                    id=e.id,
+                    content=e.content,
+                    entry_type=e.entry_type,
+                    source_wingman=e.source_wingman,
+                    created_at=e.created_at,
+                )
+                for e in entries
+            ]
+        except Exception as e:
+            await self._log_error("recall_memory", e)
+            return []
+
+    def recall_memory_sync(
+        self,
+        query: str,
+        limit: int = 5,
+        entry_type: MemoryType | None = None,
+    ) -> list[MemorySearchResult]:
+        """Sync version of recall_memory()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return []
+        try:
+            entries = mem.search_sync(
+                query_text=query,
+                limit=limit,
+                entry_type=entry_type.value if entry_type else None,
+            )
+            return [
+                MemorySearchResult(
+                    id=e.id,
+                    content=e.content,
+                    entry_type=e.entry_type,
+                    source_wingman=e.source_wingman,
+                    created_at=e.created_at,
+                )
+                for e in entries
+            ]
+        except Exception as e:
+            self._log_error_sync("recall_memory_sync", e)
+            return []
+
+    # ── Memory: Context ───────────────────────────────────────────
+
+    async def memory_context(self, query: str, max_tokens: int = 500) -> str:
+        """The MEMORY block as it stands in the system prompt: every fact and
+        the recent episodes. ``query`` and ``max_tokens`` are accepted for
+        older skills and ignored; there is no per-query lookup any more.
+
+        Returns empty string on failure — safe to concatenate directly.
+        """
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return ""
+        try:
+            return await asyncio.to_thread(mem.memory_block)
+        except Exception as e:
+            await self._log_error("memory_context", e)
+            return ""
+
+    def memory_context_sync(self, query: str, max_tokens: int = 500) -> str:
+        """Sync version of memory_context()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return ""
+        try:
+            return mem.memory_block()
+        except Exception as e:
+            self._log_error_sync("memory_context_sync", e)
+            return ""
+
+    # ── Memory: Update ────────────────────────────────────────────
+
+    async def update_memory(self, entry_id: int, new_content: str) -> bool:
+        """Update a memory's content and re-embed it. Returns True on success."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            await mem.update_memory(entry_id, new_content)
+            return True
+        except Exception as e:
+            await self._log_error("update_memory", e)
+            return False
+
+    def update_memory_sync(self, entry_id: int, new_content: str) -> bool:
+        """Sync version of update_memory()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            mem.update_memory_sync(entry_id, new_content)
+            return True
+        except Exception as e:
+            self._log_error_sync("update_memory_sync", e)
+            return False
+
+    # ── Memory: Forget ────────────────────────────────────────────
+
+    async def forget_memory_by_id(self, entry_id: int) -> bool:
+        """Delete a specific memory by its ID. Returns True if deleted."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            await asyncio.to_thread(mem.delete_memory, entry_id)
+            return True
+        except Exception as e:
+            await self._log_error("forget_memory_by_id", e)
+            return False
+
+    def forget_memory_by_id_sync(self, entry_id: int) -> bool:
+        """Sync version of forget_memory_by_id()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            mem.delete_memory(entry_id)
+            return True
+        except Exception as e:
+            self._log_error_sync("forget_memory_by_id_sync", e)
+            return False
+
+    async def memory_forget(self, query: str) -> bool:
+        """Find and delete the closest matching memory (fuzzy). Returns True if deleted."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            return await mem.forget_by_query(query)
+        except Exception as e:
+            await self._log_error("memory_forget", e)
+            return False
+
+    def memory_forget_sync(self, query: str) -> bool:
+        """Sync version of memory_forget()."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            return mem.forget_by_query_sync(query)
+        except Exception as e:
+            self._log_error_sync("memory_forget_sync", e)
+            return False
+
+    # ── Token Budget (Advanced) ───────────────────────────────────
+
+    def get_support_model_token_budget(
+        self, system_prompt: str = ""
+    ) -> "TokenBudget | None":
+        """Get token budget for planning chunked support calls.
+
+        Returns None if local AI is not available.
+        """
+        if not self.available:
+            return None
+        try:
+            return self._wingman.local_ai_service.get_token_budget(system_prompt)
+        except Exception as e:
+            self._log_error_sync("get_support_model_token_budget", e)
+            return None

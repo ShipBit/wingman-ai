@@ -1,62 +1,132 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from email.utils import parsedate_to_datetime
 import os
 import platform
 import re
 import threading
+import time
 from typing import Optional
+from xml.etree import ElementTree
 import pygame
 from google.genai import types
-from fastapi import APIRouter, Body, File, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 import requests
-from services import audio_backend as sd
+import sounddevice as sd
 from showinfm import show_in_file_manager
-import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
-from api.commands import AudioLibraryPlaybackFinishedCommand, CoreStateChangedCommand, VoiceActivationMutedCommand
+from api.commands import (
+    AudioLibraryPlaybackFinishedCommand,
+    CoreStateChangedCommand,
+    LogCommand,
+    ScGameLogStateChangedCommand,
+    SttVocabularyChangedCommand,
+    VoiceActivationMutedCommand,
+)
 from api.enums import (
-    AzureRegion,
     CommandTag,
+    ConversationProvider,
     CoreState,
+    LocalAiMode,
+    LogSource,
     LogType,
-    VoiceActivationSttProvider,
+    SpokenLanguage,
+    SttProvider,
     WingmanInitializationErrorType,
 )
 from api.interface import (
+    ScGameLogSettings,
+    ScGameLogStatus,
     AudioDevice,
     AudioFile,
-    AzureSttConfig,
+    AvatarGenerationRequest,
+    AvatarPrompt,
+    AvatarPromptRequest,
+    AvatarVariant,
+    BenchmarkResult,
+    ChangelogEntry,
     CommandJoystickConfig,
     Config,
     ConfigWithDirInfo,
     CoreStatusResponse,
     ElevenlabsModel,
+    ImageStylePrompt,
+    MemoryEntryResponse,
+    MemoryUpdateRequest,
+    MicStatusResponse,
     OpenRouterEndpointResult,
+    DetectContextSizeRequest,
+    MemorySuiteRequest,
+    PlaygroundChatRequest,
+    ParakeetSttConfig,
+    PocketTTSConfig,
+    PocketTTSPreloadResult,
+    SoundConfig,
+    PresetOverride,
+    PronunciationPreset,
+    OtherLanguageOption,
+    OtherLanguageReport,
+    OtherLanguageSetting,
+    PronunciationRule,
+    SttTestResult,
+    SubscriptionRoutes,
+    VocabularyPreset,
+    TestConnectionResult,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
 from providers.elevenlabs import ElevenLabs
-from providers.faster_whisper import FasterWhisper
+from providers.parakeet import Parakeet
 from providers.google import GoogleGenAI
-from providers.open_ai import OpenAi
-from providers.whispercpp import Whispercpp
-from providers.wingman_pro import WingmanPro
+from providers.llama_cpp_provider import LlamaCppProvider
+from providers.llama_cpp_remote import LlamaCppRemote
+from providers.wingman_support import WingmanSupport
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
-from services.file import get_writable_dir, get_audio_library_dir, get_custom_voices_dir
-from services.elite_runtime_identity import capture as capture_elite_module, write_identity
-
-capture_elite_module(__file__)
+from services import other_language
+from services.file import (
+    get_writable_dir,
+    get_audio_library_dir,
+    get_custom_voices_dir,
+    get_custom_skills_dir,
+    get_models_dir,
+    get_pocket_tts_models_dir,
+    get_prompt,
+)
+from services.audio.device_names import with_full_names
+from services.model_downloader import ModelDownloader
+from services.sc_gamelog.service import ScGameLogService
+from services import avatar_studio
+from services.stt_provider_manager import SttProviderManager
+from services.stt_service import SttService
+from services.local_ai_service import LocalAiService
+from services.token_utils import count_tokens
+from services.local_model_manager import LocalModelManager
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
-from services.audio_recorder import RECORDING_PATH, AudioRecorder
+from services.benchmark import Benchmark
+from services.image_processing import process_image, validate_image_mime
+from services.model_metadata import ModelMetadataService
+from services.audio import (
+    AudioInput,
+    GateParams,
+    ListenController,
+    ListenState,
+    SileroVad,
+    TranscriptionWorker,
+    Utterance,
+    VoiceGate,
+)
+from services.audio.transcription_worker import RECORDING_PATH
+from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
+from services import speech_text
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -64,6 +134,37 @@ from services.tower import Tower
 from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
 from hud_server.validation import validate_hud_settings, get_invalid_summary
+
+# Share of a transcript's words that must occur in what the wingman is saying
+# for the transcript to count as the wingman's own voice.
+ECHO_RATIO = 0.6
+# Fewer words of the user's own than this, next to a mostly echoed sentence,
+# are misheard echo, not the user.
+MIN_OWN_WORDS = 3
+# "Stop" said while the wingman is still thinking: the answer that starts
+# within this many seconds is cut off right away instead of being played.
+STOP_AHEAD_SECONDS = 6.0
+# Below this, a voice-activated utterance is taken as room noise rather than a
+# request, and nothing answers it. Low on purpose: an answer nobody asked for
+# is a nuisance, but silence when the user did ask is a bug report.
+#
+# 0.15 measured best on the triage set (evals/jev_bench, 2026-09-20): 93%
+# against 90% at 0.2, and it is the highest gate that drops none of the real
+# user speech. "No wait, I meant the other ship." scores 0.18 and is exactly
+# the kind of sentence that must still get through.
+NOT_ADDRESSED_BELOW = 0.15
+
+
+def _key_source(key) -> str:
+    """What identifies a key while it is held. The scan code, not the name:
+    the hook may name the same key differently on the way down and up
+    ("shift" against "left shift"), and a release under another name would
+    leave the key held for good."""
+    return f"key:{key.scan_code}"
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
 
 
 class WingmanCore(WebSocketUser):
@@ -76,10 +177,12 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
+        speech_text.configure(app_root_path)
         self.system_manager = system_manager
         self.is_client_logged_in: bool = False
         self.client_plan: str = "Free"
         self.client_account_name: str = ""
+        self._changelog_cache: Optional[tuple[float, list[ChangelogEntry]]] = None
 
         self.router = APIRouter()
         tags = ["core"]
@@ -91,9 +194,109 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["GET"],
+            path="/changelog",
+            endpoint=self.get_changelog,
+            response_model=list[ChangelogEntry],
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["POST"],
             path="/voice-activation/mute",
             endpoint=self.start_voice_recognition,
+            tags=tags,
+        )
+        # The client's mute toggle starts from this instead of guessing: with
+        # voice activation on, Core listens from the start, and a fresh client
+        # used to show "muted" until the first click.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voice-activation/status",
+            endpoint=self.get_mic_status,
+            response_model=MicStatusResponse,
+            tags=tags,
+        )
+        # Bundled word lists per game, switched on with a toggle and editable:
+        # the user's edits are stored as a diff so an updated bundle still lands.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/sc-gamelog/status",
+            endpoint=self.get_sc_gamelog_status,
+            response_model=ScGameLogStatus,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/stt/vocabulary/presets",
+            endpoint=self.get_stt_vocabulary_presets,
+            response_model=list[VocabularyPreset],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/stt/vocabulary/presets/{preset_id}",
+            endpoint=self.get_stt_vocabulary_preset,
+            response_model=list[str],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["PUT"],
+            path="/stt/vocabulary/presets/{preset_id}",
+            endpoint=self.put_stt_vocabulary_preset,
+            response_model=list[str],
+            tags=tags,
+        )
+        # How the voice says what the chat shows: bundled lists per game, and
+        # a preview of the rewritten text for the settings page.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/tts/pronunciation/presets",
+            endpoint=self.get_pronunciation_presets,
+            response_model=list[PronunciationPreset],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/tts/pronunciation/presets/{preset_id}",
+            endpoint=self.get_pronunciation_preset,
+            response_model=list[PronunciationRule],
+            tags=tags,
+        )
+        # A language beyond the seven Wingman supports end to end.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/spoken_language/others",
+            endpoint=self.get_other_languages,
+            response_model=list[OtherLanguageOption],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/spoken_language/resolve",
+            endpoint=self.resolve_other_language,
+            response_model=Optional[OtherLanguageSetting],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/spoken_language/other",
+            endpoint=self.set_other_language,
+            response_model=OtherLanguageReport,
+            tags=tags,
+        )
+        # The microphone test in Settings: hold, speak, release, read the text.
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stt/test/start",
+            endpoint=self.start_stt_test,
+            response_model=bool,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stt/test/stop",
+            endpoint=self.stop_stt_test,
+            response_model=Optional[SttTestResult],
             tags=tags,
         )
         self.router.add_api_route(
@@ -117,6 +320,18 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/start-recording-for-wingman",
+            endpoint=self.start_recording_for_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stop-recording-for-wingman",
+            endpoint=self.stop_recording_for_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/ask-wingman-conversation-provider",
             endpoint=self.ask_wingman_conversation_provider,
             tags=tags,
@@ -125,6 +340,40 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/generate-image",
             endpoint=self.generate_image,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/image-style-prompts",
+            endpoint=self.get_image_style_prompts,
+            response_model=list[ImageStylePrompt],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/avatar-prompt",
+            endpoint=self.write_avatar_prompt,
+            response_model=AvatarPrompt,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/avatar-variants",
+            endpoint=self.get_avatar_variants,
+            response_model=list[AvatarVariant],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/avatar-variants",
+            endpoint=self.generate_avatar_variant,
+            response_model=AvatarVariant,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/avatar-variants",
+            endpoint=self.delete_avatar_variant,
             tags=tags,
         )
         self.router.add_api_route(
@@ -140,24 +389,23 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
-            methods=["GET"],
-            path="/fasterwhisper/modelsizes",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_modelsizes,
+            methods=["POST"],
+            path="/condense-conversation",
+            endpoint=self.condense_conversation,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/fasterwhisper/computetypes",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_computetypes,
+            path="/wingman-context",
+            response_model=str,
+            endpoint=self.get_wingman_context,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/fasterwhisper/devices",
-            response_model=list[str],
-            endpoint=self.get_fasterwhisper_devices,
+            path="/wingman-conversation",
+            response_model=list[dict],
+            endpoint=self.get_wingman_conversation,
             tags=tags,
         )
         self.router.add_api_route(
@@ -199,6 +447,113 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["GET"],
+            path="/pocket_tts/status",
+            endpoint=self.get_pocket_tts_status,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/pocket_tts/models",
+            endpoint=self.get_pocket_tts_models,
+            tags=tags,
+        )
+
+        # Feeds the model picker. This was removed by accident together with the
+        # region route on 2026-09-10, which left the picker showing nothing but
+        # the stored value.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
+
+        # The second lane: the small model behind memory and summarisation.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/support",
+            response_model=list,
+            endpoint=self.get_wingman_support_models,
+            tags=tags,
+        )
+
+        # The models behind the plan's fixed roles (transcription, speech,
+        # images, the over-allowance chat model), named on the provider cards.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/routes",
+            response_model=SubscriptionRoutes,
+            endpoint=self.get_wingman_routes,
+            tags=tags,
+        )
+
+        # Same story: handlers that exist but were never reachable, so the
+        # client called methods its generated API did not have.
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/enhance-backstory",
+            endpoint=self.api_enhance_backstory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-library/generate-sfx/elevenlabs",
+            endpoint=self.generate_sfx_elevenlabs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs/subscription-data",
+            endpoint=self.get_elevenlabs_subscription_data,
+            tags=tags,
+        )
+
+        # The "test connection" buttons in Settings call these. The handlers
+        # existed but were never registered, so every one of those buttons hit
+        # a method the generated client did not have.
+        for test_path, test_endpoint in (
+            ("/settings/test/parakeet", self.test_parakeet),
+            ("/settings/test/xvasynth", self.test_xvasynth),
+            ("/settings/test/pocket-tts", self.test_pocket_tts),
+            ("/settings/test/local-ai-support", self.test_local_ai_support),
+            ("/settings/test/local-ai-embed", self.test_local_ai_embed),
+            ("/settings/test/hud-server", self.test_hud_server),
+            ("/settings/test/openai-compatible-tts", self.test_openai_compatible_tts),
+        ):
+            self.router.add_api_route(
+                methods=["POST"],
+                path=test_path,
+                endpoint=test_endpoint,
+                tags=tags,
+            )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/pocket_tts/preload_voice",
+            response_model=PocketTTSPreloadResult,
+            endpoint=self.preload_pocket_tts_voice,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/pocket_tts/precompute_voices",
+            endpoint=self.precompute_pocket_tts_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/pocket-tts-models",
+            endpoint=self.open_pocket_tts_models_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preprocess",
+            endpoint=self.preprocess_custom_voice,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["POST"],
             path="/open-filemanager",
             endpoint=self.open_file_manager,
@@ -226,6 +581,18 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/open-filemanager/custom-voices",
             endpoint=self.open_custom_voices_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/local-models",
+            endpoint=self.open_local_models_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/custom-skills",
+            endpoint=self.open_custom_skills_directory,
             tags=tags,
         )
         self.router.add_api_route(
@@ -291,6 +658,18 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_google_models,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/metadata",
+            endpoint=self.get_model_metadata_all,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/metadata/{model_id:path}",
+            endpoint=self.get_model_metadata,
+            tags=tags,
+        )
         # TODO: Refactor - move these to a new AudioLibrary service:
         self.router.add_api_route(
             methods=["GET"],
@@ -305,37 +684,120 @@ class WingmanCore(WebSocketUser):
             endpoint=self.play_from_audio_library,
             tags=tags,
         )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/elevenlabs/generate-sfx",
-            endpoint=self.generate_sfx_elevenlabs,
-            tags=tags,
-        )
+        # ── Local AI Routes ──────────────────────────────────────────
         self.router.add_api_route(
             methods=["GET"],
-            path="/elevenlabs/subscription-data",
-            endpoint=self.get_elevenlabs_subscription_data,
-            response_model=dict,
+            path="/settings/local-ai/status",
+            endpoint=self.get_local_ai_status,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/shutdown",
-            endpoint=self.shutdown,
+            path="/settings/local-ai/download-models",
+            endpoint=self.download_local_ai_models,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/models/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_models,
+            path="/settings/local-ai/backends",
+            endpoint=self.get_local_ai_backends,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/regions/wingman-pro",
-            response_model=list,
-            endpoint=self.get_wingman_pro_regions,
+            path="/settings/local-ai/support-models",
+            endpoint=self.get_local_ai_support_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/embed-models",
+            endpoint=self.get_local_ai_embed_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/chat",
+            endpoint=self.playground_chat,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/embed",
+            endpoint=self.playground_embed,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/benchmark",
+            endpoint=self.playground_benchmark,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/playground/prompts",
+            endpoint=self.playground_list_prompts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/playground/presets",
+            endpoint=self.playground_list_presets,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/detect-context-size",
+            endpoint=self.detect_remote_context_size,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/playground/memory-scenarios",
+            endpoint=self.playground_list_memory_scenarios,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/memory-suite",
+            endpoint=self.playground_run_memory_scenario,
+            tags=tags,
+        )
+
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/memories/{wingman_name}",
+            endpoint=self.get_memories,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["PUT"],
+            path="/memories/{entry_id}",
+            endpoint=self.update_memory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/memories/{entry_id}",
+            endpoint=self.delete_memory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/memories/{wingman_name}/all",
+            endpoint=self.clear_memories,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/memories/{wingman_name}/test-extraction",
+            endpoint=self.test_memory_extraction,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/memories/{wingman_name}/consolidate",
+            endpoint=self.consolidate_memories,
             tags=tags,
         )
 
@@ -366,20 +828,17 @@ class WingmanCore(WebSocketUser):
         # HUD Server
         self._hud_server: Optional[HudServer] = None
 
-        self.active_recording = {"key": "", "wingman": None}
-
         self.is_started = False
         self.core_state: CoreState = CoreState.STARTING
         self._last_logged_state: Optional[CoreState] = None
+        self.core_state_message: str | None = None
+        self.core_state_progress: float | None = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
 
-        self.azure_speech_config: speechsdk.SpeechConfig = None
-        self.is_listening = False
-        self.was_listening_before_ptt = False
-        self.was_listening_before_playback = False
-
         self.key_events = {}
+        # When "stop" was last said with nothing playing; see _on_transcript.
+        self._stop_requested_at = 0.0
 
         # Joystick thread management
         self._joystick_thread: Optional[threading.Thread] = None
@@ -394,6 +853,12 @@ class WingmanCore(WebSocketUser):
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
         )
+        # Surface STT download/init progress during runtime settings switches
+        # via the same LOADING_CONFIG indicator used at startup; flip back to
+        # READY when the switch finishes.
+        self.settings_service.stt_status_callback = self._broadcast_loading_status
+        self.settings_service.stt_done_callback = self._broadcast_ready
+        self.settings_service.vocabulary_changed_callback = self._broadcast_vocabulary
         self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
         )
@@ -406,22 +871,69 @@ class WingmanCore(WebSocketUser):
         self.settings_service.settings_events.subscribe(
             "hud_server_settings_changed", self._on_hud_server_settings_changed
         )
-
-        self.whispercpp = Whispercpp(
-            settings=self.settings_service.settings.voice_activation.whispercpp,
+        self.settings_service.settings_events.subscribe(
+            "sc_gamelog_settings_changed", self._apply_sc_gamelog_settings
         )
-        self.fasterwhisper = FasterWhisper(
-            settings=self.settings_service.settings.voice_activation.fasterwhisper,
+        ScGameLogService().status_callback = self._broadcast_sc_gamelog_status
+
+        self.parakeet = Parakeet(
+            settings=self.settings_service.settings.stt.parakeet,
+        )
+        # Push-to-talk and voice activation both transcribe through this one.
+        self.stt_service = SttService(
+            settings_service=self.settings_service,
+            secret_keeper=self.secret_keeper,
+            parakeet=self.parakeet,
+            get_hotwords=self._stt_hotwords,
             app_root_path=app_root_path,
-            app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
-        self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
+        self.pocket_tts = PocketTTS(
+            settings=self.settings_service.settings.pocket_tts,
+            spoken_language=self.settings_service.settings.spoken_language,
+            defer_load=True,
+            app_root_path=app_root_path,
+        )
+        self.pocket_tts.on_model_reloaded = self._on_pocket_tts_reloaded
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+        # Unified model management
+        self.model_downloader = ModelDownloader(models_root=get_models_dir())
+
+        # STT provider lifecycle manager
+        self.stt_provider_manager = SttProviderManager(
+            settings_service=self.settings_service,
+            system_manager=self.system_manager,
+            model_downloader=self.model_downloader,
+            parakeet=self.parakeet,
+            app_root_path=app_root_path,
+        )
+
+        # Local AI (llama.cpp for summarization + embedding)
+        llama_cpp_settings = self.settings_service.settings.llama_cpp
+        self.local_model_manager = LocalModelManager(settings=llama_cpp_settings)
+        self.llama_cpp_provider = LlamaCppProvider(
+            settings=llama_cpp_settings,
+            model_manager=self.local_model_manager,
+        )
+        self.llama_cpp_remote = LlamaCppRemote(settings=llama_cpp_settings)
+        self.wingman_support = WingmanSupport(
+            subscription=self.settings_service.settings.wingman_pro,
+            settings=llama_cpp_settings,
+        )
+        self.local_ai_service = LocalAiService(
+            provider=self.llama_cpp_provider,
+            remote=self.llama_cpp_remote,
+            cloud=self.wingman_support,
+            settings=llama_cpp_settings,
+        )
+
         self.settings_service.initialize(
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
+            parakeet=self.parakeet,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
+            local_ai_service=self.local_ai_service,
+            stt_provider_manager=self.stt_provider_manager,
         )
 
         self.voice_service = VoiceService(
@@ -431,26 +943,129 @@ class WingmanCore(WebSocketUser):
             pocket_tts=self.pocket_tts,
         )
 
-        # restore settings
-        self.audio_recorder = AudioRecorder(
-            on_speech_recorded=self.on_audio_recorder_speech_recorded
-        )
+        self.model_metadata_service = ModelMetadataService()
 
-        sd.supervisor.configure(self.settings_service.config_manager.settings_config.audio)
+        # Microphone: one stream, one voice gate, one state machine. Push-to-talk
+        # and voice activation only differ in who opens the gate.
+        self.transcription_worker = TranscriptionWorker(self.stt_service)
+        try:
+            self.vad = SileroVad(app_root_path)
+            vad, on_reset = self.vad, self.vad.reset
+        except Exception as e:
+            # Without the detector every frame counts as speech: push-to-talk
+            # still works, voice activation would never close and stays off.
+            self.printr.toast_error(f"Voice detector could not be loaded: {e}")
+            self.vad = None
+            vad, on_reset = (lambda _frame: 1.0), None
+        self.voice_gate = VoiceGate(vad, self._gate_params(), on_reset=on_reset)
+        self.listen_controller = ListenController(
+            gate=self.voice_gate,
+            on_utterance=self._on_utterance,
+            on_state_changed=self._on_listen_state_changed,
+            on_dropped=self._on_ptt_dropped,
+            on_hold_expired=self._on_hold_expired,
+        )
+        self.listen_controller.set_listen_while_speaking(
+            self.settings_service.settings.voice_activation.listen_while_speaking
+        )
+        self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
+
+        if self.settings_service.settings.audio:
+            sd.default.device = [
+                self.settings_service.settings.audio.input,
+                self.settings_service.settings.audio.output,
+            ]
+        self.audio_input.start()
 
     async def startup(self):
-        loop = asyncio.get_running_loop()
-        def audio_status(direction, message):
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(self.printr.print_async(
-                    f"Audio {direction}: {message}", color=LogType.INFO), loop)
-        sd.supervisor.listeners.append(audio_status)
-        sd.supervisor.start()
+        # Capture the main loop so background workers can schedule coroutines.
+        self._main_loop = asyncio.get_running_loop()
+
+        # Parakeet and Pocket TTS were built before the migration replaced the
+        # settings object, so they still hold the pre-migration values (a
+        # German user upgrading from 3.2.3 would get the English model).
+        settings = self.settings_service.settings
+        self.parakeet.settings = settings.stt.parakeet
+        self.pocket_tts.settings = settings.pocket_tts
+        self.pocket_tts.spoken_language = settings.spoken_language
+
+        # 1. Detect hardware
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG,
+            message="Detecting hardware...",
+        )
+        self.system_manager.is_cuda_available()
+
+        # 2. STT initialization (settings-aware)
+        async def stt_status(message: str, progress: float | None = None):
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message=message,
+                progress=progress,
+            )
+
+        await self.stt_provider_manager.initialize(on_status=stt_status)
+
+        # 3. Voice activation
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
-        # Start HUD Server if enabled
+        # The names people say every day go into the speech vocabulary: every
+        # wingman of every configuration. Dedupes, so restarts add nothing.
+        self.settings_service.seed_vocabulary()
+
+        # 4. TTS initialization (settings-aware, deferred from __init__)
+        pocket_settings = self.settings_service.settings.pocket_tts
+        if pocket_settings.enable:
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Downloading TTS model..." if pocket_settings.run_locally else "Initializing text-to-speech...",
+            )
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self.pocket_tts.deferred_init)
+
+        # 5. Local AI init
+        #
+        # The support model is not downloaded here any more. It runs in the cloud
+        # by default, and starting Wingman used to pull 1.28 GB of GGUF
+        # unannounced — that now happens when somebody picks Local in Settings.
+        #
+        # The embedding model is a different matter: it is 250 MB, it feeds the
+        # local vector database, and persistent memory is on by default. Skipping
+        # it would leave every fresh install with memory quietly not working.
+        llama_settings = self.settings_service.settings.llama_cpp
+        if llama_settings.mode != LocalAiMode.SERVER:
+            await self._ensure_embed_model()
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Initializing Local AI...",
+            )
+        await self.local_ai_service.initialize()
+
+        # 6. HUD server
+        hud_settings = getattr(self.settings_service.settings, "hud_server", None)
+        if hud_settings and hud_settings.enabled:
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Starting HUD server...",
+            )
         await self._start_hud_server_if_enabled()
+
+        # 7. Star Citizen log reader
+        await self._apply_sc_gamelog_settings(self.settings_service.settings.sc_gamelog)
+
+    async def _apply_sc_gamelog_settings(self, sc_gamelog: ScGameLogSettings):
+        await ScGameLogService().apply_settings(sc_gamelog.enabled, sc_gamelog.game_path)
+
+    async def _broadcast_sc_gamelog_status(self, status: ScGameLogStatus):
+        if self._connection_manager:
+            await self._connection_manager.broadcast(
+                ScGameLogStateChangedCommand(status=status)
+            )
+
+    # GET /sc-gamelog/status
+    async def get_sc_gamelog_status(self) -> ScGameLogStatus:
+        return ScGameLogService().status()
 
     def _get_validated_hud_settings(
         self, hud_settings, log_invalid: bool = True
@@ -548,20 +1163,48 @@ class WingmanCore(WebSocketUser):
             await self._hud_server.stop()
             self._hud_server = None
 
-    async def set_core_state(self, state: CoreState) -> None:
+    async def _broadcast_loading_status(
+        self, message: str, progress: float | None = None
+    ) -> None:
+        """Convenience wrapper: emit a LOADING_CONFIG state with a status message.
+
+        Used as the ``stt_status_callback`` so SttProviderManager can surface
+        download/init progress during runtime settings changes without needing
+        a direct reference to ``set_core_state``.
+        """
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG, message=message, progress=progress
+        )
+
+    async def _broadcast_ready(self) -> None:
+        """Flip core state back to READY — paired with _broadcast_loading_status."""
+        await self.set_core_state(CoreState.READY)
+
+    async def set_core_state(
+        self,
+        state: CoreState,
+        message: str | None = None,
+        progress: float | None = None,
+    ) -> None:
         """Update the core state and broadcast to all connected clients.
 
         Args:
             state: The new CoreState
+            message: Optional human-readable sub-step detail
+            progress: Optional 0.0-1.0 progress for operations with known duration
         """
         self.core_state = state
+        self.core_state_message = message
+        self.core_state_progress = progress
 
         # Update is_started for backwards compatibility
         self.is_started = state == CoreState.READY
 
         # Broadcast state change to connected clients
         if self._connection_manager:
-            command = CoreStateChangedCommand(state=state)
+            command = CoreStateChangedCommand(
+                state=state, message=message, progress=progress
+            )
             await self._connection_manager.broadcast(command)
 
         # Only log actual state changes, not progress updates within the same state
@@ -577,7 +1220,59 @@ class WingmanCore(WebSocketUser):
         """Get the current core status for the /ping endpoint."""
         return CoreStatusResponse(
             state=self.core_state,
+            message=self.core_state_message,
+            progress=self.core_state_progress,
         )
+
+    def get_mic_status(self) -> MicStatusResponse:
+        """Snapshot of the current mic / voice-activation state (voice_events payload)."""
+        state = self.listen_controller.state
+        rec_wingman = self.listen_controller.held_wingman
+        rec_name = getattr(rec_wingman, "name", None) if rec_wingman else None
+        rec_avatar = None
+        if rec_wingman is not None:
+            getter = getattr(rec_wingman, "get_avatar_path", None)
+            if callable(getter):
+                try:
+                    rec_avatar = getter()
+                except Exception:
+                    rec_avatar = None
+        return MicStatusResponse(
+            state=state.value,
+            listening=state == ListenState.ARMED,
+            # The user's own mute, the same thing the broadcast sends. Holding
+            # a push-to-talk key is a state of its own and must not read as
+            # "unmuted" to the switch in the client.
+            muted=self.listen_controller.user_muted,
+            voice_activation_enabled=bool(
+                self.settings_service.settings.voice_activation.enabled
+            ),
+            playing=bool(self.audio_player.is_playing),
+            recording=state == ListenState.HELD,
+            recording_wingman=rec_name,
+            recording_wingman_avatar=rec_avatar,
+        )
+
+    def _run_on_main_loop(self, coro) -> None:
+        """Schedule a coroutine on the main loop from any thread. The WebSocket
+        connections and the ConnectionManager's asyncio.Lock belong to the main loop;
+        awaiting them from a throwaway asyncio.run() loop (hotkey threads, FastAPI
+        threadpool) intermittently fails or reorders sends."""
+        loop = self._main_loop
+        if loop is not None and loop.is_running():
+            asyncio.run_coroutine_threadsafe(coro, loop)
+        else:
+            # Pre-startup only; no clients/subscribers exist yet.
+            self.ensure_async(coro)
+
+    def _emit_voice_state(self) -> None:
+        """Cache the current mic status on the shared AudioPlayer and notify subscribers.
+
+        Routed through the main loop so subscribers run there even when called from the
+        keyboard/mouse/joystick input threads (on_press/on_release)."""
+        status = self.get_mic_status()
+        self.audio_player.voice_state = status
+        self._run_on_main_loop(self.audio_player.voice_events.publish("changed", status))
 
     def is_mouse_configured(self, config: Config) -> bool:
         return any(
@@ -603,7 +1298,22 @@ class WingmanCore(WebSocketUser):
         return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
 
     async def start_joysticks(self):
-        pygame.init()
+        # This runs on its own thread, and pygame.init() starts EVERY pygame
+        # module - including the mixer, which opens an output device while
+        # Core's own audio stack already holds one, and the video subsystem.
+        # Only display and joystick are needed here: the loop reads joystick
+        # events and never draws. pygame.event.get() refuses to work without a
+        # video driver, so display is initialized but left without a window.
+        #
+        # On macOS the video subsystem reaches into Cocoa and sets the
+        # application's main menu, which AppKit only allows on the main thread.
+        # Core died with 'API misuse: setting the main menu on a non-main
+        # thread' for every user who had a joystick button bound. The dummy
+        # driver has no Cocoa in it. Windows and Linux keep their driver.
+        if platform.system() == "Darwin":
+            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        pygame.display.init()
+        pygame.joystick.init()
         # Initialize ALL joysticks upfront so they generate events for both
         # normal operation and recording mode.
         joysticks = [
@@ -631,7 +1341,10 @@ class WingmanCore(WebSocketUser):
                 elif event.type == pygame.JOYBUTTONUP:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
                     # In recording mode, capture the button press and signal the caller
-                    if self._joystick_recording_active and self._joystick_recording_event:
+                    if (
+                        self._joystick_recording_active
+                        and self._joystick_recording_event
+                    ):
                         self._joystick_recording_result = {
                             "button": event.button,
                             "guid": joystick_origin.get_guid(),
@@ -709,7 +1422,9 @@ class WingmanCore(WebSocketUser):
                 if task and not task.done():
                     task.cancel()
                     try:
-                        loop.run_until_complete(asyncio.gather(task, return_exceptions=True))
+                        loop.run_until_complete(
+                            asyncio.gather(task, return_exceptions=True)
+                        )
                     except Exception:
                         pass
                 loop.close()
@@ -718,7 +1433,7 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread.name = "JoystickEventLoop"
         self._joystick_thread.start()
 
-    async def record_joystick_action(self) -> dict|None:
+    async def record_joystick_action(self) -> dict | None:
         """Record a single joystick button press using the existing joystick event loop.
 
         If no joystick thread is running, starts one for recording.
@@ -726,9 +1441,7 @@ class WingmanCore(WebSocketUser):
         """
         if not self._joystick_thread or not self._joystick_thread.is_alive():
             config = (
-                self.tower.config
-                if self.tower
-                else self.config_service.current_config
+                self.tower.config if self.tower else self.config_service.current_config
             )
             await self.init_joystick(config)
 
@@ -844,35 +1557,52 @@ class WingmanCore(WebSocketUser):
         if self.is_joystick_configured(config):
             await self.init_joystick(config)
 
+        # Skill pre-flight: gate eligibility once, before any Wingman loads skills.
+        from services.skill_catalog import SkillCatalog
+        from api.commands import SkillRegisteredCommand
+
+        skill_catalog = SkillCatalog()
+        skill_catalog.scan()
+        for rec in skill_catalog.telemetry_records():
+            await self._connection_manager.broadcast(SkillRegisteredCommand(**rec))
+
+        # Auto-disable legacy/incompatible skills that are still enabled in any wingman config.
+        await self.config_service.disable_ineligible_skills(
+            skill_catalog.ineligible_skill_names(),
+            skill_catalog.ineligible_folders(),
+        )
+
         self.tower = Tower(
             config=config,
             config_dir=config_dir_info.config_dir,
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             audio_library=self.audio_library,
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
+            settings_service=self.settings_service,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
         )
+
+        for rec in skill_catalog.drain_runtime_records():
+            await self._connection_manager.broadcast(SkillRegisteredCommand(**rec))
+
+        for wingman in self.tower.wingmen:
+            if isinstance(wingman, OpenAiWingman):
+                wingman.local_ai_service = self.local_ai_service
+
         # Only show toast errors for non-MCP errors (MCP errors are already logged in mcp_client.py)
         for error in self.tower_errors:
             if error.error_type != WingmanInitializationErrorType.MCP_CONNECTION_FAILED:
                 self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+        self._emit_voice_state()
 
-        try:
-            identity = write_identity(self)
-            self.printr.print(
-                f"Elite runtime identity: pid={identity['pid']} instance={identity['instance']} profile={identity['profile']}",
-                server_only=True,
-            )
-        except (OSError, ValueError, TypeError) as exc:
-            self.printr.print(f"Elite runtime identity unavailable: {exc}", server_only=True)
+        # Warm the PocketTTS voice cache for all voices used in this config.
+        await self._preload_pocket_tts_voices()
 
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
@@ -917,6 +1647,9 @@ class WingmanCore(WebSocketUser):
         if isinstance(hotkey, list):
             codes = hotkey
 
+        if not codes:
+            return False
+
         # check if all hotkey codes are in the key events code list
         is_pressed = all(code in self.key_events for code in codes)
 
@@ -933,7 +1666,7 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.enabled
             and is_mute_hotkey_pressed
         ):
-            self.toggle_voice_recognition()
+            self.listen_controller.toggle_muted()
 
         is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
             self.settings_service.settings.cancel_tts_key_codes
@@ -955,7 +1688,7 @@ class WingmanCore(WebSocketUser):
         ):
             self.ensure_async(self.stop_playback())
 
-        if self.tower and self.active_recording["key"] == "":
+        if self.tower and self.listen_controller.held_source is None:
             wingman = None
             for potential_wingman in self.tower.wingmen:
                 if key:
@@ -978,64 +1711,75 @@ class WingmanCore(WebSocketUser):
 
             if wingman:
                 if key:
-                    self.active_recording = dict(key=key.name, wingman=wingman)
+                    source = _key_source(key)
                 elif mouse_button:
-                    self.active_recording = dict(key=mouse_button, wingman=wingman)
-                elif joystick_config:
-                    self.active_recording = dict(
-                        key=f"{joystick_config.guid}{joystick_config.button}",
-                        wingman=wingman,
-                    )
-
-                self.was_listening_before_ptt = self.is_listening
-                if (
-                    self.settings_service.settings.voice_activation.enabled
-                    and self.is_listening
-                ):
-                    self._set_voice_recognition(mute=True)
-
-                self.audio_recorder.start_recording(wingman_name=wingman.name)
+                    source = mouse_button
+                else:
+                    source = f"{joystick_config.guid}{joystick_config.button}"
+                self._ptt_down(source, wingman)
 
     def on_release(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
     ):
-        if self.tower and (
-            key is not None
-            and self.active_recording["key"] == key.name
-            or self.active_recording["key"] == mouse_button
-            or (
-                joystick_config
-                and self.active_recording["key"]
-                == f"{joystick_config.guid}{joystick_config.button}"
+        if not self.tower:
+            return
+        if key is not None:
+            source = _key_source(key)
+        elif mouse_button is not None:
+            source = mouse_button
+        elif joystick_config is not None:
+            source = f"{joystick_config.guid}{joystick_config.button}"
+        else:
+            return
+        self._ptt_up(source)
+
+    # ───────────────── Push-to-talk (key, mouse, joystick, GUI) ───────────────── #
+
+    def _ptt_down(self, source: str, wingman: Wingman) -> None:
+        if not self.listen_controller.ptt_down(source, wingman):
+            self.printr.print(
+                f"Push-to-talk for {wingman.name} ignored: "
+                f"'{self.listen_controller.held_source}' still holds the microphone.",
+                color=LogType.WARNING,
+                server_only=True,
             )
-        ):
-            wingman = self.active_recording["wingman"]
-            recorded_audio_wav = self.audio_recorder.stop_recording(
-                wingman_name=wingman.name
-            )
-            self.active_recording = {"key": "", "wingman": None}
+            return
+        self.printr.print(
+            f"Recording started ({wingman.name})",
+            source_name=wingman.name,
+            command_tag=CommandTag.RECORDING_STARTED,
+        )
 
-            if (
-                self.settings_service.settings.voice_activation.enabled
-                and not self.is_listening
-                and self.was_listening_before_ptt
-            ):
-                self._set_voice_recognition()
+    def _ptt_up(self, source: str) -> None:
+        wingman = self.listen_controller.held_wingman
+        name = wingman.name if wingman else ""
+        if not self.listen_controller.ptt_up(source):
+            return
+        self.printr.print(
+            f"Recording stopped ({name})",
+            source_name=name,
+            command_tag=CommandTag.RECORDING_STOPPED,
+        )
 
-            def run_async_process():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    if isinstance(wingman, Wingman):
-                        loop.run_until_complete(
-                            wingman.process(audio_input_wav=str(recorded_audio_wav))
-                        )
-                finally:
-                    loop.close()
+    def _on_hold_expired(self, source: str) -> None:
+        self.printr.print(
+            f"'{source}' held the microphone for too long without a release - let go of it.",
+            color=LogType.WARNING,
+            server_only=True,
+        )
 
-            if recorded_audio_wav:
-                play_thread = threading.Thread(target=run_async_process)
-                play_thread.start()
+    def _on_ptt_dropped(self, wingman: Wingman | None) -> None:
+        """The clip behind a push-to-talk key held no speech."""
+        name = wingman.name if wingman else ""
+        gate = self.voice_gate
+        self.printr.print(
+            f"Skipped recording ({name}) - no speech detected "
+            f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
+            f"threshold {gate.params.threshold:.2f})",
+            color=LogType.WARNING,
+            source_name=name,
+            command_tag=CommandTag.IGNORED_RECORDING,
+        )
 
     def on_key(self, key):
         if key.event_type == "down":
@@ -1058,182 +1802,481 @@ class WingmanCore(WebSocketUser):
             self.on_release(mouse_button=event.button)
 
     # called when AudioRecorder regonized voice
-    def on_audio_recorder_speech_recorded(self, recording_file: str):
-        def run_async_process():
+    def _stt_hotwords(self) -> list[str]:
+        """Words the local decoder should recognise: the name of every wingman
+        in the active config plus whatever their skills added at runtime."""
+        if not self.tower:
+            return []
+        words: list[str] = spoken_names(self.tower.config)
+        for wingman in self.tower.wingmen:
+            words.extend(wingman.stt_hotwords)
+        return words
+
+    def _gate_params(self) -> GateParams:
+        va = self.settings_service.settings.voice_activation
+        return GateParams(
+            sensitivity=va.sensitivity,
+            end_pause_ms=va.end_pause_ms,
+            min_speech_ms=va.min_speech_ms,
+            max_utterance_s=va.max_utterance_s,
+            pre_roll_ms=va.pre_roll_ms,
+        )
+
+    # ───────────────── Utterances → text → wingman ───────────────── #
+
+    def _on_utterance(
+        self, utterance: Utterance, wingman: Wingman | None, during_playback: bool
+    ) -> None:
+        """From the listen controller, on the audio consumer thread. `wingman` is
+        the one whose key was held; None means voice activation, the text picks.
+        `during_playback` says a wingman was speaking when this was said."""
+        self.transcription_worker.submit_utterance(
+            utterance,
+            on_text=lambda text, benchmark: self._on_transcript(
+                text, benchmark, wingman, during_playback
+            ),
+        )
+
+    def process_recording_file(self, wav_path: str, wingman: Wingman | None = None) -> None:
+        """A recording that arrived as a file, e.g. from an ESP32 device or the
+        client. `wingman` is the one it is meant for; None lets the text pick."""
+        if not self.tower:
+            return
+        self.transcription_worker.submit_file(
+            wav_path,
+            on_text=lambda text, benchmark: self._on_transcript(text, benchmark, wingman, False),
+        )
+
+    def _on_transcript(
+        self,
+        text: str,
+        benchmark: BenchmarkResult,
+        wingman: Wingman | None,
+        during_playback: bool,
+    ) -> None:
+        """On the transcription thread. Three outcomes:
+
+        - a stop word: the playback stops, nothing is answered;
+        - the wingman's own voice picked up by the microphone: dropped;
+        - the user talking: any playback stops, and the text goes to a wingman
+          on a thread of its own (processing blocks on the LLM and on speech
+          synthesis, and the next utterance must not wait for that).
+        """
+        if not self.tower:
+            return
+        words = _words(text)
+        playing = self.audio_player.is_playing
+        # With speakers the microphone hears the wingman, so what the user
+        # said while it spoke arrives mixed with the wingman's own words.
+        # Those are taken out first; the decisions below are about the rest.
+        own = self._without_echo(words) if during_playback else words
+        if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
+            # Over the wingman, a stop word anywhere in what the user said
+            # is a stop; the rest of it was talking over an answer they did
+            # not want, not a request.
+            if playing:
+                self.printr.print(
+                    f"Heard '{text}' - stopping playback.", server_only=True, color=LogType.INFO
+                )
+                self._run_on_main_loop(self.stop_playback())
+            elif during_playback:
+                # The playback it meant is over already. Nothing left to cut off.
+                self.printr.print(f"Heard '{text}' - nothing left to stop.", server_only=True)
+            else:
+                # Said in the gap between the question and the answer: the
+                # answer is on its way. on_playback_started cuts it off.
+                self._stop_requested_at = time.time()
+                self.printr.print(
+                    f"Heard '{text}' while nothing plays - the next answer will be cut off.",
+                    server_only=True,
+                    color=LogType.INFO,
+                )
+            return
+        if during_playback and self._is_echo(words):
+            self.printr.print(
+                f"Dropped '{text}': that is the wingman's own voice.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            return
+        if during_playback and len(own) < len(words):
+            stripped = " ".join(own)
+            self.printr.print(
+                f"Heard '{text}' over the wingman - taking '{stripped}'.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            text = stripped
+        target = wingman or self.tower.get_wingman_from_text(text)
+        if not target:
+            return
+        if wingman is None and not self._jev_addressed(text, target, during_playback):
+            # Voice activation only. A held key already says the utterance was
+            # meant for the wingman; there is nothing left to ask about, and
+            # asking would put a round trip in front of every push-to-talk turn.
+            return
+        if playing:
+            # Talking on means: skip the rest of the answer.
+            self._run_on_main_loop(self.stop_playback())
+
+        def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(wingman.process(transcript=text))
+                loop.run_until_complete(
+                    target.process(transcript=text, transcription_benchmark=benchmark)
+                )
             finally:
                 loop.close()
 
-        generation = self.audio_recorder._generation
-        provider = self.settings_service.settings.voice_activation.stt_provider
-        text = None
+        threading.Thread(target=run, name="wingman-process").start()
 
-        if provider == VoiceActivationSttProvider.AZURE:
-            if self.azure_speech_config is None:
-                return
-            recognizer = speechsdk.SpeechRecognizer(
-                speech_config=self.azure_speech_config,
-                audio_config=speechsdk.audio.AudioConfig(filename=recording_file),
-                auto_detect_source_language_config=self._azure_language_config)
-            result = recognizer.recognize_once_async().get()
-            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-                text = result.text
-        elif provider == VoiceActivationSttProvider.WINGMAN_PRO:
-            wingman_pro = WingmanPro(
-                wingman_name="system",
-                settings=self.settings_service.settings.wingman_pro,
+    def _jev_addressed(self, text: str, target, during_playback: bool) -> bool:
+        """Whether a voice-activated utterance was really meant for a wingman.
+
+        The word matcher that runs above has no answer for this. It sorts an
+        utterance into stop, echo, or answer it — and everything that is not
+        one of the first two gets answered, including two people talking in
+        the room and the speech model writing "Thank you for watching!" over
+        a second of fan noise. This is the one question it cannot ask.
+
+        True whenever Jev is off, failed, or unsure, so the behaviour without
+        a working gateway is exactly today's.
+        """
+        gate = getattr(target, "jev", None)
+        if not gate or not gate.active:
+            return True
+        values = gate.triage(
+            transcript=text,
+            wingman_names=[w.name for w in self.tower.wingmen] if self.tower else [],
+            during_playback=during_playback,
+            speaking_text=self.audio_player.speaking_text,
+        )
+        addressed = values.get("addressed")
+        if addressed is None or addressed >= NOT_ADDRESSED_BELOW:
+            return True
+        self.printr.print(
+            f"Dropped '{text}': not addressed to a wingman "
+            f"(Jev {addressed:.2f}).",
+            server_only=True,
+            color=LogType.INFO,
+        )
+        return False
+
+    def _is_stop(self, words: list[str]) -> bool:
+        """Whether the whole utterance is a stop command. The phrases are read
+        fresh from the settings so a change in the client applies to the next
+        utterance.
+
+        A phrase counts as a whole. Flattening them into one word set would
+        make "Okay", "Please", "Up" and "It" stop commands of their own, since
+        each is part of some phrase, and none of them would ever be answered.
+        What may stand around a stop word is the other phrases' words, so
+        "Halt, bitte" still stops while "Okay" is answered.
+        """
+        if not words:
+            return False
+        phrases = [
+            tuple(_words(phrase))
+            for phrase in self.settings_service.settings.voice_activation.stop_words
+        ]
+        phrases = [phrase for phrase in phrases if phrase]
+        if tuple(words) in set(phrases):
+            return True
+        on_its_own = {phrase[0] for phrase in phrases if len(phrase) == 1}
+        if not any(word in on_its_own for word in words):
+            return False
+        every_word = {word for phrase in phrases for word in phrase}
+        return all(word in every_word for word in words)
+
+    def _has_stop_word(self, words: list[str]) -> bool:
+        """Whether a stop word stands anywhere in the words. Used for what the
+        user said over the wingman: "stop" between misheard echo words and
+        their own protest still means stop."""
+        if not words:
+            return False
+        phrases = [
+            tuple(_words(phrase))
+            for phrase in self.settings_service.settings.voice_activation.stop_words
+        ]
+        on_its_own = {phrase[0] for phrase in phrases if len(phrase) == 1}
+        return any(word in on_its_own for word in words)
+
+    def _echo_hits(self, words: list[str]) -> list[bool]:
+        """For each word, whether it is the wingman's own, said in this order.
+
+        Counting them as a set drops sentences that only share vocabulary
+        with the answer: "is the gear on the target" against an answer about
+        the gear and the target. A user who repeats the wingman's own
+        sentence word for word is still taken for an echo - nothing in the
+        text tells those two apart.
+        """
+        spoken = _words(self.audio_player.speaking_text)
+        hits = []
+        at = 0
+        for word in words:
+            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
+            hits.append(found is not None)
+            if found is not None:
+                at = found + 1
+        return hits
+
+    def _without_echo(self, words: list[str]) -> list[str]:
+        """The words that are not the wingman's: what the user said over it."""
+        return [w for w, hit in zip(words, self._echo_hits(words)) if not hit]
+
+    def _is_echo(self, words: list[str]) -> bool:
+        """Whether these words are what the wingman is saying right now. With
+        speakers instead of a headset the microphone hears the wingman; the
+        transcript then repeats its sentence, word for word or nearly.
+
+        Nearly: the speech model mishears a word or two of the echo, so a few
+        foreign words do not make it the user. Several do, and the user's
+        words are then taken without the wingman's.
+        """
+        meaningful = [w for w in words if len(w) >= 3]
+        if not meaningful:
+            # "hm", "ah": nothing to act on either way
+            return True
+        hits = self._echo_hits(meaningful)
+        own = [w for w, hit in zip(meaningful, hits) if not hit]
+        if not own:
+            return True
+        return sum(hits) / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
+
+    # GET /stt/vocabulary/presets
+    async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
+        overrides = self.settings_service.settings.stt.preset_overrides or {}
+        return [
+            VocabularyPreset(
+                id=pid,
+                name=name,
+                count=len(apply_override(load_preset(self.app_root_path, pid), overrides.get(pid))),
             )
-            transcription = wingman_pro.transcribe_azure_speech(
-                filename=recording_file,
-                config=AzureSttConfig(
-                    languages=self.settings_service.settings.voice_activation.azure.languages,
-                    # unused as Wingman Pro sets this at API level - just for Pydantic:
-                    region=AzureRegion.WESTEUROPE,
+            for pid, name, _count in list_presets(self.app_root_path)
+        ]
+
+    # GET /stt/vocabulary/presets/{preset_id}
+    async def get_stt_vocabulary_preset(self, preset_id: str) -> list[str]:
+        """The list as the user sees it: bundled words with their edits applied."""
+        override = (self.settings_service.settings.stt.preset_overrides or {}).get(preset_id)
+        return apply_override(load_preset(self.app_root_path, preset_id), override)
+
+    # PUT /stt/vocabulary/presets/{preset_id}
+    async def put_stt_vocabulary_preset(self, preset_id: str, words: list[str] = Body(...)) -> list[str]:
+        """Store the user's version of a bundled list as a diff against the
+        bundle. An empty body resets the list to the bundle; a preset is
+        switched off with its toggle, not by emptying it. Returns the
+        effective list."""
+        if preset_id not in {pid for pid, _name, _count in list_presets(self.app_root_path)}:
+            # An unknown id would be stored as an override nothing ever reads.
+            return []
+        bundled = load_preset(self.app_root_path, preset_id)
+        wanted = [w for w in (w.strip() for w in words) if w]
+        added, removed = diff_override(bundled, wanted) if wanted else ([], [])
+        stt = self.settings_service.settings.stt
+        overrides = dict(stt.preset_overrides or {})
+        if added or removed:
+            overrides[preset_id] = PresetOverride(added=added, removed=removed)
+        else:
+            overrides.pop(preset_id, None)
+        stt.preset_overrides = overrides
+        self.config_manager.save_settings_config()
+        self.stt_service._preset_cache.pop(preset_id, None)
+        return apply_override(bundled, overrides.get(preset_id))
+
+    # ───────────────── Pronunciation (Settings > TTS) ───────────────── #
+
+    # GET /tts/pronunciation/presets
+    async def get_pronunciation_presets(self) -> list[PronunciationPreset]:
+        # Counted as they apply to the spoken language: a term with a German
+        # and an English spelling is one term.
+        language = self.settings_service.settings.spoken_language
+        return [
+            PronunciationPreset(
+                id=pid,
+                name=name,
+                count=len(speech_text.preset_rules_for(self.app_root_path, pid, language)),
+            )
+            for pid, name, _count in speech_text.list_presets(self.app_root_path)
+        ]
+
+    # GET /tts/pronunciation/presets/{preset_id}
+    async def get_pronunciation_preset(self, preset_id: str) -> list[PronunciationRule]:
+        language = self.settings_service.settings.spoken_language
+        return [
+            PronunciationRule(written=r.written, spoken=r.spoken)
+            for r in speech_text.preset_rules_for(self.app_root_path, preset_id, language)
+        ]
+
+    # ───────────────── Other spoken languages ───────────────── #
+
+    # GET /spoken_language/others
+    async def get_other_languages(self) -> list[OtherLanguageOption]:
+        return other_language.options()
+
+    # POST /spoken_language/resolve
+    async def resolve_other_language(
+        self, text: str = Body(..., embed=True)
+    ) -> Optional[OtherLanguageSetting]:
+        """The language ``text`` names: from the list, else the support
+        model gives its name and code. None when it names no language."""
+
+        async def ask(system_prompt: str, user: str) -> Optional[str]:
+            if not self.local_ai_service or not self.local_ai_service.is_ready():
+                return None
+            from services.skill_local_ai import SamplingPreset
+
+            result = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.local_ai_service.support(
+                    user, system_prompt=system_prompt, preset=SamplingPreset.PRECISE, max_output_tokens=80
                 ),
             )
-            if transcription:
-                text = transcription.get("_text")
-        elif provider == VoiceActivationSttProvider.WHISPERCPP:
+            return result.text if result else None
 
-            def filter_and_clean_text(text):
-                # First, save the original text for comparison
-                original_text = text
-                # Remove the ambient noise descriptions
-                noise_pattern = r"(\(.*?\))|(\[.*?\])|(\*.*?\*)"
-                text = re.sub(noise_pattern, "", text)
-                # Remove extra spaces, newlines, and commas
-                cleanup_pattern = r"[\s,]+"
-                text = re.sub(cleanup_pattern, " ", text)
-                # Strip leading and trailing whitespaces
-                text = text.strip()
+        return await other_language.resolve(text, ask)
 
-                return original_text != text, text
+    # POST /spoken_language/other
+    async def set_other_language(self, language: OtherLanguageSetting) -> OtherLanguageReport:
+        """Speak ``language``: set it, and move the Wingmen that speak through
+        Pocket TTS to Inworld when it has voices for it. Returns what works
+        and what was changed."""
+        settings = self.settings_service.settings.model_copy(deep=True)
+        stt = self.settings_service.settings.stt
+        stt_provider = stt.provider.value if stt.provider.value != "parakeet" else (
+            "parakeet" if stt.parakeet.run_locally else "parakeet_remote"
+        )
+        if language.code in {l.value for l in SpokenLanguage if l != SpokenLanguage.OTHER}:
+            # "Deutsch" typed as another language: it is one Wingman speaks
+            # end to end, with Pocket TTS and no switch to Inworld. Saving
+            # restores switched Wingmen and gives the defaults their voice.
+            settings.spoken_language = SpokenLanguage(language.code)
+            settings.other_language = None
+            await self.settings_service.save_settings(settings)
+            return other_language.report(language, stt_provider, True, None, [])
+        was_other = settings.spoken_language == SpokenLanguage.OTHER
+        settings.spoken_language = SpokenLanguage.OTHER
+        settings.other_language = language
+        if was_other:
+            # Another language than before: its voices are not the right ones.
+            other_language.restore_wingmen(self.config_manager)
+        await self.settings_service.save_settings(settings)
 
-            transcription = self.whispercpp.transcribe(
-                filename=recording_file,
-                config=self.settings_service.settings.voice_activation.whispercpp_config,
+        voices, provider = await self._inworld_voices_for(language.code)
+        switched = []
+        if voices and provider:
+            defaults = self.config_manager.load_defaults_config(silent_on_error=True)
+            default_tts = defaults.features.tts_provider.value if defaults else "pocket_tts"
+            switched = other_language.switch_wingmen(
+                self.config_manager, default_tts, language, provider, voices
             )
-            if transcription:
-                cleaned, text = filter_and_clean_text(transcription.text)
-                if cleaned:
-                    self.printr.print(
-                        f"Cleaned original transcription: {transcription.text}",
-                        server_only=True,
-                        color=LogType.SYSTEM,
-                    )
-        elif provider == VoiceActivationSttProvider.OPENAI:
-            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
-            openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
-            transcription = openai.transcribe(filename=recording_file)
-            text = transcription.text
-        elif provider == VoiceActivationSttProvider.GROQ:
-            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
-            groq = OpenAi(
-                api_key=self.secret_keeper.secrets["groq"],
-                base_url="https://api.groq.com/openai/v1/",
-            )
-            transcription = groq.transcribe(
-                filename=recording_file, model="whisper-large-v3-turbo"
-            )
-            text = transcription.text
-        elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            combined_hotwords: list[str] = []
+            if switched and self.config_service.tower:
+                await self.config_service.load_config()
+        return other_language.report(
+            language, stt_provider, bool(voices), provider if switched else None, switched
+        )
 
-            # add the default hotwords from settings
-            default_hotwords = (
-                self.settings_service.settings.voice_activation.fasterwhisper_config.hotwords
-            )
-            if default_hotwords and len(default_hotwords) > 0:
-                combined_hotwords.extend(default_hotwords)
+    async def _inworld_voices_for(self, code: Optional[str]):
+        """Inworld voices for ``code`` and the provider to reach them through:
+        the subscription when signed in, else the user's own Inworld key."""
+        if not code:
+            return [], None
+        try:
+            if self.is_client_logged_in:
+                from providers.wingman_subscription import WingmanSubscription
 
-            for wingman in self.tower.wingmen:
-                # add the wingman names explicitly
-                combined_hotwords.append(wingman.name)
-                # and their additional hotwords
-                wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords
-                if wingman_hotwords and len(wingman_hotwords) > 0:
-                    combined_hotwords.extend(wingman_hotwords)
+                subscription = WingmanSubscription(
+                    wingman_name="system", settings=self.settings_service.settings.wingman_pro
+                )
+                voices = await asyncio.get_running_loop().run_in_executor(
+                    None, subscription.get_available_inworld_voices
+                )
+                return other_language.inworld_speaks(voices, code), "wingman_pro"
+            key = SecretKeeper().secrets.get("inworld")
+            if key:
+                from providers.inworld import Inworld
 
-            transcription = self.fasterwhisper.transcribe(
-                config=self.settings_service.settings.voice_activation.fasterwhisper_config,
-                filename=recording_file,
-                hotwords=list(set(combined_hotwords)),
-            )
-            text = transcription.text
+                voices = await Inworld(api_key=key, wingman_name="").get_available_voices()
+                return other_language.inworld_speaks(voices, code), "inworld"
+        except Exception as e:
+            self.printr.print(f"Could not list Inworld voices: {e}", server_only=True)
+        return [], None
 
-        if not self.audio_recorder.capture_valid(generation) or not self.is_listening:
-            return
-        if text:
-            wingman = self.tower.get_wingman_from_text(text)
-            if wingman:
-                play_thread = threading.Thread(target=run_async_process)
-                play_thread.start()
-        else:
-            self.printr.print(
-                "ignored empty transcription - probably just noise.", server_only=True
+    # ───────────────── Microphone test (Settings) ───────────────── #
+
+    # POST /stt/test/start
+    async def start_stt_test(self) -> bool:
+        return self.listen_controller.capture_start("__test__")
+
+    # POST /stt/test/stop
+    async def stop_stt_test(self) -> SttTestResult | None:
+        """Release the test capture and transcribe it right here, so the
+        settings page gets the text back in the same request."""
+        utterance = self.listen_controller.capture_stop("__test__")
+        gate = self.voice_gate
+        if utterance is None:
+            return SttTestResult(
+                text="",
+                duration_s=0.0,
+                level=gate.last_peak,
+                best_score=gate.last_best_score,
+                threshold=gate.params.threshold,
             )
+        wav_path = self.transcription_worker.write(utterance)
+        started = time.perf_counter()
+        text = await asyncio.to_thread(self.stt_service.transcribe, wav_path)
+        return SttTestResult(
+            text=text or "",
+            duration_s=utterance.duration_s,
+            transcribe_ms=int((time.perf_counter() - started) * 1000),
+            level=gate.last_peak,
+            best_score=gate.last_best_score,
+            threshold=gate.params.threshold,
+        )
+
+    def _broadcast_vocabulary(self, vocabulary: list[str]) -> None:
+        """A wingman tool taught a spelling, or the names were seeded. An open
+        settings page has to hear it: it posts the whole stt block on the next
+        change and would write the list it loaded back over this one."""
+        self._run_on_main_loop(
+            self._connection_manager.broadcast(
+                SttVocabularyChangedCommand(vocabulary=vocabulary)
+            )
+        )
+
+    def _on_listen_state_changed(self, state: ListenState) -> None:
+        """From the controller, on whichever thread caused the change.
+
+        The client's mute switch means one thing: the user does not want to
+        be heard right now, say while talking to friends on Discord. It is
+        the user's own setting, so the controller's own flag is what goes out;
+        a held push-to-talk key or a wingman speaking must not flip it, and
+        those are states of their own, so the state alone cannot say it.
+        """
+        self._run_on_main_loop(
+            self._connection_manager.broadcast(
+                VoiceActivationMutedCommand(muted=self.listen_controller.user_muted)
+            )
+        )
+        self._emit_voice_state()
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
-        # The supervisor invalidates only affected streams. Continuous capture
-        # reopens itself without changing the user's mute/listening intent.
-        sd.supervisor.configure(self.settings_service.config_manager.settings_config.audio)
+        # devices: [input_device, output_device]
+
+        # get current audio devices
+        current_mic = sd.default.device[0]
+
+        # set new devices
+        sd.default.device = devices
+
+        # the stream is bound to the device it was opened on
+        if current_mic != devices[0]:
+            self.audio_input.restart()
 
     async def set_voice_activation(self, is_enabled: bool):
-        if is_enabled:
-            if (
-                self.settings_service.settings.voice_activation.stt_provider
-                == VoiceActivationSttProvider.AZURE
-                and not self.azure_speech_config
-            ):
-                await self.__init_azure_voice_activation()
-        else:
-            self.was_listening_before_playback = False
-            self.was_listening_before_ptt = False
-            self._set_voice_recognition(mute=True)
-            self.azure_speech_config = None
-
-    # called when Azure Speech Recognizer recognized voice
-    def on_azure_voice_recognition(self, voice_event):
-        def run_async_process():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(wingman.process(transcript=text))
-            finally:
-                loop.close()
-
-        text = voice_event.result.text
-        if not self.is_listening or getattr(self, "_azure_capture_interrupted", False):
-            return
-        wingman = self.tower.get_wingman_from_text(text)
-        if text and wingman:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
-
-    async def __init_azure_voice_activation(self):
-        if self.azure_speech_config or not self.config_service.current_config:
-            return
-
-        key = await self.secret_keeper.retrieve(
-            requester="Voice Activation",
-            key="azure_tts",
-            prompt_if_missing=True,
-        )
-
-        speech_config = speechsdk.SpeechConfig(
-            region=self.settings_service.settings.voice_activation.azure.region.value,
-            subscription=key,
-        )
-
-        auto_detect_source_language_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-            languages=self.settings_service.settings.voice_activation.azure.languages
-        )
-
-        self.azure_speech_config = speech_config
-        self._azure_language_config = auto_detect_source_language_config
+        """Switching voice activation on means listening, not "on but muted"."""
+        self.listen_controller.set_voice_activation(is_enabled)
 
     async def on_playback_started(self, wingman_name: str):
         await self.printr.print_async(
@@ -1242,12 +2285,17 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STARTED,
         )
 
-        self.was_listening_before_playback = self.is_listening
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and self.is_listening
-        ):
-            self._set_voice_recognition(mute=True)
+        self.listen_controller.playback_started()
+        self._emit_voice_state()
+
+        if time.time() - self._stop_requested_at <= STOP_AHEAD_SECONDS:
+            self._stop_requested_at = 0.0
+            self.printr.print(
+                "Stop was requested a moment ago - cutting this answer off.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+            await self.stop_playback()
 
     async def on_playback_finished(self, wingman_name: str):
         await self.printr.print_async(
@@ -1256,58 +2304,37 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STOPPED,
         )
 
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and not self.is_listening
-            and self.was_listening_before_playback
-        ):
-            self._set_voice_recognition()
+        self.listen_controller.playback_finished()
+        self._emit_voice_state()
 
     async def process_events(self):
         while True:
             callback, wingman_name = await self.event_queue.get()
             await callback(wingman_name)
 
-    def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
-        # restart VA with new settings
-        if self.is_listening:
-            self._set_voice_recognition(mute=True)
-            self._set_voice_recognition(mute=False, adjust_for_ambient_noise=True)
+    def on_va_settings_changed(self, va_settings: VoiceActivationSettings):
+        self.listen_controller.update_params(self._gate_params())
+        self.listen_controller.set_listen_while_speaking(va_settings.listen_while_speaking)
 
     def start_voice_recognition(
         self,
         mute: Optional[bool] = False,
         adjust_for_ambient_noise: Optional[bool] = False,
     ):
-        # This method is also the client's mute endpoint. Explicit choices must
-        # cancel an automatic resume that playback or push-to-talk had scheduled.
-        self.was_listening_before_playback = False
-        self.was_listening_before_ptt = False
-        self._set_voice_recognition(mute, adjust_for_ambient_noise)
+        """Mute or unmute voice activation. Bound to POST /voice-activation/mute.
 
-    def _set_voice_recognition(self, mute=False, adjust_for_ambient_noise=False):
-        self.is_listening = not mute
-        if self.is_listening:
-            if adjust_for_ambient_noise:
-                self.audio_recorder.adjust_for_ambient_noise()
-            self.audio_recorder.start_continuous_listening(
-                va_settings=self.settings_service.settings.voice_activation)
-        else:
-            self.audio_recorder.stop_continuous_listening()
-
-        command = VoiceActivationMutedCommand(muted=mute)
-        self.ensure_async(self._connection_manager.broadcast(command))
+        Kept as the endpoint's public name and signature so the client's generated
+        API stays stable; `adjust_for_ambient_noise` is history, the detector needs
+        no calibration.
+        """
+        self.listen_controller.set_muted(bool(mute))
 
     def toggle_voice_recognition(self):
-        mute = self.is_listening
-        self.was_listening_before_playback = False
-        self.was_listening_before_ptt = False
-        self.start_voice_recognition(mute)
+        self.listen_controller.toggle_muted()
 
     # GET /audio-devices
     def get_audio_devices(self):
-        audio_devices = sd.query_devices()
-        return audio_devices
+        return with_full_names(list(sd.query_devices()), list(sd.query_hostapis()))
 
     # GET /startup-errors
     def get_startup_errors(self):
@@ -1316,6 +2343,23 @@ class WingmanCore(WebSocketUser):
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
+
+    # POST /start-recording-for-wingman
+    async def start_recording_for_wingman(self, wingman_name: str):
+        """Start audio recording for a wingman (GUI mic toggle)."""
+        if not self.tower:
+            return
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            return
+        self._ptt_down("__gui__", wingman)
+
+    # POST /stop-recording-for-wingman
+    async def stop_recording_for_wingman(self, wingman_name: str):
+        """Stop audio recording and process the result (GUI mic toggle)."""
+        if not self.tower:
+            return
+        self._ptt_up("__gui__")
 
     # POST /ask-wingman-conversation-provider
     async def ask_wingman_conversation_provider(
@@ -1343,21 +2387,124 @@ class WingmanCore(WebSocketUser):
 
         return None
 
+    # GET /avatar-variants
+    async def get_avatar_variants(self, wingman_name: str) -> list[AvatarVariant]:
+        return avatar_studio.list_variants(wingman_name)
+
+    # GET /image-style-prompts
+    async def get_image_style_prompts(self) -> list[ImageStylePrompt]:
+        return avatar_studio.style_prompts()
+
+    # POST /avatar-prompt
+    async def write_avatar_prompt(self, request: AvatarPromptRequest) -> AvatarPrompt:
+        wingman = self._studio_wingman(request.wingman_name)
+        try:
+            return AvatarPrompt(
+                prompt=await avatar_studio.write_prompt(wingman, request)
+            )
+        except avatar_studio.AvatarStudioError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    # POST /avatar-variants
+    async def generate_avatar_variant(
+        self, request: AvatarGenerationRequest
+    ) -> AvatarVariant:
+        wingman = self._studio_wingman(request.wingman_name)
+        try:
+            return await avatar_studio.generate_variant(wingman, request)
+        except avatar_studio.AvatarStudioError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    def _studio_wingman(self, wingman_name: str) -> OpenAiWingman:
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
+        if not isinstance(wingman, OpenAiWingman):
+            raise HTTPException(
+                status_code=404,
+                detail="This wingman is not loaded. Enable it and try again.",
+            )
+        return wingman
+
+    # DELETE /avatar-variants
+    async def delete_avatar_variant(self, wingman_name: str, file_name: str):
+        avatar_studio.delete_variant(wingman_name, file_name)
+
     # POST /send-text-to-wingman
-    async def send_text_to_wingman(self, text: str, wingman_name: str):
+    async def send_text_to_wingman(
+        self,
+        text: str = Form(""),
+        wingman_name: str = Form(""),
+        images: list[UploadFile] = None,
+    ):
         wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not text:
+            return
+
+        processed_images = None
+        if images:
+            if len(images) > 2:
+                raise HTTPException(
+                    status_code=422, detail="Maximum 2 images allowed per message."
+                )
+
+            # Resolve the active conversation model ID from the wingman config.
+            # The model lives under the provider-specific sub-config, not features.
+            model_id = ""
+            if hasattr(wingman, "config") and hasattr(wingman.config, "features"):
+                provider = wingman.config.features.conversation_provider
+                cfg = wingman.config
+                if provider == ConversationProvider.OPENAI and cfg.openai:
+                    model_id = cfg.openai.conversation_model or ""
+                elif provider == ConversationProvider.MISTRAL and cfg.mistral:
+                    model_id = cfg.mistral.conversation_model or ""
+                elif provider == ConversationProvider.GROQ and cfg.groq:
+                    model_id = cfg.groq.conversation_model or ""
+                elif provider == ConversationProvider.CEREBRAS and cfg.cerebras:
+                    model_id = cfg.cerebras.conversation_model or ""
+                elif provider == ConversationProvider.GOOGLE and cfg.google:
+                    model_id = cfg.google.conversation_model or ""
+                elif provider == ConversationProvider.OPENROUTER and cfg.openrouter:
+                    model_id = cfg.openrouter.conversation_model or ""
+                elif provider == ConversationProvider.LOCAL_LLM and cfg.local_llm:
+                    model_id = cfg.local_llm.conversation_model or ""
+                elif provider == ConversationProvider.WINGMAN_PRO and cfg.wingman_pro:
+                    model_id = cfg.wingman_pro.conversation_deployment or ""
+                elif provider == ConversationProvider.PERPLEXITY and cfg.perplexity:
+                    pmodel = cfg.perplexity.conversation_model
+                    model_id = pmodel.value if hasattr(pmodel, "value") else str(pmodel)
+                elif provider == ConversationProvider.XAI and cfg.xai:
+                    model_id = cfg.xai.conversation_model or ""
+
+            if model_id:
+                supports_vision = await self.model_metadata_service.supports_vision(model_id)
+                if not supports_vision:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="The configured conversation model does not support vision/images.",
+                    )
+
+            processed_images = []
+            for img_file in images:
+                if not validate_image_mime(img_file.content_type or ""):
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unsupported image type: {img_file.content_type}. Allowed: PNG, JPEG, WebP, GIF.",
+                    )
+                img_bytes = await img_file.read()
+                b64, mime = process_image(img_bytes)
+                processed_images.append((b64, mime))
 
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(wingman.process(transcript=text))
+                loop.run_until_complete(
+                    wingman.process(transcript=text, images=processed_images)
+                )
             finally:
                 loop.close()
 
-        if wingman and text:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
+        play_thread = threading.Thread(target=run_async_process)
+        play_thread.start()
 
     # POST /send-audio-to-wingman
     async def send_audio_to_wingman(
@@ -1375,85 +2522,281 @@ class WingmanCore(WebSocketUser):
         with open(filename, "wb") as f:
             f.write(contents)
 
-        def run_async_process():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                if isinstance(wingman, Wingman):
-                    loop.run_until_complete(
-                        wingman.process(audio_input_wav=str(filename))
-                    )
-            finally:
-                loop.close()
-
-        if filename:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
+        # The wav is transcribed by the core's STT service and then answered,
+        # the same path a recording from the microphone takes.
+        self.process_recording_file(str(filename), wingman)
 
     # POST /reset-conversation-history
-    def reset_conversation_history(self, wingman_name: Optional[str] = None):
+    async def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
             wingman = self.tower.get_wingman_by_name(wingman_name)
             if wingman:
-                wingman.reset_conversation_history()
+                await wingman.reset_conversation_history()
                 self.printr.toast(
                     f"Conversation history cleared for {wingman_name}.",
                 )
         else:
             for wingman in self.tower.wingmen:
-                wingman.reset_conversation_history()
+                await wingman.reset_conversation_history()
             self.printr.toast(
                 "Conversation history cleared.",
             )
         return True
 
-    # GET /fasterwhisper/modelsizes
-    def get_fasterwhisper_modelsizes(self):
-        model_sizes = [
-            "tiny",
-            "tiny.en",
-            "base",
-            "base.en",
-            "small",
-            "small.en",
-            "distil-small.en",
-            "medium",
-            "medium.en",
-            "distil-medium.en",
-            "large-v1",
-            "large-v2",
-            "large-v3",
-            "large",
-            "distil-large-v2",
-            "distil-large-v3",
-            "large-v3-turbo",
-            "turbo",
-        ]
-        return model_sizes
+    # POST /condense-conversation
+    async def condense_conversation(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            self.printr.toast_warning(
+                f"Cannot summarize: Wingman '{wingman_name}' not found."
+            )
+            return False
+        await wingman.condenser.condense(
+            local_ai_service=wingman.local_ai_service,
+            persistent_memory_service=wingman.persistent_memory_service,
+            force=True,
+        )
+        return True
 
-    # GET /fasterwhisper/computetypes
-    def get_fasterwhisper_computetypes(self):
-        compute_types = [
-            "default",
-            "auto",
-            "int8",
-            "int16",
-            "int8_float16",
-            "int8_float32",
-            "float16",
-            "float32",
-        ]
-        return compute_types
+    # GET /wingman-context
+    def get_wingman_context(self, wingman_name: str) -> str:
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "get_last_context"):
+            return ""
+        return wingman.get_last_context()
 
-    # GET /fasterwhisper/devices
-    def get_fasterwhisper_devices(self):
-        devices = [
-            "auto",
-            "cpu",
-        ]
-        if self.system_manager.is_cuda_available():
-            devices.append("cuda")
-        return devices
+    # GET /wingman-conversation
+    def get_wingman_conversation(
+        self, wingman_name: str, strip_nulls: bool = True
+    ) -> list[dict]:
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "get_conversation_messages"):
+            return []
+        return wingman.get_conversation_messages(strip_nulls=strip_nulls)
+
+    def _collect_pocket_tts_voice_ids(self) -> list[str]:
+        """Collect the PocketTTS voice IDs used by wingmen in the current tower."""
+        if not self.tower:
+            return []
+        ids: list[str] = []
+        seen: set[str] = set()
+        for wingman in self.tower.wingmen:
+            try:
+                voice_id = wingman.config.pocket_tts.voice
+            except AttributeError:
+                continue
+            if not voice_id or voice_id in seen:
+                continue
+            seen.add(voice_id)
+            ids.append(voice_id)
+        return ids
+
+    async def _preload_pocket_tts_voices(
+        self,
+        voice_ids: Optional[list[str]] = None,
+        state_message_prefix: str = "Preloading voices",
+        restore_ready_state: bool = False,
+    ) -> dict[str, bool]:
+        """Warm PocketTTS voice state cache.
+
+        When ``voice_ids`` is None, preloads every voice used by the current
+        tower. Broadcasts LOADING_CONFIG progress messages so the app header
+        bar shows the shared loading indicator. When ``restore_ready_state``
+        is True, flips the core state back to READY on completion — use that
+        for ad-hoc preloads outside the main startup flow (e.g. a user picks
+        a voice in the config screen).
+        """
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return {}
+        if not self.pocket_tts.model:
+            return {}
+        if voice_ids is None:
+            voice_ids = self._collect_pocket_tts_voice_ids()
+        if not voice_ids:
+            return {}
+
+        def preload_and_warm_up() -> dict[str, bool]:
+            results = self.pocket_tts.preload_voice_states(voice_ids)
+            # Inside the loading phase, so the first answer is not the one
+            # that pays for the model's first run.
+            ready = next((v for v, ok in results.items() if ok), None)
+            self.pocket_tts.warm_up(self.pocket_tts.warm_up_voice(ready))
+            return results
+
+        loop = asyncio.get_running_loop()
+        preload_task = loop.run_in_executor(None, preload_and_warm_up)
+        try:
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message=state_message_prefix,
+            )
+            return await preload_task
+        finally:
+            if restore_ready_state:
+                await self.set_core_state(CoreState.READY)
+
+    def _on_pocket_tts_reloaded(self) -> None:
+        """Callback fired after the PocketTTS model finishes (re)loading.
+
+        Runs from the model-load worker thread, so schedule the async preload
+        onto the main loop.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = getattr(self, "_main_loop", None)
+            if loop is None:
+                self.printr.print(
+                    "PocketTTS model reload: main loop not captured; skipping preload.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                return
+        future = asyncio.run_coroutine_threadsafe(self._after_pocket_tts_reload(), loop)
+
+        def _log_preload_failure(fut):
+            exc = fut.exception()
+            if exc:
+                self.printr.print(
+                    f"PocketTTS background preload failed: {exc}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+
+        future.add_done_callback(_log_preload_failure)
+
+    async def _after_pocket_tts_reload(self) -> None:
+        """Get the voices ready for the model that was just loaded, under the
+        loading indicator, so a voice the user picks later speaks at once.
+
+        The voices the Wingmen use come first. Then the clones the model
+        still lacks, with their progress in the indicator: every custom voice
+        when the load replaced another model (a new spoken language or
+        quality) or Wingman brought new recordings; on any other load only
+        clones that exist but are outdated, after a Wingman update brought a
+        pocket-tts that computes them differently. Each clone is made once
+        per model: 49 shipped voices took 26 s on an M2 Pro (2026-09-24).
+        """
+        # Recordings Wingman ships for the spoken language (see
+        # providers/pocket_tts_voices.py): new ones are cloned right away, and
+        # so are those an earlier start copied but was closed before cloning.
+        installed = (
+            self.pocket_tts.install_bundled_voices()
+            or self.pocket_tts.bundled_voices_needing_clone()
+        )
+        only_stale = not (self.pocket_tts.last_load_switched_model or installed)
+        await self._preload_pocket_tts_voices(
+            state_message_prefix="Preloading voices",
+            restore_ready_state=False,
+        )
+        try:
+            # Every newly loaded model gets its warm-up generation, also when
+            # no Wingman uses a Pocket TTS voice to preload (then the one
+            # above did none): the first answer after a language switch
+            # should start as fast as every later one.
+            if self.pocket_tts.model and self.pocket_tts.settings.run_locally:
+                await self.set_core_state(CoreState.LOADING_CONFIG, message="Warming up voice")
+                await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: self.pocket_tts.warm_up(self.pocket_tts.warm_up_voice())
+                )
+            await self._precompute_with_indicator(only_stale)
+        finally:
+            await self.set_core_state(CoreState.READY)
+
+    async def _precompute_with_indicator(self, only_stale: bool) -> None:
+        """Clone what the active model lacks, showing "Preparing voices
+        (12/49)" and the progress in the loading indicator."""
+        pocket = self.pocket_tts
+        if not pocket.settings.enable or not pocket.settings.run_locally or not pocket.model:
+            return
+        if pocket._precompute_running:
+            return
+        total = len(
+            pocket.list_custom_voices_needing_precompute(
+                only_stale=only_stale, spoken_language_only=True
+            )
+        )
+        if not total:
+            return
+        loop = asyncio.get_running_loop()
+
+        def progress(current: int, total: int, _voice: str) -> None:
+            asyncio.run_coroutine_threadsafe(
+                self.set_core_state(
+                    CoreState.LOADING_CONFIG,
+                    message=f"Preparing voices ({current}/{total})",
+                    progress=(current - 1) / total,
+                ),
+                loop,
+            )
+
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG, message=f"Preparing voices (0/{total})", progress=0.0
+        )
+        await loop.run_in_executor(
+            None,
+            lambda: pocket.precompute_custom_voices(
+                progress_cb=progress, only_stale=only_stale, spoken_language_only=True
+            ),
+        )
+
+    # POST /pocket_tts/preload_voice
+    async def preload_pocket_tts_voice(self, voice: str) -> PocketTTSPreloadResult:
+        """Warm the voice-state cache for a single voice (e.g. after a user picks it).
+
+        Broadcasts LOADING_CONFIG core state while working, so the client
+        picks up progress via the shared header bar indicator. Resolves once
+        the clone + on-disk cache are ready and the core state is back to READY.
+        """
+        voice = (voice or "").strip()
+        if not voice:
+            return PocketTTSPreloadResult(ok=False, reason="empty voice id")
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return PocketTTSPreloadResult(ok=False, reason="pocket_tts unavailable")
+        if not self.pocket_tts.model:
+            return PocketTTSPreloadResult(ok=False, reason="model not loaded")
+
+        results = await self._preload_pocket_tts_voices(
+            voice_ids=[voice],
+            state_message_prefix="Preloading voice",
+            restore_ready_state=True,
+        )
+        return PocketTTSPreloadResult(ok=bool(results.get(voice, False)), voice=voice)
+
+    # POST /pocket_tts/precompute_voices
+    async def precompute_pocket_tts_voices(self) -> dict:
+        """Kick off a background precompute pass over all custom voices
+        missing a current ``.<active_model>.safetensors`` cache. Returns
+        immediately; progress is surfaced via ``GET /pocket_tts/status``.
+        """
+        return await self._start_precompute(only_stale=False)
+
+    async def _start_precompute(self, only_stale: bool) -> dict:
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return {"started": False, "reason": "pocket_tts unavailable", "total": 0}
+        if not self.pocket_tts.model:
+            return {"started": False, "reason": "model not loaded", "total": 0}
+        if self.pocket_tts._precompute_running:
+            return {
+                "started": False,
+                "reason": "already running",
+                "total": self.pocket_tts._precompute_total,
+            }
+
+        targets = self.pocket_tts.list_custom_voices_needing_precompute(
+            only_stale=only_stale
+        )
+        if not targets:
+            return {"started": False, "reason": "nothing to do", "total": 0}
+
+        loop = asyncio.get_running_loop()
+        # Fire-and-forget: run on the default executor so the HTTP call returns
+        # immediately. The method manages its own _precompute_* state for the
+        # status poller.
+        loop.run_in_executor(
+            None, lambda: self.pocket_tts.precompute_custom_voices(only_stale=only_stale)
+        )
+        return {"started": True, "total": len(targets)}
 
     # POST /pocket_tts/start
     def start_pocket_tts(self):
@@ -1467,6 +2810,171 @@ class WingmanCore(WebSocketUser):
             self.printr.print(
                 f"Error stopping PocketTTS: {e}", color=LogType.ERROR, server_only=True
             )
+
+    # GET /pocket_tts/status
+    def get_pocket_tts_status(self) -> dict:
+        return self.pocket_tts.get_status()
+
+    # GET /pocket_tts/models
+    def get_pocket_tts_models(self) -> list[dict]:
+        return self.pocket_tts.get_available_models()
+
+    # POST /open-filemanager/pocket-tts-models
+    def open_pocket_tts_models_directory(self):
+        show_in_file_manager(get_pocket_tts_models_dir())
+
+    # Windows reserved device names (case-insensitive, with or without extension).
+    _RESERVED_WINDOWS_NAMES = frozenset(
+        ["CON", "PRN", "AUX", "NUL"]
+        + [f"COM{i}" for i in range(1, 10)]
+        + [f"LPT{i}" for i in range(1, 10)]
+    )
+    _MAX_VOICE_STEM_LEN = 80
+
+    def _validate_voice_stem(self, stem: str) -> str:
+        """Validate a user-supplied voice name for safe filesystem use.
+
+        Rejects empty names, path separators, dot-traversal, control
+        characters, Windows reserved names, overly long names, and stems
+        that match a known PocketTTS model tag (which would collide with
+        the ``<voice>.<model_tag>.safetensors`` cache naming scheme).
+        """
+        if not stem:
+            raise HTTPException(status_code=400, detail="Voice name cannot be empty.")
+        if any(c in stem for c in ("/", "\\")) or ".." in stem:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if any(ord(c) < 0x20 for c in stem):
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if len(stem) > self._MAX_VOICE_STEM_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voice name exceeds {self._MAX_VOICE_STEM_LEN} characters.",
+            )
+        if stem.upper() in self._RESERVED_WINDOWS_NAMES:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        # Disallow stems that shadow a known model tag — would collide with
+        # ``<voice>.<model_tag>.safetensors`` cache files on disk.
+        if stem in self.pocket_tts._known_model_tags():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voice name '{stem}' conflicts with a model ID.",
+            )
+        return stem
+
+    # POST /voices/preprocess
+    async def preprocess_custom_voice(
+        self,
+        file: UploadFile = File(...),
+        name: Optional[str] = Form(None),
+        max_duration_s: float = Form(20.0),
+        overwrite: bool = Form(False),
+    ) -> dict:
+        """Clean up an uploaded audio clip for PocketTTS voice cloning.
+
+        Converts to mono 24 kHz WAV, trims silence, normalizes peak, caps duration,
+        and saves it into the custom voices directory under ``<name>.wav``.
+        Returns metadata about the preprocessed clip.
+        """
+        from services.voice_preprocessing import (
+            preprocess_voice_audio,
+            supported_input_extensions,
+        )
+
+        src_name = file.filename or "upload.wav"
+        src_ext = os.path.splitext(src_name)[1].lower()
+        if src_ext not in supported_input_extensions():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unsupported audio format '{src_ext}'. "
+                    f"Supported: {sorted(supported_input_extensions())}"
+                ),
+            )
+
+        stem = (name or os.path.splitext(src_name)[0]).strip()
+        stem = self._validate_voice_stem(stem)
+
+        custom_dir = get_custom_voices_dir()
+        dst_path = os.path.join(custom_dir, f"{stem}.wav")
+        # Verify the resolved destination actually lives inside custom_dir —
+        # belt-and-braces protection against creative filenames that slip past
+        # the character-level checks on platforms we don't cover (e.g. Windows
+        # drive letters, SMB paths).
+        abs_custom = os.path.realpath(custom_dir)
+        abs_dst = os.path.realpath(dst_path)
+        if os.path.commonpath([abs_custom, abs_dst]) != abs_custom:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if os.path.exists(dst_path) and not overwrite:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Voice '{stem}' already exists. Pass overwrite=true to replace it.",
+            )
+
+        # Stream upload to a unique temp file — concurrent uploads must not collide.
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=src_ext,
+            prefix="voice_upload_",
+            dir=get_writable_dir(RECORDING_PATH),
+        )
+        try:
+            chunk_size = 1024 * 1024
+            with os.fdopen(fd, "wb") as f:
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+            try:
+                result = preprocess_voice_audio(
+                    src_path=tmp_path,
+                    dst_path=dst_path,
+                    max_duration_s=max_duration_s,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=f"Preprocessing failed: {e}"
+                ) from e
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+        # Drop every stale cache (legacy + per-model) for this stem — the audio changed.
+        import glob as _glob
+        stale_paths = _glob.glob(os.path.join(custom_dir, f"{stem}.safetensors")) + _glob.glob(
+            os.path.join(custom_dir, f"{stem}.*.safetensors")
+        )
+        for stale in stale_paths:
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
+
+        # Drop matching entries from the in-memory voice cache — only those
+        # that point at this stem's files, not the whole cache.
+        cache = self.pocket_tts.voice_cache
+        for cached_key in list(cache.keys()):
+            if os.path.basename(cached_key).startswith(f"{stem}."):
+                cache.pop(cached_key, None)
+
+        return {
+            "filename": f"{stem}.wav",
+            "path": result.path,
+            "sample_rate": result.sample_rate,
+            "duration_seconds": result.duration_seconds,
+            "channels": result.channels,
+            "original_sample_rate": result.original_sample_rate,
+            "original_channels": result.original_channels,
+            "original_duration_seconds": result.original_duration_seconds,
+            "trimmed_silence_ms": result.trimmed_silence_ms,
+            "truncated": result.truncated,
+        }
 
     # POST /xvasynth/start
     def start_xvasynth(self):
@@ -1509,7 +3017,7 @@ class WingmanCore(WebSocketUser):
         except Exception:
             # this can fail:
             # - on MacOS (always)
-            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
+            # - in Dev mode if the dev hasn't copied the models dir to the repository
             # in these cases, we return an empty list and the client will lock the controls and show a warning.
             pass
         return voices
@@ -1534,158 +3042,277 @@ class WingmanCore(WebSocketUser):
     def open_custom_voices_directory(self):
         show_in_file_manager(get_custom_voices_dir())
 
+    # POST /open-filemanager/local-models
+    def open_local_models_directory(self):
+        show_in_file_manager(get_models_dir())
+
+    # POST /open-filemanager/custom-skills
+    def open_custom_skills_directory(self):
+        show_in_file_manager(get_custom_skills_dir())
+
+    # GET /changelog
+    async def get_changelog(self) -> list[ChangelogEntry]:
+        """Proxy the public Canny changelog RSS feed (no API key required) so
+        clients can render entries inline without hitting CORS."""
+        now = time.time()
+        if self._changelog_cache and now - self._changelog_cache[0] < 1800:
+            return self._changelog_cache[1]
+        try:
+            response = requests.get(
+                url="https://wingman-ai.canny.io/api/changelog/feed.rss",
+                timeout=10,
+            )
+            response.raise_for_status()
+            root = ElementTree.fromstring(response.content)
+            entries: list[ChangelogEntry] = []
+            for item in root.iter("item"):
+                published_at = None
+                pub_date = item.findtext("pubDate")
+                if pub_date:
+                    try:
+                        published_at = (
+                            parsedate_to_datetime(pub_date).date().isoformat()
+                        )
+                    except (TypeError, ValueError):
+                        pass
+                # Entries titled with an "(unstable)" / "[unstable]" marker are
+                # dev-build notes meant only for testers on the unstable channel
+                title = item.findtext("title") or ""
+                version, marker_count = re.subn(
+                    r"\s*[\(\[]unstable[\)\]]", "", title, flags=re.IGNORECASE
+                )
+                entries.append(
+                    ChangelogEntry(
+                        version=version.strip(),
+                        category=item.findtext("category"),
+                        published_at=published_at,
+                        url=item.findtext("link"),
+                        html=item.findtext("description") or "",
+                        unstable_only=marker_count > 0,
+                    )
+                )
+            self._changelog_cache = (now, entries)
+            return entries
+        except Exception as e:
+            self.printr.print(
+                f"Could not load changelog: {str(e)}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return []
+
     # GET /models/openrouter
     async def get_openrouter_models(self):
-        response = requests.get(url="https://openrouter.ai/api/v1/models", timeout=10)
-        response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        try:
+            response = requests.get(
+                url="https://openrouter.ai/api/v1/models", timeout=10
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"OpenRouter: \n{str(e)}")
+            return []
 
     # GET /models/openrouter/endpoints
     async def get_openrouter_model_endpoints(self, model_id: str):
         if not model_id:
             return None
-        response = requests.get(
-            url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
-            timeout=10,
-        )
-        response.raise_for_status()
-        content = response.json()
-        result = OpenRouterEndpointResult(**content.get("data", {}))
-        return result
+        try:
+            response = requests.get(
+                url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
+                timeout=10,
+            )
+            response.raise_for_status()
+            content = response.json()
+            result = OpenRouterEndpointResult(**content.get("data", {}))
+            return result
+        except Exception as e:
+            self.printr.toast_error(f"OpenRouter: \n{str(e)}")
+            return None
 
     # GET /models/groq
     async def get_groq_models(self):
         groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
-        response = requests.get(
-            url="https://api.groq.com/openai/v1/models",
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {groq_api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        try:
+            response = requests.get(
+                url="https://api.groq.com/openai/v1/models",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {groq_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"Groq: \n{str(e)}")
+            return []
 
     async def get_cerebras_models(self):
         cerebras_api_key = await self.secret_keeper.retrieve(
             key="cerebras", requester="Cerebras"
         )
-        response = requests.get(
-            url="https://api.cerebras.ai/v1/models",
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {cerebras_api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        try:
+            response = requests.get(
+                url="https://api.cerebras.ai/v1/models",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {cerebras_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"Cerebras: \n{str(e)}")
+            return []
 
     async def get_xai_models(self):
         xia_api_key = await self.secret_keeper.retrieve(key="xai", requester="XAI")
-        response = requests.get(
-            url="https://api.x.ai/v1/models",
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {xia_api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        try:
+            response = requests.get(
+                url="https://api.x.ai/v1/models",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {xia_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"XAI: \n{str(e)}")
+            return []
 
     async def get_mistral_models(self):
         mistral_api_key = await self.secret_keeper.retrieve(
             key="mistral", requester="Mistral"
         )
-        response = requests.get(
-            url="https://api.mistral.ai/v1/models",
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {mistral_api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        try:
+            response = requests.get(
+                url="https://api.mistral.ai/v1/models",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {mistral_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"Mistral: \n{str(e)}")
+            return []
 
     async def get_openai_models(self):
         openai_api_key = await self.secret_keeper.retrieve(
             key="openai", requester="OpenAI"
         )
+        try:
+            response = requests.get(
+                url="https://api.openai.com/v1/models",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {openai_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            content = response.json()
+            return content.get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"OpenAI: \n{str(e)}")
+            return []
+
+    async def _fetch_subscription_models(self) -> dict:
+        """The whole model list from the backend: chat models and support models.
+
+        One request for both, because the two pickers in the client are on screen
+        at the same time and the backend assembles them from the same catalogue.
+        """
+        wingman_pro_token = await self.secret_keeper.retrieve(
+            key="wingman_pro", requester="WingmanPro"
+        )
         response = requests.get(
-            url="https://api.openai.com/v1/models",
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
             timeout=10,
             headers={
-                "Authorization": f"Bearer {openai_api_key}",
+                "Authorization": f"Bearer {wingman_pro_token}",
                 "Content-Type": "application/json",
             },
         )
         response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        body = response.json()
+        return body if isinstance(body, dict) else {"models": body}
 
     async def get_wingman_pro_models(self):
-        wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
-        )
-        response = requests.get(
-            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
-            params={"region": self.settings_service.settings.wingman_pro.region},
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {wingman_pro_token}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        model_list = response.json()
-        return model_list
+        try:
+            body = await self._fetch_subscription_models()
+            # The backend answers {plan, models:[{id,name}], support:{...}}; the
+            # client wants the bare list, the way the old endpoint returned it.
+            return body.get("models", [])
+        except Exception as e:
+            self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
+            return []
 
-    async def get_wingman_pro_regions(self):
-        wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
-        )
-        response = requests.get(
-            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-regions",
-            params={"region": self.settings_service.settings.wingman_pro.region},
-            timeout=10,
-            headers={
-                "Authorization": f"Bearer {wingman_pro_token}",
-                "Content-Type": "application/json",
-            },
-        )
-        response.raise_for_status()
-        model_list = response.json()
-        return model_list
+    # GET /models/wingman-pro/support
+    async def get_wingman_support_models(self):
+        """The support models this plan offers, for the picker in Settings.
+
+        Fails quietly with an empty list rather than a toast: this is asked for
+        on every visit to the settings page, including by people with no
+        subscription, and "you are not signed in" is not news worth a popup.
+        """
+        try:
+            body = await self._fetch_subscription_models()
+            return (body.get("support") or {}).get("models", [])
+        except Exception:
+            return []
+
+    # GET /models/wingman-pro/routes
+    async def get_wingman_routes(self) -> SubscriptionRoutes:
+        """Which models serve the plan's fixed roles. Every field is None when
+        not signed in or when the backend is unreachable: a card then says
+        "cloud" without naming anything, which is right."""
+        try:
+            body = await self._fetch_subscription_models()
+            routes = body.get("routes")
+            if isinstance(routes, dict):
+                return SubscriptionRoutes(**routes)
+        except Exception:
+            pass
+        return SubscriptionRoutes()
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
         elevenlabs_api_key = await self.secret_keeper.retrieve(
             key="elevenlabs", requester="Elevenlabs"
         )
-        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
         try:
-            models = elevenlabs.get_available_models()
+            elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
 
-            convert = lambda model: ElevenlabsModel(
-                name=model.name,
-                model_id=model.modelID,
-                description=model.description,
-                max_characters=model.maxCharacters,
-                cost_factor=model.costFactor,
-                supported_languages=model.supportedLanguages,
-                metadata=model.metadata,
-            )
-            result = [convert(model) for model in models]
-            return result
-        except ValueError as e:
+            # maxCharacters asks ElevenLabs for the subscription tier, and the
+            # lookups wait for each other, so all of it runs off the event loop.
+            def load_models():
+                return [
+                    ElevenlabsModel(
+                        name=model.name,
+                        model_id=model.modelID,
+                        description=model.description,
+                        max_characters=model.maxCharacters,
+                        cost_factor=model.costFactor,
+                        supported_languages=model.supportedLanguages,
+                        metadata=model.metadata,
+                    )
+                    for model in elevenlabs.get_available_models()
+                ]
+
+            return await asyncio.to_thread(load_models)
+        except Exception as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
             return []
 
@@ -1698,9 +3325,22 @@ class WingmanCore(WebSocketUser):
         try:
             models = google.get_available_models()
             return models
-        except ValueError as e:
+        except Exception as e:
             self.printr.toast_error(f"Google: \n{str(e)}")
             return []
+        finally:
+            await google.aclose()
+
+    # GET /models/metadata
+    async def get_model_metadata_all(self):
+        return await self.model_metadata_service.get_all()
+
+    # GET /models/metadata/{model_id}
+    async def get_model_metadata(self, model_id: str):
+        result = await self.model_metadata_service.get(model_id)
+        if result is None:
+            return {}
+        return result
 
     # GET /audio-library
     async def get_audio_library(self):
@@ -1718,6 +3358,935 @@ class WingmanCore(WebSocketUser):
         if self._connection_manager:
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
+
+    async def _ensure_embed_model(self):
+        """Fetch the embedding model if memory needs it and it is not here yet.
+
+        Only the embedding model, and only when at least one wingman has
+        persistent memory switched on. The support model is never fetched
+        automatically — see the note at step 5 in ``startup``.
+        """
+        if self.local_model_manager.embed_model_available():
+            return
+
+        wingmen = self.tower.wingmen if self.tower else []
+        if not any(getattr(w.config, "persistent_memory", False) for w in wingmen):
+            return
+
+        await self.printr.print_async(
+            "Memory is on but the embedding model is missing — downloading it...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        progress_state = {}
+
+        def on_download_progress(filename, pct, downloaded_mb, total_mb):
+            progress_state["filename"] = filename
+            progress_state["pct"] = pct
+            progress_state["downloaded_mb"] = downloaded_mb
+            progress_state["total_mb"] = total_mb
+
+        download_task = asyncio.create_task(
+            self.local_model_manager.download_models(
+                cuda_available=self.system_manager.is_cuda_available(),
+                on_progress=on_download_progress,
+                support=False,
+            )
+        )
+
+        while not download_task.done():
+            if progress_state:
+                pct = progress_state.get("pct", 0)
+                dl_mb = progress_state.get("downloaded_mb", 0)
+                t_mb = progress_state.get("total_mb", 0)
+                await self.set_core_state(
+                    CoreState.LOADING_CONFIG,
+                    message=f"Downloading the memory model... ({dl_mb} / {t_mb} MB)",
+                    progress=pct / 100.0 if pct else None,
+                )
+            await asyncio.sleep(0.5)
+
+        if not await download_task:
+            self.printr.toast_error(
+                "Could not download the memory model. Memory stays off until it "
+                "is downloaded — retry in Settings > Local AI."
+            )
+
+    # ── Local AI Endpoints ────────────────────────────────────────
+
+    # GET /settings/local-ai/status
+    async def get_local_ai_status(self) -> dict:
+        status = self.local_model_manager.get_status()
+        status["is_ready"] = self.local_ai_service.is_ready()
+        status["cuda_available"] = self.system_manager.is_cuda_available()
+        return status
+
+    # GET /settings/local-ai/backends
+    def get_local_ai_backends(self) -> list[str]:
+        backends = self.local_model_manager.get_available_backends()
+        # Filter CUDA out if not available on this machine
+        if not self.system_manager.is_cuda_available():
+            backends = [b for b in backends if b != "cuda"]
+        return backends
+
+    # GET /settings/local-ai/support-models
+    def get_local_ai_support_models(self) -> list[dict]:
+        return self.local_model_manager.get_support_models()
+
+    # GET /settings/local-ai/embed-models
+    def get_local_ai_embed_models(self) -> list[dict]:
+        return self.local_model_manager.get_embed_models()
+
+    # POST /settings/local-ai/download-models
+    async def download_local_ai_models(self, support: bool = True) -> dict:
+        """Fetch the local models.
+
+        ``support`` is off when the caller only needs embeddings — that is the
+        cloud mode case, where the 1.28 GB support model would be dead weight but
+        the 250 MB embedding model still feeds the vector database.
+        """
+        success = await self.local_model_manager.download_models(
+            cuda_available=self.system_manager.is_cuda_available(),
+            support=support,
+        )
+        if success:
+            await self.local_ai_service.initialize()
+        return {
+            "success": success,
+            **self.local_model_manager.get_status(),
+        }
+
+    # POST /settings/local-ai/playground/chat
+    async def playground_chat(self, request: PlaygroundChatRequest) -> dict:
+        """Test the support model with a system + user message.
+
+        When iterations > 1, runs the same prompt multiple times and returns
+        all responses so users can evaluate output variety and quality.
+        """
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            }
+
+        iterations = max(1, min(request.iterations, 20))
+
+        def _run():
+            benchmark = Benchmark("playground_chat")
+            responses = []
+            for i in range(iterations):
+                label = f"iteration_{i + 1}"
+                benchmark.start_snapshot(label)
+                result = self.local_ai_service.support(
+                    text=request.user_message,
+                    system_prompt=request.system_message,
+                    temperature=request.temperature,
+                    top_p=request.top_p,
+                    top_k=request.top_k,
+                    presence_penalty=request.presence_penalty,
+                    reasoning=request.reasoning,
+                )
+                snap = benchmark.finish_snapshot()
+                elapsed_ms = snap.execution_time_ms if snap else 0
+                responses.append({
+                    "text": result.text if result.text else "",
+                    "reasoning": result.reasoning_content or "",
+                    "truncated": result.truncated,
+                    "completion_tokens": result.completion_tokens or 0,
+                    "time_ms": round(elapsed_ms, 1),
+                })
+            return responses, benchmark.finish()
+
+        responses, bench_result = await asyncio.to_thread(_run)
+
+        return {
+            "success": True,
+            "responses": responses,
+            # Keep single-response field for backward compat
+            "response": responses[0]["text"] if responses else "",
+            "benchmark": bench_result.model_dump(),
+        }
+
+    # ── Playground lab configuration (single source of truth) ───
+    # Maps each prompt to the preset used in production and a realistic
+    # example user message that matches the exact format the real code sends.
+    PROMPT_LAB_CONFIG: dict[str, dict] = {
+        "condense-conversation": {
+            "production_preset": "Balanced",
+            "production_reasoning": True,
+            "example_message": (
+                "CONVERSATION TO SUMMARIZE:\n"
+                "User: What's the best ship for solo bounty hunting?\n"
+                "Assistant: For solo bounty hunting, the Aegis Vanguard Warden is hard to beat. "
+                "It has heavy forward firepower, strong shields, and good range. The Drake Cutlass Black "
+                "is a more affordable option with decent combat capability plus cargo space.\n"
+                "User: I've been flying my Cutlass Black but I keep dying to Hammerheads. Any tips?\n"
+                "Assistant: Hammerheads are tough targets for a solo pilot. Focus on hit-and-run attacks "
+                "— approach fast, unload on one shield face, then boost away before turrets track you. "
+                "Aim for the engines to reduce their mobility. Consider upgrading to Size 3 gimballed "
+                "weapons for better sustained DPS.\n"
+                "User: Good advice. My org is planning a group bounty night on Saturday, maybe I'll "
+                "save the Hammerheads for that.\n"
+                "Assistant: That's a smart plan! With a wing of 3-4 fighters, you can coordinate "
+                "shield-face attacks and take down Hammerheads much more efficiently. Have someone fly "
+                "an ERT-capable ship to pull the contracts.\n"
+                "\n---\n"
+                "Now list every fact from the conversation above as bullet points.\n"
+                "Start from the FIRST message, end at the LAST. Include all secrets, names, "
+                "preferences, and creative content:"
+            ),
+        },
+        "extract-memories": {
+            "production_preset": "Precise",
+            "production_reasoning": False,
+            "example_message": (
+                "STORED FACTS:\n1. Name is Shackles\n2. Owns an Aurora MR\n\n"
+                "EPISODE SO FAR:\n(none)\n\nNEW MESSAGES:\n"
+                "user: Hey, can you check the trade prices for laranite at Lorville?\n"
+                "assistant: Laranite is currently buying at 31.26 aUEC per unit at the TDD in Lorville. "
+                "The sell price at Port Tressler is around 33.10 aUEC, so you'd make about 1.84 per "
+                "unit profit on that route.\n"
+                "user: Nice, I'll load up my C2 Hercules. It can carry 696 SCU so that should be a "
+                "decent run. My buddy Marcus and I have been grinding trade runs all week to save up "
+                "for an Idris.\n"
+                "assistant: That's ambitious! An Idris is a serious investment. With 696 SCU of "
+                "laranite per run, you're looking at about 1,280 aUEC profit per run. How much have "
+                "you saved so far?\n"
+                "user: We're at about 12 million, still a long way to go. Oh, I also joined the org "
+                '"Stellar Logistics Corp" last week, they do coordinated trade convoys which should help.'
+            ),
+        },
+        "greeting-default": {
+            "production_preset": "Balanced",
+            "example_message": "Generate your greeting.",
+        },
+        "greeting-returning": {
+            "production_preset": "Creative",
+            "example_message": "Generate your greeting.",
+        },
+        "filler-response": {
+            "production_preset": "Balanced",
+            "example_message": 'User request: "Hola Em, ¿puedes comprobarme si ha cambiado el precio del hierro?"',
+        },
+        # enhance-backstory: uses the conversation LLM, not the support model — not listed here
+        "radio-chatter": {
+            "production_preset": None,  # uses main LLM, not support model
+            "example_message": (
+                "Generate radio chatter between 3 pilots approaching a space station. "
+                "5 messages total. They should be requesting landing clearance, commenting "
+                "on traffic, and coordinating their approach vectors."
+            ),
+        },
+        "support-default": {
+            "production_preset": "Balanced",
+            "example_message": (
+                "The Aegis Gladius is a light fighter originally developed for the UEE Navy as a "
+                "patrol and intercept craft. It features a sleek, angular design optimized for speed "
+                "and agility in dogfighting scenarios. The ship has three weapon hardpoints — two "
+                "Size 3 on the wings and one Size 3 on the nose — making it a potent threat despite "
+                "its small size. It lacks any cargo capacity, reinforcing its pure combat role. The "
+                "Gladius has been a mainstay of military and civilian combat pilots since its "
+                "introduction, valued for its excellent maneuverability and reliable power plant."
+            ),
+        },
+        "support-tool-response": {
+            "production_preset": "Precise",
+            "example_message": (
+                "DATA TO SUMMARIZE:\n"
+                '{"status": "success", "data": {"ship": "Constellation Andromeda", '
+                '"manufacturer": "RSI", "role": "Multi-crew explorer", "crew": {"min": 1, "max": 4}, '
+                '"cargo_scu": 96, "price_auec": 3250000, "weapons": [{"mount": "Turret", "size": 4, '
+                '"count": 2}, {"mount": "Fixed", "size": 5, "count": 2}, {"mount": "Missile", '
+                '"size": 2, "count": 28}], "shields": [{"type": "FR-76", "size": "L", "count": 2}], '
+                '"quantum_drive": "Odyssey", "status": "Flight Ready", "last_updated": "2954-03-15"}}'
+                "\n\n---\n"
+                "Summarize the above data. Preserve all key facts, numbers, names, IDs, and status values:"
+            ),
+        },
+        "tts-test-praise": {
+            "production_preset": "Precise",
+            "example_message": "Generate a sentence.",
+        },
+    }
+
+    async def playground_list_prompts(self) -> list[dict]:
+        """List available prompt templates for the playground."""
+        from services.file import get_prompt
+        import os
+
+        prompts_dir = os.path.join(
+            os.path.abspath(os.path.dirname(__file__)), "prompts"
+        )
+        results = []
+        for filename in sorted(os.listdir(prompts_dir)):
+            if filename.endswith(".md"):
+                name = filename[:-3]
+                content = get_prompt(name)
+                first_line = content.split("\n")[0].strip()
+                lab_config = self.PROMPT_LAB_CONFIG.get(name, {})
+                results.append({
+                    "name": name,
+                    "label": first_line[:60] + ("…" if len(first_line) > 60 else ""),
+                    "content": content,
+                    "production_preset": lab_config.get("production_preset"),
+                    "production_reasoning": lab_config.get("production_reasoning", False),
+                    "example_message": lab_config.get("example_message"),
+                })
+        return results
+
+    async def playground_list_presets(self) -> list[dict]:
+        """List sampling presets from the SamplingPreset enum."""
+        from services.skill_local_ai import SamplingPreset
+
+        return [
+            {
+                "name": preset.name.capitalize(),
+                "temperature": preset.temperature,
+                "top_p": preset.top_p,
+                "top_k": preset.top_k,
+                "presence_penalty": preset.presence_penalty,
+            }
+            for preset in SamplingPreset
+        ]
+
+    # POST /settings/local-ai/detect-context-size
+    async def detect_remote_context_size(
+        self, request: DetectContextSizeRequest
+    ) -> dict:
+        """Detect a remote llama.cpp support server's context window via /props.
+
+        Lets users point Wingman at a powerful self-hosted model and have all
+        the auto-sized budgets scale to its real context window.
+        """
+        n_ctx = await asyncio.to_thread(
+            LlamaCppRemote.detect_context_size, request.host, request.port
+        )
+        if n_ctx:
+            return {"success": True, "n_ctx": n_ctx}
+        return {
+            "success": False,
+            "error": (
+                "Could not read context size. Make sure the host/port point at a "
+                "reachable llama.cpp server that exposes /props."
+            ),
+        }
+
+    # GET /settings/local-ai/playground/memory-scenarios
+    async def playground_list_memory_scenarios(self) -> list[dict]:
+        """List the simulated conversations the Persistent Memory test suite can run.
+
+        The suite lives in the internal eval harness, which is not part of a
+        packaged build — it was never listed in ``WingmanAiCore.spec``. Running
+        from source with the harness present, this works; otherwise it returns
+        an empty list rather than a 500, and the Lab shows nothing to run.
+        """
+        try:
+            from evals.memory_suite.scenarios import SCENARIOS
+        except ImportError:
+            return []
+
+        return [
+            {
+                "id": s.id,
+                "title": s.title,
+                "category": s.category,
+                "message_count": len(s.messages),
+                "expected_fact_count": len(s.expect_facts),
+                "recall_probe_count": len(s.recall),
+            }
+            for s in SCENARIOS
+        ]
+
+    # POST /settings/local-ai/playground/memory-suite
+    async def playground_run_memory_scenario(
+        self, request: MemorySuiteRequest
+    ) -> dict:
+        """Run one Persistent Memory scenario end-to-end against the loaded models
+        and return a scorecard (extraction facts, recall probes, greeting).
+
+        This drives the REAL pipeline (extract -> store -> recall) on a throwaway
+        database, so it never touches the user's actual memories.
+        """
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            }
+
+        try:
+            from evals.memory_suite.harness import run_scenario
+            from evals.memory_suite.profiles import DEFAULT
+            from evals.memory_suite.scenarios import get_scenarios
+        except ImportError:
+            return {
+                "success": False,
+                "error": (
+                    "The memory test suite is not part of this build. It ships "
+                    "only with a source checkout of Wingman AI Core."
+                ),
+            }
+
+        matches = get_scenarios(ids=[request.scenario_id]) if request.scenario_id else []
+        if not matches:
+            return {"success": False, "error": f"Unknown scenario '{request.scenario_id}'."}
+
+        scenario = matches[0]
+        samples = max(1, min(request.samples, 5))
+        result = await asyncio.to_thread(
+            run_scenario, self.local_ai_service, scenario, DEFAULT, samples
+        )
+        # Include the conversation so the UI can show what was fed in.
+        result["messages"] = scenario.messages
+        return {"success": True, "result": result}
+
+    # POST /settings/local-ai/playground/embed
+    async def playground_embed(self, texts: list[str] = Body(...)) -> dict:
+        """Test the embedding model with one or more texts."""
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            }
+
+        def _run():
+            benchmark = Benchmark("playground_embed")
+            benchmark.start_snapshot("inference")
+            result = self.local_ai_service.embed(texts)
+            benchmark.finish_snapshot()
+            return result, benchmark.finish()
+
+        result, bench_result = await asyncio.to_thread(_run)
+
+        if result is None:
+            return {"success": False, "error": "Embedding returned no result."}
+
+        return {
+            "success": True,
+            "embeddings": [
+                {"text": t, "dimensions": len(e), "preview": e[:8]}
+                for t, e in zip(texts, result)
+            ],
+            "benchmark": bench_result.model_dump(),
+        }
+
+    # POST /settings/local-ai/playground/benchmark
+    async def playground_benchmark(
+        self,
+        iterations: int = 3,
+    ) -> dict:
+        """Run an automated benchmark suite over both models."""
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            }
+
+        iterations = max(1, min(iterations, 20))
+
+        return await asyncio.to_thread(self._run_benchmark_sync, iterations)
+
+    def _run_benchmark_sync(self, iterations: int) -> dict:
+        """Blocking benchmark loop — runs in a thread to keep the event loop free."""
+        benchmark = Benchmark("full_benchmark")
+        results = {"support_runs": [], "embed_runs": []}
+
+        # Support model benchmark
+        test_texts = [
+            "The quick brown fox jumps over the lazy dog. This is a short test sentence.",
+            "Artificial intelligence is transforming how we interact with technology. Large language models can understand and generate human-like text, while embedding models convert text into numerical vectors that capture semantic meaning. These capabilities enable powerful applications like semantic search, text summarization, and conversational AI assistants.",
+            "In a galaxy far, far away, there existed a civilization that had mastered the art of faster-than-light travel. Their ships could traverse the vast emptiness between star systems in mere hours. The key to their technology was a crystal found only in the deepest mines of their home world. This crystal, when properly refined and charged, could bend the fabric of spacetime itself, creating tunnels through which spacecraft could pass almost instantaneously. However, the supply of this precious mineral was dwindling, and the civilization faced an existential crisis as they searched for alternatives.",
+        ]
+
+        # Cycle through SamplingPreset enum (single source of truth)
+        from services.skill_local_ai import SamplingPreset
+        all_presets = list(SamplingPreset)
+
+        for i in range(iterations):
+            preset = all_presets[i % len(all_presets)]
+            for j, text in enumerate(test_texts):
+                label = f"support_iter{i+1}_text{j+1}_{len(text)}chars"
+                benchmark.start_snapshot(label)
+                res = self.local_ai_service.support(
+                    text=text,
+                    preset=preset,
+                )
+                benchmark.finish_snapshot()
+
+                # Compute tokens/sec from the snapshot we just finished
+                snap = benchmark.snapshots[-1] if benchmark.snapshots else None
+                elapsed_sec = (snap.execution_time_ms / 1000.0) if snap else 0
+                completion_tokens = (
+                    res.completion_tokens if res.completion_tokens else 0
+                )
+                tokens_per_sec = (
+                    completion_tokens / elapsed_sec
+                    if elapsed_sec > 0 and completion_tokens > 0
+                    else 0
+                )
+
+                results["support_runs"].append(
+                    {
+                        "iteration": i + 1,
+                        "input_length": len(text),
+                        "output_length": len(res.text) if res.text else 0,
+                        "prompt_tokens": res.prompt_tokens if res.prompt_tokens else 0,
+                        "completion_tokens": completion_tokens,
+                        "tokens_per_sec": round(tokens_per_sec, 1),
+                        "label": label,
+                        "preset": preset.name,
+                        "temperature": preset.temperature,
+                        "top_p": preset.top_p,
+                        "top_k": preset.top_k,
+                        "presence_penalty": preset.presence_penalty,
+                    }
+                )
+
+        # Embed benchmark
+        embed_inputs = [
+            ["Hello world"],
+            ["The quick brown fox", "jumps over the lazy dog"],
+            [
+                "Artificial intelligence",
+                "machine learning",
+                "deep neural networks",
+                "natural language processing",
+            ],
+        ]
+
+        for i in range(iterations):
+            for j, texts in enumerate(embed_inputs):
+                label = f"embed_iter{i+1}_batch{j+1}_{len(texts)}texts"
+                benchmark.start_snapshot(label)
+                res = self.local_ai_service.embed(texts)
+                benchmark.finish_snapshot()
+                results["embed_runs"].append(
+                    {
+                        "iteration": i + 1,
+                        "num_texts": len(texts),
+                        "dimensions": len(res[0]) if res else 0,
+                        "label": label,
+                    }
+                )
+
+        bench_result = benchmark.finish()
+        snapshots = bench_result.snapshots or []
+
+        # Calculate averages
+        sum_times = [
+            s.execution_time_ms for s in snapshots if s.label.startswith("support_")
+        ]
+        emb_times = [
+            s.execution_time_ms for s in snapshots if s.label.startswith("embed_")
+        ]
+
+        # Tokens/sec stats from support runs
+        tps_values = [
+            r["tokens_per_sec"]
+            for r in results["support_runs"]
+            if r["tokens_per_sec"] > 0
+        ]
+        avg_tokens_per_sec = (
+            round(sum(tps_values) / len(tps_values), 1) if tps_values else 0
+        )
+
+        return {
+            "success": True,
+            "iterations": iterations,
+            "total_time_ms": bench_result.execution_time_ms,
+            "formatted_total_time": bench_result.formatted_execution_time,
+            "support_avg_ms": sum(sum_times) / len(sum_times) if sum_times else 0,
+            "embed_avg_ms": sum(emb_times) / len(emb_times) if emb_times else 0,
+            "avg_tokens_per_sec": avg_tokens_per_sec,
+            "snapshots": [s.model_dump() for s in snapshots],
+            "runs": results,
+        }
+
+    # POST /settings/test/parakeet
+    async def test_parakeet(self) -> TestConnectionResult:
+        """Test Parakeet by transcribing a short audio sample (locally or remotely)."""
+        settings = self.settings_service.settings.stt.parakeet
+
+        if self.settings_service.settings.stt.provider != SttProvider.PARAKEET:
+            return TestConnectionResult(
+                success=False,
+                provider="parakeet",
+                error="Parakeet is not the active STT provider.",
+            )
+
+        wav_path = os.path.join(self.app_root_path, "audio_samples", "beep.wav")
+        config = ParakeetSttConfig(temperature=0.0)
+
+        if settings.run_locally:
+            if self.parakeet._loading:
+                return TestConnectionResult(
+                    success=False,
+                    provider="parakeet",
+                    error="Parakeet model is still loading. Please wait and try again.",
+                )
+            if not self.parakeet.model:
+                return TestConnectionResult(
+                    success=False,
+                    provider="parakeet",
+                    error="Parakeet model is not loaded. Check STT settings.",
+                )
+
+        try:
+            result = self.parakeet.transcribe(config=config, filename=wav_path)
+            if result and result.text is not None:
+                return TestConnectionResult(success=True, provider="parakeet")
+            return TestConnectionResult(
+                success=False,
+                provider="parakeet",
+                error="Transcription returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="parakeet", error=str(e)
+            )
+
+    # POST /settings/test/xvasynth
+    async def test_xvasynth(self) -> TestConnectionResult:
+        """Test the XVASynth server connection."""
+        settings = self.settings_service.settings.xvasynth
+        try:
+            response = requests.get(
+                url=f"{settings.host}:{settings.port}",
+                timeout=10,
+            )
+            if response.ok:
+                return TestConnectionResult(success=True, provider="xvasynth")
+            return TestConnectionResult(
+                success=False,
+                provider="xvasynth",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="xvasynth",
+                error=f"Could not connect to {settings.host}:{settings.port}. Is the server running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="xvasynth", error=str(e)
+            )
+
+    # POST /settings/test/local-ai/support
+    async def test_local_ai_support(self) -> TestConnectionResult:
+        """Test the local AI support model."""
+        if not self.local_ai_service.is_ready():
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_support",
+                error="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            )
+        try:
+            result = self.local_ai_service.support(
+                text="The quick brown fox jumps over the lazy dog.",
+            )
+            if result and result.text:
+                return TestConnectionResult(success=True, provider="local_ai_support")
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_support",
+                error="Support Model returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="local_ai_support", error=str(e)
+            )
+
+    # POST /settings/test/local-ai/embed
+    async def test_local_ai_embed(self) -> TestConnectionResult:
+        """Test the local AI embedding model.
+
+        Gated on ``embed_ready``, not on ``is_ready``: in Cloud mode the two
+        come apart. The Support Model answers over the network while the Embed
+        Model still has to be downloaded here, so asking about the Support
+        Model would fail this test for anyone who is not signed in — even
+        though embedding works fine on their machine.
+        """
+        if not self.local_ai_service.embed_ready():
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_embed",
+                error="The Embed Model is not ready. Download it in Settings.",
+            )
+        try:
+            result = self.local_ai_service.embed(["hello world"])
+            if result and len(result) > 0:
+                return TestConnectionResult(success=True, provider="local_ai_embed")
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_embed",
+                error="Embedding returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="local_ai_embed", error=str(e)
+            )
+
+    # POST /settings/test/hud-server
+    async def test_hud_server(self) -> TestConnectionResult:
+        """Test the HUD server connection via its health endpoint."""
+        settings = self.settings_service.settings.hud_server
+        try:
+            host = settings.host or "127.0.0.1"
+            port = settings.port or 7862
+            # Ensure host has a scheme
+            if not host.startswith("http"):
+                host = f"http://{host}"
+            response = requests.get(
+                url=f"{host}:{port}/health",
+                timeout=5,
+            )
+            if response.ok:
+                data = response.json()
+                if data.get("status") == "healthy":
+                    return TestConnectionResult(success=True, provider="hud_server")
+                return TestConnectionResult(
+                    success=False,
+                    provider="hud_server",
+                    error=f"HUD server responded but status is '{data.get('status', 'unknown')}'",
+                )
+            return TestConnectionResult(
+                success=False,
+                provider="hud_server",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="hud_server",
+                error=f"Could not connect to HUD server. Is it running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="hud_server", error=str(e)
+            )
+
+    # POST /settings/test/pocket-tts
+    async def test_pocket_tts(self) -> TestConnectionResult:
+        """Test PocketTTS: check local model is loaded or remote server is reachable."""
+        settings = self.settings_service.settings.pocket_tts
+        if not settings.enable:
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error="PocketTTS is not enabled.",
+            )
+
+        if settings.run_locally:
+            if self.pocket_tts.model is not None:
+                return TestConnectionResult(success=True, provider="pocket_tts")
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error="PocketTTS model is not loaded. Try toggling PocketTTS off and on.",
+            )
+
+        # Remote mode — hit the server's health endpoint
+        try:
+            base = PocketTTS.normalize_remote_url(settings.host, settings.port)
+            response = requests.get(
+                url=f"{base}/health",
+                timeout=5,
+            )
+            if response.ok:
+                return TestConnectionResult(success=True, provider="pocket_tts")
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error=f"Could not connect to PocketTTS server at {base}. Is it running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="pocket_tts", error=str(e)
+            )
+
+    # POST /settings/test/openai-compatible-tts
+    async def test_openai_compatible_tts(
+        self,
+        base_url: str = Body(..., embed=True),
+    ) -> TestConnectionResult:
+        """Test an OpenAI-compatible TTS server by probing known endpoints."""
+        if not base_url:
+            return TestConnectionResult(
+                success=False,
+                provider="openai_compatible_tts",
+                error="No base URL configured.",
+            )
+        url = base_url.rstrip("/")
+        # Try endpoints in order: /health, /audio/speech (GET → 405 still proves liveness), root
+        probe_paths = ["/health", "/audio/speech", ""]
+        try:
+            for path in probe_paths:
+                try:
+                    response = requests.get(url=f"{url}{path}", timeout=10)
+                    # 2xx or 405 (method not allowed) both prove the server is alive
+                    if response.ok or response.status_code == 405:
+                        return TestConnectionResult(
+                            success=True, provider="openai_compatible_tts"
+                        )
+                except requests.ConnectionError:
+                    continue
+            return TestConnectionResult(
+                success=False,
+                provider="openai_compatible_tts",
+                error=f"Could not connect to {base_url}. Is the server running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="openai_compatible_tts", error=str(e)
+            )
+
+    # POST /local-ai/support
+    async def api_support(
+        self,
+        text: str = Body(..., embed=True),
+        system_prompt: str = Body(
+            "",
+            embed=True,
+        ),
+    ) -> dict:
+        """Public API: Process text using the local AI support model.
+
+        Output token budget is computed automatically from the context window.
+        """
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            )
+        result = self.local_ai_service.support(
+            text=text, system_prompt=system_prompt
+        )
+        if result.text is None:
+            raise HTTPException(status_code=500, detail="Support model call failed.")
+        return {"result": result.text}
+
+    # POST /local-ai/enhance-backstory
+    async def api_enhance_backstory(
+        self,
+        wingman_name: str = Body(...),
+        backstory: str = Body(...),
+    ) -> dict:
+        """Enhance a wingman backstory using that wingman's conversation LLM.
+
+        Uses the specific wingman's conversation provider (OpenAI, Groq, etc.)
+        — not the local support model — because backstory enhancement requires
+        a capable model that can follow complex prompt-engineering rules.
+        """
+        from wingmen.open_ai_wingman import OpenAiWingman
+
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
+        if not wingman or not isinstance(wingman, OpenAiWingman):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Wingman '{wingman_name}' not found or has no conversation provider.",
+            )
+
+        MAX_BACKSTORY_TOKENS = 2048
+        backstory_tokens = count_tokens(backstory)
+        if backstory_tokens > MAX_BACKSTORY_TOKENS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Backstory too long: ~{backstory_tokens} tokens "
+                    f"(max {MAX_BACKSTORY_TOKENS}). "
+                    f"Consider shortening your backstory."
+                ),
+            )
+
+        system_prompt = get_prompt("enhance-backstory")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": backstory},
+        ]
+
+        try:
+            completion = await wingman.actual_llm_call(messages)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"LLM call failed: {e}",
+            )
+
+        if not completion or not completion.choices:
+            raise HTTPException(
+                status_code=500,
+                detail="Backstory enhancement failed — no response from LLM.",
+            )
+
+        result_text = completion.choices[0].message.content
+        if not result_text:
+            raise HTTPException(
+                status_code=500,
+                detail="Backstory enhancement failed — empty response.",
+            )
+
+        # Parse JSON response: {"backstory": "...", "summary": "..."}
+        # Strip markdown code fences if the model wrapped the JSON
+        import re as _re
+        import json as _json
+        stripped = result_text.strip()
+        fence_match = _re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$", stripped)
+        if fence_match:
+            stripped = fence_match.group(1).strip()
+        try:
+            parsed = _json.loads(stripped)
+            enhanced = parsed.get("backstory", result_text)
+            summary = parsed.get("summary", "")
+        except (_json.JSONDecodeError, AttributeError):
+            # Model didn't return valid JSON — use raw text as backstory
+            enhanced = result_text
+            summary = ""
+
+        raw_model = getattr(completion, "model", None) or ""
+        # Strip date suffixes like "-2025-04-14" for a friendlier display name
+        model_name = _re.sub(r"-\d{4}-\d{2}-\d{2}$", "", raw_model)
+        usage = getattr(completion, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        return {
+            "result": enhanced,
+            "summary": summary,
+            "model": model_name,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        }
+
+    # GET /local-ai/enhance-backstory-budget
+    async def api_enhance_backstory_budget(self) -> dict:
+        """Return the max backstory tokens for enhancement.
+
+        Since this now uses the conversation LLM (not the local support model),
+        the budget is simply the hard cap.
+        """
+        MAX_BACKSTORY_TOKENS = 2048
+        return {
+            "max_backstory_tokens": MAX_BACKSTORY_TOKENS,
+        }
+
+    # POST /local-ai/embed
+    async def api_embed(self, texts: list[str] = Body(...)) -> dict:
+        """Public API: Generate embeddings using the local AI service."""
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="The Support Model is not ready. In Cloud mode, sign in with your Wingman account; in Local mode, download the models in Settings.",
+            )
+        result = self.local_ai_service.embed(texts)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Embedding failed.")
+        return {"embeddings": result}
 
     # POST /elevenlabs/generate-sfx
     async def generate_sfx_elevenlabs(
@@ -1788,20 +4357,19 @@ class WingmanCore(WebSocketUser):
 
     async def shutdown(self):
         await self.set_core_state(CoreState.SHUTTING_DOWN)
-        self.was_listening_before_playback = False
-        self.was_listening_before_ptt = False
-        self.is_listening = False
-        self.audio_recorder.close()
-        await self.audio_player.stop_playback()
-        await asyncio.to_thread(sd.supervisor.close)
 
         # Stop HUD Server
         await self._stop_hud_server()
+        await ScGameLogService().stop()
 
         if self.settings_service.settings.xvasynth.enable:
             self.stop_xvasynth()
         if self.settings_service.settings.pocket_tts.enable:
             self.stop_pocket_tts()
+
+        # Stop managed llama-server processes
+        self.llama_cpp_provider.unload_models()
+
         await self.unload_tower()
 
         self.printr.print(
@@ -1809,3 +4377,137 @@ class WingmanCore(WebSocketUser):
             server_only=True,
             color=LogType.SYSTEM,
         )
+
+    # GET /memories/{wingman_name}
+    def get_memories(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            return []
+        wingman.ensure_memory_initialized()
+        if not wingman.persistent_memory_service:
+            return []
+        entries = wingman.persistent_memory_service.get_all()
+        return [
+            MemoryEntryResponse(
+                id=e.id,
+                collection=e.collection,
+                entry_type=e.entry_type,
+                content=e.content,
+                source_wingman=e.source_wingman,
+                session_id=e.session_id,
+                created_at=e.created_at,
+                updated_at=e.updated_at,
+            )
+            for e in entries
+        ]
+
+    # PUT /memories/{entry_id}
+    async def update_memory(self, entry_id: int, request: MemoryUpdateRequest):
+        for wingman in self.tower.wingmen:
+            if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+                entries = wingman.persistent_memory_service.get_all()
+                if any(e.id == entry_id for e in entries):
+                    await wingman.persistent_memory_service.update_memory(entry_id, request.content)
+                    return True
+        return False
+
+    # DELETE /memories/{entry_id}
+    def delete_memory(self, entry_id: int):
+        for wingman in self.tower.wingmen:
+            if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+                entries = wingman.persistent_memory_service.get_all()
+                if any(e.id == entry_id for e in entries):
+                    wingman.persistent_memory_service.delete_memory(entry_id)
+                    return True
+        return False
+
+    # DELETE /memories/{wingman_name}/all
+    def clear_memories(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if wingman and hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+            wingman.persistent_memory_service.clear_collection()
+            self.printr.toast(f"All memories cleared for {wingman_name}.")
+            return True
+        return False
+
+    # POST /memories/{wingman_name}/consolidate
+    async def consolidate_memories(self, wingman_name: str) -> dict:
+        """Tidy a wingman's facts with one support-model pass: merge duplicates,
+        drop moments that were stored as facts, keep the newer of two
+        contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            raise HTTPException(404, f"Wingman '{wingman_name}' not found")
+        wingman.ensure_memory_initialized()
+        svc = wingman.persistent_memory_service
+        if not svc:
+            raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(503, "The Support Model is not ready.")
+
+        outcome = await svc.consolidate()
+        if outcome["changed"]:
+            self.printr.toast(
+                f"Memories tidied for {wingman_name}: {outcome['before']} → {outcome['after']} facts."
+            )
+        else:
+            self.printr.toast(f"Memories of {wingman_name} were already tidy.")
+        return outcome
+
+    # POST /memories/{wingman_name}/test-extraction
+    async def test_memory_extraction(
+        self,
+        wingman_name: str,
+        messages: list[dict] = Body(...),
+    ):
+        """Test memory extraction with a canned conversation.
+
+        Send a list of messages like:
+        [
+            {"role": "user", "content": "I was born in 1986."},
+            {"role": "assistant", "content": "Noted! I'll remember that."},
+            {"role": "user", "content": "I fly a Constellation Taurus."},
+            ...
+        ]
+
+        Returns the raw extraction result (facts + summary) without storing anything.
+        """
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            raise HTTPException(404, f"Wingman '{wingman_name}' not found")
+
+        wingman.ensure_memory_initialized()
+        svc = wingman.persistent_memory_service
+        if not svc:
+            raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
+
+        from services.file import get_prompt
+        from services.skill_local_ai import SamplingPreset
+
+        transcript, user_turns = svc.conversation_text(messages)
+        if not transcript:
+            raise HTTPException(400, "No valid user/assistant messages provided")
+
+        # The same input a checkpoint builds, against the wingman's real
+        # facts, but nothing is written.
+        facts = svc.get_all(entry_type="fact")
+        facts.sort(key=lambda e: e.updated_at)
+        text = svc._checkpoint_input(facts, "", "", transcript)
+        result = await asyncio.to_thread(
+            svc.local_ai_service.support,
+            text=text,
+            system_prompt=get_prompt("extract-memories"),
+            preset=SamplingPreset.PRECISE,
+        )
+
+        if not result or not result.text:
+            return {"raw_response": None, "parsed": None, "error": "No response from support model"}
+
+        parsed = svc._parse_json_response(result.text)
+
+        return {
+            "raw_response": result.text,
+            "parsed": parsed,
+            "message_count": len(messages),
+            "user_turns": user_turns,
+        }

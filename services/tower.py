@@ -1,5 +1,4 @@
 import asyncio
-import re
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     Config,
@@ -8,14 +7,12 @@ from api.interface import (
     WingmanInitializationError,
     ConfigDirInfo,
 )
-from providers.faster_whisper import FasterWhisper
 from providers.pocket_tts import PocketTTS
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
-from services.module_manager import ModuleManager
+from services.name_match import find_name, words_of
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -32,21 +29,19 @@ class Tower:
         config_manager: ConfigManager,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
+        settings_service=None,
     ):
         self.audio_player = audio_player
         self.audio_library = audio_library
+        self.settings_service = settings_service
         self.config = config
         self.config_dir = config_dir
         self.config_manager = config_manager
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
 
@@ -106,33 +101,17 @@ class Tower:
     ):
         wingman = None
         try:
-            # it's a custom Wingman
-            if wingman_config.custom_class:
-                wingman = ModuleManager.create_wingman_dynamically(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    xvasynth=self.xvasynth,
-                    pocket_tts=self.pocket_tts,
-                    tower=self,
-                )
-            else:
-                wingman = OpenAiWingman(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    xvasynth=self.xvasynth,
-                    pocket_tts=self.pocket_tts,
-                    tower=self,
-                )
+            wingman = OpenAiWingman(
+                name=wingman_name,
+                config=wingman_config,
+                settings=settings,
+                audio_player=self.audio_player,
+                audio_library=self.audio_library,
+                xvasynth=self.xvasynth,
+                pocket_tts=self.pocket_tts,
+                tower=self,
+                settings_service=self.settings_service,
+            )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True
             self.disabled_wingmen.append(wingman_config)
@@ -192,19 +171,26 @@ class Tower:
             ]
 
             if not fatal_errors:
-                await wingman.prepare()
                 self.wingmen.append(wingman)
 
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:
+        """The wingman addressed in the text, else the default one.
+
+        A name is matched by sound, not by spelling: the speech model writes
+        "Eva" for Ava and "Computa" for Computer, and an exact word match then
+        sends the sentence to the wrong wingman or nowhere. Only the opening of
+        the sentence is searched, that is where people put a name.
+        """
+        words = words_of(text)
+        best: tuple[int, Wingman | None] = (10**6, None)
         for wingman in self.wingmen:
-            # Check if a wingman name appears as a whole word in the text
-            if re.search(
-                r"\b" + re.escape(wingman.config.name.lower()) + r"\b",
-                text.lower(),
-            ):
-                return wingman
+            found = find_name(words, wingman.config.name)
+            if found is not None and found[2] < best[0]:
+                best = (found[2], wingman)
+        if best[1] is not None:
+            return best[1]
 
         # Check if there is a default wingman defined in the config
         for wingman in self.wingmen:
@@ -313,6 +299,7 @@ class Tower:
                             config_dir=self.config_dir,
                             wingman_file=wingman_file,
                             commands=wingman.config.commands,
+                            command_categories=wingman.config.command_categories,
                         )
                         printr.print(
                             f"Saved commands for {wingman_name}.",

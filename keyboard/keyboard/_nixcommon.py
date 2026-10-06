@@ -62,7 +62,7 @@ class EventDevice(object):
             except IOError as e:
                 if e.strerror == 'Permission denied':
                     print("# ERROR: Failed to read device '{}'. You must be in the 'input' group to access global events. Use 'sudo usermod -a -G input USERNAME' to add user to the required group.".format(self.path))
-                    exit()
+                    raise PermissionError(e.strerror)
 
             def try_close():
                 try:
@@ -102,8 +102,11 @@ class AggregatedEventDevice(object):
         self.devices = devices
         self.output = output or self.devices[0]
         def start_reading(device):
-            while True:
-                self.event_queue.put(device.read_event())
+            try:
+                while True:
+                    self.event_queue.put(device.read_event())
+            except (PermissionError, IOError):
+                pass
         for device in self.devices:
             thread = Thread(target=start_reading, args=[device])
             thread.daemon = True

@@ -67,6 +67,154 @@ servers:
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/versetime/mcp
     discoverable_by_default: false
 
+  # ElevenLabs' hosted server only accepts an OAuth token — it answers 401 to an
+  # API key. Pressing Authorize in a wingman's MCP settings opens the consent
+  # page and stores the token; see docs/mcp-oauth.md.
+  #
+  # ElevenLabs has no dynamic client registration, so `oauth_client_id` has to
+  # name a client id metadata document. The one below is served by Wingman's own
+  # worker.
+  - name: elevenlabs
+    display_name: ElevenLabs
+    description: ElevenLabs generative media. Generate images and video from a prompt, turn text into speech, transcribe audio, design new voices and browse the voice library.
+    discovery_keywords:
+      - ElevenLabs
+      - 11labs
+      - generate an image
+      - create a picture
+      - generate a video
+      - text to speech
+      - read this out loud
+      - voice
+      - design a voice
+      - transcribe
+      - speech to text
+    type: http
+    url: https://api.us.elevenlabs.io/v1/mcp
+    auth: oauth
+    oauth_client_id: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client
+    # Every generator runs through a flow, so `flows` is not optional: without
+    # it even speech answers 403. `image_video_generation` covers the two
+    # visual tools. `convai_read` is gone with the agents_* tools.
+    oauth_scopes:
+      - flows
+      - image_video_generation
+      - text_to_speech
+      - voice_generation
+      - speech_history_read
+    # ElevenLabs offers 111 tools measuring roughly 222,000 tokens, more than
+    # most context windows hold. Every tool stays visible in the UI with a
+    # switch; these 104 are off by default. What is left is what a voice
+    # assistant reaches for: image, video, speech, image edit, transcription,
+    # the voice list and `get_flow_run_status`, which is not optional because
+    # generation is asynchronous and without it a result never comes back.
+    disabled_tools:
+      - agents_list
+      - agents_get
+      - agents_get_summaries
+      - agents_get_widget
+      - agents_get_link
+      - agents_get_knowledge_size
+      - agents_calculate_llm_usage
+      - agents_list_conversations
+      - agents_get_conversation
+      - agents_duplicate
+      - agents_delete
+      - agents_search_conversation_messages
+      - agents_resolve_conversation
+      - agents_get_topics
+      - agents_list_branches
+      - agents_get_branch
+      - agents_update_branch
+      - agents_get_version
+      - agents_merge_branch_preview
+      - agents_merge_branch
+      - agents_create_deployment
+      - agents_create_draft
+      - agents_delete_draft
+      - agents_create_procedure
+      - agents_list_procedures
+      - agents_get_procedure
+      - agents_delete_procedure
+      - agents_compile_procedures
+      - agents_get_procedure_draft
+      - agents_update_procedure_draft
+      - agents_delete_procedure_draft
+      - agents_list_knowledge_base
+      - agents_get_kb_document
+      - agents_create_kb_text
+      - agents_create_kb_url
+      - agents_create_kb_folder
+      - agents_update_kb_document
+      - agents_delete_kb_document
+      - agents_bulk_delete_knowledge_base
+      - agents_bulk_move_knowledge_base
+      - agents_search_knowledge_base
+      - agents_query_knowledge_base_rag
+      - agents_get_kb_dependents
+      - agents_create_tool
+      - agents_list_tools
+      - agents_get_tool
+      - agents_update_tool
+      - agents_delete_tool
+      - agents_get_tool_dependents
+      - agents_get_tool_executions
+      - agents_create_mcp_server
+      - agents_list_mcp_servers
+      - agents_get_mcp_server
+      - agents_update_mcp_server
+      - agents_delete_mcp_server
+      - agents_list_mcp_server_tools
+      - agents_create_test
+      - agents_list_tests
+      - agents_get_test
+      - agents_delete_test
+      - agents_run_tests
+      - agents_list_test_runs
+      - agents_get_test_run
+      - agents_list_phone_numbers
+      - agents_get_phone_number
+      - agents_update_phone_number
+      - agents_delete_phone_number
+      - agents_list_triage_tickets
+      - agents_create_manual_triage_ticket
+      - agents_get_triage_ticket_assignable_users
+      - agents_get_triage_ticket
+      - agents_create_triage_ticket
+      - agents_update_triage_ticket
+      - agents_add_triage_ticket_comment
+      - agents_add_triage_ticket_turn_comment
+      - agents_delete_triage_ticket
+      - agents_create
+      - agents_update
+      - agents_create_branch
+      - agents_create_code_tool
+      - agents_update_code_tool
+      - creative_generate_in_flow
+      - creative_create_flow
+      - creative_get_flow
+      - creative_get_flow_node_types
+      - creative_add_flow_node
+      - creative_add_flow_asset_node
+      - creative_upload_flow_reference
+      - creative_connect_flow_nodes
+      - creative_update_node
+      - creative_run_flow_nodes
+      - creative_show_flow_results
+      - creative_get_model_guide
+      - creative_get_model_schema
+      - creative_design_voice
+      - creative_save_designed_voice
+      - creative_get_voice_design_previews
+      - creative_get_view_state
+      - creative_save_view_state
+      - creative_get_available_assets
+      - creative_create_asset_upload
+      - creative_finalize_asset_upload
+      - creative_attach_reference_file
+      - get_more_tools
+    discoverable_by_default: false
+
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.

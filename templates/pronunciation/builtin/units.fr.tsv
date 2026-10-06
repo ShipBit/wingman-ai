@@ -1,0 +1,27 @@
+# Unités, seulement après un nombre. écrit<TAB>pour 1<TAB>pour les autres valeurs.
+km/h	un kilomètre heure	kilomètres heure
+m/s	un mètre par seconde	mètres par seconde
+km	un kilomètre	kilomètres
+cm	un centimètre	centimètres
+mm	un millimètre	millimètres
+m	un mètre	mètres
+kg	un kilogramme	kilogrammes
+g	un gramme	grammes
+t	une tonne	tonnes
+ml	un millilitre	millilitres
+l	un litre	litres
+°C	un degré Celsius	degrés Celsius
+°	un degré	degrés
+h	une heure	heures
+min	une minute	minutes
+ms	une milliseconde	millisecondes
+s	une seconde	secondes
+GHz	un gigahertz	gigahertz
+Hz	un hertz	hertz
+Go	un gigaoctet	gigaoctets
+Mo	un mégaoctet	mégaoctets
+To	un téraoctet	téraoctets
+kW	un kilowatt	kilowatts
+W	un watt	watts
+€	un euro	euros
+$	un dollar	dollars

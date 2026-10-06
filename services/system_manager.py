@@ -1,15 +1,13 @@
 import platform
 import subprocess
 import shutil
+import sys
 from typing import Optional
 from fastapi import APIRouter
-import requests
-from packaging import version
 from api.enums import LogType
-from api.interface import SystemCore, SystemInfo
+from api.interface import ErrorReportingState, SystemCore, SystemInfo
 
-LOCAL_VERSION = "2.1.1"
-VERSION_ENDPOINT = "https://wingman-ai.com/api/version"
+LOCAL_VERSION = "3.2.5"
 
 
 class SystemManager:
@@ -22,39 +20,30 @@ class SystemManager:
             response_model=SystemInfo,
             tags=["system"],
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/error-reporting",
+            endpoint=self.get_error_reporting,
+            response_model=ErrorReportingState,
+            tags=["system"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/error-reporting",
+            endpoint=self.set_error_reporting,
+            response_model=ErrorReportingState,
+            tags=["system"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/error-reporting/channel",
+            endpoint=self.set_error_reporting_channel,
+            tags=["system"],
+        )
 
-        self.latest_version = version.parse("0.0.0")
-        self.local_version = version.parse(LOCAL_VERSION)
         self._cuda_available: bool | None = None  # Cached CUDA availability
         self._gpu_name: str | None = None  # Cached GPU name
         self._gpu_checked: bool = False  # Whether GPU detection has been attempted
-        self.check_version()
-
-    def check_version(self):
-        try:
-            response = requests.get(VERSION_ENDPOINT, timeout=10)
-            response.raise_for_status()
-
-            remote_version_str = response.json().get("version", None)
-            remote_version = version.parse(remote_version_str)
-
-            self.latest_version = remote_version
-
-            return self.local_version >= remote_version
-
-        except requests.RequestException:
-            return False
-        except ValueError:
-            return False
-
-    def current_version_is_latest(self):
-        return self.local_version >= self.latest_version
-
-    def get_local_version(self, as_string=True) -> str | version.Version:
-        return LOCAL_VERSION if as_string else self.local_version
-
-    def get_latest_version(self, as_string=True) -> str | version.Version:
-        return str(self.latest_version) if as_string else self.latest_version
 
     def _detect_gpu(self) -> None:
         """
@@ -71,9 +60,8 @@ class SystemManager:
         self._cuda_available = False
         self._gpu_name = None
 
-        # Only check on Windows - CUDA is not supported on other platforms
-        if platform.system() != "Windows":
-            # No logging needed - CUDA is simply not available on non-Windows
+        # CUDA is not available on macOS
+        if platform.system() == "Darwin":
             return
 
         try:
@@ -137,17 +125,35 @@ class SystemManager:
         self._detect_gpu()
         return self._gpu_name
 
+    # GET /error-reporting
+    def get_error_reporting(self):
+        # Imported here: error_reporting needs services.file, which imports
+        # LOCAL_VERSION from this module.
+        from services import error_reporting
+
+        return ErrorReportingState(enabled=error_reporting.get_enabled())
+
+    # POST /error-reporting
+    def set_error_reporting(self, enabled: bool):
+        from services import error_reporting
+
+        error_reporting.set_enabled(enabled)
+        return ErrorReportingState(enabled=error_reporting.get_enabled())
+
+    # POST /error-reporting/channel
+    def set_error_reporting_channel(self, channel: str):
+        from services import error_reporting
+
+        error_reporting.set_channel(channel)
+
     # GET /system-info
     def get_system_info(self):
-        is_latest = self.check_version()
-
         return SystemInfo(
             os=platform.system(),
             core=SystemCore(
-                version=str(LOCAL_VERSION),
-                latest_version=str(self.latest_version),
-                is_latest=is_latest,
+                version=LOCAL_VERSION,
                 cuda_available=self.is_cuda_available(),
                 gpu_name=self.get_gpu_name(),
+                is_dev=not getattr(sys, "frozen", False),
             ),
         )

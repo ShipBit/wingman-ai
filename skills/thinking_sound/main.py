@@ -1,6 +1,6 @@
+import copy
 from typing import TYPE_CHECKING
 
-from api.enums import LogType
 from api.interface import (
     AudioFileConfig,
     SettingsConfig,
@@ -10,7 +10,7 @@ from api.interface import (
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class ThinkingSound(Skill):
@@ -20,20 +20,16 @@ class ThinkingSound(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
         self.stop_duration = 1
         self.is_playing = False
 
-        # Subscribe to playback events
-        self.wingman.audio_player.playback_events.subscribe(
-            "started", self.on_playback_started
-        )
-        self.wingman.audio_player.playback_events.subscribe(
-            "finished", self.on_playback_finished
-        )
+        # Subscribe to playback events (keep the Subscription handles to detach on unload)
+        self._sub_started = self.wingman.audio.on_playback_started(self.on_playback_started)
+        self._sub_finished = self.wingman.audio.on_playback_finished(self.on_playback_finished)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -46,27 +42,15 @@ class ThinkingSound(Skill):
         await self.stop_playback()
 
         # Unsubscribe from playback events
-        self.wingman.audio_player.playback_events.unsubscribe(
-            "started", self.on_playback_started
-        )
-        self.wingman.audio_player.playback_events.unsubscribe(
-            "finished", self.on_playback_finished
-        )
+        self._sub_started.unsubscribe()
+        self._sub_finished.unsubscribe()
 
-        self.printr.print(
-            "Thinking Sound Skill unloaded.",
-            color=LogType.INFO,
-            server_only=True,
-        )
+        self.log.info("Thinking Sound Skill unloaded.", server_only=True)
 
     async def on_playback_started(self, _):
         """Called when main TTS playback starts - stop the thinking sound."""
         if self.is_playing:
-            self.printr.print(
-                "Thinking Sound: Stopping (TTS playback started).",
-                color=LogType.INFO,
-                server_only=True,
-            )
+            self.log.info("Thinking Sound: Stopping (TTS playback started).", server_only=True)
             await self.stop_playback()
 
     async def on_playback_finished(self, _):
@@ -78,6 +62,8 @@ class ThinkingSound(Skill):
         errors: list[WingmanInitializationError] = []
         audio_config = self.retrieve_custom_property_value("audio_config", errors)
         if audio_config:
+            # Copy so the config property itself is not mutated
+            audio_config = copy.deepcopy(audio_config)
             # Force no wait for this skill to work
             audio_config.wait = False
         return audio_config
@@ -89,15 +75,11 @@ class ThinkingSound(Skill):
             return
 
         # Stop any existing playback first
-        await self.wingman.audio_library.stop_playback(audio_config, 0)
+        await self.wingman.audio.stop(audio_config, fade_out=0)
 
-        self.printr.print(
-            "Thinking Sound: Starting playback.",
-            color=LogType.INFO,
-            server_only=True,
-        )
+        self.log.info("Thinking Sound: Starting playback.", server_only=True)
 
-        self.threaded_execution(self.start_playback)
+        self.wingman.run_in_thread(self.start_playback)
 
     async def start_playback(self):
         """Start playing the thinking sound."""
@@ -105,10 +87,14 @@ class ThinkingSound(Skill):
         if not audio_config or self.is_playing:
             return
 
+        try:
+            await self.wingman.audio.play(
+                audio_config, volume=self.wingman.config.sound.volume
+            )
+        except Exception as e:
+            self.log.error(f"Thinking Sound: playback failed: {e}", server_only=True)
+            return
         self.is_playing = True
-        await self.wingman.audio_library.start_playback(
-            audio_config, self.wingman.config.sound.volume
-        )
 
     async def stop_playback(self):
         """Stop the thinking sound with fade out."""
@@ -116,5 +102,5 @@ class ThinkingSound(Skill):
         if not audio_config or not self.is_playing:
             return
 
-        await self.wingman.audio_library.stop_playback(audio_config, self.stop_duration)
+        await self.wingman.audio.stop(audio_config, fade_out=self.stop_duration)
         self.is_playing = False

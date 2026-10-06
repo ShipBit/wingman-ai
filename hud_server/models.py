@@ -183,6 +183,9 @@ class MessageRequest(BaseModel):
     duration: Optional[float] = Field(default=None, ge=0.1, le=3600.0)
     """Optional duration in seconds before auto-hide (0.1 to 3600)."""
 
+    title_icon: Optional[str] = None
+    """Optional local file path to an icon shown in front of the title (e.g. an avatar)."""
+
 
 class AppendMessageRequest(BaseModel):
     """Request to append content to current message (streaming)."""

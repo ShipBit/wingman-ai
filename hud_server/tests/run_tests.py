@@ -8,6 +8,7 @@ Usage:
     python -m hud_server.tests.run_tests --progress   # Run progress tests
     python -m hud_server.tests.run_tests --persistent # Run persistent info tests
     python -m hud_server.tests.run_tests --chat       # Run chat tests
+    python -m hud_server.tests.run_tests --images     # Run image rendering tests
     python -m hud_server.tests.run_tests --unicode    # Run Unicode/emoji stress tests
     python -m hud_server.tests.run_tests --settings  # Run settings update tests
     python -m hud_server.tests.run_tests --layout     # Run layout manager unit tests (no server needed)
@@ -99,6 +100,9 @@ async def run_test_suite(test_name: str):
         elif test_name == "chat":
             from hud_server.tests.test_chat import run_all_chat_tests
             await run_all_chat_tests(session)
+        elif test_name == "images":
+            from hud_server.tests.test_images import run_all_image_tests
+            await run_all_image_tests(session)
         elif test_name == "settings":
             from hud_server.tests.test_settings import run_all_settings_tests
             await run_all_settings_tests(session)
@@ -110,6 +114,7 @@ async def run_test_suite(test_name: str):
             from hud_server.tests.test_progress import run_all_progress_tests
             from hud_server.tests.test_persistent import run_all_persistent_tests
             from hud_server.tests.test_chat import run_all_chat_tests
+            from hud_server.tests.test_images import run_all_image_tests
             from hud_server.tests.test_unicode_stress import run_all_unicode_stress_tests
             from hud_server.tests.test_settings import run_all_settings_tests
 
@@ -120,6 +125,8 @@ async def run_test_suite(test_name: str):
             await run_all_persistent_tests(session)
             await asyncio.sleep(2)
             await run_all_chat_tests(session)
+            await asyncio.sleep(2)
+            await run_all_image_tests(session)
             await asyncio.sleep(2)
             await run_all_unicode_stress_tests(session)
             await asyncio.sleep(2)
@@ -146,7 +153,7 @@ def main():
             # Snake game - interactive fun test
             from hud_server.tests.test_snake import run_snake_test
             asyncio.run(run_snake_test())
-        elif arg in ["messages", "progress", "persistent", "chat", "unicode", "settings", "all"]:
+        elif arg in ["messages", "progress", "persistent", "chat", "images", "unicode", "settings", "all"]:
             asyncio.run(run_test_suite(arg))
         elif arg == "help":
             print(__doc__)

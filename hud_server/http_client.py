@@ -366,7 +366,8 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
         props: Optional[BaseProps] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        title_icon: Optional[str] = None
     ) -> Optional[dict]:
         """Show a message in a HUD group.
 
@@ -379,6 +380,7 @@ class HudHttpClient:
             tools: Optional list of tool information for display
             props: Optional MessageProps to override group defaults
             duration: Optional display duration in seconds (0.1-3600)
+            title_icon: Optional local file path to an icon shown in front of the title
 
         Returns:
             Server response dict or None if failed
@@ -408,6 +410,8 @@ class HudHttpClient:
             data["props"] = _resolve_props(props)
         if duration is not None:
             data["duration"] = duration
+        if title_icon:
+            data["title_icon"] = title_icon
 
         return await self._request("POST", PATH_MESSAGE, data)
 
@@ -1063,11 +1067,12 @@ class HudHttpClientSync:
         color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
         props: Optional[BaseProps] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        title_icon: Optional[str] = None
     ):
         """Show a message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_message(
-            group_name, element, title, content, color, tools, props, duration
+            group_name, element, title, content, color, tools, props, duration, title_icon
         )) if self._client else None
 
     def append_message(self, group_name: str, element: WindowType, content: str):

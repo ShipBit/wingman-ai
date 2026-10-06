@@ -63,9 +63,22 @@ def age_seconds(value, now):
     return round((now - stamp).total_seconds()) if stamp else None
 
 
+ELITE_STEAM_APP_ID = "359320"
+PROTON_SAVED_GAMES = ("steamapps/compatdata/" + ELITE_STEAM_APP_ID +
+                      "/pfx/drive_c/users/steamuser/Saved Games")
+STEAM_ROOTS = (".local/share/Steam", ".steam/steam",
+               ".var/app/com.valvesoftware.Steam/.local/share/Steam")
+
+
 def default_journal_dir() -> Path:
-    """Respect Windows' redirected Saved Games folder; explicit paths work elsewhere."""
+    """Respect Windows' redirected Saved Games folder and Steam Proton on Linux."""
     saved = Path.home() / "Saved Games"
+    if platform.system() == "Linux":
+        for root in STEAM_ROOTS:
+            candidate = Path.home() / root / PROTON_SAVED_GAMES
+            if candidate.is_dir():
+                saved = candidate
+                break
     if platform.system() == "Windows":
         import winreg
 

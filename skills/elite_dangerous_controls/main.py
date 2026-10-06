@@ -1,385 +1,180 @@
-"""Wingman lifecycle adapter for verified Elite control requests."""
+"""Elite Dangerous controls: Elite's own key bindings become Wingman commands.
+
+The skill reads the bindings the pilot set up in the game (keyboard only) and
+keeps one command per control in the categories "Elite Ship", "Elite SRV" and
+"Elite On Foot". Core presses the keys like for any other command, so instant
+activation works without the AI, and the AI picks them through execute_command.
+When the pilot changes a binding in the game, the commands follow.
+
+The skill owns the keys of the commands in those categories. Instant phrases,
+responses and descriptions the user adds stay. A command with the same name
+in another category is the user's own and is left alone.
+"""
 
 import asyncio
-from collections import OrderedDict
-from contextlib import suppress
-from importlib import import_module, util
-import json
-import os
+import threading
 from pathlib import Path
-import platform
-import sys
-from typing import Literal
+from typing import TYPE_CHECKING
 
-from api.enums import LogType
-from skills.skill_base import Skill, tool
-from services.tool_execution import current_turn, current_call, ControlAuthorization, SkillRoute
-from services.elite_runtime_identity import capture, CONTROL_FILES, PROCESS_INSTANCE
+from api.interface import CommandActionConfig, CommandConfig, SettingsConfig, SkillConfig
+from skills.elite_dangerous_controls.bindings import (
+    Bindings,
+    blocked_keys,
+    control_schemes_dirs,
+    default_bindings_dir,
+    game_dirs,
+    read_bindings,
+)
+from skills.elite_dangerous_controls.catalog import CATALOG, CATEGORIES
+from skills.skill_base import Skill, command_action
+
+if TYPE_CHECKING:
+    from wingmen.wingman_context import WingmanContext
+
+WATCH_SECONDS = 5
 
 
-# Custom skills are loaded by filename. Give bundled siblings a real package
-# without changing sys.path or relying on the source checkout being installed.
-_package = "_wingman_elite_controls"
-if _package not in sys.modules:
-    _spec = util.spec_from_file_location(_package, Path(__file__).with_name("__init__.py"),
-                                       submodule_search_locations=[str(Path(__file__).parent)])
-    _module = util.module_from_spec(_spec)
-    sys.modules[_package] = _module
-    _spec.loader.exec_module(_module)
-runtime = import_module(_package + ".runtime")
-inputs = import_module(_package + ".input")
-observation = import_module(_package + ".observation")
-workflow_module = import_module(_package + ".workflows")
-speech_module = import_module(_package + ".speech")
-routing = import_module(_package + ".routing")
-_spec = util.spec_from_file_location("_elite_control_telemetry", Path(__file__).parent.parent / "elite_dangerous/telemetry.py")
-telemetry = util.module_from_spec(_spec)
-_spec.loader.exec_module(telemetry)
-LOADED_FILES = {"controls/" + name: capture(Path(__file__).with_name(name)) for name in CONTROL_FILES}
-LOADED_FILES["telemetry/telemetry.py"] = capture(Path(telemetry.__file__))
+def _same_actions(command, actions: list[CommandActionConfig]) -> bool:
+    current = [a.model_dump(exclude_none=True) for a in (command.actions or [])]
+    return current == [a.model_dump(exclude_none=True) for a in actions]
+
+
+def apply_bindings(commands, bindings: Bindings) -> bool:
+    """Add, update and remove the Elite commands. True if anything changed.
+
+    `commands` is the facade's SkillCommands.
+    """
+    existing = {c.name for c in commands.categories()}
+    changed = False
+    for mode, rows in CATALOG.items():
+        bound = any(name in bindings.actions for _, name in rows)
+        if not bound and CATEGORIES[mode] not in existing:
+            continue  # No empty category for a mode without keys.
+        category = commands.add_category(CATEGORIES[mode])
+        for _, name in rows:
+            command = commands.get(name)
+            ours = command is not None and command.category_id == category.id
+            if name not in bindings.actions:
+                if ours:
+                    commands.remove(name)
+                    changed = True
+                continue
+            actions = [CommandActionConfig.model_validate(a) for a in bindings.actions[name]]
+            if command is None:
+                commands.add(
+                    CommandConfig(
+                        name=name,
+                        instant_activation=[name.lower()],
+                        actions=actions,
+                    ),
+                    category=category,
+                )
+                changed = True
+            elif ours and not _same_actions(command, actions):
+                command.actions = actions
+                changed = True
+    return changed
 
 
 class EliteDangerousControls(Skill):
-    def __init__(self, config, settings, wingman):
-        super().__init__(config, settings, wingman)
-        self._engine = None
-        self._reader = None
-        self._routing_reader = None
-        self._watcher = None
-        self._settings_key = None
-        self._revision = None
-        self._stopping = False
-        self._requests = OrderedDict()
-        self._request_turn = None
-        self.loaded_files = LOADED_FILES
-        self._cancel_hook = None
-        self._workflow = None
-        # Core injects llm_call after constructing a skill; resolve it at call time.
-        self._speech = speech_module.CompanionSpeech(
-            lambda messages, tools=None: self.llm_call(messages, tools=tools), self._persona, self._log)
-        self._router = routing.IntentRouter(
-            lambda messages, tools=None: self.llm_call(messages, tools=tools), self._log)
+    def __init__(
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
+    ) -> None:
+        super().__init__(config=config, settings=settings, wingman=wingman)
+        self._run_id = 0
+        self._lock = threading.Lock()
+        """The watcher and the command action may sync at the same time."""
+        self._last_error = ""
+        self._last_summary = ""
 
-    def _persona(self):
-        prompts = getattr(getattr(self.wingman, "config", None), "prompts", None)
-        return getattr(prompts, "backstory", "") or "A concise, capable companion for an Elite Dangerous commander."
+    # --- settings, read fresh -------------------------------------------------
 
-    def _property(self, name):
-        return self.retrieve_custom_property_value(name, [])
+    def _bindings_dir(self) -> Path:
+        value = self.retrieve_custom_property_value("bindings_directory", [])
+        return Path(value).expanduser() if value else default_bindings_dir()
 
-    async def _on_loop(self, callback):
-        loop = self.wingman.audio_player.event_loop
-        if loop is None or not loop.is_running():
-            raise ValueError("Wingman runtime is unavailable.")
-        if loop is asyncio.get_running_loop():
-            return await callback()
-        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(callback(), loop))
+    def _schemes(self) -> list[Path]:
+        value = self.retrieve_custom_property_value("game_directory", [])
+        roots = [Path(value).expanduser()] if value else game_dirs()
+        return [folder for root in roots for folder in control_schemes_dirs(root)]
 
-    async def prepare(self):
+    # --- lifecycle --------------------------------------------------------------
+
+    async def validate(self):
+        errors = await super().validate()
+        self.retrieve_custom_property_value("bindings_directory", errors)
+        self.retrieve_custom_property_value("game_directory", errors)
+        return errors
+
+    async def prepare(self) -> None:
         await super().prepare()
-        self._stopping = False
-        await self._on_loop(self._start)
+        self._run_id += 1
+        # Voice requests run on loops that close after the reply, so the
+        # watcher gets its own thread and loop.
+        self.wingman.run_in_thread(self._watch, self._run_id)
 
-    async def _start(self):
-        if self._stopping:
-            return
-        if self._watcher is None or self._watcher.done():
-            self._watcher = asyncio.create_task(self._watch())
-        if platform.system() == "Windows" and self._cancel_hook is None:
-            from keyboard import keyboard
-            # A local, single physical Escape press only cancels; never injects.
-            loop = asyncio.get_running_loop()
-            self._cancel_hook = keyboard.on_press_key("esc", lambda _: loop.call_soon_threadsafe(self._cancel))
-
-    def _cancel(self):
-        # Also invalidate a request still awaiting routing/model output.
-        self.wingman.latest_user_turn_id = None
-        self._router.clear()
-        if self._workflow:
-            self._workflow.cancel()
-        if self._engine:
-            self._engine.cancel()
-
-    async def _watch(self):
-        while not self._stopping:
-            if self._engine:
-                try:
-                    snapshot = await self._engine.resolver.stable()
-                    if self._revision != snapshot["revision"]:
-                        self._revision = snapshot["revision"]
-                        self._log({"event": "bindings_reloaded", "revision": self._revision,
-                                   "configured": len(snapshot["available"]), "unavailable": len(snapshot["unavailable"])})
-                except (OSError, ValueError, runtime.ET.ParseError):
-                    self._revision = None  # Never keep a stale usable mapping.
-                if self._workflow:
-                    await self._workflow.monitor()
-            await asyncio.sleep(1)
-
-    def _log(self, event):
-        self.printr.print("Elite controls: " + json.dumps(event, sort_keys=True), color=LogType.SYSTEM, server_only=True)
-        # Explicitly armed by the acceptance CLI. Records stay local and private.
-        directory = os.environ.get("WINGMAN_ELITE_ACCEPTANCE_DIR")
-        if directory and event.get("request_id"):
-            from uuid import uuid4
-            try:
-                target = Path(directory)
-                target.mkdir(parents=True, exist_ok=True)
-                armed_path = target.parent / "armed.json"
-                armed = json.loads(armed_path.read_text(encoding="utf-8")) if armed_path.is_file() else {}
-                with (target / (uuid4().hex + ".json")).open("x", encoding="utf-8") as handle:
-                    json.dump({"path": armed.get("path", "voice"), "case": armed.get("case"), **event}, handle, indent=2)
-            except (OSError, ValueError) as exc:
-                self.printr.print("Elite acceptance evidence could not be saved: " + str(exc), server_only=True)
-
-    async def _observe(self):
-        return await observation.observe_status(self._reader, telemetry)
-
-    def _journal_directory(self):
-        journal = self._property("journal_directory")
-        if not journal:
-            for skill in getattr(self.wingman, "skills", []):
-                if skill.config.name == "EliteDangerous":
-                    journal = skill.retrieve_custom_property_value("journal_directory", [])
-                    break
-        return Path(journal or telemetry.default_journal_dir())
-
-    async def _routing_context(self):
-        if platform.system() != "Windows":
-            return {}
-        try:
-            process = inputs.WindowsInput().context()
-            directory = self._journal_directory()
-            if self._routing_reader is None or self._routing_reader.directory != directory:
-                self._routing_reader = telemetry.JournalReader(directory)
-            observed = await observation.observe_status(self._routing_reader, telemetry)
-            return runtime.routing_context(process, observed)
-        except (ValueError, OSError, KeyError):
-            return {}  # Interpretation remains possible; execution rechecks everything.
-
-    async def route_request(self, text):
-        """Cold-safe, optional semantic hook. No input or activation occurs here."""
-        if self._stopping or self._property("semantic_routing") is not True:
-            self._router.clear()
-            return None
-        turn = current_turn.get()
-        if not turn:
-            return SkillRoute("clarify", reply=routing.RETRY)
-        if self.name in turn.routes:
-            return turn.routes[self.name]
-        # Deny model tool execution while a classification is pending or fails.
-        turn.routes[self.name] = SkillRoute("conversation")
-        if self._router.pending and self._router.pending.get("turn_id") != turn.previous_id:
-            self._router.clear()  # An intervening request may have used another exact skill.
-        if text.casefold().strip(" .!") in {"cancel", "never mind", "nevermind", "cancel that", "forget it"}:
-            self._cancel()
-            result = SkillRoute("clarify", reply="Cancelled, Commander.")
-            turn.routes[self.name] = result
-            return result
-        is_current = lambda: (not self._stopping and self._property("semantic_routing") is True and
-                              getattr(self.wingman, "latest_user_turn_id", None) == turn.id)
-        # Observation is local, read-only and separately bounded; no engine is needed.
-        # Install local Escape cancellation even before the first skill activation.
-        await self._on_loop(self._start)
-        context = await self._on_loop(self._routing_context)
-        if not is_current():
-            return SkillRoute("clarify", reply="")
-        decision = await self._router.route(text, context, is_current)
-        if self._router.pending:
-            self._router.pending["turn_id"] = turn.id
-        if not is_current():
-            self._router.clear()
-            result = SkillRoute("clarify", reply="")
-        elif decision.kind == "execute":
-            authorization = ControlAuthorization(turn.id, decision.action, decision.state, decision.mode, context)
-            result = SkillRoute("execute", ("elite_control", {"action": decision.action,
-                "state": decision.state, "mode": decision.mode}), authorization=authorization)
-        else:
-            result = SkillRoute(decision.kind, reply=decision.reply)
-        turn.routes[self.name] = result
-        return result
-
-    async def _execute(self, action, state, mode, request=None, workflow=None):
-        def blocked(reason):
-            result = runtime.ControlResult((request or {}).get("request_id", "unrouted"),
-                                           {"action": action, "state": state, "mode": mode},
-                                           "blocked", reason, "prerequisites")
-            self._log(result.to_dict())
-            return result.speech
-        if self._stopping:
-            return blocked("Elite controls are disabled.")
-        if platform.system() != "Windows":
-            return blocked("Elite controls require Windows; telemetry remains available.")
-        try:
-            if request and request["still_current"]():
-                turn_id = request["request_id"].split(":", 1)[0]
-                if turn_id != self._request_turn:
-                    self._requests.clear()
-                    self._request_turn = turn_id
-            backend = inputs.WindowsInput()
-            context = backend.context()
-            directory = self._property("bindings_directory") or str(runtime.default_bindings())
-            presets = self._property("presets_directory") or context["presets"]
-            journal = self._property("journal_directory")
-            if not journal:
-                # Honor the telemetry skill's directory override as well.
-                for skill in getattr(self.wingman, "skills", []):
-                    if skill.config.name == "EliteDangerous":
-                        journal = skill.retrieve_custom_property_value("journal_directory", [])
-                        break
-            journal = journal or str(telemetry.default_journal_dir())
-            profile = self.wingman.config.model_dump()
-            ptt = {key: profile.get(key) for key in ("record_key", "record_key_codes", "record_mouse_button")}
-            settings_key = (directory, presets, journal, json.dumps(ptt, sort_keys=True))
-            if self._engine is None or settings_key != self._settings_key:
-                if self._workflow:
-                    await self._workflow.close()
-                    self._workflow = None
-                if self._engine:
-                    await self._engine.close()
-                self._reader = telemetry.JournalReader(Path(journal))
-                self._engine = runtime.ControlEngine(backend, runtime.BindingResolver(
-                    directory, presets, lambda: self.wingman.config.model_dump()), self._observe, self._log,
-                    identity={"pid": os.getpid(), "instance": PROCESS_INSTANCE, "files": self.loaded_files},
-                    requests=self._requests)
-                self._settings_key = settings_key
-            if workflow is not None:
-                if self._workflow is None:
-                    self._workflow = workflow_module.WorkflowRunner(self._engine, self._log)
-                return await self._workflow.handle(**workflow, request_id=request["request_id"],
-                                                   still_current=request["still_current"])
-            if self._workflow and self._workflow.active:
-                self._workflow.cancel("Workflow ended for your individual control request, Commander.")
-            record = await self._engine.run_result(action, state, mode, **(request or {}))
-            # Execution has finished. This call has no tools and cannot replay it.
-            return await self._speech.acknowledge(record)
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            return blocked(str(exc)[:220])
-
-    def resolve_direct_request(self, text):
-        """Let Core route exact control phrases before model/instant-command replies."""
-        workflow = workflow_module.parse_workflow(text)
-        if workflow is not None:
-            return "elite_workflow", workflow
-        try:
-            action, state, mode = runtime.parse_turn(text)
-        except runtime.InvalidRequest:
-            return None
-        return "elite_control", {"action": action.replace(" ", "_"), "state": state, "mode": mode}
-
-    @tool(description="Press one Elite control binding once per request. On/off words still press toggle keys once. Never skip using remembered state. Status reports readiness.", summarize=False)
-    async def elite_control(self, action: str, state: Literal["on", "off", "toggle"],
-                            mode: Literal["auto", "ship", "srv", "on_foot"] = "auto") -> tuple[str, str]:
-        """Args:
-            action: Catalog action ID, such as lights or night_vision; runtime routing authorizes it.
-            state: On/off/toggle wording from the request; each sends one press.
-            mode: Auto uses current vehicle telemetry.
-        """
-        turn, call = current_turn.get(), current_call.get()
-        request_id = (turn.id + ":" + call) if turn and call else "missing-provenance"
-        try:
-            if not turn or not call:
-                raise runtime.InvalidRequest("No originating user turn is available. Please repeat the request.")
-            if getattr(self.wingman, "latest_user_turn_id", None) != turn.id:
-                raise runtime.InvalidRequest("A newer user request arrived. No input sent.")
-            route = turn.routes.get(self.name)
-            if route is None:
-                action, state, mode = runtime.validate_turn(turn.text, action, state, mode, require_state=False)
-                if action in {"eject all cargo", "ejectallcargo", "ejectallcargo buggy"} and not routing.explicit_cargo_order(turn.text):
-                    raise runtime.InvalidRequest("Please explicitly order eject all cargo, Commander.")
-                self._router.clear()
-                authorization = ControlAuthorization(turn.id, action.replace(" ", "_"), state, mode)
-                route = SkillRoute("execute", authorization=authorization)
-                turn.routes[self.name] = route
-            if route.kind != "execute" or route.authorization is None:
-                raise runtime.InvalidRequest("This turn did not authorize an Elite control. Please make a new request.")
-            action, state, mode = runtime.normalize_request(action, state, mode)
-            authorization = route.authorization
-            authorization.validate(turn.id, action, state, mode, call)
-        except ValueError as exc:
-            record = runtime.ControlResult(request_id, {"action": action, "state": state, "mode": mode},
-                                           "invalid", str(exc), "user_intent")
-            self._log(record.to_dict())
-            result = record.speech
-        else:
-            request = {"request_id": request_id, "user_text": turn.text,
-                       "authorization": authorization,
-                       "still_current": lambda: getattr(self.wingman, "latest_user_turn_id", None) == turn.id}
-            try:
-                result = await self._on_loop(lambda: self._execute(action, state, mode, request))
-            except asyncio.CancelledError:
-                result = "Unverified: control cancelled. Check the game; no retry was sent."
-        if self._stopping or (turn and getattr(self.wingman, "latest_user_turn_id", None) != turn.id):
-            self._log({"event": "speech_superseded", "request_id": request_id})
-            return "", ""
-        self._log({"event": "speech_requested", "request_id": request_id,
-                   "turn_id": turn.id if turn else None,
-                   "transcript": turn.text if turn else "", "speech": result})
-        await self.printr.print_async(result, color=LogType.INFO, source_name=self.wingman.name)
-        return result, result  # Final skill response; Core must not rewrite it again.
-
-    @tool(description="Run a named supervised Elite checklist. Start, status, continue at a player checkpoint, or cancel. No piloting, aiming or automatic consumable retries.", summarize=False)
-    async def elite_workflow(self, operation: Literal["start", "status", "continue", "cancel"],
-                             workflow: Literal["", *workflow_module.WORKFLOWS] = "") -> tuple[str, str]:
-        """Args:
-            operation: Requested workflow operation.
-            workflow: Named workflow for start; otherwise leave empty.
-        """
-        turn, call = current_turn.get(), current_call.get()
-        request_id = turn.id + ":" + call if turn and call else "missing-provenance"
-        expected = workflow_module.parse_workflow(turn.text) if turn else None
-        route = turn.routes.get(self.name) if turn else None
-        if (route is not None or not call or expected != {"operation": operation, "workflow": workflow}
-                or getattr(self.wingman, "latest_user_turn_id", None) != getattr(turn, "id", None)):
-            result = "Please specify the workflow request, Commander. No step was started."
-        else:
-            self._router.clear()
-            request = {"request_id": request_id,
-                       "still_current": lambda: self.wingman.latest_user_turn_id == turn.id}
-            async def execute():
-                # Local cancellation/status do not depend on current game focus.
-                if operation in ("cancel", "status"):
-                    if self._workflow:
-                        return await self._workflow.handle(operation, request_id=request_id)
-                    return "No workflow is active, Commander."
-                return await self._execute("status", "toggle", "auto", request,
-                                           {"operation": operation, "workflow": workflow})
-            result = await self._on_loop(execute)
-        self._log({"event": "workflow_speech_requested", "request_id": request_id,
-                   "transcript": turn.text if turn else "", "speech": result})
-        await self.printr.print_async(result, color=LogType.INFO, source_name=self.wingman.name)
-        return result, result
-
-    async def get_prompt(self):
-        return (await super().get_prompt() or "") + (
-            "\nEvery requested Elite control must call elite_control, even for repeated requests. "
-            "Each individual command presses its binding once; on/off wording does not suppress a toggle key. "
-            "Pass the request's on/off/toggle wording explicitly. Never answer that a control is already set from memory. "
-            "Successful input gets one brief varied AI acknowledgment after execution, without a game-state claim. "
-            "Map controls instead report observed opening/closing, or an unverified result if no transition is observed. "
-            "Natural-language routing owns the compact control catalog. Conversation or clarification "
-            "does not authorize a control; never reinterpret those decisions through tool calls. "
-            "Use elite_workflow only for an explicitly requested named workflow or checkpoint operation. "
-            "Launch and docking automation are unavailable. The tools speak their own final results; do not repeat them.")
-
-    async def unload(self):
-        self._stopping = True
-        self._router.clear()
-        if self._cancel_hook is not None:
-            from keyboard import keyboard
-            keyboard.unhook(self._cancel_hook)
-            self._cancel_hook = None
-        async def stop():
-            if self._workflow:
-                await self._workflow.close()
-                self._workflow = None
-            if self._engine:
-                await self._engine.close()
-                self._engine = None
-                self._settings_key = None
-            if self._watcher:
-                self._watcher.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._watcher
-                self._watcher = None
-        await self._on_loop(stop)
+    async def unload(self) -> None:
+        self._run_id += 1
         await super().unload()
+
+    # --- keeping the commands in step ---------------------------------------------
+
+    def _stamp(self) -> tuple:
+        """Changes when the pilot saves other bindings or picks another preset."""
+        folder = self._bindings_dir()
+        try:
+            return tuple(sorted(
+                (p.name, p.stat().st_mtime_ns)
+                for p in folder.iterdir()
+                if p.suffix in (".binds", ".start")
+            )) + (str(folder),)
+        except OSError:
+            return (str(folder),)
+
+    async def _watch(self, run_id: int) -> None:
+        stamp = None
+        while run_id == self._run_id:
+            try:
+                current = await asyncio.to_thread(self._stamp)
+                if current != stamp:
+                    stamp = current
+                    await self.sync()
+            except Exception as error:  # A half-written file; the next round reads it.
+                self.log.warning(f"Elite bindings: {error}", server_only=True)
+            await asyncio.sleep(WATCH_SECONDS)
+
+    async def sync(self) -> str:
+        """Bring the Elite commands in line with the game's bindings."""
+        config = self.wingman.config
+        blocked = blocked_keys(config.record_key, list(config.record_key_codes or []))
+        try:
+            bindings = await asyncio.to_thread(
+                read_bindings, self._bindings_dir(), self._schemes(), blocked
+            )
+        except (OSError, ValueError) as error:
+            message = f"Could not read your Elite key bindings. {error}."
+            if message != self._last_error:
+                self._last_error = message
+                self.log.warning(message)
+            return message
+        self._last_error = ""
+        with self._lock:
+            changed = apply_bindings(self.wingman.commands, bindings)
+        if changed:
+            await self.wingman.commands.save()
+        summary = (
+            f"{len(bindings.actions)} Elite controls are ready as commands. "
+            f"{len(bindings.unbound)} have no keyboard key in Elite."
+        )
+        if summary != self._last_summary:
+            self._last_summary = summary
+            self.log.info(summary, server_only=True)
+        return summary
+
+    @command_action(
+        label="Read Elite Bindings",
+        description="Read the key bindings from Elite again and say how many controls are ready.",
+        respond="speak",
+    )
+    async def sync_elite_bindings(self) -> str:
+        return await self.sync()

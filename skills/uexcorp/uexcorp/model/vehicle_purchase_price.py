@@ -42,7 +42,7 @@ class VehiclePurchasePrice(DataModel):
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         information = {
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
             "price_buy_from_terminal": self.get_price_buy(),
         }
 
@@ -54,12 +54,14 @@ class VehiclePurchasePrice(DataModel):
 
         return information
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return {
-            "terminal": self.get_terminal_name(),
-            "vehicle": self.get_vehicle_name(),
-            "price_buy_from_terminal": self.get_price_buy(),
-        }
+    def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_vehicle_information: bool = True) -> dict:
+        information = {}
+        if show_vehicle_information:
+            information["vehicle"] = self.get_vehicle_name()
+        if show_terminal_information:
+            information["terminal"] = self.get_terminal_name()
+        information["price_buy_from_terminal"] = self.get_price_buy()
+        return information
 
     def get_id(self) -> int:
         return self.data["id"]

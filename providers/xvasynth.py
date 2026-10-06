@@ -3,12 +3,17 @@ from os import path
 import platform
 import subprocess
 import time
+from typing import TYPE_CHECKING
 import requests
-from api.enums import LogType
+from api.enums import LogType, TtsProvider
 from api.interface import XVASynthSettings, XVASynthTtsConfig, SoundConfig
+from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE = "xvasynth.wav"
@@ -214,3 +219,21 @@ class XVASynth:
             return response.ok
         except Exception:
             return False
+
+
+@tts_provider(TtsProvider.XVASYNTH)
+class XVASynthTts(TtsInterface):
+    """Per-wingman adapter around the shared XVASynth singleton."""
+
+    def __init__(self, shared: "XVASynth", config: "WingmanConfig"):
+        self._shared = shared
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._shared.play_audio(
+            text=text,
+            config=self._config.xvasynth,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+        )
