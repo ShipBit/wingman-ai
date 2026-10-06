@@ -11,6 +11,25 @@ responses and descriptions the user adds stay. A command with the same name
 in another category is the user's own and is left alone.
 """
 
+# A custom skill is loaded from its file, without a package, so the absolute
+# imports of its own modules below would not resolve. Register this folder as
+# the package when nothing else provides it (a bundled copy wins).
+import importlib.util as _util
+import sys as _sys
+import types as _types
+from pathlib import Path as _Path
+
+_PACKAGE = "skills.elite_dangerous_controls"
+if _PACKAGE not in _sys.modules and _util.find_spec("skills") is not None:
+    try:
+        _missing = _util.find_spec(_PACKAGE) is None
+    except ModuleNotFoundError:
+        _missing = True
+    if _missing:
+        _package = _types.ModuleType(_PACKAGE)
+        _package.__path__ = [str(_Path(__file__).parent)]
+        _sys.modules[_PACKAGE] = _package
+
 import asyncio
 import threading
 from pathlib import Path
