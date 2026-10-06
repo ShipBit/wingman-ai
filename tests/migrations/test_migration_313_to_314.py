@@ -16,6 +16,7 @@ from tests.support import (
     config_names,
     make_old_version,
     read_yaml,
+    shipped_configs,
 )
 
 OLD_VERSION_DIR = "3_1_3"
@@ -46,7 +47,7 @@ def test_default_switched_user(users_dir, boot_config_manager):
 
     cm = migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General", "Star Citizen"]
+    assert config_names(users_dir) == shipped_configs()
     assert cm.find_default_config().name == "General"
     assert read_context(users_dir)["default_config"] == "General"
 
@@ -65,7 +66,7 @@ def test_deleted_config_stays_deleted_and_is_archived(
 
     cm = migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General"]
+    assert config_names(users_dir) == shipped_configs(without=["Star Citizen"])
     context = read_context(users_dir)
     assert context["default_config"] == "General"
     assert "Star Citizen" in context["deleted_template_configs"]
@@ -76,7 +77,7 @@ def test_deleted_config_stays_deleted_and_is_archived(
 
     # a restart does not resurrect it
     boot_config_manager()
-    assert config_names(users_dir) == ["General"]
+    assert config_names(users_dir) == shipped_configs(without=["Star Citizen"])
     assert cm.find_default_config().name == "General"
 
 
@@ -96,11 +97,7 @@ def test_duplicated_configs_are_both_kept(users_dir, boot_config_manager):
 
     cm = migrate(boot_config_manager)
 
-    assert config_names(users_dir) == [
-        "General",
-        "Star Citizen",
-        "Star Citizen (2)",
-    ]
+    assert config_names(users_dir) == shipped_configs(plus=["Star Citizen (2)"])
     # the legacy default flag carries over to the renamed duplicate
     assert cm.find_default_config().name == "Star Citizen (2)"
 
@@ -109,11 +106,7 @@ def test_duplicated_configs_are_both_kept(users_dir, boot_config_manager):
 
     # a restart neither duplicates nor deletes anything
     boot_config_manager()
-    assert config_names(users_dir) == [
-        "General",
-        "Star Citizen",
-        "Star Citizen (2)",
-    ]
+    assert config_names(users_dir) == shipped_configs(plus=["Star Citizen (2)"])
 
 
 def test_corrupted_underscore_dot_dir(users_dir, boot_config_manager):
@@ -128,7 +121,7 @@ def test_corrupted_underscore_dot_dir(users_dir, boot_config_manager):
 
     cm = migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General", "Star Citizen"]
+    assert config_names(users_dir) == shipped_configs()
     assert cm.find_default_config().name == "Star Citizen"
 
 
@@ -183,7 +176,7 @@ def test_multi_step_migration_from_3_1_2(users_dir, boot_config_manager):
 
     cm = migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General"]
+    assert config_names(users_dir) == shipped_configs(without=["Star Citizen"])
     context = read_context(users_dir)
     assert context["default_config"] == "General"
     assert "Star Citizen" in context["deleted_template_configs"]
@@ -203,5 +196,5 @@ def test_migration_marker_prevents_rerun(users_dir, boot_config_manager):
     # second full boot incl. migration service: must be a no-op
     migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General", "Star Citizen"]
+    assert config_names(users_dir) == shipped_configs()
     assert read_context(users_dir)["default_config"] == "General"

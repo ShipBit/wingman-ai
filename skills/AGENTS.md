@@ -459,5 +459,7 @@ Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `system_one`, `st
 | [uexcorp](uexcorp/) | Tool | Game integration, domain tags |
 | [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions, `language.name` in prompts |
 | [sc_accountant](sc_accountant/) | Hook+Tool (auto) | `sc_gamelog.on("*")`, own web dashboard, `ui.show_dialog(once=...)` |
+| [elite_dangerous](elite_dangerous/) | Hook+Tool (auto) | Reads a game's own files in a `run_in_thread` loop, support-model reactions |
+| [elite_dangerous_controls](elite_dangerous_controls/) | Hook (auto) | No tools: turns the game's key bindings into commands via `commands.add_category` / `add` / `save` |
 
 Do not copy the tool count of `hud`, `control_windows` or `file_manager`: they predate the token rules and expose 9–10 tools each.

@@ -28,6 +28,7 @@ from tests.support import (
     make_old_version,
     migration_service,
     read_yaml,
+    shipped_configs,
     write_yaml,
 )
 
@@ -153,7 +154,7 @@ def test_a_crash_in_a_step_reruns_it_on_the_next_start(users_dir, boot_config_ma
     config_manager, _ = boot_and_migrate(boot_config_manager)
 
     assert path.exists(marker)
-    assert config_names(users_dir) == ["General"]
+    assert config_names(users_dir) == shipped_configs(without=["Star Citizen"])
     assert config_manager.find_default_config().name == "General"
 
 
@@ -168,7 +169,7 @@ def test_a_rerun_over_a_finished_migration_makes_no_duplicates(users_dir, boot_c
 
     config_manager, _ = boot_and_migrate(boot_config_manager)
 
-    assert config_names(users_dir) == ["General", "Star Citizen"]
+    assert config_names(users_dir) == shipped_configs()
     assert config_manager.find_default_config().name == "General"
 
 
@@ -291,7 +292,7 @@ def test_the_conversion_runs_in_its_own_step_folder(users_dir, boot_config_manag
 
     config_manager, _ = boot_and_migrate(boot_config_manager)
 
-    assert config_names(users_dir, "3_1_9") == ["General"]
+    assert config_names(users_dir, "3_1_9") == shipped_configs(without=["Star Citizen"])
     with open(path.join(users_dir, "3_1_9", "configs", "context.yaml"), encoding="UTF-8") as f:
         context = yaml.safe_load(f)
     assert context["default_config"] == "General"

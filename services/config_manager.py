@@ -43,6 +43,9 @@ DEFAULT_SKILLS_CONFIG = "default_config.yaml"
 
 CONTEXT_FILE = "context.yaml"
 SHIPPED_DEFAULT_CONFIG = "Star Citizen"
+FALLBACK_CONFIG = "General"
+"""Takes over when the default config is gone, so deleting Star Citizen lands
+on General and not on whichever shipped config sorts first."""
 
 
 _WINGMAN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 -]*$")
@@ -291,6 +294,11 @@ class ConfigManager:
                 del self.context_state.deleted_template_wingmen[config_name]
             self.save_context_state()
 
+    @staticmethod
+    def _fallback_config(config_dirs: list[ConfigDirInfo]) -> ConfigDirInfo:
+        """General if it is there, otherwise the first config by name."""
+        return next((c for c in config_dirs if c.name == FALLBACK_CONFIG), config_dirs[0])
+
     def find_default_config(self) -> ConfigDirInfo:
         """Find the default config (as stored in the context state) or a fallback."""
         config_dirs = self.get_config_dirs()
@@ -323,7 +331,7 @@ class ConfigManager:
                 return config_dir
 
         # The stored default doesn't exist (anymore) - fall back and self-heal.
-        fallback = config_dirs[0]
+        fallback = self._fallback_config(config_dirs)
         self.printr.print(
             f"Default config '{self.context_state.default_config}' not found. Picking '{fallback.name}' as new default.",
             color=LogType.WARNING,
@@ -733,9 +741,10 @@ class ConfigManager:
         if self.context_state.default_config == config_dir.name:
             remaining = self.get_config_dirs()
             if remaining:
-                self.set_default_config(remaining[0])
+                fallback = self._fallback_config(remaining)
+                self.set_default_config(fallback)
                 self.printr.print(
-                    f"Deleted config {config_dir.name} was the default. Picked a new default config: {remaining[0].name}.",
+                    f"Deleted config {config_dir.name} was the default. Picked a new default config: {fallback.name}.",
                     color=LogType.INFO,
                     server_only=True,
                     source=LogSource.SYSTEM,

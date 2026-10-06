@@ -16,6 +16,10 @@ from services.system_manager import LOCAL_VERSION
 REPO_ROOT = path.dirname(path.dirname(path.abspath(__file__)))
 TEMPLATES = path.join(REPO_ROOT, "templates", "configs")
 FIXTURES = path.join(REPO_ROOT, "tests", "fixtures")
+# The config folders a fresh install gets: General, Star Citizen and so on.
+SHIPPED_CONFIGS = sorted(
+    d for d in os.listdir(TEMPLATES) if path.isdir(path.join(TEMPLATES, d))
+)
 # The config folder name of the version under test, e.g. "3_2_5".
 VERSION_DIR = LOCAL_VERSION.replace(".", "_")
 
@@ -33,6 +37,11 @@ def write_yaml(file_path: str, content) -> None:
 def template(name: str):
     """A file from templates/configs, parsed."""
     return read_yaml(path.join(TEMPLATES, name))
+
+
+def shipped_configs(without=(), plus=()) -> list[str]:
+    """The shipped config folders, minus the ones the user deleted, plus their own."""
+    return sorted((set(SHIPPED_CONFIGS) - set(without)) | set(plus))
 
 
 def config_names(users_dir: str, version_dir: str = VERSION_DIR) -> list[str]:

@@ -81,6 +81,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Control Windows**: Window management operations
   - **MSFS2020 Control**: Microsoft Flight Simulator 2020 integration
   - **ATS Telemetry**: American Truck Simulator data integration
+  - **Elite Dangerous**: reads the journal (ship, cargo, missions, route) and reacts to arrivals, dockings and finished missions
+  - **Elite Dangerous Controls**: turns the game's own key bindings into commands for ship, SRV and on foot
   - **UEX Corp**: Star Citizen trading data (UEX Corp API)
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers

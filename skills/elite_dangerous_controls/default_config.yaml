@@ -1,0 +1,39 @@
+module: skills.elite_dangerous_controls.main
+name: EliteDangerousControls
+api_version: 3
+display_name: Elite Dangerous Controls
+author: S-Foxx
+version: 1.0.0
+auto_activate: true
+discoverable_by_default: false
+platforms:
+  - windows
+tags:
+  - Game
+  - Elite Dangerous
+description:
+  en: Turns your Elite Dangerous key bindings into Wingman commands for ship, SRV and on foot. Say the command name to press the key right away, or just ask your Wingman. When you change a binding in the game, the commands follow.
+  de: Macht aus deiner Elite Dangerous Tastenbelegung Wingman Commands für Schiff, SRV und zu Fuß. Sag den Namen des Commands und die Taste wird sofort gedrückt, oder frag einfach deinen Wingman. Änderst du eine Taste im Spiel, ziehen die Commands nach.
+hint:
+  en: Only keyboard keys work. Controls that are bound to a joystick only get no command. The commands are in the categories Elite Ship, Elite SRV and Elite On Foot. Phrases and responses you add there stay, the keys always follow the game.
+  de: Es zählen nur Tasten auf der Tastatur. Steuerungen, die nur auf einem Joystick liegen, bekommen keinen Command. Die Commands stehen in den Kategorien Elite Ship, Elite SRV und Elite On Foot. Phrasen und Antworten, die du dort ergänzt, bleiben. Die Tasten kommen immer aus dem Spiel.
+discovery_keywords:
+  - elite dangerous
+  - ship controls
+  - landing gear
+  - hardpoints
+  - SRV
+  - on foot
+custom_properties:
+  - id: bindings_directory
+    name: Bindings folder
+    hint: Leave empty to use the folder Elite saves your bindings in.
+    value: ""
+    required: false
+    property_type: string
+  - id: game_directory
+    name: Game folder
+    hint: Only needed if you use one of Elite's built-in control presets and Wingman does not find the game by itself.
+    value: ""
+    required: false
+    property_type: string
