@@ -14,6 +14,8 @@ import json
 import os
 from typing import Optional
 
+from api.enums import TtsVoiceGender
+from api.interface import VoiceInfo
 from services.config_manager import ConfigManager
 from services.printr import Printr
 
@@ -142,6 +144,126 @@ def downgrade_inworld_to_azure(config_manager: ConfigManager) -> list[str]:
     ):
         config_manager.default_config = config_manager.load_defaults_config(silent_on_error=True)
         changed.insert(0, "defaults")
+    return changed
+
+
+def _base_language(language) -> str:
+    """"de-DE", "de_DE" and "DE" all become "de"."""
+    return str(language).replace("_", "-").split("-")[0].strip().lower()
+
+
+def pick_free_voice(
+    requested: Optional[VoiceInfo], free: list[VoiceInfo]
+) -> Optional[VoiceInfo]:
+    """The free voice closest to ``requested``: same language and gender, then
+    same language, then same gender, then simply the first free one."""
+    if not free:
+        return None
+    if requested is None:
+        return free[0]
+    languages = {_base_language(lang) for lang in requested.languages or [] if lang}
+    gender = requested.gender
+
+    def same_language(voice: VoiceInfo) -> bool:
+        return bool(languages) and any(
+            _base_language(lang) in languages for lang in voice.languages or [] if lang
+        )
+
+    def same_gender(voice: VoiceInfo) -> bool:
+        return gender not in (None, TtsVoiceGender.UNKNOWN) and voice.gender == gender
+
+    for matches in (
+        lambda v: same_language(v) and same_gender(v),
+        same_language,
+        same_gender,
+    ):
+        for voice in free:
+            if matches(voice):
+                return voice
+    return free[0]
+
+
+def _subscription_voice(config: dict, defaults: dict) -> tuple[Optional[str], Optional[str]]:
+    """(sub-provider, voice id) a config speaks with through the subscription,
+    or (None, None) when it does not speak through the subscription."""
+    if _effective(config, defaults, "features", "tts_provider") != "wingman_pro":
+        return None, None
+    provider = _effective(config, defaults, "wingman_pro", "tts_provider")
+    if provider == "inworld":
+        return provider, _effective(config, defaults, "inworld", "voice_id")
+    if provider == "azure":
+        own = ((config.get("wingman_pro") or {}).get("azure") or {}).get("voice")
+        inherited = ((defaults.get("wingman_pro") or {}).get("azure") or {}).get("voice")
+        return provider, own if own is not None else inherited
+    return provider, None
+
+
+def _set_subscription_voice(config: dict, provider: str, voice_id: str) -> None:
+    if provider == "inworld":
+        config["inworld"] = {**(config.get("inworld") or {}), "voice_id": voice_id}
+    else:
+        wingman_pro = config.setdefault("wingman_pro", {})
+        wingman_pro["azure"] = {**(wingman_pro.get("azure") or {}), "voice": voice_id}
+
+
+def _replace_locked_voice(
+    config: dict, defaults: dict, voices_by_provider: dict[str, list[VoiceInfo]]
+) -> Optional[str]:
+    """Write a free voice into ``config`` when the subscription voice it speaks
+    with is locked for the plan. Returns "old → new", or None when nothing
+    changed. A voice missing from the list is left alone: the list may be
+    incomplete, and only the backend knows it is locked."""
+    provider, voice_id = _subscription_voice(config, defaults)
+    voices = voices_by_provider.get(provider or "") or []
+    if not voice_id or not voices:
+        return None
+    wanted = str(voice_id).strip().lower()
+    current = next((v for v in voices if (v.id or "").lower() == wanted), None)
+    if current is None or not current.locked:
+        return None
+    replacement = pick_free_voice(current, [v for v in voices if not v.locked and v.id])
+    if replacement is None or replacement.id == voice_id:
+        return None
+    _set_subscription_voice(config, provider, replacement.id)
+    return f"{current.name or current.id} → {replacement.name or replacement.id}"
+
+
+def rewrite_locked_voices(
+    config_manager: ConfigManager, voices_by_provider: dict[str, list[VoiceInfo]]
+) -> list[str]:
+    """Every Wingman that speaks through the subscription with a voice its plan
+    does not include gets the closest free voice written into its config, so
+    the config shows what the backend really plays. ``voices_by_provider`` maps
+    "azure"/"inworld" to the plan's voice list; a missing or empty list skips
+    that provider. Returns "defaults: old → new" / "config/wingman: old → new".
+
+    The defaults go first: a Wingman inheriting their voice is fixed with
+    them. Wingmen are then checked against the fixed defaults, so only those
+    with a locked voice of their own (or a provider the defaults do not use)
+    are written."""
+    changed = []
+    try:
+        defaults = config_manager.read_config(config_manager.default_config_path) or {}
+    except Exception as e:
+        Printr().print(f"Could not read the defaults: {e}", server_only=True)
+        return changed
+
+    change = _replace_locked_voice(defaults, {}, voices_by_provider)
+    if change and config_manager.write_config(config_manager.default_config_path, defaults):
+        config_manager.default_config = config_manager.load_defaults_config(silent_on_error=True)
+        changed.append(f"defaults: {change}")
+
+    for config_dir in config_manager.get_config_dirs():
+        for wingman in config_manager.get_wingmen_configs(config_dir):
+            path = os.path.join(config_manager.config_dir, config_dir.directory, wingman.file)
+            try:
+                config = config_manager.read_config(path) or {}
+            except Exception as e:
+                Printr().print(f"Could not read {path}: {e}", server_only=True)
+                continue
+            change = _replace_locked_voice(config, defaults, voices_by_provider)
+            if change and config_manager.write_config(path, config):
+                changed.append(f"{config_dir.name}/{wingman.name}: {change}")
     return changed
 
 

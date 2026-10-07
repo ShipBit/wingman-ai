@@ -323,7 +323,9 @@ class CommandHandler:
             server_only=True,
         )
 
-        if await self._downgrade_subscription_tts():
+        downgraded = await self._downgrade_subscription_tts()
+        rewritten = await self._rewrite_locked_voices()
+        if downgraded or rewritten:
             # Reloading publishes config_loaded, which initializes the Tower
             # with the rewritten configs.
             await self.core.config_service.load_config(
@@ -354,6 +356,63 @@ class CommandHandler:
             return False
         await self.printr.print_async(
             "Your plan has no Inworld voices, so these Wingmen now speak with Azure: "
+            + ", ".join(changed),
+            color=LogType.INFO,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+        )
+        return True
+
+    async def _fetch_plan_voices(self) -> dict[str, list]:
+        """The subscription's Azure and Inworld voices, `locked` where the plan
+        does not include them. A provider whose list could not be fetched maps
+        to an empty list, which means "leave it alone"."""
+        from providers.wingman_subscription import WingmanSubscription
+
+        # A short timeout: this runs on sign-in, before the Tower starts.
+        subscription = WingmanSubscription(
+            wingman_name="",
+            settings=self.core.config_manager.settings_config.wingman_pro,
+            timeout=10,
+        )
+
+        async def fetch(provider: str, load) -> list:
+            try:
+                return await asyncio.to_thread(load) or []
+            except Exception as e:
+                self.printr.print(
+                    f"Could not fetch the plan's {provider} voices: {e}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                return []
+
+        azure, inworld = await asyncio.gather(
+            fetch("azure", subscription.get_available_azure_voices),
+            fetch("inworld", subscription.get_available_inworld_voices),
+        )
+        return {"azure": azure, "inworld": inworld}
+
+    async def _rewrite_locked_voices(self) -> bool:
+        """A Wingman set to a subscription voice its plan does not include gets
+        the closest free voice in its config, so the config says what the
+        backend really plays. Returns True when a config changed."""
+        from services.wingman_default_voices import rewrite_locked_voices
+
+        try:
+            voices = await self._fetch_plan_voices()
+            changed = rewrite_locked_voices(self.core.config_manager, voices)
+        except Exception as e:
+            self.printr.print(
+                f"Could not replace locked voices: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return False
+        if not changed:
+            return False
+        await self.printr.print_async(
+            "These voices are not in your plan, so the Wingmen now use free ones: "
             + ", ".join(changed),
             color=LogType.INFO,
             source=LogSource.SYSTEM,
