@@ -7,11 +7,12 @@ Three steps, each as far as the providers allow:
    It only turns the input into a name and a code: whether a provider
    supports the language comes from our own data, never from the model.
 2. Check it. Parakeet transcribes 25 languages (the subscription's cloud
-   transcription detects any); Inworld has voices for a language or not,
-   which its voice list says.
+   transcription detects any); Inworld and Azure have voices for a language
+   or not, which their voice lists say.
 3. Switch. Wingmen on Pocket TTS, which has no model for such a language,
-   move to Inworld through the subscription or the user's own key, with a
-   voice in that language. What was switched is noted, and switching back
+   move to Inworld through the subscription or the user's own key, or to
+   Azure through a subscription without Inworld, with a voice in that
+   language. What was switched is noted, and switching back
    to one of the seven languages restores it.
 """
 
@@ -93,28 +94,47 @@ def inworld_speaks(voices: list[VoiceInfo], code: Optional[str]) -> list[VoiceIn
     return [v for v in voices if any((lang or "").lower().split("-")[0] == code for lang in (v.languages or []))]
 
 
+def azure_speaks(voices: list[VoiceInfo], code: Optional[str]) -> list[VoiceInfo]:
+    """Azure voices for the language ``code``, those the plan includes first.
+    A multilingual pair (Jenny and Andrew) covers most languages, so a free
+    plan rarely ends up with a voice the backend has to replace."""
+    speakers = inworld_speaks(voices, code)
+    return [v for v in speakers if not v.locked] or speakers
+
+
 def switch_wingmen(
     config_manager,
     defaults_tts_provider: str,
     language: OtherLanguageSetting,
     provider: str,
     voices: list[VoiceInfo],
+    subprovider: Optional[str] = None,
 ) -> list[str]:
     """Move every Wingman speaking through Pocket TTS to ``provider``
     ("wingman_pro" or "inworld") with one of ``voices``, each Wingman its own
-    where there are enough. Notes what it did for restore_wingmen."""
+    where there are enough. For "wingman_pro", ``subprovider`` says whose
+    voices they are ("inworld", the default, or "azure"). Notes what it did
+    for restore_wingmen."""
     record_path = os.path.join(config_manager.config_dir, RECORD_FILE)
     record = _read(record_path)
     switched = []
+    azure = provider == "wingman_pro" and subprovider == "azure"
     for index, (path, label, config) in enumerate(_pocket_wingmen(config_manager, defaults_tts_provider)):
         voice = voices[index % len(voices)].id
         features = config.setdefault("features", {})
         features["tts_provider"] = provider
-        if provider == "wingman_pro":
-            config.setdefault("wingman_pro", {})["tts_provider"] = "inworld"
-        config.setdefault("inworld", {})["voice_id"] = voice
+        if azure:
+            wingman_pro = config.setdefault("wingman_pro", {})
+            wingman_pro["tts_provider"] = "azure"
+            wingman_pro["azure"] = {**(wingman_pro.get("azure") or {}), "voice": voice}
+        else:
+            if provider == "wingman_pro":
+                config.setdefault("wingman_pro", {})["tts_provider"] = "inworld"
+            config.setdefault("inworld", {})["voice_id"] = voice
         if config_manager.write_config(path, config):
             record[path] = {"voice_id": voice, "provider": provider}
+            if azure:
+                record[path]["subprovider"] = "azure"
             switched.append(label)
     _write(record_path, record)
     return switched
@@ -137,7 +157,11 @@ def restore_wingmen(config_manager) -> list[str]:
         features = config.get("features") or {}
         if features.get("tts_provider") != done["provider"]:
             continue
-        if (config.get("inworld") or {}).get("voice_id") != done["voice_id"]:
+        if done.get("subprovider") == "azure":
+            voice = ((config.get("wingman_pro") or {}).get("azure") or {}).get("voice")
+        else:
+            voice = (config.get("inworld") or {}).get("voice_id")
+        if voice != done["voice_id"]:
             continue
         features["tts_provider"] = "pocket_tts"
         config["features"] = features

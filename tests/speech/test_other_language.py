@@ -75,6 +75,32 @@ def test_switch_and_restore(tmp_path):
     assert not (tmp_path / "configs" / other_language.RECORD_FILE).exists()
 
 
+def test_a_subscription_without_inworld_switches_to_azure_and_back(tmp_path):
+    folder = tmp_path / "configs" / "Star Citizen"
+    folder.mkdir(parents=True)
+    (folder / "ATC.yaml").write_text(yaml.safe_dump({"name": "ATC"}))
+    cm = FakeConfigManager(tmp_path)
+    polish = OtherLanguageSetting(code="pl", name="Polski", english_name="Polish")
+    voices = other_language.azure_speaks(
+        [
+            VoiceInfo(id="pl-PL-MarekNeural", languages=["pl-PL"], locked=True),
+            VoiceInfo(id="en-US-JennyMultilingualNeural", languages=["en-US", "pl-PL"]),
+            VoiceInfo(id="en-US-GuyNeural", languages=["en-US"]),
+        ],
+        "pl",
+    )
+    assert [v.id for v in voices] == ["en-US-JennyMultilingualNeural"]
+
+    switched = other_language.switch_wingmen(cm, "pocket_tts", polish, "wingman_pro", voices, "azure")
+    atc = yaml.safe_load((folder / "ATC.yaml").read_text())
+    assert switched == ["Star Citizen/ATC"]
+    assert atc["wingman_pro"] == {"tts_provider": "azure", "azure": {"voice": "en-US-JennyMultilingualNeural"}}
+    assert "inworld" not in atc
+
+    assert len(other_language.restore_wingmen(cm)) == 1
+    assert yaml.safe_load((folder / "ATC.yaml").read_text())["features"]["tts_provider"] == "pocket_tts"
+
+
 def test_the_report_says_what_works():
     dutch = OtherLanguageSetting(code="nl", name="Nederlands", english_name="Dutch")
     klingon = OtherLanguageSetting(code="tlh", name="tlhIngan Hol", english_name="Klingon")

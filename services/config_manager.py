@@ -67,6 +67,19 @@ def deep_merge_configs(base: dict, override: dict) -> dict:
     return merged
 
 
+def missing_paths(template: dict, config: dict, prefix: str = "") -> list[str]:
+    """Dotted paths of the template's keys ``config`` does not have, the
+    outermost missing one only ("wingman_pro.azure", not its fields)."""
+    missing = []
+    for key, value in template.items():
+        dotted = f"{prefix}{key}"
+        if key not in config:
+            missing.append(dotted)
+        elif isinstance(value, dict) and isinstance(config[key], dict):
+            missing.extend(missing_paths(value, config[key], dotted + "."))
+    return missing
+
+
 class ConfigContextState(BaseModel):
     """State of the user's config directories, stored in configs/context.yaml.
 
@@ -1327,6 +1340,7 @@ class ConfigManager:
         startup still failed on the untouched original.
         """
         config = self.read_config(self.default_config_path)
+        self._backfill_defaults(config)
         config["wingmen"] = {}
         for change in sanitize(NestedConfig, config):
             self.printr.print(
@@ -1337,6 +1351,43 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
         return config
+
+    def _backfill_defaults(self, config: dict) -> None:
+        """Fill what defaults.yaml lacks from the shipped template, in place.
+
+        The migration chain does the same at its end (backfill_from_template),
+        but it only runs when the version changes. A defaults.yaml that is
+        already on the current version and predates a new required field
+        (wingman_pro.azure in 3.2.6) would otherwise fail validation, and with
+        it every Wingman, which inherits from it. User values always win; the
+        filled file is written back so this happens once. Wingman files need
+        no step of their own: what they leave out comes from these defaults.
+        """
+        if not isinstance(config, dict):
+            return
+        template = self.read_template_config(DEFAULT_CONFIG_FILE)
+        missing = missing_paths(template, config)
+        if not missing:
+            return
+        merged = deep_merge_configs(template, config)
+        config.clear()
+        config.update(merged)
+        for dotted in missing:
+            self.printr.print(
+                f"defaults: added missing '{dotted}' from the template",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        try:
+            self.write_config(self.default_config_path, config)
+        except Exception as e:
+            self.printr.print(
+                f"Could not write the repaired defaults: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
 
     def read_config(self, file_path: str):
         """Loads a config file (without validating it)"""

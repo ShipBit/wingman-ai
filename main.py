@@ -90,7 +90,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from api.commands import McpOAuthStateChangedCommand, WebSocketCommandModel
-from api.interface import BenchmarkResult, CoreStatusResponse
+from api.interface import BenchmarkResult, CoreStatusResponse, MachineHash
 from api.enums import ENUM_TYPES, CoreState, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
 from services.command_handler import CommandHandler
@@ -611,6 +611,21 @@ async def get_avatar_image(wingman_name: str, filename: str):
     if not file_path:
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(file_path)
+
+
+_machine_hash: str | None = None
+
+
+@app.get("/system/machine-hash", tags=["main"], response_model=MachineHash)
+async def get_machine_hash():
+    """An anonymous, stable id of this machine for the backend's referral
+    checks. Only the salted hash, never the machine id itself."""
+    global _machine_hash
+    if _machine_hash is None:
+        from services.machine_hash import machine_hash
+
+        _machine_hash = await asyncio.to_thread(machine_hash)
+    return MachineHash(machine_hash=_machine_hash)
 
 
 @app.get("/client/plan", tags=["main"], response_model=str)

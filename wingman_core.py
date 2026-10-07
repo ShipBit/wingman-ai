@@ -71,6 +71,7 @@ from api.interface import (
     PronunciationRule,
     SttTestResult,
     SubscriptionRoutes,
+    SubscriptionTtsModels,
     VocabularyPreset,
     TestConnectionResult,
     VoiceActivationSettings,
@@ -486,6 +487,16 @@ class WingmanCore(WebSocketUser):
             path="/models/wingman-pro/routes",
             response_model=SubscriptionRoutes,
             endpoint=self.get_wingman_routes,
+            tags=tags,
+        )
+
+        # The plan's TTS models (Azure, Inworld), with locks and usage factor,
+        # so the client knows which provider tile to offer.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro/tts",
+            response_model=SubscriptionTtsModels,
+            endpoint=self.get_wingman_tts_models,
             tags=tags,
         )
 
@@ -2163,13 +2174,13 @@ class WingmanCore(WebSocketUser):
             other_language.restore_wingmen(self.config_manager)
         await self.settings_service.save_settings(settings)
 
-        voices, provider = await self._inworld_voices_for(language.code)
+        voices, provider, subprovider = await self._inworld_voices_for(language.code)
         switched = []
         if voices and provider:
             defaults = self.config_manager.load_defaults_config(silent_on_error=True)
             default_tts = defaults.features.tts_provider.value if defaults else "pocket_tts"
             switched = other_language.switch_wingmen(
-                self.config_manager, default_tts, language, provider, voices
+                self.config_manager, default_tts, language, provider, voices, subprovider
             )
             if switched and self.config_service.tower:
                 await self.config_service.load_config()
@@ -2178,10 +2189,11 @@ class WingmanCore(WebSocketUser):
         )
 
     async def _inworld_voices_for(self, code: Optional[str]):
-        """Inworld voices for ``code`` and the provider to reach them through:
-        the subscription when signed in, else the user's own Inworld key."""
+        """Voices for ``code``, the provider to reach them through and, for
+        the subscription, its voice provider: Inworld when the plan has it,
+        else Azure. Without a sign-in, the user's own Inworld key."""
         if not code:
-            return [], None
+            return [], None, None
         try:
             if self.is_client_logged_in:
                 from providers.wingman_subscription import WingmanSubscription
@@ -2189,19 +2201,28 @@ class WingmanCore(WebSocketUser):
                 subscription = WingmanSubscription(
                     wingman_name="system", settings=self.settings_service.settings.wingman_pro
                 )
-                voices = await asyncio.get_running_loop().run_in_executor(
-                    None, subscription.get_available_inworld_voices
+                tts = await self.get_wingman_tts_models()
+                has_inworld = not tts.models or any(
+                    m.provider == "inworld" and m.available for m in tts.models
                 )
-                return other_language.inworld_speaks(voices, code), "wingman_pro"
+                if has_inworld:
+                    voices = await asyncio.get_running_loop().run_in_executor(
+                        None, subscription.get_available_inworld_voices
+                    )
+                    return other_language.inworld_speaks(voices, code), "wingman_pro", "inworld"
+                voices = await asyncio.get_running_loop().run_in_executor(
+                    None, subscription.get_available_azure_voices
+                )
+                return other_language.azure_speaks(voices, code), "wingman_pro", "azure"
             key = SecretKeeper().secrets.get("inworld")
             if key:
                 from providers.inworld import Inworld
 
                 voices = await Inworld(api_key=key, wingman_name="").get_available_voices()
-                return other_language.inworld_speaks(voices, code), "inworld"
+                return other_language.inworld_speaks(voices, code), "inworld", None
         except Exception as e:
-            self.printr.print(f"Could not list Inworld voices: {e}", server_only=True)
-        return [], None
+            self.printr.print(f"Could not list voices: {e}", server_only=True)
+        return [], None, None
 
     # ───────────────── Microphone test (Settings) ───────────────── #
 
@@ -3286,6 +3307,17 @@ class WingmanCore(WebSocketUser):
         except Exception:
             pass
         return SubscriptionRoutes()
+
+    # GET /models/wingman-pro/tts
+    async def get_wingman_tts_models(self) -> SubscriptionTtsModels:
+        """Every TTS model of every plan, `available` for this one. Empty when
+        not signed in or when the backend is unreachable."""
+        from providers.wingman_subscription import tts_models_from
+
+        try:
+            return tts_models_from(await self._fetch_subscription_models())
+        except Exception:
+            return SubscriptionTtsModels()
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:

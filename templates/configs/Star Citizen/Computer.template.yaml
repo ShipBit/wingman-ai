@@ -32,7 +32,10 @@ prompts:
 record_key: end
 is_voice_activation_default: true
 inworld:
-  voice_id: Olivia
+  voice_id: Ashley
+wingman_pro:
+  azure:
+    voice: en-US-JennyMultilingualNeural
 pocket_tts:
   voice: fantine
 command_categories:

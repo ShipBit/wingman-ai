@@ -518,9 +518,11 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.OPENAI:
             voice = self.wingman.config.openai.tts_voice
         elif voice_provider == TtsProvider.WINGMAN_PRO:
-            # The subscription speaks through Inworld only.
             voice_subprovider = self.wingman.config.wingman_pro.tts_provider
-            voice = self.wingman.config.inworld.voice_id
+            if voice_subprovider == WingmanProTtsProvider.AZURE:
+                voice = self.wingman.config.wingman_pro.azure.voice
+            else:
+                voice = self.wingman.config.inworld.voice_id
         elif voice_provider == TtsProvider.INWORLD:
             voice = self.wingman.config.inworld.voice_id
         elif voice_provider == TtsProvider.POCKET_TTS:

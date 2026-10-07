@@ -282,10 +282,13 @@ class RecordingDevice(Enum):
 
 
 class WingmanProTtsProvider(Enum):
-    # One provider since 2026-09-11. OpenAI's voices cost 15 dollars per million
-    # characters against Inworld's 5, and the reason they were kept — Inworld
-    # having two poor German voices — went away when Inworld shipped 17.
+    # Two providers since 3.2.6. Azure is back as the voice every plan has
+    # (15 dollars per million characters), Inworld (5) is in Pro and Ultra.
+    # Which of them a plan may use comes from the backend's /api/v1/models.
+    # Inworld stays first: the sanitizer falls back to the first member when a
+    # stored value is unknown and no template value is at hand.
     INWORLD = "inworld"
+    AZURE = "azure"
 
 
 class McpTransportType(Enum):

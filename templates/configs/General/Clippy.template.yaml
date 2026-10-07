@@ -183,7 +183,7 @@ discoverable_skills:
 - TypingAssistant
 - VisionAI
 inworld:
-  voice_id: Alex
+  voice_id: Edward
 is_voice_activation_default: true
 name: Clippy
 prompts:
@@ -221,3 +221,6 @@ prompts:
 
     '
 record_key: end
+wingman_pro:
+  azure:
+    voice: en-US-AndrewMultilingualNeural

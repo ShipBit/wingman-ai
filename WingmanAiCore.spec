@@ -49,6 +49,10 @@ datas = [
     ('templates/vocabulary', 'templates/vocabulary'),
     ('templates/pronunciation', 'templates/pronunciation'),
     ('templates/pocket_tts', 'templates/pocket_tts'),
+    # Azure voice of each shipped Wingman per spoken language.
+    ('templates/azure', 'templates/azure'),
+    # Inworld voice of each shipped Wingman per spoken language.
+    ('templates/inworld', 'templates/inworld'),
     ('audio_samples', 'audio_samples'),
     # Silero VAD, runs on the onnxruntime that Parakeet already needs.
     ('audio_models', 'audio_models'),

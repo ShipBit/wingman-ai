@@ -168,7 +168,7 @@ hume:
 inworld:
   tts_endpoint: https://api.inworld.ai/tts/v1/voice
   model_id: inworld-tts-2-flash
-  voice_id: Deborah
+  voice_id: Ashley
   temperature: 1.1
   output_streaming: true
   audio_config:
@@ -215,6 +215,10 @@ pocket_tts:
   output_streaming: true
 wingman_pro:
   tts_provider: inworld
+  # Used when tts_provider is azure. Multilingual, so it speaks every language.
+  azure:
+    voice: en-US-JennyMultilingualNeural
+    output_streaming: true
   # Empty means: whatever the plan lists as its default right now.
   conversation_deployment: ''
 commands:
