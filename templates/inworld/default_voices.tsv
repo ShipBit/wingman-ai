@@ -1,0 +1,25 @@
+# Inworld voice (subscription or own key) of each shipped Wingman per spoken
+# language (see services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
+# "legacy" is the voice its template had up to 3.2.5, so a Wingman still on
+# it counts as untouched and moves to the voice of its language.
+# "*" is every language without a row of its own.
+# All voices are the two the Pro plan includes per language: Computer the
+# female one, ATC and Clippy the male one.
+Computer	legacy	Olivia
+Computer	en	Ashley
+Computer	de	Johanna
+Computer	fr	Hélène
+Computer	es	Mercedes
+Computer	*	Ashley
+ATC	legacy	Clive
+ATC	en	Edward
+ATC	de	Matthias
+ATC	fr	Alain
+ATC	es	Alvaro
+ATC	*	Edward
+Clippy	legacy	Alex
+Clippy	en	Edward
+Clippy	de	Matthias
+Clippy	fr	Alain
+Clippy	es	Alvaro
+Clippy	*	Edward

@@ -28,6 +28,17 @@ templates/pocket_tts and templates/azure, read like any current template). Only 
 provider is set for a Wingman: its Azure voice moves to its language at the next
 start, in apply_default_voices, which also records it as a default voice.
 
+Each plan with locked voices includes two per language, one female and one
+male, and the shipped Wingmen now speak with them: Computer the female one, ATC
+and Clippy the male one. Deborah, the defaults' Inworld voice, is locked on Pro,
+so defaults still on it move to Ashley. A shipped Wingman still on the Inworld
+voice its template had (Olivia, Clive, Alex) is left as it is here: at the next
+start apply_default_voices moves it to the voice of the spoken language
+(templates/inworld/default_voices.tsv, "legacy" row) and records it, so it
+keeps following the language. Written here, it would no longer count as a
+default voice. Its Azure counterpart is the same either way: Olivia and Ashley
+give Jenny, Clive, Alex and Edward give Andrew.
+
 Nothing else changes.
 """
 
@@ -101,6 +112,10 @@ GALACTAPEDIA_SERVER = {
     "url": "https://wingman-ai-mcp-servers.wingman-ai.workers.dev/galactapedia/mcp",
     "discoverable_by_default": False,
 }
+
+# The defaults' Inworld voice up to 3.2.5 and the one that replaces it.
+OLD_DEFAULT_INWORLD_VOICE = "Deborah"
+NEW_DEFAULT_INWORLD_VOICE = "Ashley"
 
 NEW_SERVERS = [
     (ELITE_SERVER, "Elite Dangerous"),
@@ -191,6 +206,10 @@ class Migration325To326(BaseMigration):
         return old
 
     def migrate_defaults(self, old: dict) -> dict:
+        inworld = old.get("inworld")
+        if isinstance(inworld, dict) and inworld.get("voice_id") == OLD_DEFAULT_INWORLD_VOICE:
+            old["inworld"] = {**inworld, "voice_id": NEW_DEFAULT_INWORLD_VOICE}
+            self.log(f"- defaults: Inworld voice {OLD_DEFAULT_INWORLD_VOICE} → {NEW_DEFAULT_INWORLD_VOICE}")
         config = self._set_azure_voice(old, "defaults", is_defaults=True)
         # Wingmen are migrated after the defaults (they sit in subfolders) and
         # inherit from them as they were before the switch.

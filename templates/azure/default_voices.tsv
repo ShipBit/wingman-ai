@@ -3,8 +3,8 @@
 # "legacy" is the voice a Wingman had in 3.2.6 before this list, so a Wingman
 # still on it counts as untouched and moves to the voice of its language.
 # "*" is every language without a row of its own: the multilingual voice of
-# the Wingman's gender. All voices are ones the Free plan includes.
-# Computer a woman, ATC and Clippy men, like their Inworld voices.
+# the Wingman's gender. All voices are the two the Free plan includes per
+# language: Computer the female one, ATC and Clippy the male one.
 Computer	legacy	en-US-JennyMultilingualNeural
 Computer	en	en-US-JennyMultilingualNeural
 Computer	de	de-DE-KatjaNeural
@@ -12,10 +12,14 @@ Computer	fr	fr-FR-DeniseNeural
 Computer	es	es-ES-ElviraNeural
 Computer	*	en-US-JennyMultilingualNeural
 ATC	legacy	en-US-AndrewMultilingualNeural
-ATC	en	en-US-GuyNeural
+ATC	en	en-US-AndrewMultilingualNeural
 ATC	de	de-DE-ConradNeural
 ATC	fr	fr-FR-HenriNeural
 ATC	es	es-ES-AlvaroNeural
 ATC	*	en-US-AndrewMultilingualNeural
 Clippy	legacy	en-US-AndrewMultilingualNeural
+Clippy	en	en-US-AndrewMultilingualNeural
+Clippy	de	de-DE-ConradNeural
+Clippy	fr	fr-FR-HenriNeural
+Clippy	es	es-ES-AlvaroNeural
 Clippy	*	en-US-AndrewMultilingualNeural

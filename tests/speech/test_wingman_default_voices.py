@@ -2,11 +2,14 @@
 
 import os
 
+import pytest
 import yaml
 
 from services.wingman_default_voices import (
     AZURE_DEFAULTS_FILE,
     DEFAULTS_FILE,
+    INWORLD_DEFAULTS_FILE,
+    azure_voice_for_inworld,
     apply_default_voices,
     load_default_voices,
 )
@@ -115,17 +118,80 @@ def test_an_azure_voice_the_user_picked_stays_while_the_pocket_voice_moves(tmp_p
     assert (azure(folder, "ATC"), voice(folder, "ATC")) == ("katja", "de-julia")
 
 
-def test_the_shipped_wingmen_have_three_different_azure_voices():
-    voices = [
-        template("Star Citizen/Computer.template.yaml")["wingman_pro"]["azure"]["voice"],
-        template("Star Citizen/ATC.template.yaml")["wingman_pro"]["azure"]["voice"],
-        template("General/Clippy.template.yaml")["wingman_pro"]["azure"]["voice"],
-    ]
-    assert len(set(voices)) == 3
+# ── Inworld voices (subscription or own key) ──
+
+INWORLD_TABLE = "ATC\tlegacy\tClive\nATC\ten\tEdward\nATC\tde\tMatthias\nATC\t*\tEdward\n"
+
+
+def inworld(folder, name):
+    return (yaml.safe_load((folder / f"{name}.yaml").read_text()).get("inworld") or {}).get("voice_id")
+
+
+def test_the_inworld_voice_follows_the_language_and_a_picked_one_stays(tmp_path):
+    app, cm, folder = setup(tmp_path, {
+        "ATC": {"inworld": {"voice_id": "Clive", "temperature": 1.1}},
+        "Clippy": {"inworld": {"voice_id": "Clive"}},
+    })
+    (tmp_path / "app" / os.path.dirname(INWORLD_DEFAULTS_FILE)).mkdir(parents=True)
+    (tmp_path / "app" / INWORLD_DEFAULTS_FILE).write_text(
+        INWORLD_TABLE + "Clippy\tlegacy\tAlex\nClippy\t*\tEdward\n", encoding="utf-8"
+    )
+    apply_default_voices(cm, app, "de")
+    assert inworld(folder, "ATC") == "Matthias"
+    assert yaml.safe_load((folder / "ATC.yaml").read_text())["inworld"]["temperature"] == 1.1
+    # Clive is not Clippy's legacy voice: the user picked it.
+    assert inworld(folder, "Clippy") == "Clive"
+    apply_default_voices(cm, app, "en")
+    assert inworld(folder, "ATC") == "Edward"
+    apply_default_voices(cm, app, "it")
+    assert inworld(folder, "ATC") == "Edward"
+
+
+PLAN_VOICES = {
+    # The two voices each plan with locks includes per language (2026-10-07):
+    # Free for Azure, Pro for Inworld. (female, male)
+    AZURE_DEFAULTS_FILE: {
+        "en": ("en-US-JennyMultilingualNeural", "en-US-AndrewMultilingualNeural"),
+        "de": ("de-DE-KatjaNeural", "de-DE-ConradNeural"),
+        "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
+        "es": ("es-ES-ElviraNeural", "es-ES-AlvaroNeural"),
+    },
+    INWORLD_DEFAULTS_FILE: {
+        "en": ("Ashley", "Edward"),
+        "de": ("Johanna", "Matthias"),
+        "fr": ("Hélène", "Alain"),
+        "es": ("Mercedes", "Alvaro"),
+    },
+}
+
+
+@pytest.mark.parametrize("file, voice_path", [
+    (AZURE_DEFAULTS_FILE, ("wingman_pro", "azure", "voice")),
+    (INWORLD_DEFAULTS_FILE, ("inworld", "voice_id")),
+])
+def test_the_shipped_wingmen_speak_with_the_plan_voices(file, voice_path):
+    """Computer the female voice, ATC and Clippy the male one, in every language."""
+    table = load_default_voices(REPO_ROOT, file)
+    for language, (female, male) in PLAN_VOICES[file].items():
+        assert table["Computer"][language] == female
+        assert table["ATC"][language] == male
+        assert table["Clippy"][language] == male
     # The template's voice is the English row of the table, so an English
     # Wingman is not rewritten on its first start.
-    table = load_default_voices(REPO_ROOT, AZURE_DEFAULTS_FILE)
-    for name, shipped in zip(("Computer", "ATC", "Clippy"), voices):
-        assert (table[name].get("en") or table[name]["*"]) == shipped
-    for language in ("de", "fr", "es"):
-        assert table["Computer"][language] != table["ATC"][language]
+    for name, folder in (("Computer", "Star Citizen"), ("ATC", "Star Citizen"), ("Clippy", "General")):
+        shipped = template(f"{folder}/{name}.template.yaml")
+        for key in voice_path:
+            shipped = shipped[key]
+        assert table[name]["en"] == table[name]["*"] == shipped
+
+
+def test_the_defaults_speak_with_a_voice_pro_includes():
+    assert template("defaults.yaml")["inworld"]["voice_id"] == PLAN_VOICES[INWORLD_DEFAULTS_FILE]["en"][0]
+
+
+def test_the_azure_counterpart_of_each_inworld_default_matches_the_azure_table():
+    azure = load_default_voices(REPO_ROOT, AZURE_DEFAULTS_FILE)
+    inworld_table = load_default_voices(REPO_ROOT, INWORLD_DEFAULTS_FILE)
+    for name in ("Computer", "ATC", "Clippy"):
+        for language in ("en", "de", "fr", "es", "legacy"):
+            assert azure_voice_for_inworld(inworld_table[name][language]) == azure[name][language]

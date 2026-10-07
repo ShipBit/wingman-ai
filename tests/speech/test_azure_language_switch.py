@@ -10,6 +10,7 @@ import yaml
 from services.wingman_default_voices import (
     AZURE_DEFAULTS_FILE,
     DEFAULTS_FILE,
+    INWORLD_DEFAULTS_FILE,
     TEMPLATE_DEFAULTS_FILE,
     apply_default_voices,
     switch_to_azure_for_language,
@@ -41,6 +42,7 @@ def setup(tmp_path, wingmen, defaults=None):
                         "Clippy\tlegacy\talba\nClippy\tde\tde-gaby\nClippy\ten\tciufi\n"),
         (AZURE_DEFAULTS_FILE, "ATC\tlegacy\tandrew\nATC\ten\tguy\nATC\tde\tconrad\nATC\t*\tandrew\n"
                               "Clippy\tlegacy\tandrew\nClippy\t*\tandrew\n"),
+        (INWORLD_DEFAULTS_FILE, "ATC\tlegacy\tClive\nATC\ten\tEdward\nATC\tde\tMatthias\nATC\t*\tEdward\n"),
         (TEMPLATE_DEFAULTS_FILE, yaml.safe_dump(DEFAULTS)),
     ):
         (app / os.path.dirname(file)).mkdir(parents=True, exist_ok=True)
@@ -129,3 +131,16 @@ def test_not_back_to_pocket_for_english_and_not_twice(tmp_path):
     cm.write_config(cm.default_config_path, DEFAULTS)
     assert change_language(cm, app, "fr") == []
     assert tts(read(folder, "ATC"))[0] == "pocket_tts"
+
+
+def test_the_inworld_voice_moves_with_the_language_too(tmp_path):
+    """A Wingman on Inworld (subscription or own key) is not moved to Azure,
+    but its default Inworld voice follows the language."""
+    app, cm, folder = setup(tmp_path, {
+        "ATC": {"features": {"tts_provider": "inworld"}, "inworld": {"voice_id": "Clive"}},
+    })
+    change_language(cm, app, "de")
+    atc = read(folder, "ATC")
+    assert (atc["features"]["tts_provider"], atc["inworld"]["voice_id"]) == ("inworld", "Matthias")
+    change_language(cm, app, "en")
+    assert read(folder, "ATC")["inworld"]["voice_id"] == "Edward"

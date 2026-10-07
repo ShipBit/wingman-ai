@@ -10,7 +10,9 @@ user picked is never replaced, even one that is another language's default.
 
 The subscription's Azure voice follows the language the same way, from
 templates/azure/default_voices.tsv (same format, plus a "*" row per Wingman
-for every language without one) and its own record, AZURE_RECORD_FILE.
+for every language without one) and its own record, AZURE_RECORD_FILE. So
+does the Inworld voice, from templates/inworld/default_voices.tsv and
+INWORLD_RECORD_FILE; the subscription and an own Inworld key share it.
 
 Pocket TTS stays the default for English. For every other language a Wingman
 still on Pocket TTS with a default voice moves to the subscription's Azure
@@ -35,6 +37,9 @@ RECORD_FILE = ".default_voices.json"
 AZURE_DEFAULTS_FILE = os.path.join("templates", "azure", "default_voices.tsv")
 AZURE_RECORD_FILE = ".default_azure_voices.json"
 """In the configs folder: the Azure voice Wingman last gave each Wingman."""
+INWORLD_DEFAULTS_FILE = os.path.join("templates", "inworld", "default_voices.tsv")
+INWORLD_RECORD_FILE = ".default_inworld_voices.json"
+"""In the configs folder: the Inworld voice Wingman last gave each Wingman."""
 SWITCH_RECORD_FILE = ".azure_language_switch.json"
 """In the configs folder: what switch_to_azure_for_language moved to Azure,
 so a Wingman the user puts back on Pocket TTS is not moved a second time."""
@@ -46,6 +51,7 @@ TTS_PROVIDER = ("features", "tts_provider")
 SUBSCRIPTION_TTS_PROVIDER = ("wingman_pro", "tts_provider")
 POCKET_VOICE = ("pocket_tts", "voice")
 AZURE_VOICE = ("wingman_pro", "azure", "voice")
+INWORLD_VOICE = ("inworld", "voice_id")
 
 
 # The subscription's Azure voices a plan always includes: one female and one
@@ -293,7 +299,7 @@ def rewrite_locked_voices(
 
 def load_default_voices(app_root: str, file: str = DEFAULTS_FILE) -> dict[str, dict[str, str]]:
     """{wingman file name: {language: voice}} from ``file`` (Pocket TTS by
-    default, AZURE_DEFAULTS_FILE for Azure)."""
+    default, AZURE_DEFAULTS_FILE or INWORLD_DEFAULTS_FILE for the others)."""
     path = os.path.join(app_root, file)
     table: dict[str, dict[str, str]] = {}
     if not os.path.isfile(path):
@@ -340,11 +346,13 @@ def _set(config: dict, keys: tuple, value) -> None:
 
 def apply_default_voices(config_manager: ConfigManager, app_root: str, language: str) -> list[str]:
     """Give every shipped Wingman that still has a default voice the one for
-    ``language``: its Pocket TTS voice and its subscription Azure voice, each
-    on its own. Returns "config/wingman" of each Wingman changed."""
+    ``language``: its Pocket TTS voice, its subscription Azure voice and its
+    Inworld voice, each on its own. Returns "config/wingman" of each Wingman
+    changed."""
     providers = [
         (POCKET_VOICE, load_default_voices(app_root, DEFAULTS_FILE), RECORD_FILE),
         (AZURE_VOICE, load_default_voices(app_root, AZURE_DEFAULTS_FILE), AZURE_RECORD_FILE),
+        (INWORLD_VOICE, load_default_voices(app_root, INWORLD_DEFAULTS_FILE), INWORLD_RECORD_FILE),
     ]
     records = {
         record_file: _read(os.path.join(config_manager.config_dir, record_file))

@@ -161,3 +161,25 @@ def test_a_voice_of_its_own_keeps_pocket_and_english_users_are_untouched():
     assert defaults["features"]["tts_provider"] == "pocket_tts"
     atc = english.migrate_wingman(shipped("ATC", "Star Citizen"))
     assert "features" not in atc or "tts_provider" not in atc["features"]
+
+
+# ── The defaults' Inworld voice ──
+
+
+def test_the_defaults_move_from_deborah_to_ashley_and_keep_a_voice_of_their_own():
+    m = migration()
+    out = m.migrate_defaults({"inworld": {"voice_id": "Deborah", "temperature": 1.1}})
+    assert out["inworld"] == {"voice_id": "Ashley", "temperature": 1.1}
+    assert out["wingman_pro"]["azure"]["voice"] == "en-US-JennyMultilingualNeural"
+    assert migration().migrate_defaults({"inworld": {"voice_id": "Johanna"}})["inworld"]["voice_id"] == "Johanna"
+
+
+def test_a_legacy_inworld_voice_is_left_for_the_next_start():
+    """apply_default_voices moves it at the next start and records it; written
+    here, it would no longer count as a default voice. Its Azure counterpart
+    is the one of the new default already."""
+    out = migration().migrate_wingman(
+        {"name": "ATC", "features": {"tts_provider": "wingman_pro"}, "inworld": {"voice_id": "Clive"}}
+    )
+    assert out["inworld"]["voice_id"] == "Clive"
+    assert out["wingman_pro"]["azure"]["voice"] == "en-US-AndrewMultilingualNeural"
