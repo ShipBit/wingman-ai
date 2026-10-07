@@ -22,10 +22,16 @@ RECORD_FILE = ".default_voices.json"
 """In the configs folder: the voice Wingman last gave each Wingman."""
 
 
-# The subscription's Azure voices. Both are multilingual, so one pair covers
-# every language Wingman speaks, and they are the two voices every plan has.
+# The subscription's Azure voices a plan always includes: one female and one
+# male per main market (German, French, Spanish) and the two multilingual
+# ones for everything else. Same list as `plan_voices` for Free (2026-10-07).
 AZURE_FEMALE_VOICE = "en-US-JennyMultilingualNeural"
 AZURE_MALE_VOICE = "en-US-AndrewMultilingualNeural"
+AZURE_VOICES_BY_LANGUAGE = {
+    "de": ("de-DE-KatjaNeural", "de-DE-ConradNeural"),
+    "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
+    "es": ("es-ES-ElviraNeural", "es-ES-AlvaroNeural"),
+}
 
 # Male Inworld voices, lowercased. Inworld names carry no gender, so it is
 # looked up here; a name not listed counts as female, like the template default.
@@ -36,15 +42,45 @@ INWORLD_MALE_VOICES = frozenset(
         "matthias", "alain", "mathieu", "etienne", "diego", "miguel", "rafael",
         "gianni", "dmitry", "nikolai", "heitor", "szymon", "wojciech", "erik",
         "lennart", "yichen", "satoshi", "hyunwoo", "seojun",
+        "alvaro",
+        "bastian", "borja", "bruno", "cuauhtemoc", "curro", "fabian", "gonzalo",
+        "hendrik", "ignacio", "inigo", "joaquin", "josef", "kilian", "mateo",
+        "mauricio", "maximiliano", "nacho", "reinhard", "ruben", "salvador", "sergio",
+        "tobias", "étienne",
     }
 )
 
+# Inworld voices made for one of our main markets, lowercased (live list of
+# 2026-10-07). A German Wingman keeps a German voice when it moves to Azure.
+INWORLD_VOICES_BY_LANGUAGE = {
+    "de": frozenset({
+        "annika", "bastian", "birgit", "carina", "fabian", "franziska", "heidi",
+        "heike", "hendrik", "johanna", "josef", "kilian", "matthias", "reinhard",
+        "sabine", "steffi", "tobias",
+    }),
+    "fr": frozenset({
+        "alain", "hélène", "helene", "mathieu", "étienne", "etienne",
+    }),
+    "es": frozenset({
+        "alvaro", "borja", "bruno", "camila", "citlali", "cuauhtemoc", "curro", "diego",
+        "gonzalo", "guadalupe", "ignacio", "inigo", "inmaculada", "itzel", "joaquin",
+        "lupita", "marta", "mateo", "mauricio", "maximiliano", "mayte", "mercedes",
+        "miguel", "nacho", "paloma", "pilar", "rafael", "rocio", "ruben", "salvador",
+        "sergio", "sofia", "ximena", "xochitl",
+    }),
+}
 
-def azure_voice_for_inworld(voice_id: Optional[str]) -> str:
-    """The Azure voice of the same gender as the Inworld voice ``voice_id``."""
-    if voice_id and voice_id.strip().lower() in INWORLD_MALE_VOICES:
-        return AZURE_MALE_VOICE
-    return AZURE_FEMALE_VOICE
+
+def azure_voice_for_inworld(voice_id) -> str:
+    """The Azure voice closest to the Inworld voice ``voice_id``: same language
+    when it is one of our main markets, same gender, Jenny for the unknown."""
+    name = str(voice_id).strip().lower() if voice_id else ""
+    male = name in INWORLD_MALE_VOICES
+    for language, names in INWORLD_VOICES_BY_LANGUAGE.items():
+        if name in names:
+            female_voice, male_voice = AZURE_VOICES_BY_LANGUAGE[language]
+            return male_voice if male else female_voice
+    return AZURE_MALE_VOICE if male else AZURE_FEMALE_VOICE
 
 
 def _effective(config: dict, defaults: dict, section: str, key: str):
@@ -66,8 +102,11 @@ def downgrade_config_to_azure(config: dict, defaults: dict) -> bool:
     wingman_pro = config.setdefault("wingman_pro", {})
     wingman_pro["tts_provider"] = "azure"
     azure = dict(wingman_pro.get("azure") or {})
-    current = azure.get("voice") or ((defaults.get("wingman_pro") or {}).get("azure") or {}).get("voice")
-    if not current or current in (AZURE_FEMALE_VOICE, AZURE_MALE_VOICE):
+    # The 3.2.6 migration already wrote the Azure counterpart of each Wingman's
+    # Inworld voice, and a user may have picked one since; both are kept. Only
+    # a Wingman without a voice of its own gets one derived now, so a male
+    # Wingman inheriting the defaults does not end up with the defaults' Jenny.
+    if not azure.get("voice"):
         azure["voice"] = azure_voice_for_inworld(_effective(config, defaults, "inworld", "voice_id"))
     wingman_pro["azure"] = azure
     return True

@@ -94,3 +94,12 @@ def test_an_azure_voice_already_set_is_kept():
     config = {"name": "C", "features": {"tts_provider": "wingman_pro"}, "inworld": {"voice_id": "Clive"},
               "wingman_pro": {"azure": {"voice": "de-DE-KatjaNeural"}}}
     assert migration().migrate_wingman(config)["wingman_pro"]["azure"]["voice"] == "de-DE-KatjaNeural"
+
+
+def test_a_german_inworld_voice_gets_a_german_azure_voice():
+    from services.migrations.migration_325_to_326 import azure_voice_for_inworld
+
+    assert azure_voice_for_inworld("Johanna") == "de-DE-KatjaNeural"
+    assert azure_voice_for_inworld("Matthias") == "de-DE-ConradNeural"
+    assert azure_voice_for_inworld("Alain") == "fr-FR-HenriNeural"
+    assert azure_voice_for_inworld("Mercedes") == "es-ES-ElviraNeural"

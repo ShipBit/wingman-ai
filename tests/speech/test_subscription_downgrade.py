@@ -129,3 +129,17 @@ def test_sign_in_rewrites_only_for_a_plan_without_inworld(tmp_path):
     assert asyncio.run(free._downgrade_subscription_tts()) is True
     assert read(folder, "ATC")["wingman_pro"]["tts_provider"] == "azure"
     assert len(free_lines) == 1 and "Star Citizen/ATC" in free_lines[0]
+
+
+def test_a_voice_of_a_main_market_keeps_its_language():
+    from services.wingman_default_voices import azure_voice_for_inworld
+
+    assert azure_voice_for_inworld("Johanna") == "de-DE-KatjaNeural"
+    assert azure_voice_for_inworld("Matthias") == "de-DE-ConradNeural"
+    assert azure_voice_for_inworld("Hélène") == "fr-FR-DeniseNeural"
+    assert azure_voice_for_inworld("Alain") == "fr-FR-HenriNeural"
+    assert azure_voice_for_inworld("Mercedes") == "es-ES-ElviraNeural"
+    assert azure_voice_for_inworld("Alvaro") == "es-ES-AlvaroNeural"
+    # English and unknown names: the multilingual pair, by gender.
+    assert azure_voice_for_inworld("Clive") == "en-US-AndrewMultilingualNeural"
+    assert azure_voice_for_inworld("Nobody") == "en-US-JennyMultilingualNeural"

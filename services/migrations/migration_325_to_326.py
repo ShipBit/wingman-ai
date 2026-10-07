@@ -86,6 +86,14 @@ NEW_SERVERS = [
 # migration gives the same result whatever that file says later.
 AZURE_FEMALE_VOICE = "en-US-JennyMultilingualNeural"
 AZURE_MALE_VOICE = "en-US-AndrewMultilingualNeural"
+AZURE_VOICES_BY_LANGUAGE = {
+    "de": ("de-DE-KatjaNeural", "de-DE-ConradNeural"),
+    "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
+    "es": ("es-ES-ElviraNeural", "es-ES-AlvaroNeural"),
+}
+
+# Male Inworld voices, lowercased. Inworld names carry no gender, so it is
+# looked up here; a name not listed counts as female, like the template default.
 INWORLD_MALE_VOICES = frozenset(
     {
         "alex", "blake", "carter", "clive", "craig", "dennis", "dominus",
@@ -93,15 +101,45 @@ INWORLD_MALE_VOICES = frozenset(
         "matthias", "alain", "mathieu", "etienne", "diego", "miguel", "rafael",
         "gianni", "dmitry", "nikolai", "heitor", "szymon", "wojciech", "erik",
         "lennart", "yichen", "satoshi", "hyunwoo", "seojun",
+        "alvaro",
+        "bastian", "borja", "bruno", "cuauhtemoc", "curro", "fabian", "gonzalo",
+        "hendrik", "ignacio", "inigo", "joaquin", "josef", "kilian", "mateo",
+        "mauricio", "maximiliano", "nacho", "reinhard", "ruben", "salvador", "sergio",
+        "tobias", "étienne",
     }
 )
 
+# Inworld voices made for one of our main markets, lowercased (live list of
+# 2026-10-07). A German Wingman keeps a German voice when it moves to Azure.
+INWORLD_VOICES_BY_LANGUAGE = {
+    "de": frozenset({
+        "annika", "bastian", "birgit", "carina", "fabian", "franziska", "heidi",
+        "heike", "hendrik", "johanna", "josef", "kilian", "matthias", "reinhard",
+        "sabine", "steffi", "tobias",
+    }),
+    "fr": frozenset({
+        "alain", "hélène", "helene", "mathieu", "étienne", "etienne",
+    }),
+    "es": frozenset({
+        "alvaro", "borja", "bruno", "camila", "citlali", "cuauhtemoc", "curro", "diego",
+        "gonzalo", "guadalupe", "ignacio", "inigo", "inmaculada", "itzel", "joaquin",
+        "lupita", "marta", "mateo", "mauricio", "maximiliano", "mayte", "mercedes",
+        "miguel", "nacho", "paloma", "pilar", "rafael", "rocio", "ruben", "salvador",
+        "sergio", "sofia", "ximena", "xochitl",
+    }),
+}
+
 
 def azure_voice_for_inworld(voice_id) -> str:
-    """Andrew for a male Inworld voice, Jenny for a female or unknown one."""
-    if voice_id and str(voice_id).strip().lower() in INWORLD_MALE_VOICES:
-        return AZURE_MALE_VOICE
-    return AZURE_FEMALE_VOICE
+    """The Azure voice closest to the Inworld voice ``voice_id``: same language
+    when it is one of our main markets, same gender, Jenny for the unknown."""
+    name = str(voice_id).strip().lower() if voice_id else ""
+    male = name in INWORLD_MALE_VOICES
+    for language, names in INWORLD_VOICES_BY_LANGUAGE.items():
+        if name in names:
+            female_voice, male_voice = AZURE_VOICES_BY_LANGUAGE[language]
+            return male_voice if male else female_voice
+    return AZURE_MALE_VOICE if male else AZURE_FEMALE_VOICE
 
 
 class Migration325To326(BaseMigration):
