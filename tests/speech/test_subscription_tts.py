@@ -199,12 +199,13 @@ def test_voice_lists_carry_gender_locale_and_lock(backend):
     backend.responses.append(FakeResponse(body={"voices": [
         {"voiceId": "en-US-JennyMultilingualNeural", "displayName": "Jenny Multilingual",
          "localName": "Jenny Multilingual", "locale": "en-US", "gender": "Female",
-         "languages": ["en-US", "de-DE"], "locked": False},
+         "languages": ["en-US", "de-DE"], "locked": False, "description": "Friendly, Positive"},
         {"voiceId": "de-DE-ConradNeural", "displayName": "Conrad", "localName": "Conrad",
          "locale": "de-DE", "gender": "Male", "languages": ["de-DE"], "locked": True},
     ]}))
     backend.responses.append(FakeResponse(body={"voices": [
-        {"voiceId": "Ashley", "displayName": "Ashley", "locale": "", "gender": "Robot", "languages": ["en"]},
+        {"voiceId": "Ashley", "displayName": "Ashley", "locale": "", "gender": "Robot", "languages": ["en"],
+         "description": "A warm, natural female voice"},
     ]}))
     ws = subscription()
 
@@ -217,6 +218,9 @@ def test_voice_lists_carry_gender_locale_and_lock(backend):
         ("de-DE-ConradNeural", TtsVoiceGender.MALE, "de-DE", True),
     ]
     assert azure[0].languages == ["en-US", "de-DE"]
+    # The description comes through for both providers; an empty one is None.
+    assert (azure[0].description, azure[1].description) == ("Friendly, Positive", None)
+    assert inworld[0].description == "A warm, natural female voice"
     # An unknown gender and a missing lock are tolerated.
     assert (inworld[0].gender, inworld[0].locale, inworld[0].locked) == (TtsVoiceGender.UNKNOWN, None, False)
 

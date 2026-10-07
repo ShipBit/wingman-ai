@@ -505,6 +505,9 @@ class WingmanSubscription:
                     locale=voice.get("locale") or None,
                     languages=voice.get("languages", []),
                     provider=provider,
+                    # One sentence from Inworld, the personality words from
+                    # Azure. The picker shows it and searches in it.
+                    description=voice.get("description") or None,
                     locked=bool(voice.get("locked", False)),
                 )
             )
