@@ -11,7 +11,7 @@ from services.migrations.migration_325_to_326 import (
     GALACTAPEDIA_SERVER,
     Migration325To326,
 )
-from tests.support import template
+from tests.support import REPO_ROOT, template
 
 
 def migration():
@@ -103,3 +103,61 @@ def test_a_german_inworld_voice_gets_a_german_azure_voice():
     assert azure_voice_for_inworld("Matthias") == "de-DE-ConradNeural"
     assert azure_voice_for_inworld("Alain") == "fr-FR-HenriNeural"
     assert azure_voice_for_inworld("Mercedes") == "es-ES-ElviraNeural"
+
+
+# ── Azure instead of Pocket TTS for a spoken language other than English ──
+
+
+POCKET_DEFAULTS = {
+    "features": {"tts_provider": "pocket_tts"},
+    "pocket_tts": {"voice": "alba"},
+    "inworld": {"voice_id": "Deborah"},
+    "wingman_pro": {"tts_provider": "inworld"},
+}
+
+
+def migration_in(language):
+    service = MagicMock()
+    service.templates_dir = f"{REPO_ROOT}/templates"
+    service.config_manager.read_config.side_effect = lambda file: (
+        {"spoken_language": language} if file.endswith("settings.yaml") else template("defaults.yaml")
+    )
+    return Migration325To326(service)
+
+
+def shipped(name, folder):
+    config = template(f"{folder}/{name}.template.yaml")
+    config.pop("wingman_pro", None)  # 3.2.5 had no Azure voice in the template
+    return config
+
+
+def test_german_users_move_from_pocket_to_azure():
+    m = migration_in("de")
+    defaults = m.migrate_defaults(dict(POCKET_DEFAULTS))
+    assert defaults["features"]["tts_provider"] == "wingman_pro"
+    assert defaults["wingman_pro"]["tts_provider"] == "azure"
+    assert defaults["wingman_pro"]["azure"]["voice"] == "de-DE-KatjaNeural"
+    # A shipped Wingman on the German default voice switches; its Azure voice
+    # follows the language at the next start (apply_default_voices).
+    atc = shipped("ATC", "Star Citizen")
+    atc["pocket_tts"]["voice"] = "de-julia"
+    atc = m.migrate_wingman(atc)
+    assert atc["features"]["tts_provider"] == "wingman_pro"
+    assert atc["wingman_pro"]["tts_provider"] == "azure"
+    assert atc["wingman_pro"]["azure"]["voice"] == "en-US-AndrewMultilingualNeural"
+    clippy = m.migrate_wingman(shipped("Clippy", "General"))
+    assert clippy["features"]["tts_provider"] == "wingman_pro"
+
+
+def test_a_voice_of_its_own_keeps_pocket_and_english_users_are_untouched():
+    m = migration_in("de")
+    m.migrate_defaults(dict(POCKET_DEFAULTS))
+    computer = shipped("Computer", "Star Citizen")
+    computer["pocket_tts"]["voice"] = "eponine"
+    assert m.migrate_wingman(computer)["features"]["tts_provider"] == "pocket_tts"
+
+    english = migration_in("en")
+    defaults = english.migrate_defaults(dict(POCKET_DEFAULTS))
+    assert defaults["features"]["tts_provider"] == "pocket_tts"
+    atc = english.migrate_wingman(shipped("ATC", "Star Citizen"))
+    assert "features" not in atc or "tts_provider" not in atc["features"]

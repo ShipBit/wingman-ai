@@ -33,7 +33,7 @@ inworld:
   voice_id: Clive
 wingman_pro:
   azure:
-    voice: en-US-AndrewMultilingualNeural
+    voice: en-US-GuyNeural
 pocket_tts:
   voice: azelma
 sound:

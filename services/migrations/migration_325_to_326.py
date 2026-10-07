@@ -17,10 +17,35 @@ an Inworld voice of its own, gets the Azure voice of its Inworld voice's gender:
 Andrew for a male one, Jenny otherwise. It is only used once the Wingman is switched
 to Azure, by the user or by Core when the plan has no Inworld. Nobody is switched here.
 
+Pocket TTS stays the default for English only. A user whose spoken language is
+another one gets the subscription's Azure instead: the defaults, when they still
+speak through Pocket TTS with the template's voice, and every shipped Wingman still
+on Pocket TTS with a default voice move to `wingman_pro` / `azure`. A Wingman with a
+Pocket voice of its own keeps it (pinned to `pocket_tts` when the defaults move), one
+on another provider is left alone, English users are untouched. The rules and the
+voice tables are shared with the settings switch (services/wingman_default_voices.py,
+templates/pocket_tts and templates/azure, read like any current template). Only the
+provider is set for a Wingman: its Azure voice moves to its language at the next
+start, in apply_default_voices, which also records it as a default voice.
+
 Nothing else changes.
 """
 
+import copy
+import os
+
+from services.file import get_users_dir
 from services.migrations.base_migration import BaseMigration
+from services.wingman_default_voices import (
+    DEFAULTS_FILE,
+    TEMPLATE_DEFAULTS_FILE,
+    default_voice_for,
+    is_default_voice,
+    load_default_voices,
+    moves_to_azure,
+    switch_defaults_to_azure,
+    switch_wingman_to_azure,
+)
 
 # Kept in step with templates/configs/mcp.template.yaml, like the ElevenLabs
 # entry in migration_320_to_321: a migration must produce the same config every
@@ -166,10 +191,69 @@ class Migration325To326(BaseMigration):
         return old
 
     def migrate_defaults(self, old: dict) -> dict:
-        return self._set_azure_voice(old, "defaults", is_defaults=True)
+        config = self._set_azure_voice(old, "defaults", is_defaults=True)
+        # Wingmen are migrated after the defaults (they sit in subfolders) and
+        # inherit from them as they were before the switch.
+        self._old_defaults = copy.deepcopy(config)
+        self._defaults_on_pocket = (config.get("features") or {}).get("tts_provider") == "pocket_tts"
+        self._defaults_switched = False
+        language = self._spoken_language()
+        if self._defaults_on_pocket and moves_to_azure(language):
+            template = self.service.config_manager.read_config(
+                os.path.join(self._app_root(), TEMPLATE_DEFAULTS_FILE)
+            )
+            self._defaults_switched = switch_defaults_to_azure(
+                config, template if isinstance(template, dict) else {}, language
+            )
+            if self._defaults_switched:
+                self.log(f"- defaults: Azure voices for spoken language {language}")
+        return config
 
     def migrate_wingman(self, old: dict) -> dict:
-        return self._set_azure_voice(old, old.get("name", "wingman"), is_defaults=False)
+        name = old.get("name", "wingman")
+        config = self._set_azure_voice(old, name, is_defaults=False)
+        language = self._spoken_language()
+        if not getattr(self, "_defaults_on_pocket", False) or not moves_to_azure(language):
+            return config
+        table = self._pocket_table()
+        voices = table.get(name)
+        default_pocket = bool(voices) and is_default_voice(
+            (config.get("pocket_tts") or {}).get("voice"),
+            voices,
+            # Wingman gave it this voice at every start since 3.2.4.
+            default_voice_for(table, name, language),
+        )
+        result = switch_wingman_to_azure(
+            config, self._old_defaults, self._defaults_switched, default_pocket, None
+        )
+        if result == "switched":
+            self.log(f"- {name}: Azure voice for spoken language {language}")
+        elif result == "kept":
+            self.log(f"- {name}: keeps its own voice")
+        return config
+
+    def _spoken_language(self) -> str:
+        """settings.spoken_language of the version migrated from, "en" when unset."""
+        if not hasattr(self, "_language"):
+            language = "en"
+            try:
+                settings = self.service.config_manager.read_config(
+                    os.path.join(get_users_dir(), self.old_version, "configs", "settings.yaml")
+                )
+                if isinstance(settings, dict) and isinstance(settings.get("spoken_language"), str):
+                    language = settings["spoken_language"]
+            except Exception as e:
+                self.log_warning(f"Could not read the spoken language: {e}")
+            self._language = language
+        return self._language
+
+    def _app_root(self) -> str:
+        return os.path.dirname(os.path.normpath(self.templates_dir))
+
+    def _pocket_table(self) -> dict:
+        if not hasattr(self, "_pocket_voices"):
+            self._pocket_voices = load_default_voices(self._app_root(), DEFAULTS_FILE)
+        return self._pocket_voices
 
     def _set_azure_voice(self, config: dict, label: str, is_defaults: bool) -> dict:
         """Give the config the Azure voice of its Inworld voice's gender."""
