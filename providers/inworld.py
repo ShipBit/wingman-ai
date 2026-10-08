@@ -261,7 +261,7 @@ class Inworld:
         voices: list[VoiceInfo] = []
         params = None
         if filter_language:
-            params = {"filter": f"language={filter}"}
+            params = {"filter": f"language={filter_language}"}
 
         response = requests.get(
             "https://api.inworld.ai/tts/v1/voices",
