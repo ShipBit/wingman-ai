@@ -37,25 +37,20 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - Perplexity
   - X.AI (Grok)
   - Local LLM (any OpenAI-compatible API)
-  - Wingman Subscription (optional)
-    - Pro: unlimited access to gpt-4.1-mini, Azure TTS and OpenAI TTS
-    - Ultra: everything in Pro, plus additional unlimited access to Inworld TTS
+  - Wingman Subscription (optional, Free, Pro or Ultra): chat models, speech recognition, Azure and Inworld speech and image generation through one account, no API keys. The plans differ in monthly usage (1x, 10x, 30x), in the voices they include and in Voice Activation.
 - **Speech-to-text providers** (STT) for transcription:
-  - FasterWhisper (local, default - bundled with CUDA for GPU acceleration)
-  - whispercpp (local, needs to be installed separately)
-  - Azure Whisper
-  - Azure Speech
-  - OpenAI Whisper
-  - Wingman Pro (Azure Speech or Azure Whisper)
+  - Parakeet (local, default - bundled with CUDA for GPU acceleration)
+  - Parakeet on a remote server
+  - Wingman Subscription (cloud)
 - **Text-to-speech** (TTS) providers:
   - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
-  - Azure TTS
   - Edge TTS (free)
   - Elevenlabs
   - Hume
-  - Inworld
+  - Inworld (own key, or through the Wingman Subscription on Pro and Ultra)
+  - Azure TTS (through the Wingman Subscription, every plan)
 - **Sound effects** that work with every supported TTS provider
 - **Audio markups (aka "emotions")** that work with every supported TTS provider
 - **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
@@ -85,8 +80,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers
   - Supports HTTP, STDIO, and SSE transports
-  - **Ultra Subscribers** get access to premium MCP servers:
-    - **Web Search & Content Extraction**: Brave and Tavily search (no API key needed - proxied for Wingman Ultra subs)
+  - **Every subscription plan** gets access to our hosted MCP servers:
+    - **Web Search & Content Extraction**: Brave and Tavily search (no API key needed - proxied for subscribers)
     - **Date & Time Utilities**: Time zone conversions and date calculations
     - **Perplexity AI Search**: AI-powered search (BYOK - bring your own API key)
     - **No Man's Sky Game Data**: Game information and wiki data
@@ -129,7 +124,7 @@ If you're not a developer, you can start with pre-built Wingmen from us or from 
 
 ## Providers & cost
 
-Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we are offering "Wingman Pro" which is a subscription-based service with a flat fee for all the AI providers you need (and additional GUI features). This way, you won't have to worry about intransparent "pay-per-use" costs.
+Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we offer the Wingman Subscription: one account for chat models, speech recognition, speech output and image generation, with a monthly usage allowance instead of pay-per-use bills. Free gives you a taste, Pro has 10x the usage of Free, Ultra 30x. Pro and Ultra add Voice Activation and more voices; Ultra includes every voice. Invite a friend and you both get a Usage Reset when they subscribe.
 
 Check out the pricing and features here: [Wingman AI Pro](https://www.wingman-ai.com)
 
@@ -163,7 +158,7 @@ Signing up is very similar to OpenAI: Create your account, set up your payment m
 
 #### Inworld
 
-Inworld is a powerful and affordable alternative to ElevenLabs that's **included in Wingman Ultra** subscriptions. It offers high-quality text-to-speech with advanced features like **audio markups for emotions** (anger, joy, sadness, etc.), allowing your Wingmen to speak with dynamic emotional expression.
+Inworld is a powerful and affordable alternative to ElevenLabs that's **included in the Wingman Subscription**: Pro gets two Inworld voices per language, Ultra gets all of them. It offers high-quality text-to-speech with advanced features like **audio markups for emotions** (anger, joy, sadness, etc.), allowing your Wingmen to speak with dynamic emotional expression.
 
 Inworld also supports **voice cloning** when you bring your own API key (BYOK). With significantly lower pricing than ElevenLabs, Inworld is an excellent choice for users who want professional-quality TTS without breaking the bank.
 
@@ -347,7 +342,6 @@ Thank you so much for your support. We really appreciate it!
 Wingman makes use of other Open Source projects internally (without modifying them in any way).
 We would like to thank their creators for their great work and contributions to the Open Source community.
 
-- [azure-cognitiveservices-speech](https://learn.microsoft.com/en-GB/azure/ai-services/speech-service/) - Proprietary license, Microsoft
 - [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
 - [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2018 The Python Packaging Authority
 - [FastAPI](https://github.com/tiangolo/fastapi) - MIT, © 2018 Sebastián Ramírez
