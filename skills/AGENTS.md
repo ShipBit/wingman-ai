@@ -261,6 +261,7 @@ but you may only **change** things through sanctioned capabilities. Writing to c
 
 # CHANGE (sanctioned capabilities only):
 await self.wingman.tts.set_voice(voice)                 # voice on the CURRENT provider (no switching)
+await self.wingman.tts.missing_voices(voices)          # voices the provider lacks (deleted Pocket TTS files)
 await self.wingman.tts.speak(text, interrupt=True)      # say text; interrupt=False waits for current playback
 self.wingman.audio.is_playing                           # read playback state
 await self.wingman.audio.play(cfg) / .stop(cfg)         # play/stop your own audio

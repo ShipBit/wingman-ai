@@ -1227,7 +1227,9 @@ class PocketTTS:
                     )
 
         except Exception as e:
-            self.printr.toast_error(f"PocketTTS Synthesis failed: {str(e)}")
+            self.printr.toast_error(
+                f"PocketTTS Synthesis failed for {wingman_name}: {str(e)}"
+            )
             self.printr.print(f"PocketTTS Generation failed: {e}", color=LogType.ERROR)
 
     async def _generate_and_play(

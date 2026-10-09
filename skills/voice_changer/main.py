@@ -28,6 +28,7 @@ class VoiceChanger(Skill):
         self.context_personality = ""
         self.context_personality_next = ""
         self.active = False
+        self.reported_missing_voices: set[str] = set()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -142,6 +143,7 @@ class VoiceChanger(Skill):
         # Only voices for the active provider are usable (no cross-provider switching).
         current_provider = self.wingman.config.features.tts_provider
         voices = [v for v in voices if v.provider == current_provider]
+        voices = await self._drop_missing_voices(voices)
         if not voices:
             return "No configured voice matches the current TTS provider."
 
@@ -152,6 +154,22 @@ class VoiceChanger(Skill):
         voice_setting = voices[index]
 
         return await self.wingman.tts.set_voice(voice_setting.voice)
+
+    async def _drop_missing_voices(
+        self, voices: list[VoiceSelection]
+    ) -> list[VoiceSelection]:
+        """Leave out voices the provider no longer has, e.g. a Pocket TTS voice
+        whose file was deleted. Each one is reported once, with the wingman's
+        name, so the user knows which voice list to clean up."""
+        missing = await self.wingman.tts.missing_voices([v.voice for v in voices])
+        for voice in missing:
+            if str(voice) not in self.reported_missing_voices:
+                self.reported_missing_voices.add(str(voice))
+                self.log.warning(
+                    f"{self.wingman.name} skips the voice '{voice}': it is not one of "
+                    "your voices anymore. Remove it from this skill's voice list."
+                )
+        return [v for v in voices if v.voice not in missing]
 
     async def _switch_personality(self) -> str:
         # if no next context is available, generate a new one

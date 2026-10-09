@@ -86,6 +86,43 @@ def test_a_voice_is_applied_to_the_subscriptions_voice_provider():
     assert inworld.inworld.output_streaming is False
 
 
+def _pocket_wingman(voice_ids):
+    pocket = SimpleNamespace(
+        get_available_voices=AsyncMock(
+            return_value=[SimpleNamespace(id=v) for v in voice_ids]
+        )
+    )
+    return SimpleNamespace(
+        config=SimpleNamespace(
+            features=SimpleNamespace(tts_provider=TtsProvider.POCKET_TTS),
+            pocket_tts=SimpleNamespace(voice="alba"),
+        ),
+        tts=SimpleNamespace(),
+        _shared_providers={"pocket_tts": pocket},
+    )
+
+
+def test_a_pocket_tts_voice_without_its_file_is_missing():
+    tts = facade.SkillTts(_pocket_wingman(["alba", "moxxi1"]))
+
+    assert [v.id for v in _run(tts.voices())] == ["alba", "moxxi1"]
+    assert _run(tts.missing_voices(["alba", "moxxi", "moxxi1"])) == ["moxxi"]
+
+
+def test_a_missing_voice_is_not_set():
+    wingman = _pocket_wingman(["alba"])
+
+    result = _run(facade.SkillTts(wingman).set_voice("Fabieng"))
+
+    assert "Fabieng" in result
+    assert wingman.config.pocket_tts.voice == "alba"
+
+
+def test_other_providers_have_no_missing_voices():
+    tts = facade.SkillTts(SimpleNamespace(config=_subscription_config(WingmanProTtsProvider.INWORLD)))
+    assert _run(tts.missing_voices(["Fabieng"])) == []
+
+
 def test_categories_are_saved_with_the_commands(tmp_path, monkeypatch):
     from services.config_manager import ConfigManager
 
