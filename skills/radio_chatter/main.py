@@ -42,6 +42,7 @@ class RadioChatter(Skill):
         self.loaded = False
         # Bumped on every start/stop so an older chatter loop notices it was replaced
         self.run_id = 0
+        self.reported_missing_voices: set[str] = set()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -368,7 +369,7 @@ class RadioChatter(Skill):
 
             clean_messages.append(message)
 
-        voices = self._get_voices()
+        voices = await self._drop_missing_voices(self._get_voices())
         if not voices:
             return
 
@@ -448,6 +449,22 @@ class RadioChatter(Skill):
 
         while self.wingman.audio.is_playing:
             time.sleep(1)  # stay in function call until last message got played
+
+    async def _drop_missing_voices(
+        self, voices: list[VoiceSelection]
+    ) -> list[VoiceSelection]:
+        """Leave out voices the provider no longer has, e.g. a Pocket TTS voice
+        whose file was deleted. Each one is reported once, with the wingman's
+        name, so the user knows which voice list to clean up."""
+        missing = await self.wingman.tts.missing_voices([v.voice for v in voices])
+        for voice in missing:
+            if str(voice) not in self.reported_missing_voices:
+                self.reported_missing_voices.add(str(voice))
+                self.log.warning(
+                    f"{self.wingman.name} skips the voice '{voice}': it is not one of "
+                    "your voices anymore. Remove it from this skill's voice list."
+                )
+        return [v for v in voices if v.voice not in missing]
 
     async def _get_random_voice_index(
         self, count: int, voices: list[VoiceSelection]

@@ -1435,7 +1435,8 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | --- | --- |
 | `.voice` | The voice configured on the current provider (read). |
 | `await .voices()` | All voices on the current provider (best-effort; `[]` if not cheaply enumerable). |
-| `await .set_voice(voice, errors=None)` | Set the voice on the **current** provider (no provider switch) and rebuild TTS so it takes effect. Returns a human-readable result string. |
+| `await .missing_voices(voices)` | The voices in the list the current provider doesn't have, e.g. a Pocket TTS voice whose file was deleted. Only Pocket TTS is checked; other providers return `[]`. |
+| `await .set_voice(voice, errors=None)` | Set the voice on the **current** provider (no provider switch) and rebuild TTS so it takes effect. Refuses a voice from `missing_voices`. Returns a human-readable result string. |
 | `await .speak(text, *, interrupt=True, sound_config=None)` | Say text in the wingman's voice. `interrupt=True` (default) cuts off current playback; `interrupt=False` waits for it. `interrupt` is **keyword-only** and inverted from the old `no_interrupt`. |
 
 ### `self.wingman.audio` — playback & devices

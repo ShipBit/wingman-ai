@@ -7,6 +7,7 @@ Skills that legitimately need to change something use a sanctioned capability
 (e.g. ``ctx.tts.set_voice(...)``) instead of mutating config by reference.
 """
 
+import os
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -945,8 +946,10 @@ class SkillTts:
                 pass
 
         # Pocket TTS can enumerate its local voices without a secret/network call.
+        # Its per-wingman adapter has no list; the shared provider does.
         if provider == TtsProvider.POCKET_TTS:
-            pocket = getattr(self._wingman, "pocket_tts", None) or getattr(tts, "pocket_tts", None)
+            shared = getattr(self._wingman, "_shared_providers", None) or {}
+            pocket = shared.get("pocket_tts")
             getter = getattr(pocket, "get_available_voices", None)
             if getter is not None:
                 try:
@@ -960,6 +963,27 @@ class SkillTts:
         # Everything else (OpenAI, ElevenLabs, Hume, Inworld, OpenAI-compatible,
         # XVASynth) needs a secret and/or network call we don't make here.
         return []
+
+    async def missing_voices(self, voices: list) -> list:
+        """The voices in ``voices`` the current provider does not have, e.g. a
+        Pocket TTS voice whose file is gone from the custom voices folder.
+
+        Only Pocket TTS is checked: its voices are files the user can delete.
+        For other providers, and when the list can't be read, nothing counts
+        as missing.
+        """
+        from api.enums import TtsProvider
+
+        if self._wingman.config.features.tts_provider != TtsProvider.POCKET_TTS:
+            return []
+        known = {getattr(v, "id", None) for v in await self.voices()} - {None}
+        if not known:
+            return []
+        return [
+            v
+            for v in voices
+            if v not in known and not (isinstance(v, str) and os.path.exists(v))
+        ]
 
     async def speak(self, text: str, *, interrupt: bool = True, sound_config=None) -> None:
         """Say text in the wingman's voice. interrupt=True (default) speaks immediately,
@@ -978,6 +1002,13 @@ class SkillTts:
         from services.provider_factory import ProviderFactory
 
         config = self._wingman.config
+        # A missing voice would fail on every line the wingman speaks.
+        if await self.missing_voices([voice]):
+            provider = config.features.tts_provider
+            return (
+                f"Voice change failed: '{getattr(provider, 'value', provider)}' "
+                f"has no voice '{voice}'."
+            )
         applied = apply_voice_to_current_provider(config, voice)
         if applied is None:
             provider = config.features.tts_provider
