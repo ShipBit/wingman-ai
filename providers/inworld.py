@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 from os import path
 from typing import TYPE_CHECKING, Optional
 import threading
@@ -7,7 +8,7 @@ import queue
 import time
 import requests
 import aiofiles
-from api.enums import LogType, TtsProvider
+from api.enums import LogType, TtsProvider, TtsVoiceGender
 from api.interface import (
     SoundConfig,
     VoiceInfo,
@@ -277,7 +278,12 @@ class Inworld:
                 VoiceInfo(
                     id=voice_id,
                     name=voice_name or voice_id,
+                    gender=inworld_voice_gender(voice),
                     languages=voice.get("languages", []),
+                    provider="inworld",
+                    # The picker shows it and searches in it, as for the
+                    # subscription's Inworld voices.
+                    description=voice.get("description") or None,
                 )
             )
         return voices
@@ -288,6 +294,25 @@ class Inworld:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(audio_data)
         return file_path
+
+
+def inworld_voice_gender(voice: dict) -> TtsVoiceGender:
+    """The voice's gender, read the same way as wingman-backend does for the
+    subscription's list.
+
+    Inworld's list has no gender field today. Should one appear, it wins.
+    Until then the description names it ("A warm, natural female voice").
+    Female is tested first because "female" contains "male".
+    """
+    field = str(voice.get("gender") or "").lower()
+    if field in ("female", "male", "neutral"):
+        return TtsVoiceGender(field.capitalize())
+    text = str(voice.get("description") or "").lower()
+    if re.search(r"\b(female|woman|girl)\b", text):
+        return TtsVoiceGender.FEMALE
+    if re.search(r"\b(male|man|boy)\b", text):
+        return TtsVoiceGender.MALE
+    return TtsVoiceGender.UNKNOWN
 
 
 @tts_provider(TtsProvider.INWORLD)
