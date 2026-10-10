@@ -2,6 +2,7 @@ from typing import Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
+    VoiceCloneState,
     ConversationProvider,
     CoreState,
     ImageGenerationProvider,
@@ -152,6 +153,9 @@ class VoiceInfo(BaseModel):
     locked: bool = False
     """The voice needs a higher plan. Subscription voices only; the backend
     plays a free voice of the same gender instead, previews play it as is."""
+    clone_state: VoiceCloneState = VoiceCloneState.CURRENT
+    """Pocket TTS custom voices only: whether the voice fits the loaded model
+    or only an old clone without its recording is left."""
 
 
 # from sounddevice lib

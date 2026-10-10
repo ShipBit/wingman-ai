@@ -379,3 +379,23 @@ def test_a_voice_with_a_recording_continues_the_piece_before(tmp_path, monkeypat
     assert prompts[0].shape[0] == 1 and prompts[0][0, -1] == 1
     # Kyutai's built-in voices have no recording: they start from the voice.
     assert provider._continued_state(voice, "alba", previous) is voice
+
+
+def test_a_voice_without_its_recording_shows_whether_it_still_fits(tmp_path, monkeypatch):
+    from api.enums import VoiceCloneState
+    from providers.pocket_tts import POCKET_TTS_VERSION
+
+    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
+    (voices_dir / "Rec.wav").write_bytes(b"x")  # recording: Wingman clones it again
+    write_voice(voices_dir / "Rec.german.safetensors")
+    current_clone(voices_dir / "Fresh.german.safetensors")
+    write_voice(voices_dir / "Old.german.safetensors", **{PocketTTS._CLONED_BY: POCKET_TTS_VERSION})
+    write_voice(voices_dir / "Gone.english_2026-09.safetensors")
+
+    states = {v.id: v.clone_state for v in asyncio.run(provider.get_available_voices()) if v.provider == "custom_voices"}
+    assert states == {
+        "Rec": VoiceCloneState.CURRENT,
+        "Fresh": VoiceCloneState.CURRENT,
+        "Old": VoiceCloneState.OUTDATED,
+        "Gone": VoiceCloneState.MISSING,
+    }

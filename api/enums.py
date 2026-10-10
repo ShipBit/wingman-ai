@@ -98,6 +98,18 @@ class TtsVoiceGender(Enum):
     NEUTRAL = "Neutral"
 
 
+class VoiceCloneState(Enum):
+    """Whether a Pocket TTS voice fits the loaded model."""
+
+    CURRENT = "current"
+    """Made for this model, or Wingman makes it from the voice's recording."""
+    OUTDATED = "outdated"
+    """Only an older clone and no recording to make it again: it speaks with
+    the old clone."""
+    MISSING = "missing"
+    """Only clones for other models and no recording: it cannot speak."""
+
+
 class PerplexityModel(Enum):
     """https://docs.perplexity.ai/models/model-cards"""
 
@@ -350,6 +362,10 @@ class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
 
+class VoiceCloneStateEnumModel(BaseEnumModel):
+    state: VoiceCloneState
+
+
 class PerplexityModelEnumModel(BaseEnumModel):
     model: PerplexityModel
 
@@ -430,6 +446,7 @@ ENUM_TYPES = {
     "CommandTag": CommandTagEnumModel,
     "CustomPropertyType": CustomPropertyTypeEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
+    "VoiceCloneState": VoiceCloneStateEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,

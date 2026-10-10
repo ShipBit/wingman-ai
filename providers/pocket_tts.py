@@ -29,7 +29,7 @@ except ImportError:  # renamed in a later release: the 3.3.0 set
         "eve fantine george giovanni jane javert jean juergen lola marius mary "
         "michael paul peter_yearsley rafael stuart_bell vera".split()
     )
-from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider, TtsVoiceGender
+from api.enums import LogType, PocketTtsQuality, SpokenLanguage, TtsProvider, TtsVoiceGender, VoiceCloneState
 from api.interface import (
     PocketTTSConfig,
     SoundConfig,
@@ -539,6 +539,7 @@ class PocketTTS:
                 gender=next((g for g in TtsVoiceGender if g.value == gender), None),
                 description=details.description or (bundled.description if bundled else None),
                 provider="custom_voices",
+                clone_state=self._clone_state(stem),
             )
             if bundled and bundled.language == spoken:
                 shipped.append(info)
@@ -547,6 +548,22 @@ class PocketTTS:
         voices[native_count:native_count] = sorted(shipped, key=lambda v: v.name or "")
 
         return voices
+
+    def _clone_state(self, stem: str) -> VoiceCloneState:
+        """Whether a custom voice fits the loaded model. A voice with its
+        recording always does: Wingman clones it again when needed. Without
+        one only a clone made for this model by this Wingman fits; one from
+        an older Wingman still speaks, one for another model cannot (after
+        3.2.7 moved English to english_drifting_26-09, for instance)."""
+        base = os.path.join(self.voices_dir, stem)
+        if self._audio_for(base):
+            return VoiceCloneState.CURRENT
+        tagged = f"{base}.{self._active_model_tag()}.safetensors"
+        if os.path.exists(tagged):
+            return VoiceCloneState.CURRENT if self._clone_is_current(tagged) else VoiceCloneState.OUTDATED
+        if os.path.exists(base + ".safetensors"):
+            return VoiceCloneState.OUTDATED
+        return VoiceCloneState.MISSING
 
     def bundled_voices_needing_clone(self) -> list[str]:
         """Shipped voices in the custom voices folder without a current clone
