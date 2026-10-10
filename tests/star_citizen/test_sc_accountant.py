@@ -85,7 +85,7 @@ def test_two_wingmen_share_the_books_and_a_reward_is_booked(reader, tmp_path):
 
         async def booked():
             report = json.loads(await one.erp_report("overview"))
-            return "500" in json.dumps(report)
+            return report["data"]["balance"] == "500.00"
 
         for _ in range(100):
             if await booked():
@@ -138,5 +138,6 @@ def test_books_from_the_old_reader_move_over_without_booking_twice(reader, tmp_p
     assert feed["core_reader"] is True
     assert feed["previous_source_id"] == "old-reader-source"
     assert feed["cursor"] == high_water  # What Core read before is not booked again.
-    assert "500" not in json.dumps(engine.view("overview"))
+    overview = engine.view("overview")["data"]
+    assert (overview["balance"], overview["cash_flow"]) == ("0.00", "0.00")
     engine.close()
