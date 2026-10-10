@@ -2307,6 +2307,8 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_started()
+        if getattr(self, "audio_input", None):
+            self.audio_input.set_output_busy(True)
         self._emit_voice_state()
 
         if time.time() - self._stop_requested_at <= STOP_AHEAD_SECONDS:
@@ -2326,6 +2328,8 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_finished()
+        if getattr(self, "audio_input", None):
+            self.audio_input.set_output_busy(False)
         self._emit_voice_state()
 
     async def process_events(self):
