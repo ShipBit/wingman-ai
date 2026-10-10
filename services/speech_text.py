@@ -11,16 +11,18 @@ Applied in this order, each step on what the previous one left:
 2. the bundled lists the user switched on, one per game
    (templates/pronunciation/<id>.tsv), e.g. "aUEC" -> "Alpha U E C",
 3. abbreviations of the spoken language ("z.B.", "Lt.", "Blvd."),
-4. units after a number ("10 km", "$20"),
-5. numbers (services/spoken_numbers.py).
+4. long amounts rounded the way people say them ("689,482,137 aUEC" ->
+   "about 690 million aUEC"), for every voice, Inworld too,
+5. units after a number ("10 km", "$20"),
+6. numbers (services/spoken_numbers.py).
 
 Inworld (directly or through the subscription) reads digits, clock times,
 dates, amounts of money and temperatures itself, and better than these rules
-write them out. For it, steps 4 and 5 leave those alone; the rules, the
+write them out. For it, steps 5 and 6 leave those alone; the rules, the
 abbreviations and the other units still apply ("3-4 km" -> "3 bis 4
 Kilometer", "1 h" -> "eine Stunde").
 
-Rules may leave digits in what they write ("F7C" -> "F 7 C"): step 5 reads
+Rules may leave digits in what they write ("F7C" -> "F 7 C"): step 6 reads
 them in the spoken language. Markup in angle or square brackets (Inworld's
 <break>, audio markups like [laughs]) is never touched.
 
@@ -37,6 +39,7 @@ from typing import Iterable, Optional
 from api.enums import SpokenLanguage, TtsProvider
 from services.printr import Printr
 from services.spoken_numbers import (
+    round_for_speech,
     NUMBER_PATTERN,
     expand_ranges,
     safe_spell_out_numbers,
@@ -227,6 +230,10 @@ def _speak_segment(
         return segment
     if _app_root:
         segment = _apply_rules(segment, _abbreviations(_app_root, code))
+    # Every voice, also one that reads digits itself: "689,482,137" is a long
+    # string of words either way.
+    segment = round_for_speech(segment, language)
+    if _app_root:
         units = _units(_app_root, code)
         if reads_numbers:
             units = tuple(u for u in units if u[0] not in _UNITS_THE_VOICE_READS)

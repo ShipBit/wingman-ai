@@ -11,6 +11,7 @@ Everything else is left as it is. A wrong guess is worse than digits: the
 model at least reads a lone "7" correctly.
 """
 
+import math
 import re
 from decimal import InvalidOperation
 from functools import lru_cache
@@ -112,6 +113,100 @@ def spell_out_numbers(text: str, language: SpokenLanguage) -> str:
     text = expand_ranges(text, language)
     text = _PERCENT.sub(lambda m: f"{m.group(1)} {_PERCENT_WORD[language]}", text)
     return _NUMBER.sub(lambda m: _number(m.group(1), m.group(2), language) or m.group(0), text)
+
+
+_APPROX_WORD = {
+    SpokenLanguage.EN: "about",
+    SpokenLanguage.DE: "rund",
+    SpokenLanguage.FR: "environ",
+    SpokenLanguage.ES: "aproximadamente",
+    SpokenLanguage.IT: "circa",
+    SpokenLanguage.PT: "cerca de",
+    SpokenLanguage.NL: "ongeveer",
+}
+
+# Words that already say a number is not exact; no second one in front.
+_APPROX_BEFORE = re.compile(
+    r"(?:\b(?:about|around|roughly|approximately|nearly|almost|some|rund|etwa|ungefähr|ca\.|circa|knapp|fast|"
+    r"environ|près de|presque|aproximadamente|unos|unas|casi|cerca de|quase|ongeveer|bijna|zo'n)|~)\s*$",
+    re.IGNORECASE,
+)
+
+# Million and billion words: (singular, plural, plural from 2 on). French and
+# Portuguese keep the singular below two ("1,5 million"), the others only
+# for exactly one.
+_SCALE_WORDS = {
+    SpokenLanguage.EN: (("million", "million"), ("billion", "billion"), False),
+    SpokenLanguage.DE: (("Million", "Millionen"), ("Milliarde", "Milliarden"), False),
+    SpokenLanguage.FR: (("million", "millions"), ("milliard", "milliards"), True),
+    SpokenLanguage.ES: (("millón", "millones"), ("mil millones", "mil millones"), False),
+    SpokenLanguage.IT: (("milione", "milioni"), ("miliardo", "miliardi"), False),
+    SpokenLanguage.PT: (("milhão", "milhões"), ("bilhão", "bilhões"), True),
+    SpokenLanguage.NL: (("miljoen", "miljoen"), ("miljard", "miljard"), False),
+}
+
+ROUND_FROM = 10_000
+"""Spoken amounts from here on are rounded (round_for_speech). Below it are
+prices per unit, quantities, years and times, which are short and often
+meant exactly."""
+
+_TILDE_NUMBER = re.compile(r"~\s?(?=-?\d)")
+
+
+def round_for_speech(text: str, language: SpokenLanguage) -> str:
+    """Long amounts in ``text`` rounded the way a person says them, for the
+    voice only: "689,482,137 aUEC" -> "about 690 million aUEC", "396.288" ->
+    "rund 396.000". Two digits from a million on, three from ROUND_FROM.
+    Only numbers written with a separator: a bare "1234567" may be an ID.
+    "about" goes in front only where rounding changed the number and no
+    such word is there yet; a "~" in front becomes the word."""
+    if language not in _APPROX_WORD:
+        return text
+    approx = _APPROX_WORD[language]
+    text = _TILDE_NUMBER.sub(f"{approx} ", text)
+
+    def spoken(m: re.Match) -> str:
+        sign, body = m.group(1), m.group(2)
+        if not re.search(r"\D", body):
+            return m.group(0)
+        integer, decimals = split_number(body.replace("\u00a0", " ").replace("\u202f", " "), language)
+        if integer is None or integer.startswith("0"):
+            return m.group(0)
+        value = float(f"{integer}.{decimals or 0}")
+        if value < ROUND_FROM:
+            return m.group(0)
+        rounded, words = _rounded(value, language)
+        if rounded == value:
+            # Exact already ("2,000,000"): said in the short form, no "about".
+            return f"{sign}{words}" if value >= 1_000_000 else m.group(0)
+        before = text[: m.start()]
+        prefix = "" if _APPROX_BEFORE.search(before) else f"{approx} "
+        return f"{prefix}{sign}{words}"
+
+    return _NUMBER.sub(spoken, text)
+
+
+def _rounded(value: float, language: SpokenLanguage) -> tuple[float, str]:
+    """``value`` rounded, and written for the voice in ``language``."""
+    decimal = "." if language == SpokenLanguage.EN else ","
+    if value >= 1_000_000:
+        (million, millions), (billion, billions), singular_below_two = _SCALE_WORDS[language]
+        scale, one, many = (1e9, billion, billions) if value >= 1e9 else (1e6, million, millions)
+        mantissa = _significant(value / scale, 2)
+        singular = mantissa < 2 if singular_below_two else mantissa == 1
+        number = f"{mantissa:g}".replace(".", decimal)
+        return mantissa * scale, f"{number} {one if singular else many}"
+    rounded = _significant(value, 3)
+    thousands = "," if language == SpokenLanguage.EN else "."
+    return rounded, f"{int(rounded):,}".replace(",", thousands)
+
+
+def _significant(value: float, digits: int) -> float:
+    """``value`` to ``digits`` significant digits: 689.48 -> 690, 6.8947 -> 6.9."""
+    if value == 0:
+        return 0.0
+    magnitude = math.floor(math.log10(abs(value)))
+    return round(value, digits - 1 - magnitude)
 
 
 def expand_ranges(text: str, language: SpokenLanguage) -> str:
