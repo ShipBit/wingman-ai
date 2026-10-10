@@ -100,6 +100,23 @@ piece before stay under the 12 s the models handle (PROMPT_MAX_SECONDS)."""
 
 _SILENCE_RMS = 10 ** (-50 / 20)
 
+LIMIT_KNEE = 0.9
+"""Above this the audio is rounded off instead of cut. The models overshoot
+full scale on a loud first syllable: German "Hallo, Commander" with Ibrahim
+peaked at 1.14 to 1.33 in 4 of 4 runs (2026-10-10), and the int16
+conversion cut it off, heard as a crackle."""
+
+
+def soft_limit(chunk: torch.Tensor) -> torch.Tensor:
+    """``chunk`` unchanged below LIMIT_KNEE, above it bent smoothly towards
+    full scale instead of running into it."""
+    over = chunk.abs() > LIMIT_KNEE
+    if not bool(over.any()):
+        return chunk
+    room = 1.0 - LIMIT_KNEE
+    bent = torch.sign(chunk) * (LIMIT_KNEE + room * torch.tanh((chunk.abs() - LIMIT_KNEE) / room))
+    return torch.where(over, bent, chunk)
+
 
 def continuation_prompt(voice: torch.Tensor, previous: torch.Tensor, sample_rate: int) -> torch.Tensor:
     """One voice prompt [1, samples]: the voice's recording, a short pause,

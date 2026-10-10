@@ -40,6 +40,7 @@ from api.interface import (
 from providers.interfaces import TtsInterface, tts_provider
 from providers.pocket_tts_chunks import (
     CONTINUATION_PROMPT_SECONDS,
+    soft_limit,
     JOIN_SECONDS,
     continuation_prompt,
     MAX_TOKENS,
@@ -1389,6 +1390,7 @@ class PocketTTS:
                 ),
                 self.model.sample_rate,
             ):
+                last = soft_limit(last)
                 previous.append(last.cpu())
                 yield last
 

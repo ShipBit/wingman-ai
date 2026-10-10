@@ -138,3 +138,16 @@ def test_the_next_piece_hears_the_voice_then_the_piece_before_up_to_its_last_pau
     assert torch.equal(out[0, : 9 * sr], voice)
     assert out[0, 9 * sr : 9 * sr + gap].abs().max() == 0
     assert out[0, -tail:].eq(0.4).all()  # spoken audio, from before the pause
+
+
+from providers.pocket_tts_chunks import LIMIT_KNEE, soft_limit
+
+
+def test_a_loud_syllable_is_rounded_off_below_full_scale():
+    chunk = torch.tensor([0.0, 0.5, -0.8, 0.95, -1.33, 2.0])
+    out = soft_limit(chunk)
+    assert torch.equal(out[:3], chunk[:3])  # quiet audio untouched
+    assert out.abs().max() <= 1.0
+    assert soft_limit(torch.tensor([1.33])).item() < 1.0  # the overshoot measured
+    assert 0.9 < out[3] < 0.95 and out[4] < -LIMIT_KNEE
+    assert out[5] > out[3]  # louder stays louder
