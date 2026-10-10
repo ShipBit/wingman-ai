@@ -81,3 +81,12 @@ def test_long_amounts_are_rounded_for_the_voice(language, written, spoken):
 )
 def test_short_numbers_and_ids_stay_as_written(written):
     assert round_for_speech(written, L.DE) == written
+
+
+@pytest.mark.parametrize(
+    "language, spoken",
+    [(L.EN, "minus three"), (L.DE, "minus drei"), (L.FR, "moins trois"), (L.ES, "menos tres"),
+     (L.IT, "meno tre"), (L.PT, "menos três"), (L.NL, "min drie")],
+)
+def test_a_negative_number_is_said_in_the_language(language, spoken):
+    assert spell_out_numbers("-3", language) == spoken

@@ -61,7 +61,13 @@ _RANGE_WORD = {
     SpokenLanguage.NL: "tot",
 }
 
-_MINUS_WORD = {SpokenLanguage.FR: "moins", SpokenLanguage.NL: "min"}
+_MINUS_WORD = {
+    SpokenLanguage.FR: "moins",
+    SpokenLanguage.ES: "menos",
+    SpokenLanguage.IT: "meno",
+    SpokenLanguage.PT: "menos",
+    SpokenLanguage.NL: "min",
+}
 
 
 @lru_cache(maxsize=None)
