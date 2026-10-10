@@ -88,6 +88,38 @@ def _assign_process_to_job(job, process: subprocess.Popen):
         kernel32.AssignProcessToJobObject(job, handle)
         kernel32.CloseHandle(handle)
 
+
+# Ends llama-server ($2) once Core ($1) is gone, on macOS and Linux. A Core
+# that is killed instead of shut down (the client quitting, a crash) runs no
+# atexit handler, and its llama-servers would keep their RAM and VRAM until
+# the next reboot. When llama-server ends first, Core is still there and the
+# watcher leaves the PID alone.
+_PARENT_WATCH_SCRIPT = (
+    "while kill -0 $1 2>/dev/null && kill -0 $2 2>/dev/null; do sleep 2; done; "
+    "kill -0 $1 2>/dev/null || kill $2 2>/dev/null"
+)
+
+
+def _watch_parent(process: subprocess.Popen) -> Optional[subprocess.Popen]:
+    """Start a watcher that ends `process` when this process is gone."""
+    try:
+        return subprocess.Popen(
+            [
+                "/bin/sh",
+                "-c",
+                _PARENT_WATCH_SCRIPT,
+                "sh",
+                str(os.getpid()),
+                str(process.pid),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return None
+
+
 # Preferred ports for managed llama-server instances (offset from remote defaults)
 MANAGED_SUPPORT_PORT = 49172
 MANAGED_EMBED_PORT = 49173
@@ -187,6 +219,8 @@ class LlamaCppProvider:
         self._embed_process: Optional[subprocess.Popen] = None
         self._support_client: Optional[OpenAI] = None
         self._embed_client: Optional[OpenAI] = None
+        # Parent watchers by llama-server PID, macOS and Linux only.
+        self._watchers: dict[int, subprocess.Popen] = {}
 
         # On Windows, create a Job Object so the OS kills child processes
         # automatically if the parent is force-killed (e.g. Task Manager).
@@ -264,6 +298,10 @@ class LlamaCppProvider:
                     _assign_process_to_job(self._job_object, process)
                 except Exception:
                     pass
+            else:
+                watcher = _watch_parent(process)
+                if watcher:
+                    self._watchers[process.pid] = watcher
             return process
         except Exception as e:
             printr.print(
@@ -296,12 +334,24 @@ class LlamaCppProvider:
         """Gracefully stop a server process."""
         if process is None:
             return
+        self._stop_watcher(process)
         try:
             process.terminate()
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        except Exception:
+            pass
+
+    def _stop_watcher(self, process: subprocess.Popen):
+        """Stop the parent watcher of `process` before Core ends it itself."""
+        watcher = self._watchers.pop(process.pid, None)
+        if watcher is None:
+            return
+        try:
+            watcher.kill()
+            watcher.wait(timeout=5)
         except Exception:
             pass
 
@@ -314,6 +364,7 @@ class LlamaCppProvider:
         for proc in (self._support_process, self._embed_process):
             if proc is None:
                 continue
+            self._stop_watcher(proc)
             try:
                 if proc.poll() is None:  # still running
                     proc.kill()
