@@ -138,7 +138,7 @@ def test_an_other_language_passes_its_code_and_no_transcription_hint():
     assert inworld_language(SpokenLanguage.OTHER, dutch) == "nl"
     assert language_name(SpokenLanguage.OTHER, dutch) == "Dutch"
     # Pocket TTS has no Dutch model; the English one stays loaded.
-    assert pocket_tts_model(SpokenLanguage.OTHER, PocketTtsQuality.STANDARD) == "english_2026-09"
+    assert pocket_tts_model(SpokenLanguage.OTHER, PocketTtsQuality.STANDARD) == "english_drifting_26-09"
 
 
 def _context(spoken_language, other_language=None):

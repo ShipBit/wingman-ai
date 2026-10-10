@@ -34,7 +34,11 @@ POCKET_TTS_MODELS: dict[SpokenLanguage, dict[PocketTtsQuality, str]] = {
     # goes in here (scripts/mirror_pocket_tts_r2.py), or no custom voice
     # could be cloned with it.
     SpokenLanguage.EN: {
-        PocketTtsQuality.STANDARD: "english_2026-09",
+        # english_2026-09 (same size, LSD sampler) repeats the end of a text
+        # ending on "an hour": 22 of 30 with three stock voices, the
+        # drifting one 0, at the same speed and word error rate (measured
+        # 2026-10-09, kyutai-labs/pocket-tts#347).
+        PocketTtsQuality.STANDARD: "english_drifting_26-09",
         PocketTtsQuality.HIGH: "english_2026-09_24l",
     },
     SpokenLanguage.DE: {

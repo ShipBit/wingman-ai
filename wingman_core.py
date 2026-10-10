@@ -2307,6 +2307,8 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_started()
+        if getattr(self, "audio_input", None):
+            self.audio_input.set_output_busy(True)
         self._emit_voice_state()
 
         if time.time() - self._stop_requested_at <= STOP_AHEAD_SECONDS:
@@ -2326,6 +2328,8 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_finished()
+        if getattr(self, "audio_input", None):
+            self.audio_input.set_output_busy(False)
         self._emit_voice_state()
 
     async def process_events(self):
@@ -2795,6 +2799,8 @@ class WingmanCore(WebSocketUser):
     async def _start_precompute(self, only_stale: bool) -> dict:
         if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
             return {"started": False, "reason": "pocket_tts unavailable", "total": 0}
+        if self.pocket_tts.is_loading:
+            return {"started": False, "reason": "model loading", "total": 0}
         if not self.pocket_tts.model:
             return {"started": False, "reason": "model not loaded", "total": 0}
         if self.pocket_tts._precompute_running:

@@ -9,12 +9,13 @@ from services.spoken_numbers import safe_spell_out_numbers, spell_out_numbers
 @pytest.mark.parametrize(
     "text, spoken",
     [
-        ("Das kostet 1.234 Credits.", "Das kostet eintausendzweihundertvierunddreißig Credits."),
+        ("Das kostet 1.234 Credits.", "Das kostet eintausend-zweihundert-vierunddreißig Credits."),
+        ("Die Hermes hat 288 SCU.", "Die Hermes hat zweihundert-achtundachtzig SCU."),
         ("Die Reise dauert 3,5 Stunden.", "Die Reise dauert drei Komma fünf Stunden."),
         ("Das sind 3.5 Tonnen.", "Das sind drei Komma fünf Tonnen."),
         ("Die Schilde sind bei 75 %.", "Die Schilde sind bei fünfundsiebzig Prozent."),
         ("Wir landen um 14:30, spätestens 15:00.", "Wir landen um vierzehn Uhr dreißig, spätestens fünfzehn Uhr."),
-        ("Am 3. Oktober 1984.", "Am dritten Oktober neunzehnhundertvierundachtzig."),
+        ("Am 3. Oktober 1984.", "Am dritten Oktober neunzehnhundert-vierundachtzig."),
         ("Es sind -5 Grad, 3-4 Stunden.", "Es sind minus fünf Grad, drei bis vier Stunden."),
         ("Ruf 0151 an.", "Ruf null eins fünf eins an."),
     ],

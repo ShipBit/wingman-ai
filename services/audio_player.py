@@ -1,8 +1,10 @@
 import asyncio
 import inspect
 import io
+import os
 import wave
 from os import path
+from time import perf_counter
 from threading import Lock, Thread
 from typing import Callable
 import numpy as np
@@ -24,7 +26,8 @@ from services.sound_effects import (
 
 PREVIEW_OUTPUT_DIR = "audio_output"
 PREVIEW_OUTPUT_FILE = "generated_audio.wav"
-PREVIEW_WINGMAN_NAME = "system"
+"""The last thing a voice said, a Wingman's answer or a preview, with its
+sound effects, to listen to again or share."""
 
 class AudioPlayer:
     def __init__(
@@ -234,12 +237,10 @@ class AudioPlayer:
 
         channels = audio.shape[1] if audio.ndim > 1 else 1
 
-        # Streaming previews are saved separately inside stream_with_effects.
-        if wingman_name == PREVIEW_WINGMAN_NAME:
-            try:
-                self._save_preview_audio(audio, sample_rate)
-            except Exception:
-                pass
+        try:
+            self._save_generated_audio(audio, sample_rate)
+        except Exception:
+            pass
 
         def finished_callback():
             if self.stream is not None:
@@ -279,8 +280,29 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def _save_preview_audio(self, audio: np.ndarray, sample_rate: int) -> None:
-        """Fire-and-forget save of the generated preview audio.
+    def _dump_playback_debug(self, out, events, rate, channels, dtype) -> None:
+        """WINGMAN_AUDIO_DEBUG=1: what the speakers really got, every callback,
+        as playback_debug.wav, and every short callback in the log."""
+        try:
+            audio = np.frombuffer(b"".join(out), dtype=dtype)
+            if channels > 1:
+                audio = audio.reshape(-1, channels)
+            sf.write(path.join(get_writable_dir(PREVIEW_OUTPUT_DIR), "playback_debug.wav"), audio, rate)
+            short = [e for e in events if e[0] == "cb" and e[2] < e[3]]
+            flagged = [e for e in events if e[0] == "cb" and e[5]]
+            Printr().print(
+                f"Playback debug: {len([e for e in events if e[0] == 'cb'])} callbacks, "
+                f"{len(short)} short (ran dry) at "
+                + ", ".join(f"{e[1]:.3f}s ({e[2]}/{e[3]} bytes, {e[4]} queued)" for e in short[:10])
+                + f"; PortAudio flags {[(round(e[1], 3), e[5]) for e in flagged[:10]]}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+        except Exception as e:
+            Printr().print(f"Playback debug failed: {e}", color=LogType.WARNING, server_only=True)
+
+    def _save_generated_audio(self, audio: np.ndarray, sample_rate: int) -> None:
+        """Fire-and-forget save of what the voice said (PREVIEW_OUTPUT_FILE).
 
         Runs on a daemon thread with an isolated copy of the buffer so it
         can never block playback start or race with the playback callback.
@@ -500,6 +522,11 @@ class AudioPlayer:
                 mixed_pos = mixed_pos + num_samples_to_copy
             return chunk
 
+        debug = os.environ.get("WINGMAN_AUDIO_DEBUG") == "1"
+        debug_t0 = perf_counter()
+        debug_out: list[bytes] = []
+        debug_events: list[tuple] = []
+
         def callback(outdata, frames, time, status):
             nonlocal stream_finished, data_received, playing
             # Silence first, always. The stream starts before the voice
@@ -520,6 +547,9 @@ class AudioPlayer:
                 # Taken out in place, so an append can never land in a copy.
                 taken = bytes(buffer[: num_elements * byte_size])
                 del buffer[: num_elements * byte_size]
+                if debug:
+                    debug_events.append(("cb", perf_counter() - debug_t0, len(taken),
+                                         num_elements * byte_size, len(buffer), str(status)))
 
             if taken:
                 data_chunk = np.frombuffer(taken, dtype=dtype).astype(np.float32)
@@ -540,6 +570,8 @@ class AudioPlayer:
                 # came out as 0.25), measured 2026-09-23.
                 data_chunk_bytes = data_chunk.flatten().astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
+            if debug and playing:
+                debug_out.append(bytes(outdata))
 
         device_rate = self.output_rate(sample_rate)
         converters = [RateConverter(sample_rate, device_rate) for _ in range(channels)]
@@ -594,9 +626,7 @@ class AudioPlayer:
             sound_effects = get_sound_effects(
                 config=config, use_gain_boost=use_gain_boost
             )
-            preview_chunks: list[np.ndarray] | None = (
-                [] if wingman_name == PREVIEW_WINGMAN_NAME else None
-            )
+            spoken_chunks: list[np.ndarray] = []
             audio_buffer = bytearray(buffer_size)
             filled_size = await fill(audio_buffer)
             while filled_size > 0 and self.raw_stream is stream:
@@ -615,10 +645,10 @@ class AudioPlayer:
                     amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
                     data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
 
-                # Snapshot post-effects, post-mix audio for the preview file
-                # before per-playback volume is baked in (matches play_with_effects).
-                if preview_chunks is not None:
-                    preview_chunks.append(data_in_numpy)
+                # Snapshot post-effects, post-mix audio for the generated
+                # audio file before per-playback volume is baked in (matches
+                # play_with_effects).
+                spoken_chunks.append(data_in_numpy)
 
                 data_in_numpy = data_in_numpy * config.volume
                 # Listeners on the event (the client, an ESP32) get the audio
@@ -627,14 +657,16 @@ class AudioPlayer:
                 converted = to_device_rate(data_in_numpy).astype(dtype).tobytes()
                 with buffer_lock:
                     buffer.extend(converted)
+                    if debug:
+                        debug_events.append(("fill", perf_counter() - debug_t0, len(converted), len(buffer)))
                 await self.stream_event.publish("audio", processed_buffer)
                 filled_size = await fill(audio_buffer)
 
             data_received = True
 
-            if preview_chunks:
+            if spoken_chunks:
                 try:
-                    full = np.concatenate(preview_chunks)
+                    full = np.concatenate(spoken_chunks)
                     # data_in_numpy holds int-range floats (from int dtype frombuffer);
                     # scale to [-1, 1] so the saved float WAV plays at correct level.
                     np_dtype = np.dtype(dtype)
@@ -642,7 +674,7 @@ class AudioPlayer:
                         full = full / float(np.iinfo(np_dtype).max)
                     if channels > 1:
                         full = full.reshape(-1, channels)
-                    self._save_preview_audio(full.astype(np.float32), sample_rate)
+                    self._save_generated_audio(full.astype(np.float32), sample_rate)
                 except Exception:
                     pass
             # stop_playback() detaches raw_stream and kills the audio callback,
@@ -651,6 +683,8 @@ class AudioPlayer:
             while not stream_finished and self.raw_stream is stream:
                 await asyncio.sleep(0.1)
 
+            if debug and debug_out:
+                self._dump_playback_debug(debug_out, debug_events, device_rate, channels, dtype)
             if self.raw_stream is not stream:
                 # Interrupted via stop_playback(), which already reset state
                 # and notified listeners. Skip the trailing beeps.

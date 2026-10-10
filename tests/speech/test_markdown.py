@@ -77,6 +77,14 @@ def test_a_short_list_becomes_an_enumeration():
     assert spoken("Do this:\n\n1. Gear down\n2. Lights on\n\nDone.") == "Do this:\nGear down and Lights on.\nDone."
 
 
+def test_a_list_is_joined_in_the_spoken_language():
+    from api.enums import SpokenLanguage
+
+    text = "- Kaufen\n- Verkaufen\n- Gewinn"
+    assert cleanup_text(text, SpokenLanguage.DE)[0] == "Kaufen, Verkaufen und Gewinn."
+    assert cleanup_text(text, SpokenLanguage.OTHER)[0] == "Kaufen, Verkaufen, Gewinn."
+
+
 def test_a_long_list_is_left_out():
     items = "\n".join(f"- Item {i}" for i in range(MAX_LIST_ITEMS_FOR_TTS + 1))
     assert spoken(f"Here:\n{items}\nThat was it.") == "Here:\nThat was it."
