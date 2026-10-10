@@ -28,9 +28,9 @@ def write_voice(path, **metadata):
 
 
 def current_clone(path):
-    from providers.pocket_tts import POCKET_TTS_VERSION, PocketTTS
+    from providers.pocket_tts import CLONE_STAMP, PocketTTS
 
-    write_voice(path, **{PocketTTS._CLONED_BY: POCKET_TTS_VERSION})
+    write_voice(path, **{PocketTTS._CLONED_BY: CLONE_STAMP})
 
 
 def make_provider(tmp_path, monkeypatch, model="german"):
@@ -176,7 +176,7 @@ def test_ensure_builtin_voice_rejects_custom_model_config(
 def test_english_uses_the_canonical_tag(tmp_path, monkeypatch):
     provider, voices_dir = make_provider(tmp_path, monkeypatch, model="english")
     assert provider._builtin_voice_cache_path("alba") == str(
-        voices_dir / "alba.english_2026-09.safetensors"
+        voices_dir / "alba.english_drifting_26-09.safetensors"
     )
 
 
@@ -313,3 +313,69 @@ def test_only_stale_skips_voices_never_cloned_for_this_model(tmp_path, monkeypat
     (voices_dir / "Joe.wav").write_bytes(b"audio")
     assert provider.list_custom_voices_needing_precompute() == ["Joe"]
     assert provider.list_custom_voices_needing_precompute(only_stale=True) == []
+
+
+def test_a_clone_from_before_the_word_gap_prompts_is_made_again(tmp_path):
+    from providers.pocket_tts import POCKET_TTS_VERSION, PocketTTS
+
+    path = tmp_path / "Joe.german.safetensors"
+    write_voice(path, **{PocketTTS._CLONED_BY: POCKET_TTS_VERSION})
+    assert not PocketTTS._clone_is_current(str(path))
+
+
+def test_during_a_model_switch_nothing_is_cloned_under_the_new_name(tmp_path, monkeypatch):
+    import numpy as np
+    import soundfile as sf
+
+    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
+    wav = voices_dir / "Joe.wav"
+    sf.write(str(wav), np.zeros(24000, dtype=np.float32), 24000)
+
+    class FakeModel:
+        config = type("C", (), {"mimi": type("M", (), {"sample_rate": 24000})})()
+
+        def get_state_for_audio_prompt(self, audio, truncate=False):
+            return {"state": "ok"}
+
+    provider.model = FakeModel()
+    provider._loaded_model_id = "english_2026-09"  # still loaded, settings say german
+    provider._switch_pending = True
+
+    assert provider.get_status()["is_loading"]
+    assert provider._clone_from_audio_and_cache(str(wav)) == {"state": "ok"}
+    assert not (voices_dir / "Joe.german.safetensors").exists()
+
+
+def test_clones_of_a_model_wingman_left_are_not_voices_of_their_own(tmp_path, monkeypatch):
+    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="english")
+    (voices_dir / "Joe.wav").write_bytes(b"x")
+    (voices_dir / "Joe.english_2026-09.safetensors").write_bytes(b"x")
+    (voices_dir / "Joe.english_2026-04.safetensors").write_bytes(b"x")
+    assert provider._list_voice_stems(str(voices_dir)) == ["Joe"]
+
+
+def test_a_voice_with_a_recording_continues_the_piece_before(tmp_path, monkeypatch):
+    import numpy as np
+    import soundfile as sf
+    import torch
+
+    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
+    sf.write(str(voices_dir / "Joe.wav"), np.full(24000 * 12, 0.3, dtype=np.float32), 24000)
+    prompts = []
+
+    class FakeModel:
+        sample_rate = 24000
+
+        def get_state_for_audio_prompt(self, audio, truncate=False):
+            prompts.append(audio)
+            return {"continued": True}
+
+    provider.model = FakeModel()
+    voice = {"voice": True}
+    previous = torch.ones(24000 * 5)
+
+    assert provider._continued_state(voice, "Joe", previous) == {"continued": True}
+    # The recording first, then the end of the piece before, as one prompt.
+    assert prompts[0].shape[0] == 1 and prompts[0][0, -1] == 1
+    # Kyutai's built-in voices have no recording: they start from the voice.
+    assert provider._continued_state(voice, "alba", previous) is voice

@@ -28,6 +28,15 @@ SILENCE_RMS_THRESHOLD = 0.005  # -46 dBFS; anything below counts as silence
 SILENCE_WINDOW_MS = 20
 PEAK_NORMALIZE_DBFS = -1.0
 
+PROMPT_MAX_SECONDS = 12.0
+"""Longest recording a voice is cloned from. Each piece of an answer starts
+with the model continuing the recording; one that stops in the middle of
+speech, or runs long, comes back as a hiss in front of every piece. With a
+cloned voice of 20 s, 6 of 15 pieces started with a hiss; cut at a pause
+between words, 4 of 15 at 18 s and 0 of 15 at 11 s (measured 2026-10-09,
+english_2026-09). The 6-layer models of other languages also stopped
+answers early on recordings over about 12 s (kyutai-labs/pocket-tts#344)."""
+
 
 @dataclass
 class PreprocessResult:
@@ -109,6 +118,45 @@ def _truncate(samples: np.ndarray, sample_rate: int, max_seconds: float) -> tupl
     if samples.size <= max_samples:
         return samples, False
     return samples[:max_samples], True
+
+
+def load_voice_prompt(
+    src_path: str, sample_rate: int, max_seconds: float = PROMPT_MAX_SECONDS
+) -> np.ndarray:
+    """The recording at ``src_path`` as a mono float32 prompt at
+    ``sample_rate``, ending at the last pause between words before
+    ``max_seconds`` (see PROMPT_MAX_SECONDS)."""
+    data, rate = _load_audio(src_path)
+    return end_at_word_gap(_resample(_to_mono(data), rate, sample_rate), sample_rate, max_seconds)
+
+
+def end_at_word_gap(
+    samples: np.ndarray,
+    sample_rate: int,
+    max_seconds: float = PROMPT_MAX_SECONDS,
+    floor_db: float = 30.0,
+    min_gap_seconds: float = 0.12,
+) -> np.ndarray:
+    """``samples`` up to the start of the last pause that begins before
+    ``max_seconds``: 20 ms windows ``floor_db`` below the loudest one, for at
+    least ``min_gap_seconds``. Without such a pause, the first
+    ``max_seconds``."""
+    window = max(1, int(0.02 * sample_rate))
+    limit = min(samples.size, int(max_seconds * sample_rate)) // window
+    if limit == 0:
+        return samples[: int(max_seconds * sample_rate)]
+    framed = samples[: limit * window].astype(np.float64).reshape(limit, window)
+    db = 20 * np.log10(np.sqrt((framed**2).mean(axis=1)) + 1e-12)
+    quiet = db < db.max() - floor_db
+    needed = max(1, math.ceil(min_gap_seconds * sample_rate / window))
+    gap_start, run = None, 0
+    for i, q in enumerate(quiet):
+        run = run + 1 if q else 0
+        if run >= needed:
+            gap_start = i - run + 1
+    if not gap_start:
+        return samples[: int(max_seconds * sample_rate)]
+    return samples[: gap_start * window]
 
 
 def _to_int16(samples: np.ndarray) -> np.ndarray:

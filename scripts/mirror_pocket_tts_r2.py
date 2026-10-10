@@ -58,7 +58,7 @@ from providers.pocket_tts_r2 import (  # noqa: E402
 # Keep in sync with BUILTIN_MODELS in providers/pocket_tts.py. Hardcoded here so the
 # mirror script doesn't have to import the heavyweight provider (torch/torchaudio).
 BUILTIN_LANGUAGES = [
-    "english_2026-09",
+    "english_drifting_26-09",
     "english_2026-09_24l",
     "german",
     "german_24l",

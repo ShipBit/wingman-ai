@@ -1,4 +1,5 @@
 import os
+import copy
 import io
 import glob
 import asyncio
@@ -38,12 +39,15 @@ from api.interface import (
 )
 from providers.interfaces import TtsInterface, tts_provider
 from providers.pocket_tts_chunks import (
+    CONTINUATION_PROMPT_SECONDS,
+    JOIN_SECONDS,
+    continuation_prompt,
     MAX_TOKENS,
-    faded_edges,
-    frames_after_eos,
+    piece_audio,
     pieces_for_speech,
-    CLAUSE_MODELS,
+    text_for_pocket,
 )
+from services.voice_preprocessing import load_voice_prompt
 from providers.pocket_tts_voices import (
     install_bundled_voices,
     load_bundled_voices,
@@ -78,6 +82,29 @@ def _library_version() -> str:
 
 POCKET_TTS_VERSION = _library_version()
 
+
+def _library_commit() -> str:
+    """The commit pocket-tts was installed from when requirements.txt pins
+    it to one ahead of a release, else empty. Such a build reports the
+    release it starts from as its version."""
+    try:
+        import json
+        from importlib.metadata import distribution
+
+        info = json.loads(distribution("pocket-tts").read_text("direct_url.json") or "{}")
+        return info.get("vcs_info", {}).get("commit_id", "")[:12]
+    except Exception:
+        return ""
+
+
+CLONE_RECIPE = "prompt-12s"
+"""How Wingman turns a recording into a voice (see load_voice_prompt).
+Changing it re-clones every voice once."""
+
+CLONE_STAMP = "+".join(p for p in (POCKET_TTS_VERSION, _library_commit(), CLONE_RECIPE) if p)
+"""Stamped into every cloned voice; a clone with another stamp is made
+again from its recording."""
+
 BUILTIN_MODEL_TEMPERATURE = 0.3
 """Sampling temperature for the built-in models. pocket-tts 3.0 set 0.3 for
 English after human listening tests (#223) and left every other language on
@@ -92,7 +119,7 @@ the library's 0.7. Measured 2026-09-23, German model, 3 voices x 5 sentences x
 # Makes it obvious when a model family changes (e.g. english_2026-04 -> _06)
 # and cached clones need regenerating.
 BUILTIN_MODELS = [
-    {"id": "english_2026-09",     "label": "english_2026-09",     "quality": "6L"},
+    {"id": "english_drifting_26-09", "label": "english_drifting_26-09", "quality": "6L"},
     {"id": "english_2026-09_24l", "label": "english_2026-09_24l", "quality": "24L"},
     {"id": "german",          "label": "german",          "quality": "6L"},
     {"id": "german_24l",      "label": "german_24l",      "quality": "24L"},
@@ -171,6 +198,14 @@ class PocketTTS:
         # typical tower size) and drop the oldest on overflow.
         self.voice_cache: OrderedDict[str, dict] = OrderedDict()
         self._loading = False
+        # Set when a settings change asks for another model, cleared once the
+        # reload thread is done: until then the old model may still be loaded
+        # while model_id already names the new one.
+        self._switch_pending = False
+        # Logged once when a piece cannot continue the one before.
+        self._continuation_failed = False
+        # Per voice: its recording, cut for continuing pieces (or None).
+        self._continuation_prompts: dict[str, Optional[torch.Tensor]] = {}
         self.on_model_reloaded: Optional[Callable[[], None]] = None
         # The model the last successful load brought up, and whether that load
         # replaced a different one (a new spoken language or quality) rather
@@ -268,12 +303,17 @@ class PocketTTS:
                 or old_model_id != self.model_id
             )
             if needs_reload:
+                self._switch_pending = True
+
                 def _reload():
                     # Wait for any in-flight generation to finish before swapping
                     # the model out — pocket-tts v2's TTSModel is not thread-safe.
-                    with self._model_swap_lock:
-                        self.unload_model()
-                        self.load_model()
+                    try:
+                        with self._model_swap_lock:
+                            self.unload_model()
+                            self.load_model()
+                    finally:
+                        self._switch_pending = False
 
                 threading.Thread(target=_reload, daemon=True).start()
         else:
@@ -410,10 +450,16 @@ class PocketTTS:
             "PocketTTS Model unloaded.", color=LogType.INFO, server_only=True
         )
 
+    @property
+    def is_loading(self) -> bool:
+        """A model is loading or about to: the loaded one is not (yet) the
+        one the settings ask for."""
+        return self._loading or self._switch_pending
+
     def get_status(self) -> dict:
         """Return current PocketTTS status for the UI."""
         return {
-            "is_loading": self._loading,
+            "is_loading": self.is_loading,
             "model_loaded": self.model is not None,
             "model": self.model_id,
             "version": POCKET_TTS_VERSION,
@@ -529,10 +575,18 @@ class PocketTTS:
     def _known_model_tags(self) -> set[str]:
         """Canonical model IDs usable as a ``<stem>.<tag>.safetensors`` tag.
 
-        Includes built-in model IDs and any bare filename (no extension) of
-        custom YAML configs in ``models_dir``.
+        Includes built-in model IDs, every model pocket-tts ships a config
+        for (so clones of a model Wingman no longer uses, english_2026-04 or
+        english_2026-09, are not listed as voices of their own), and any bare
+        filename (no extension) of custom YAML configs in ``models_dir``.
         """
         tags = {m["id"] for m in BUILTIN_MODELS}
+        try:
+            from pocket_tts.utils.config import CONFIGS_DIR
+
+            tags.update(p.stem for p in CONFIGS_DIR.glob("*.yaml"))
+        except Exception:
+            pass
         if os.path.isdir(self.models_dir):
             for entry in os.listdir(self.models_dir):
                 if entry.lower().endswith((".yaml", ".yml")):
@@ -673,7 +727,7 @@ class PocketTTS:
             # Without a version to compare, re-cloning on every start would be
             # the only safe answer; keeping what is there is the sane one.
             return True
-        return cls._voice_file_metadata(path).get(cls._CLONED_BY) == POCKET_TTS_VERSION
+        return cls._voice_file_metadata(path).get(cls._CLONED_BY) == CLONE_STAMP
 
     @classmethod
     def _save_voice_state(cls, state: dict, path: str, metadata: dict) -> None:
@@ -725,10 +779,14 @@ class PocketTTS:
         to derive a cache path from), the state is returned without writing a
         disk cache.
         """
-        state = self.model.get_state_for_audio_prompt(audio_path, truncate=True)
+        sample_rate = self.model.config.mimi.sample_rate
+        prompt = load_voice_prompt(audio_path, sample_rate)
+        state = self.model.get_state_for_audio_prompt(torch.from_numpy(prompt).unsqueeze(0))
         directory = os.path.dirname(audio_path)
         stem, ext = os.path.splitext(os.path.basename(audio_path))
-        if not directory or not ext:
+        if not directory or not ext or self._loaded_model_id != self.model_id:
+            # During a model switch the old model is still loaded while the
+            # file name would already be the new model's.
             return state
         active_tag = self._active_model_tag()
         safetensors_path = os.path.join(
@@ -736,7 +794,7 @@ class PocketTTS:
         )
         try:
             self._save_voice_state(
-                state, safetensors_path, {self._CLONED_BY: POCKET_TTS_VERSION}
+                state, safetensors_path, {self._CLONED_BY: CLONE_STAMP}
             )
             self.printr.print(
                 f"Saved cloned voice state to {safetensors_path}",
@@ -1178,6 +1236,7 @@ class PocketTTS:
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
+        text = text_for_pocket(text)
         if not text:
             return
 
@@ -1205,8 +1264,6 @@ class PocketTTS:
         if not self.model:
             self.printr.toast_error("PocketTTS model not loaded.")
             return
-        # Hack for pocket-tts sometimes skipping first syllable in short generations
-        text = "..." + text
         try:
             # We assume config.voice holds the voice ID or path
             voice_id = config.voice if config.voice else "alba"
@@ -1219,11 +1276,11 @@ class PocketTTS:
             async with self._gen_lock():
                 if config.output_streaming:
                     await self._stream_audio(
-                        text, voice_state, sound_config, audio_player, wingman_name
+                        text, voice_state, sound_config, audio_player, wingman_name, voice_id
                     )
                 else:
                     await self._generate_and_play(
-                        text, voice_state, sound_config, audio_player, wingman_name
+                        text, voice_state, sound_config, audio_player, wingman_name, voice_id
                     )
 
         except Exception as e:
@@ -1231,7 +1288,7 @@ class PocketTTS:
             self.printr.print(f"PocketTTS Generation failed: {e}", color=LogType.ERROR)
 
     async def _generate_and_play(
-        self, text, voice_state, sound_config, audio_player, wingman_name
+        self, text, voice_state, sound_config, audio_player, wingman_name, voice_id=None
     ):
         """Generate full audio and play it via the streaming playback path.
 
@@ -1245,7 +1302,7 @@ class PocketTTS:
             # Protect model lifecycle: a settings-change reload waits on this
             # lock before swapping self.model out.
             with self._model_swap_lock:
-                return torch.cat(list(self._speech_stream(voice_state, text)))
+                return torch.cat(list(self._speech_stream(voice_state, text, voice_id)))
 
         audio_tensor = await loop.run_in_executor(None, _generate)
 
@@ -1281,10 +1338,10 @@ class PocketTTS:
             use_gain_boost=True,
         )
 
-    def _speech_stream(self, voice_state, text: str):
+    def _speech_stream(self, voice_state, text: str, voice_id: Optional[str] = None):
         """Audio chunks for ``text``, generated piece by piece so no piece
         is longer than the model handles cleanly, each faded in and out so
-        the joins do not click (see pocket_tts_chunks). Caller holds
+        the joins neither click nor pause too long (see pocket_tts_chunks). Caller holds
         ``_model_swap_lock``."""
         try:
             tokenizer = self.model.flow_lm.conditioner.tokenizer
@@ -1299,7 +1356,6 @@ class PocketTTS:
                 ),
                 count_tokens=lambda t: len(tokenizer(t)[0]),
                 language=self.spoken_language,
-                by_clause=self.model_id in CLAUSE_MODELS,
             )
         except Exception as e:
             # A later pocket-tts moving these internals must not cost speech.
@@ -1309,18 +1365,76 @@ class PocketTTS:
                 server_only=True,
             )
             pieces = [text]
+        pause_samples = int(self.model.sample_rate * JOIN_SECONDS)
+        last = None
+        previous: list[torch.Tensor] = []
         for piece in pieces:
-            yield from faded_edges(
+            state = voice_state
+            if previous:
+                yield last.new_zeros(pause_samples)
+                state = self._continued_state(voice_state, voice_id, torch.cat(previous))
+            previous = []
+            for last in piece_audio(
                 self.model.generate_audio_stream(
-                    voice_state,
+                    state,
                     piece,
                     # Its own limit is lower (50) and would cut the piece again.
                     max_tokens=MAX_TOKENS,
-                    frames_after_eos=self.model.model_recommended_frames_after_eos
-                    or frames_after_eos(piece),
+                    # pocket-tts' own choice. After the end the model breathes
+                    # in and starts the next sentence, often higher: of 84
+                    # English pieces, 2 frames more held an audible breath 30
+                    # times instead of 9 and a new start once, heard as the
+                    # last word repeated or a squeak (measured 2026-10-09).
+                    frames_after_eos=None,
                 ),
                 self.model.sample_rate,
-            )
+            ):
+                previous.append(last.cpu())
+                yield last
+
+    def _continued_state(self, voice_state, voice_id: Optional[str], previous: torch.Tensor):
+        """The state for the next piece: the voice's recording followed by
+        the end of the piece before, so it goes on in the same voice (see
+        CONTEXT_SECONDS). A voice without a recording (Kyutai's built-in
+        ones) starts every piece from the voice alone, as does any failure."""
+        prompt = self._continuation_prompt(voice_id)
+        if prompt is None:
+            return voice_state
+        try:
+            audio = continuation_prompt(prompt, previous.reshape(-1).cpu(), self.model.sample_rate)
+            return self.model.get_state_for_audio_prompt(audio)
+        except Exception as e:
+            if not self._continuation_failed:
+                self._continuation_failed = True
+                self.printr.print(
+                    f"PocketTTS: pieces start from the voice alone, could not continue the last one: {e}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+            return voice_state
+
+    def _continuation_prompt(self, voice_id: Optional[str]) -> Optional[torch.Tensor]:
+        """The voice's recording, cut short to leave room for the end of the
+        piece before (CONTINUATION_PROMPT_SECONDS); None for a voice without
+        one. Kept per voice, so it is read once."""
+        if not voice_id or voice_id in self._BUILTIN_VOICE_IDS:
+            return None
+        if voice_id not in self._continuation_prompts:
+            audio = None
+            if self.voices_dir:
+                audio = self._audio_for(os.path.join(self.voices_dir, voice_id))
+            if audio is None and os.path.splitext(voice_id)[1].lower() in (".wav", ".mp3", ".flac"):
+                audio = voice_id if os.path.exists(voice_id) else None
+            prompt = None
+            if audio:
+                try:
+                    prompt = torch.from_numpy(
+                        load_voice_prompt(audio, self.model.sample_rate, CONTINUATION_PROMPT_SECONDS)
+                    )
+                except Exception:
+                    prompt = None
+            self._continuation_prompts[voice_id] = prompt
+        return self._continuation_prompts[voice_id]
 
     # Audio the speakers hold back before they start. Covers a slow first
     # sentence boundary on a machine that makes audio only a little faster
@@ -1328,7 +1442,7 @@ class PocketTTS:
     _STREAM_PREBUFFER_MS = 200
 
     async def _stream_audio(
-        self, text, voice_state, sound_config, audio_player, wingman_name
+        self, text, voice_state, sound_config, audio_player, wingman_name, voice_id=None
     ):
         """Stream generation.
 
@@ -1352,9 +1466,7 @@ class PocketTTS:
         def produce() -> None:
             try:
                 with self._model_swap_lock:
-                    # ``frames_after_eos=None`` lets pocket-tts pick the
-                    # trailing frames from the text length.
-                    for tensor in self._speech_stream(voice_state, text):
+                    for tensor in self._speech_stream(voice_state, text, voice_id):
                         if cancelled.is_set():
                             break
                         if tensor.is_cuda:

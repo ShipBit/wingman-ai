@@ -2795,6 +2795,8 @@ class WingmanCore(WebSocketUser):
     async def _start_precompute(self, only_stale: bool) -> dict:
         if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
             return {"started": False, "reason": "pocket_tts unavailable", "total": 0}
+        if self.pocket_tts.is_loading:
+            return {"started": False, "reason": "model loading", "total": 0}
         if not self.pocket_tts.model:
             return {"started": False, "reason": "model not loaded", "total": 0}
         if self.pocket_tts._precompute_running:

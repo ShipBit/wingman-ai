@@ -1140,7 +1140,9 @@ class Wingman:
         else:
             sound_config = self.config.sound
 
-        text, contains_links, contains_code_blocks = cleanup_text(text)
+        text, contains_links, contains_code_blocks = cleanup_text(
+            text, self.settings.spoken_language
+        )
 
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:

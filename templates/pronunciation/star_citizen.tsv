@@ -6,11 +6,22 @@
 # German voices would read "U E C" as German letters; players say these
 # terms in English, so the German lines spell the English sound. The first
 # matching line wins, so the German one comes first.
+# French, Spanish, Italian, Portuguese and Dutch lines: candidates spelled
+# by each language's rules, spoken by its standard model with two voices,
+# and scored by a phoneme recognizer (wav2vec2 espeak) against the English
+# pronunciation; a line only where it beat what was read before by 0.08 or
+# more (2026-10-10). The same score agreed with the German lines chosen by
+# ear in 10 of 12 cases, so these are a start, not a final word.
 # Only aUEC, QT and ATC are on for now: the other spelled-out letters broke
 # the flow of speech. Hyphens make the German voice say the letters as one
 # word instead of stressing each; without a rule it swallows ATC (heard 0 of
 # 6 times by Parakeet, 6 of 6 with "Ey-Tih-Ssi"; measured 2026-09-24).
 aUEC	Alpha Juh-Ih-Ssi	de
+aUEC	Alpha You-I-Si	fr
+aUEC	Alfa Yu-I-Si	es
+aUEC	Alfa Iu-I-Si	it
+aUEC	Alfa Iú-Í-Ci	pt
+aUEC	Alfa Joe-I-Sie	nl
 aUEC	Alpha U E C
 # UEC	Juh Ih Ssi	de
 # UEC	U E C
@@ -22,27 +33,83 @@ QT	Quantum
 # spoken by the German model (2026-09-24); names it already says well enough
 # (Aegis, Drake, Freelancer, Hornet, Prospector, Reclaimer) are not listed.
 Crusader	Kruseider	de
+Crusader	Krou-Séïdeur	fr
+Crusader	Cruséider	es
+Crusader	Cru-Sèider	it
+Crusader	Cru-Sêider	pt
+Crusader	Kroe-Seejder	nl
 Hurston	Hörstn	de
+Hurston	Hurstun	nl
 ArcCorp	Ark-Korp	de
+ArcCorp	Ark-Korp	it
+ArcCorp	Ark-Korp	nl
 Arccorp	Ark-Korp	de
+Arccorp	Ark-Korp	it
+Arccorp	Ark-Korp	nl
 microTech	Maikroteck	de
+microTech	Maïkrotèk	fr
+microTech	Maicro-Tec	es
+microTech	Màicro-Tek	it
+microTech	Maicro-Téc	pt
+microTech	Maikro-Tek	nl
 MicroTech	Maikroteck	de
+MicroTech	Maïkrotèk	fr
+MicroTech	Maicro-Tec	es
+MicroTech	Màicro-Tek	it
+MicroTech	Maicro-Téc	pt
+MicroTech	Maikro-Tek	nl
 Microtech	Maikroteck	de
+Microtech	Maïkrotèk	fr
+Microtech	Maicro-Tec	es
+Microtech	Màicro-Tek	it
+Microtech	Maicro-Téc	pt
+Microtech	Maikro-Tek	nl
 Stanton	Stänten	de
+Stanton	Stentun	nl
 Lorville	Lohr-Will	de
+Lorville	Lor-Vil	es
+Lorville	Lòrvil	it
 New Babbage	Nju Bäbbitsch	de
+New Babbage	Niou Babidje	fr
+New Babbage	Niu Bébidj	pt
 Orison	Orris'n	de
+Orison	O-Ri-Seune	fr
+Orison	Órison	es
 Pyro	Pai-Ro	de
+Pyro	Paï-Ro	fr
+Pyro	Páiro	es
+Pyro	Pàiro	it
+Pyro	Pai-Rô	pt
+Pyro	Paai-Roo	nl
 Anvil	Änwil	de
+Anvil	Ènn-vil	fr
+Anvil	Ànvil	it
+Anvil	Ennvil	nl
 Origin	Orridschin	de
+Origin	Oridjine	fr
 Cutlass	Kattläss	de
+Cutlass	Kátlas	pt
 Carrack	Kärräck	de
+Carrack	Kérrak	pt
 Constellation	Konstel-Läischen	de
+Constellation	Konn-Steu-Léïcheune	fr
+Constellation	Consteléishen	es
+Constellation	Constelèiscion	it
+Constellation	Konstelêichen	pt
+Constellation	Konstelleesjun	nl
 Vanguard	Wänngard	de
+Vanguard	Vánggard	es
 Caterpillar	Kätterpiller	de
+Caterpillar	Kateur-Pileur	fr
+Caterpillar	Càterpilar	it
 # QD	Quantum Dampener
 # MFD	M F D
 ATC	Ey-Tih-Ssi	de
+ATC	É-Ti-Si	fr
+ATC	Ey-Ti-Si	es
+ATC	Èi-Tì-Sì	it
+ATC	Ei-Tii-Sii	pt
+ATC	Ee-Ti-Sie	nl
 # EVA	E V A
 # RSI	R S I
 # MISC	Misc

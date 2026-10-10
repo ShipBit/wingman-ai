@@ -13,6 +13,7 @@ model at least reads a lone "7" correctly.
 
 import re
 from decimal import InvalidOperation
+from functools import lru_cache
 
 from num2words import num2words
 
@@ -60,6 +61,22 @@ _RANGE_WORD = {
 }
 
 _MINUS_WORD = {SpokenLanguage.FR: "moins", SpokenLanguage.NL: "min"}
+
+
+@lru_cache(maxsize=None)
+def number_words(language: SpokenLanguage) -> frozenset[str]:
+    """Lower-case words spell_out_numbers writes for ``language``: "two",
+    "hundred", "and", "eighty", "point". Empty for a language num2words does
+    not know."""
+    lang = _NUM2WORDS_LANG.get(language)
+    if not lang:
+        return frozenset()
+    samples = [*range(101), *range(100, 1000, 100), *range(1000, 10000, 1000), 10**6, 2 * 10**6, 10**9, 2 * 10**9]
+    out = {_DECIMAL_WORD[language].lower(), *_PERCENT_WORD[language].lower().split()}
+    for n in samples:
+        out.update(re.split(r"[\s-]+", num2words(n, lang=lang).lower()))
+    out.discard("")
+    return frozenset(out)
 
 _GERMAN_MONTHS = (
     "Januar|Jänner|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember"
@@ -120,6 +137,8 @@ def _number(sign: str, body: str, language: SpokenLanguage) -> str | None:
         words = _words(num2words(int(integer), lang=lang, to="year"))
     else:
         words = _words(num2words(int(integer), lang=lang))
+    if language == SpokenLanguage.DE:
+        words = _german_parts(words)
 
     if decimals:
         digits = " ".join(_words(num2words(int(d), lang=lang)) for d in decimals)
@@ -168,6 +187,19 @@ def _time(hours: int, minutes: int, language: SpokenLanguage) -> str:
     if language == SpokenLanguage.EN:
         return f"{h} o'clock" if minutes == 0 else f"{h} {m if minutes >= 10 else 'oh ' + m}"
     return f"{h} {m}" if minutes else h
+
+
+_GERMAN_PART = re.compile(
+    r"(hundert|tausend)(?=ein|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig)"
+)
+
+
+def _german_parts(spelled: str) -> str:
+    """A German number as hyphenated parts: "zweihundert-achtundachtzig".
+    In one word the German model lost its place in the repeated "acht":
+    "zweihundertachtundachtundachtzig" in 4 of 60 runs, 0 of 60 with the
+    hyphen; still read as one number (2026-10-10)."""
+    return _GERMAN_PART.sub(r"\1-", spelled)
 
 
 def _words(spelled: str) -> str:
