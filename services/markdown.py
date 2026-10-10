@@ -216,6 +216,16 @@ def _count_list_items(items: list[dict]) -> int:
     return sum(1 + len(item["children"]) for item in items)
 
 
+LIST_ITEM_SENTENCE_WORDS = 4
+"""A list with an item longer than this is spoken item by item as sentences;
+a shorter one as an enumeration ("Gear down and Lights on.")."""
+
+
+def _as_sentence(text: str) -> str:
+    text = text.strip().rstrip(",;:")
+    return text if text.endswith((".", "!", "?", "\u2026")) else text + "."
+
+
 def _format_list_for_tts(items: list[dict], and_word: str | None = "and") -> str:
     """Formats parsed list items into natural speech.
 
@@ -231,6 +241,15 @@ def _format_list_for_tts(items: list[dict], and_word: str | None = "and") -> str
             parts.append(f'{item["text"]}: {children_text}')
         else:
             parts.append(item["text"])
+
+    # Items that are sentences of their own ("Buy 288 SCU of Silicon at the
+    # Admin Office, Baijini Point, 565,632 aUEC") are said as sentences: joined
+    # with commas and an "and" they ran into one long sentence, and no voice
+    # could be heard to start a new item.
+    if all(not item["children"] for item in items) and any(
+        len(part.split()) > LIST_ITEM_SENTENCE_WORDS for part in parts
+    ):
+        return " ".join(_as_sentence(part) for part in parts)
 
     # If all items are simple (no children), join with commas
     if all(not item["children"] for item in items):
