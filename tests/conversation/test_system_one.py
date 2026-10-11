@@ -20,9 +20,7 @@ from services.jev_decisions import (
     NONE_OPTION,
     command_questions,
     read_command,
-    read_triage,
     read_vocabulary,
-    triage_questions,
     vocabulary_questions,
 )
 from services import jev_gate
@@ -95,28 +93,6 @@ def test_a_failed_call_changes_nothing():
 
 def test_an_empty_answer_changes_nothing():
     assert read_command(JevResult(answers={}), 0.0) is None
-
-
-# ── triage ──────────────────────────────────────────────────────────
-
-
-def test_echo_is_only_asked_about_while_the_wingman_speaks():
-    assert "echo" not in triage_questions(["Computer"], during_playback=False)
-    assert "echo" in triage_questions(["Computer"], during_playback=True)
-
-
-def test_the_wingman_names_reach_the_question():
-    question = triage_questions(["Computer", "ATC"], during_playback=False)["addressed"]
-    assert "Computer" in question["instructions"]
-    assert "ATC" in question["instructions"]
-
-
-def test_triage_hands_back_probabilities_not_a_verdict():
-    result = JevResult(answers={"addressed": {"type": "noul", "noul": 0.04}})
-    values = read_triage(result)
-    assert values["addressed"] == pytest.approx(0.04)
-    assert values["stop"] is None
-    assert values["echo"] is None
 
 
 # ── the client, switched off ────────────────────────────────────────
@@ -229,7 +205,6 @@ def test_a_switched_off_gate_reaches_no_model():
     gate = JevGate("T", settings=_settings(False))
     assert asyncio.run(gate.ask({"x": 1}, {"q": {"type": "noul"}})) is None
     assert gate.ask_sync({"x": 1}, {"q": {"type": "noul"}}) is None
-    assert gate.triage("hi", ["Computer"], during_playback=False) == {}
     assert gate.confirm_vocabulary("hi", [("a", "B", False)]) is None
 
 
