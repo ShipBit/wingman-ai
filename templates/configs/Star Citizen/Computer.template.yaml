@@ -8,6 +8,7 @@ discoverable_skills:
 discoverable_mcps:
   - wingman_date_time
   - wingman_starhead
+  - wingman_galactapedia
 prompts:
   backstory: |
     Your name is "Computer" and you are the AI board computer of a spacecraft in the Star Citizen universe.

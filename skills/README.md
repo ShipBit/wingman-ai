@@ -32,6 +32,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Dialogs in the client](#selfwingmanui--show-something-in-the-client)
   - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
+  - [Star Citizen's game folder](#selfwingmanstar_citizen--where-star-citizen-is-installed)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
 - [Local AI API](#local-ai-api-selfwingmanlocal_ai)
   - [Overview](#overview)
@@ -931,6 +932,36 @@ custom_properties:
 
 ---
 
+#### `directory` and `file` - Folder and File Picker
+
+A text field with a button that opens the system's folder or file dialog. The
+value is the full path as a string, so the skill reads it like a `string`.
+Use one of these for every path, so the user never has to copy a path out of
+Explorer or Finder.
+
+```yaml
+custom_properties:
+  - id: install_directory
+    name: Install Directory
+    hint: Where the game is installed.
+    value: C:\Program Files (x86)\Steam\steamapps\common\American Truck Simulator
+    required: false
+    property_type: directory
+
+  - id: profile_file
+    name: Profile
+    hint: The profile file to read.
+    value: ""
+    required: false
+    property_type: file
+```
+
+**Use for:** Install folders, output folders, files to read. For Star Citizen's
+folder use `self.wingman.star_citizen` instead: the user sets it once for every
+skill.
+
+---
+
 #### `audio_device` - Audio Device Selector
 
 Dropdown populated with available audio devices from the user's system.
@@ -1569,6 +1600,28 @@ If your skill is pointless without the HUD, declare `requires: [hud_server]`
 in its `default_config.yaml`. The client then keeps the skill off and tells the
 user to switch the HUD on first. A skill that only uses the HUD as an extra
 (like Star Citizen Events) leaves it out and relies on the `False` return.
+
+### `self.wingman.star_citizen` — where Star Citizen is installed
+
+The StarCitizen folder that holds LIVE, PTU and the other environments. The
+user sets it once, in the setup after the first start or in Settings, and every
+skill that reads the game's files uses it. Do not ask for the folder in a
+custom property of your own. Read-only.
+
+| Member | Description |
+| --- | --- |
+| `.game_path` | `Path` of the folder as the user set it, `None` if empty. It may not exist. |
+| `.found` | `bool` — the folder holds at least one environment. |
+| `.environments` | `("LIVE", "PTU", ...)` — environment folders in it right now. |
+| `.environment_path(environment="LIVE")` | `Path` to that environment's folder, `None` if it does not exist. |
+| `.plays` | What the user answered to "Do you play Star Citizen?", `None` before they answered. |
+
+```python
+live = self.wingman.star_citizen.environment_path("LIVE")
+if not live:
+    return "Star Citizen was not found. Set the game folder in Settings > Star Citizen."
+profiles = live / "user" / "client" / "0" / "Profiles" / "default"
+```
 
 ### `self.wingman.sc_gamelog` — Star Citizen's Game.log, live
 

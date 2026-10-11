@@ -36,8 +36,10 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from api.interface import (
-    ScGameLogSettings,
     ScGameLogStatus,
+    SettingsConfig,
+    StarCitizenGameFolder,
+    StarCitizenSetup,
     AudioDevice,
     AudioFile,
     AvatarGenerationRequest,
@@ -100,6 +102,8 @@ from services.file import (
 from services.audio.device_names import with_full_names
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
+from services.star_citizen.game_folder import inspect_game_folder
+from services.star_citizen.setup import StarCitizenSetupService
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -228,6 +232,29 @@ class WingmanCore(WebSocketUser):
             path="/sc-gamelog/status",
             endpoint=self.get_sc_gamelog_status,
             response_model=ScGameLogStatus,
+            tags=tags,
+        )
+        # The Star Citizen step of the first-start setup. Its switches are
+        # the normal skill and MCP toggles.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/star-citizen/game-folder",
+            endpoint=self.check_star_citizen_game_folder,
+            response_model=StarCitizenGameFolder,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/star-citizen/setup",
+            endpoint=self.get_star_citizen_setup,
+            response_model=StarCitizenSetup,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/star-citizen/plays",
+            endpoint=self.set_plays_star_citizen,
+            response_model=StarCitizenSetup,
             tags=tags,
         )
         self.router.add_api_route(
@@ -871,6 +898,9 @@ class WingmanCore(WebSocketUser):
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
         )
+        self.star_citizen_setup = StarCitizenSetupService(
+            config_service=self.config_service, settings_service=self.settings_service
+        )
         # Surface STT download/init progress during runtime settings switches
         # via the same LOADING_CONFIG indicator used at startup; flip back to
         # READY when the switch finishes.
@@ -1070,10 +1100,22 @@ class WingmanCore(WebSocketUser):
         await self._start_hud_server_if_enabled()
 
         # 7. Star Citizen log reader
-        await self._apply_sc_gamelog_settings(self.settings_service.settings.sc_gamelog)
+        await self._apply_sc_gamelog_settings(self.settings_service.settings)
 
-    async def _apply_sc_gamelog_settings(self, sc_gamelog: ScGameLogSettings):
-        await ScGameLogService().apply_settings(sc_gamelog.enabled, sc_gamelog.game_path)
+    async def _apply_sc_gamelog_settings(self, settings: SettingsConfig):
+        enabled = settings.sc_gamelog.enabled
+        game_path = settings.star_citizen.game_path
+        await ScGameLogService().apply_settings(enabled, game_path)
+        # The client shows the warning with a link to the setting; this is
+        # the line for the log file.
+        if enabled and not inspect_game_folder(game_path).environments:
+            self.printr.print(
+                f"Star Citizen is not in {game_path or 'an empty folder'}: "
+                "the log reader waits for a Game.log that never comes. "
+                "Set the game folder in Settings > Star Citizen.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
 
     async def _broadcast_sc_gamelog_status(self, status: ScGameLogStatus):
         if self._connection_manager:
@@ -1084,6 +1126,18 @@ class WingmanCore(WebSocketUser):
     # GET /sc-gamelog/status
     async def get_sc_gamelog_status(self) -> ScGameLogStatus:
         return ScGameLogService().status()
+
+    # GET /star-citizen/game-folder
+    def check_star_citizen_game_folder(self, path: str) -> StarCitizenGameFolder:
+        return self.star_citizen_setup.check_game_folder(path)
+
+    # GET /star-citizen/setup
+    def get_star_citizen_setup(self) -> StarCitizenSetup:
+        return self.star_citizen_setup.get_setup()
+
+    # POST /star-citizen/plays
+    async def set_plays_star_citizen(self, plays: bool) -> StarCitizenSetup:
+        return await self.star_citizen_setup.apply_answer(plays)
 
     def _get_validated_hud_settings(
         self, hud_settings, log_invalid: bool = True
