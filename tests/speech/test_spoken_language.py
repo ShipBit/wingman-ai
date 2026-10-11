@@ -103,7 +103,7 @@ def test_only_a_reload_with_another_model_counts_as_a_switch(tmp_path, monkeypat
 
     monkeypatch.setattr(pocket, "use_r2_mirror", lambda: True)
     monkeypatch.setattr(pocket, "build_r2_config", lambda model_id, _dir: model_id)
-    monkeypatch.setattr(pocket, "prefetch_gated_weights", lambda *a, **k: None)
+    monkeypatch.setattr(pocket, "prefetch_model_files", lambda *a, **k: None)
     monkeypatch.setattr(pocket.TTSModel, "load_model", classmethod(lambda cls, **k: object()))
     monkeypatch.setattr(pocket, "get_pocket_tts_models_dir", lambda: str(tmp_path))
     monkeypatch.setattr(pocket, "get_custom_voices_dir", lambda: str(tmp_path))

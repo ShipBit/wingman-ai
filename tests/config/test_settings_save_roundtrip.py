@@ -20,6 +20,7 @@ import inspect
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from api.enums import SpokenLanguage
 from api.interface import SettingsConfig
 from services.settings_service import SettingsService
 from tests.support import template
@@ -56,6 +57,7 @@ def _service(current: SettingsConfig):
     service.stt_provider_manager = None
     service.stt_status_callback = None
     service.printr = MagicMock()
+    service.printr.print_async = _noop
     return service
 
 
@@ -85,6 +87,35 @@ def test_the_toggle_survives_being_switched_back_on():
 
     asyncio.run(_service(current).save_settings(incoming))
     assert current.system_one.enabled is True
+
+
+def test_a_language_change_before_sign_in_reloads_the_config(monkeypatch):
+    """The client sets the language before it signs in, while there is no
+    Tower yet. The Tower then started from the config parsed at boot, still on
+    Pocket TTS, and the moved Wingmen stayed silent until a restart."""
+    import services.settings_service as module
+
+    monkeypatch.setattr(module, "apply_default_voices", lambda *a: [])
+    monkeypatch.setattr(module, "switch_to_azure_for_language", lambda *a: ["Star Citizen/ATC"])
+    current = _settings()
+    current.spoken_language = SpokenLanguage.EN
+    incoming = _settings()
+    incoming.spoken_language = SpokenLanguage.DE
+    service = _service(current)
+    service.config_manager.app_root_path = ""
+    service.pocket_tts.model_id = "german"
+    loads = []
+
+    async def load_config(*args):
+        loads.append(args)
+
+    service.config_service = SimpleNamespace(
+        tower=None, load_config=load_config, current_config_dir="Star Citizen"
+    )
+
+    asyncio.run(service.save_settings(incoming))
+
+    assert loads == [("Star Citizen",)]
 
 
 def test_every_settings_block_is_either_copied_or_deliberately_not():

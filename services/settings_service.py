@@ -288,8 +288,12 @@ class SettingsService:
                     f"these Wingmen now speak with Azure voices: {', '.join(wingmen)}.",
                     color=LogType.INFO,
                 )
-            if (changed or restored or moved) and self.config_service.tower:
-                await self.config_service.load_config()
+            # Also without a Tower: before sign-in the config is already parsed,
+            # and the Tower starts from that copy, not from the rewritten files.
+            if changed or restored or moved:
+                await self.config_service.load_config(
+                    self.config_service.current_config_dir
+                )
 
         # Local AI (llama.cpp)
         if self.local_ai_service:

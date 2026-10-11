@@ -168,6 +168,10 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
 
 
+class SubscriptionNotSignedIn(Exception):
+    """Core has no device token yet, so it cannot ask the subscription backend."""
+
+
 class WingmanCore(WebSocketUser):
     def __init__(
         self,
@@ -846,6 +850,9 @@ class WingmanCore(WebSocketUser):
         self.core_state_progress: float | None = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
+        # One Tower build at a time: a language change during sign-in reloads
+        # the config while the sign-in is about to build the Tower itself.
+        self._tower_lock = asyncio.Lock()
 
         self.key_events = {}
         # When "stop" was last said with nothing playing; see _on_transcript.
@@ -1546,6 +1553,10 @@ class WingmanCore(WebSocketUser):
         await self.refresh_input_hooks()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        async with self._tower_lock:
+            await self._initialize_tower(config_dir_info)
+
+    async def _initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         if not self.is_client_logged_in:
             self.printr.print(
                 "Client not logged in yet - skipping Tower initialization.",
@@ -3261,9 +3272,14 @@ class WingmanCore(WebSocketUser):
         One request for both, because the two pickers in the client are on screen
         at the same time and the backend assembles them from the same catalogue.
         """
+        # The device token, saved by the client on sign-in. Never ask for it: the
+        # user does not know it, and the client may ask for the models before
+        # it has saved the token.
         wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
+            key="wingman_pro", requester="WingmanPro", prompt_if_missing=False
         )
+        if not wingman_pro_token:
+            raise SubscriptionNotSignedIn()
         response = requests.get(
             url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
             timeout=10,
@@ -3282,8 +3298,11 @@ class WingmanCore(WebSocketUser):
             # The backend answers {plan, models:[{id,name}], support:{...}}; the
             # client wants the bare list, the way the old endpoint returned it.
             return body.get("models", [])
+        except SubscriptionNotSignedIn:
+            # A fresh install before the first sign-in. Not an error worth a toast.
+            return []
         except Exception as e:
-            self.printr.toast_error(f"Wingman Pro: \n{str(e)}")
+            self.printr.toast_error(f"Wingman Subscription: \n{str(e)}")
             return []
 
     # GET /models/wingman-pro/support
@@ -4418,6 +4437,9 @@ class WingmanCore(WebSocketUser):
 
     # GET /memories/{wingman_name}
     def get_memories(self, wingman_name: str):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return []
         wingman = self.tower.get_wingman_by_name(wingman_name)
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             return []

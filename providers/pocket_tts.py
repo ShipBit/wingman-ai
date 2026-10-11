@@ -58,7 +58,7 @@ from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
     hf_uri_to_https_url,
-    prefetch_gated_weights,
+    prefetch_model_files,
     use_r2_mirror,
 )
 from services.file import get_custom_voices_dir, get_pocket_tts_models_dir
@@ -375,11 +375,12 @@ class PocketTTS:
                 )
                 # Pre-populate pocket_tts's cache with retries + atomic writes so
                 # its own fragile download path (no timeout/retry/size check)
-                # never runs for the large cloning weights. On failure, warn and
-                # continue — the library falls back to the public non-cloning
-                # weights instead of silently breaking with no explanation.
+                # never runs for the cloning weights and the tokenizer. On
+                # failure, warn and continue: without the cloning weights the
+                # library falls back to the public non-cloning ones; without
+                # the tokenizer the load below fails with its own error.
                 try:
-                    prefetch_gated_weights(
+                    prefetch_model_files(
                         model_id,
                         log=lambda msg: self.printr.print(
                             msg, color=LogType.INFO, server_only=True
@@ -387,9 +388,9 @@ class PocketTTS:
                     )
                 except Exception as fetch_err:
                     self.printr.toast_warning(
-                        "Could not download the PocketTTS voice-cloning weights. "
-                        "Voice cloning may be unavailable — check your internet "
-                        f"connection and restart Wingman AI.\nError: {fetch_err}"
+                        "Could not download a Pocket TTS model file. Pocket TTS "
+                        "may not load, or may not clone voices. Check your "
+                        f"internet connection and restart Wingman AI.\nError: {fetch_err}"
                     )
                 self.model = TTSModel.load_model(
                     config=config_path, temp=BUILTIN_MODEL_TEMPERATURE

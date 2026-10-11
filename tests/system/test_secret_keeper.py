@@ -131,3 +131,70 @@ def test_posting_secrets_adds_new_keys_and_overwrites_existing_ones(secrets_dir)
     assert keeper.secrets == expected
     assert read_yaml(secrets_file(secrets_dir)) == expected
 
+
+
+# ── the subscription's device token ──
+
+
+def test_asking_for_subscription_models_before_sign_in_never_prompts(secrets_dir):
+    """The client asks for the TTS models as soon as it knows the plan, before
+    it has saved the device token. That popped "WingmanPro needs to know a
+    secret" on a fresh install, for a token the user cannot know."""
+    from types import SimpleNamespace
+
+    from wingman_core import SubscriptionNotSignedIn, WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper())
+
+    with pytest.raises(SubscriptionNotSignedIn):
+        asyncio.run(WingmanCore._fetch_subscription_models(core))
+
+    assert SecretKeeper._connection_manager.sent == []
+
+
+def _command_handler(keeper):
+    from services.command_handler import CommandHandler
+
+    handler = CommandHandler.__new__(CommandHandler)
+    handler.secret_keeper = keeper
+    handler.connection_manager = SecretKeeper._connection_manager
+    return handler
+
+
+def test_saving_the_device_token_tells_the_client_core_has_it(secrets_dir):
+    """The client asks Core for the subscription's models only after this, so
+    the first answer is not an empty list from a Core without the token."""
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="wingman_pro", secret_value="token", show_message=False), None
+    ))
+
+    assert [c.command for c in SecretKeeper._connection_manager.sent] == ["subscription_token_saved"]
+
+
+def test_saving_another_secret_says_nothing_about_the_subscription(secrets_dir):
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="openai", secret_value="sk-test", show_message=False), None
+    ))
+
+    assert SecretKeeper._connection_manager.sent == []
+
+
+def test_the_model_list_before_sign_in_is_empty_without_an_error_toast(secrets_dir):
+    """On a fresh install the client may ask for the models before it has sent
+    the token. That showed "Wingman Pro: Not signed in." as an error."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from wingman_core import WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper(), printr=MagicMock())
+    core._fetch_subscription_models = lambda: WingmanCore._fetch_subscription_models(core)
+
+    assert asyncio.run(WingmanCore.get_wingman_pro_models(core)) == []
+    core.printr.toast_error.assert_not_called()
