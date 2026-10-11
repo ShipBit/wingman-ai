@@ -142,11 +142,11 @@ def test_asking_for_subscription_models_before_sign_in_never_prompts(secrets_dir
     secret" on a fresh install, for a token the user cannot know."""
     from types import SimpleNamespace
 
-    from wingman_core import WingmanCore
+    from wingman_core import SubscriptionNotSignedIn, WingmanCore
 
     core = SimpleNamespace(secret_keeper=SecretKeeper())
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SubscriptionNotSignedIn):
         asyncio.run(WingmanCore._fetch_subscription_models(core))
 
     assert SecretKeeper._connection_manager.sent == []
@@ -183,3 +183,18 @@ def test_saving_another_secret_says_nothing_about_the_subscription(secrets_dir):
     ))
 
     assert SecretKeeper._connection_manager.sent == []
+
+
+def test_the_model_list_before_sign_in_is_empty_without_an_error_toast(secrets_dir):
+    """Right after a Core restart the client asks for the models before it has
+    sent the token again. That showed "Wingman Pro: Not signed in." as an error."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from wingman_core import WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper(), printr=MagicMock())
+    core._fetch_subscription_models = lambda: WingmanCore._fetch_subscription_models(core)
+
+    assert asyncio.run(WingmanCore.get_wingman_pro_models(core)) == []
+    core.printr.toast_error.assert_not_called()
