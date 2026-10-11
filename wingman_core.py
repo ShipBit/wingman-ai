@@ -850,6 +850,9 @@ class WingmanCore(WebSocketUser):
         self.core_state_progress: float | None = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
+        # One Tower build at a time: a language change during sign-in reloads
+        # the config while the sign-in is about to build the Tower itself.
+        self._tower_lock = asyncio.Lock()
 
         self.key_events = {}
         # When "stop" was last said with nothing playing; see _on_transcript.
@@ -1550,6 +1553,10 @@ class WingmanCore(WebSocketUser):
         await self.refresh_input_hooks()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        async with self._tower_lock:
+            await self._initialize_tower(config_dir_info)
+
+    async def _initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         if not self.is_client_logged_in:
             self.printr.print(
                 "Client not logged in yet - skipping Tower initialization.",
@@ -3292,8 +3299,7 @@ class WingmanCore(WebSocketUser):
             # client wants the bare list, the way the old endpoint returned it.
             return body.get("models", [])
         except SubscriptionNotSignedIn:
-            # Before sign-in, or right after a Core restart while the client
-            # still has to send the token again. Not an error worth a toast.
+            # A fresh install before the first sign-in. Not an error worth a toast.
             return []
         except Exception as e:
             self.printr.toast_error(f"Wingman Subscription: \n{str(e)}")

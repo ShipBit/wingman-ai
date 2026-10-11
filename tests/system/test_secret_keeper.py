@@ -186,8 +186,8 @@ def test_saving_another_secret_says_nothing_about_the_subscription(secrets_dir):
 
 
 def test_the_model_list_before_sign_in_is_empty_without_an_error_toast(secrets_dir):
-    """Right after a Core restart the client asks for the models before it has
-    sent the token again. That showed "Wingman Pro: Not signed in." as an error."""
+    """On a fresh install the client may ask for the models before it has sent
+    the token. That showed "Wingman Pro: Not signed in." as an error."""
     from types import SimpleNamespace
     from unittest.mock import MagicMock
 

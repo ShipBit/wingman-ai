@@ -291,7 +291,9 @@ class SettingsService:
             # Also without a Tower: before sign-in the config is already parsed,
             # and the Tower starts from that copy, not from the rewritten files.
             if changed or restored or moved:
-                await self.config_service.load_config()
+                await self.config_service.load_config(
+                    self.config_service.current_config_dir
+                )
 
         # Local AI (llama.cpp)
         if self.local_ai_service:

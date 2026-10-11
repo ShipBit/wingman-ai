@@ -109,11 +109,13 @@ def test_a_language_change_before_sign_in_reloads_the_config(monkeypatch):
     async def load_config(*args):
         loads.append(args)
 
-    service.config_service = SimpleNamespace(tower=None, load_config=load_config)
+    service.config_service = SimpleNamespace(
+        tower=None, load_config=load_config, current_config_dir="Star Citizen"
+    )
 
     asyncio.run(service.save_settings(incoming))
 
-    assert loads == [()]
+    assert loads == [("Star Citizen",)]
 
 
 def test_every_settings_block_is_either_copied_or_deliberately_not():
