@@ -295,11 +295,11 @@ def load_preset(app_root_path: str, preset_id: str) -> list[str]:
 # --- names from the configuration ---
 
 
-def spoken_names(config) -> list[str]:
-    """What the active configuration says people will say: every wingman's
+def spoken_names(wingmen) -> list[str]:
+    """What people will say to the given wingman configs: every wingman's
     name and every spoken command trigger. Applied at runtime, not stored."""
     words: list[str] = []
-    for wingman in (config.wingmen or {}).values():
+    for wingman in wingmen:
         if wingman.disabled:
             continue
         words.append(wingman.name)

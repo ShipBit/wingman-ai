@@ -59,7 +59,7 @@ def _config():
 
 
 def test_spoken_names_are_the_runtime_vocabulary():
-    assert spoken_names(_config()) == ["Computer", "Flight Ready", "Deploy gear"]
+    assert spoken_names(_config().wingmen.values()) == ["Computer", "Flight Ready", "Deploy gear"]
 
 
 def test_mapping_entries_replace_exactly():
