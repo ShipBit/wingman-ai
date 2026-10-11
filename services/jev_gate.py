@@ -269,7 +269,7 @@ class JevGate:
     async def ask(self, state, questions: dict) -> Optional[JevResult]:
         """Any questions a skill wants answered. None when the feature is off.
 
-        Deliberately unconstrained: the four decisions above are Core's, and a
+        Deliberately unconstrained: the two decisions above are Core's, and a
         skill's will be something we did not think of. What it does not get is
         a way around the switch — off is off, here as everywhere.
         """

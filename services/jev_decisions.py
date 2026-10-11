@@ -1,4 +1,4 @@
-"""The three decisions the prototype hands to Jev, and how to read the answers.
+"""The two decisions the prototype hands to Jev, and how to read the answers.
 
 Kept apart from the places that use them so each one can be measured on its
 own against the path it would replace. Every function here is pure: it builds
