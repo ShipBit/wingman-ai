@@ -170,3 +170,8 @@ def test_preset_overrides_are_a_diff_against_the_bundle():
         "Hurston", "Crusader", "Orison", "Jumptown"
     ]
     assert diff_override(bundled, bundled) == ([], [])
+
+
+def test_spoken_english_shorthand_is_not_a_name():
+    # "kinda" is one letter from the Star Citizen name "Kinga".
+    assert Vocabulary(["Kinga"]).correct("It's like kinda green.") == "It's like kinda green."

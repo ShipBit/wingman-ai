@@ -53,6 +53,7 @@ east west north south always often sometimes rarely never again already
 almost also always another anything before between both each either enough
 every everything few little many much neither nothing several such through
 together toward without within
+kinda sorta gonna wanna gotta
 """
 
 _GERMAN = """
