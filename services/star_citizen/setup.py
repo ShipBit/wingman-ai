@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from os import path
 from typing import TYPE_CHECKING
 
-from api.enums import StarCitizenFeatureKind
+from api.enums import LogType, StarCitizenFeatureKind
 from api.interface import (
     ConfigDirInfo,
     McpConfig,
@@ -110,9 +110,10 @@ class StarCitizenSetupService:
     async def apply_answer(self, plays: bool) -> StarCitizenSetup:
         """Switch every Star Citizen feature on or off. On only switches on
         what is on by default and leaves the rest as the user had it; off
-        switches everything off. The answer itself is saved by the client
-        with the settings once the step is done."""
+        switches everything off. The answer is saved with the settings, so
+        a config changed by it never comes with the question still open."""
         settings = deepcopy(self.settings_service.settings)
+        settings.star_citizen.plays = plays
         settings.sc_gamelog.enabled = plays
         _set_preset(settings.pronunciation.presets, plays)
         _set_preset(settings.stt.presets, plays)
@@ -125,13 +126,34 @@ class StarCitizenSetupService:
         if plays:
             self._add_missing_servers()
         available = self._available()
+        changed = False
         for config_dir, wingman_file in self._shipped_wingmen():
-            for feature in FEATURES:
-                if (feature.kind, feature.name) not in available:
-                    continue
-                if plays and not on_by_default(feature, wingman_file.name):
-                    continue
-                await self.toggle(config_dir, wingman_file, feature, plays)
+            try:
+                changed |= self._switch_features(
+                    config_dir, wingman_file, available, plays
+                )
+            except Exception as error:
+                self.printr.print(
+                    f"Star Citizen features not switched for {wingman_file.name}: {error}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+
+        # One reload for all Wingmen instead of one per feature. A toggle
+        # each would rebuild the Tower or connect every MCP server one by
+        # one, and right after sign-in it would build the Tower a second
+        # time while the first build is still running.
+        if changed and self._star_citizen_is_current():
+            try:
+                await self.config_service.load_config(
+                    self.config_service.current_config_dir
+                )
+            except Exception as error:
+                self.printr.print(
+                    f"Star Citizen config not reloaded: {error}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
 
         self.printr.print(
             f"Star Citizen features switched {'on' if plays else 'off'}.",
@@ -139,21 +161,45 @@ class StarCitizenSetupService:
         )
         return self.get_setup()
 
-    async def toggle(
+    def _switch_features(
         self,
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
-        feature: _Feature,
-        enabled: bool,
-    ) -> None:
-        if feature.kind == StarCitizenFeatureKind.SKILL:
-            await self.config_service.toggle_wingman_skill(
-                config_dir, wingman_file, feature.name, enabled
-            )
-        else:
-            await self.config_service.toggle_wingman_mcp(
-                config_dir, wingman_file, feature.name, enabled
-            )
+        available: dict,
+        plays: bool,
+    ) -> bool:
+        """Write the new skill and MCP lists of one Wingman straight to its
+        file. True if anything changed."""
+        config = self.config_manager.load_wingman_config(
+            config_dir=config_dir, wingman_file=wingman_file
+        )
+        skills = list(config.discoverable_skills or [])
+        mcps = list(config.discoverable_mcps or [])
+        for feature in FEATURES:
+            if (feature.kind, feature.name) not in available:
+                continue
+            if plays and not on_by_default(feature, wingman_file.name):
+                continue
+            names = skills if feature.kind == StarCitizenFeatureKind.SKILL else mcps
+            if plays and feature.name not in names:
+                names.append(feature.name)
+            elif not plays and feature.name in names:
+                names.remove(feature.name)
+        if skills == list(config.discoverable_skills or []) and mcps == list(
+            config.discoverable_mcps or []
+        ):
+            return False
+        # Assigned, not mutated in place, so the fields count as set.
+        config.discoverable_skills = skills
+        config.discoverable_mcps = mcps
+        self.config_manager.save_wingman_config(
+            config_dir=config_dir, wingman_file=wingman_file, wingman_config=config
+        )
+        return True
+
+    def _star_citizen_is_current(self) -> bool:
+        current = self.config_service.current_config_dir
+        return bool(current) and current.name == STAR_CITIZEN_CONFIG
 
     def _game_folder(self) -> StarCitizenGameFolder:
         """The folder from the settings if the game is there, else the one

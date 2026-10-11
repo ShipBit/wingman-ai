@@ -3,6 +3,7 @@ on or off: the log reader, the bundled lists and the Star Citizen skills and
 MCP servers on the shipped Wingmen."""
 
 import asyncio
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -53,22 +54,35 @@ def service(monkeypatch, tmp_path):
     config_manager.mcp_config = SimpleNamespace(
         servers=[SimpleNamespace(name=name, display_name=name) for name in SERVERS]
     )
-    config_manager.load_wingman_config.return_value = SimpleNamespace(
-        discoverable_skills=["UEXCorp"], discoverable_mcps=[]
+    files = {
+        name: SimpleNamespace(discoverable_skills=["UEXCorp"], discoverable_mcps=[])
+        for name in wingmen
+    }
+    config_manager.load_wingman_config.side_effect = (
+        lambda config_dir, wingman_file: deepcopy(files[wingman_file.name])
     )
+    writes = []
 
-    toggles = []
+    def save_wingman_config(config_dir, wingman_file, wingman_config):
+        writes.append(wingman_file.name)
+        files[wingman_file.name] = wingman_config
 
-    async def toggle_skill(config_dir, wingman_file, name, enabled):
-        toggles.append((wingman_file.name, name, enabled))
+    config_manager.save_wingman_config.side_effect = save_wingman_config
 
-    async def toggle_mcp(config_dir, wingman_file, name, enabled):
-        toggles.append((wingman_file.name, name, enabled))
+    reloads = []
+
+    async def load_config(config_dir):
+        reloads.append(config_dir.name)
+
+    async def toggle(*args):
+        raise AssertionError("the answer must not go through the single toggles")
 
     config_service = SimpleNamespace(
         config_manager=config_manager,
-        toggle_wingman_skill=toggle_skill,
-        toggle_wingman_mcp=toggle_mcp,
+        current_config_dir=config_dir,
+        load_config=load_config,
+        toggle_wingman_skill=toggle,
+        toggle_wingman_mcp=toggle,
     )
 
     saved = []
@@ -87,7 +101,9 @@ def service(monkeypatch, tmp_path):
     )
     service = StarCitizenSetupService(config_service, settings_service)
     service.printr = MagicMock()
-    service.toggles = toggles
+    service.files = files
+    service.writes = writes
+    service.reloads = reloads
     service.saved = saved
     return service
 
@@ -98,10 +114,10 @@ def test_no_switches_everything_off(service):
     assert settings.sc_gamelog.enabled is False
     assert settings.pronunciation.presets == []
     assert settings.stt.presets == ["elite"]
-    assert {(w, n) for w, n, on in service.toggles if not on} == {
-        (w, n) for w in ("ATC", "Computer") for n in SKILLS + SERVERS
-    }
-    assert all(not on for _, _, on in service.toggles)
+    assert settings.star_citizen.plays is False
+    for name in ("ATC", "Computer"):
+        assert service.files[name].discoverable_skills == []
+        assert service.files[name].discoverable_mcps == []
 
 
 def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
@@ -111,23 +127,54 @@ def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
     settings = service.saved[0]
     assert settings.sc_gamelog.enabled is True
     assert settings.pronunciation.presets == ["star_citizen"]
-    assert sorted(service.toggles) == sorted(
-        [
-            ("ATC", "wingman_starhead", True),
-            ("ATC", "wingman_galactapedia", True),
-            ("ATC", "wingman_versetime", True),
-            ("Computer", "wingman_starhead", True),
-            ("Computer", "wingman_galactapedia", True),
-            ("Computer", "wingman_versetime", True),
-            ("Computer", "ScGameEvents", True),
-            ("Computer", "SC_Accountant", True),
-        ]
-    )
+    assert settings.star_citizen.plays is True
+    assert service.files["ATC"].discoverable_skills == ["UEXCorp"]
+    assert service.files["ATC"].discoverable_mcps == list(SERVERS)
+    assert service.files["Computer"].discoverable_skills == [
+        "UEXCorp",
+        "ScGameEvents",
+        "SC_Accountant",
+    ]
+    assert service.files["Computer"].discoverable_mcps == list(SERVERS)
+
+
+def test_the_answer_writes_each_wingman_once_and_reloads_once(service):
+    asyncio.run(service.apply_answer(True))
+    assert sorted(service.writes) == ["ATC", "Computer"]
+    assert service.reloads == ["Star Citizen"]
+
+
+def test_no_reload_when_another_config_is_open(service):
+    service.config_service.current_config_dir = SimpleNamespace(name="Elite")
+    asyncio.run(service.apply_answer(True))
+    assert sorted(service.writes) == ["ATC", "Computer"]
+    assert service.reloads == []
+
+
+def test_no_write_and_no_reload_when_nothing_changes(service):
+    asyncio.run(service.apply_answer(True))
+    service.writes.clear()
+    service.reloads.clear()
+    asyncio.run(service.apply_answer(True))
+    assert service.writes == [] and service.reloads == []
+
+
+def test_a_wingman_that_fails_does_not_stop_the_others(service):
+    def save_wingman_config(config_dir, wingman_file, wingman_config):
+        if wingman_file.name == "ATC":
+            raise OSError("disk full")
+        service.files[wingman_file.name] = wingman_config
+
+    service.config_manager.save_wingman_config.side_effect = save_wingman_config
+    setup = asyncio.run(service.apply_answer(True))
+    assert "wingman_starhead" in service.files["Computer"].discoverable_mcps
+    assert service.reloads == ["Star Citizen"]
+    assert [w.wingman_file.name for w in setup.wingmen] == ["ATC", "Computer"]
 
 
 def test_the_users_own_wingmen_are_not_touched(service):
     asyncio.run(service.apply_answer(False))
-    assert all(wingman != "Mine" for wingman, _, _ in service.toggles)
+    assert "Mine" not in service.writes
     assert [w.wingman_file.name for w in service.get_setup().wingmen] == ["ATC", "Computer"]
 
 
@@ -171,7 +218,7 @@ def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(servi
     asyncio.run(service.apply_answer(True))
     assert "wingman_galactapedia" in {s.name for s in config_manager.mcp_config.servers}
     config_manager.save_mcp_config.assert_called_once()
-    assert ("Computer", "wingman_galactapedia", True) in service.toggles
+    assert "wingman_galactapedia" in service.files["Computer"].discoverable_mcps
 
 
 def test_no_adds_no_servers(service):
