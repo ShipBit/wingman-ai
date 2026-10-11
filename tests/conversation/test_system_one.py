@@ -10,6 +10,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from api.interface import CommandActionConfig, CommandConfig, CommandKeyboardConfig
 from providers.typesafe_jev import JevClient, JevResult
@@ -132,6 +133,25 @@ def test_no_subscription_and_no_key_means_no_request():
 def test_no_questions_means_no_request():
     result = JevClient(api_key="k").system_one({"transcript": "hi"}, {})
     assert result.error == "no questions"
+
+
+def test_a_failed_request_starts_the_next_on_a_fresh_connection():
+    class DeadSession:
+        closed = False
+
+        def post(self, *args, **kwargs):
+            raise requests.ReadTimeout("read timeout=4.0")
+
+        def close(self):
+            self.closed = True
+
+    client = JevClient(api_key="k")
+    dead = DeadSession()
+    client._session = dead
+    result = client.system_one({"transcript": "hi"}, {"q": {"type": "noul"}})
+    assert result.error
+    assert dead.closed
+    assert client._session is not dead
 
 
 # ── vocabulary gating ───────────────────────────────────────────────
