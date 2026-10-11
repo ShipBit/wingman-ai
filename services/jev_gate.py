@@ -114,6 +114,8 @@ class JevGate:
         Core's part of it."""
         self._warned_without_access = False
         """A plan without System One access must not say so on every utterance."""
+        self._warned_about_command_count = False
+        """Nor must a config too big to ask about."""
         self._vocabulary_paused_until = 0.0
         """Until when the vocabulary check is skipped after a failure, in
         ``time.monotonic()`` seconds."""
@@ -122,8 +124,6 @@ class JevGate:
         )
         """Runs the call so the transcript can stop waiting at the deadline.
         A call that outlives it finishes here, and its answer is dropped."""
-        self._warned_about_command_count = False
-        """Nor must a config too big to ask about."""
 
     def update_settings(self, settings: SettingsConfig) -> None:
         """Settings changed in the client. The subscription goes with them: a
