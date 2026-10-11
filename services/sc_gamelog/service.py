@@ -40,8 +40,8 @@ from services.sc_gamelog.rules import (
 )
 from services.sc_gamelog.state import State
 from services.sc_gamelog.tailer import LogTail
+from services.star_citizen.game_folder import ENVIRONMENTS, looks_like_game_folder
 
-ENVIRONMENTS = ("LIVE", "PTU", "EPTU", "HOTFIX", "TECH-PREVIEW")
 POLL_SECONDS = 0.25
 IDLE_SECONDS = 2.0
 """Between looks while no environment has a Game.log."""
@@ -276,7 +276,7 @@ class ScGameLogService:
         return ScGameLogStatus(
             running=self.running,
             game_path=self._game_path,
-            game_path_found=bool(self._game_path) and Path(self._game_path).is_dir(),
+            game_path_found=looks_like_game_folder(self._game_path),
             environments=list(self._found),
             active_environment=self.active_environment,
             rules_version=rules.version if rules else "",

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings, SkillSystemOne, SkillScGameLog, SkillUi, SkillHud, SpokenLanguageInfo,
+        SkillSettings, SkillSystemOne, SkillScGameLog, SkillStarCitizen, SkillUi, SkillHud, SpokenLanguageInfo,
     )
     from wingmen.wingman import Wingman
 
@@ -65,6 +65,7 @@ class WingmanContext:
         self.__memory = None
         self.__system_one = None
         self.__sc_gamelog = None
+        self.__star_citizen = None
         self.__ui = None
         self.__hud = None
         self.__secrets = None
@@ -233,6 +234,14 @@ class WingmanContext:
             from wingmen.facade import SkillScGameLog
             self.__sc_gamelog = SkillScGameLog()
         return self.__sc_gamelog
+
+    @property
+    def star_citizen(self) -> "SkillStarCitizen":
+        """Where Star Citizen is installed, set once by the user for every skill."""
+        if self.__star_citizen is None:
+            from wingmen.facade import SkillStarCitizen
+            self.__star_citizen = SkillStarCitizen(self.__wingman)
+        return self.__star_citizen
 
     @property
     def secrets(self) -> "SkillSecrets":
