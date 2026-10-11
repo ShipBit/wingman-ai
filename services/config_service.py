@@ -1608,12 +1608,17 @@ class ConfigService:
 
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
-        if not wingman:
+        if merged_config.disabled:
+            # A disabled wingman leaves the Tower, so no sentence reaches it.
+            # Its config is still saved, the user may edit it while it is off.
+            if wingman:
+                await self.tower.disable_wingman(wingman_file.name)
+        elif not wingman:
             # try to enable a previously disabled wingman
             disabled_config = self.tower.get_disabled_wingman_by_name(
                 merged_config.name
             )
-            if disabled_config and not merged_config.disabled:
+            if disabled_config:
                 enabled = await self.tower.enable_wingman(
                     wingman_name=merged_config.name,
                     settings=self.config_manager.settings_config,
@@ -1626,16 +1631,17 @@ class ConfigService:
                 self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
                 return
 
-        updated = await wingman.update_config(
-            config=merged_config,
-            skip_config_validation=skip_config_validation,
-        )
-
-        if not updated:
-            self.printr.toast_error(
-                f"New config for Wingman '{merged_config.name}' is invalid."
+        if not merged_config.disabled:
+            updated = await wingman.update_config(
+                config=merged_config,
+                skip_config_validation=skip_config_validation,
             )
-            return
+
+            if not updated:
+                self.printr.toast_error(
+                    f"New config for Wingman '{merged_config.name}' is invalid."
+                )
+                return
 
         # save the config file
         self.config_manager.save_wingman_config(

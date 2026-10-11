@@ -238,12 +238,16 @@ class Tower:
                 return True
         return False
 
-    def disable_wingman(self, wingman_name: str):
+    async def disable_wingman(self, wingman_name: str):
         for wingman in self.wingmen:
             if wingman.name == wingman_name:
                 wingman.config.disabled = True
                 self.disabled_wingmen.append(wingman.config)
+                # Out of the list first, so no new sentence is routed to it
+                # while its skills and MCP servers shut down.
                 self.wingmen.remove(wingman)
+                await wingman.unload()
+                await wingman.unload_mcps()
                 printr.print(
                     f"Disabled wingman {wingman_name}.",
                     color=LogType.SYSTEM,
