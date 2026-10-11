@@ -418,6 +418,12 @@ class JevClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
+            # The pooled connection may be one the network dropped without
+            # telling us: the request goes out and waits for the whole read
+            # timeout. The next call starts on a fresh connection instead of
+            # finding the same dead one.
+            self._session.close()
+            self._session = requests.Session()
             return _log_failure(state, questions, JevResult(
                 seconds=time.perf_counter() - started, error=str(e)))
 

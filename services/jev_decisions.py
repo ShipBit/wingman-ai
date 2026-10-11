@@ -1,4 +1,4 @@
-"""The three decisions the prototype hands to Jev, and how to read the answers.
+"""The two decisions the prototype hands to Jev, and how to read the answers.
 
 Kept apart from the places that use them so each one can be measured on its
 own against the path it would replace. Every function here is pure: it builds
@@ -11,7 +11,7 @@ this safe to switch on — a Jev that is unsure costs a few hundred milliseconds
 and changes nothing.
 """
 
-from typing import Any, Optional
+from typing import Optional
 
 from api.interface import CommandConfig
 from providers.typesafe_jev import JevResult, choice, noul
@@ -145,63 +145,7 @@ def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
     return picked
 
 
-# ── 2. What an utterance heard over the wingman actually was ────────
-
-
-def triage_questions(wingman_names: list[str], during_playback: bool) -> dict[str, dict]:
-    """The three things ``_on_transcript`` decides today by matching words.
-
-    All three in one call, because they are one decision really: the text is
-    either for us, or it is a stop, or it is our own voice coming back through
-    the speakers. Asking them separately would cost three round trips to learn
-    the same thing.
-    """
-    names = ", ".join(wingman_names) or "the assistant"
-    questions = {
-        "addressed": noul(
-            instructions=(
-                f"Is this spoken to a voice assistant ({names}) — a request, a "
-                "question, or an order to it? Answer no for talk between people "
-                "in the room, thinking out loud, or background noise written out "
-                "as words."
-            )
-        ),
-        "stop": noul(
-            instructions=(
-                "Does the speaker want the assistant to stop talking right now? "
-                "Answer yes for interruptions like 'stop', 'be quiet', 'enough'. "
-                "Answer no when the word stop is part of a request, as in "
-                "'stop the engines'."
-            )
-        ),
-    }
-    if during_playback:
-        questions["echo"] = noul(
-            instructions=(
-                "This was picked up while the assistant itself was speaking "
-                "through the speakers. Is this the assistant's own sentence "
-                "heard back by the microphone, rather than a person talking?"
-            )
-        )
-    return questions
-
-
-def read_triage(result: JevResult) -> dict[str, Any]:
-    """The three answers as probabilities, for a caller that sets its own gates.
-
-    Deliberately not a verdict. The thresholds belong where the consequences
-    are: stopping playback by mistake is a small annoyance, answering the room's
-    conversation is a large one, and only the caller knows which it is about
-    to do.
-    """
-    return {
-        "addressed": result.noul_value("addressed"),
-        "stop": result.noul_value("stop"),
-        "echo": result.noul_value("echo"),
-    }
-
-
-# ── 3. whether a heard word really is a Star Citizen name ───────────
+# ── 2. whether a heard word really is a Star Citizen name ───────────
 
 
 def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
