@@ -12,6 +12,7 @@ from api.enums import StarCitizenFeatureKind
 from api.interface import ConfigDirInfo, WingmanConfigFileInfo
 from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
+from tests.support import template
 
 SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp")
 SERVERS = ("wingman_starhead", "wingman_galactapedia", "wingman_versetime")
@@ -114,8 +115,10 @@ def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
         [
             ("ATC", "wingman_starhead", True),
             ("ATC", "wingman_galactapedia", True),
+            ("ATC", "wingman_versetime", True),
             ("Computer", "wingman_starhead", True),
             ("Computer", "wingman_galactapedia", True),
+            ("Computer", "wingman_versetime", True),
             ("Computer", "ScGameEvents", True),
             ("Computer", "SC_Accountant", True),
         ]
@@ -157,3 +160,22 @@ def test_a_picked_live_folder_checks_the_folder_above_it(service, tmp_path):
     (tmp_path / "LIVE").mkdir()
     folder = service.check_game_folder(str(tmp_path / "LIVE"))
     assert folder.path == str(tmp_path) and folder.environments == ["LIVE"]
+
+
+def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(service):
+    config_manager = service.config_manager
+    config_manager.mcp_config.servers = [
+        s for s in config_manager.mcp_config.servers if s.name != "wingman_galactapedia"
+    ]
+    config_manager.read_config.return_value = template("mcp.template.yaml")
+    asyncio.run(service.apply_answer(True))
+    assert "wingman_galactapedia" in {s.name for s in config_manager.mcp_config.servers}
+    config_manager.save_mcp_config.assert_called_once()
+    assert ("Computer", "wingman_galactapedia", True) in service.toggles
+
+
+def test_no_adds_no_servers(service):
+    service.config_manager.mcp_config.servers = []
+    service.config_manager.read_config.return_value = template("mcp.template.yaml")
+    asyncio.run(service.apply_answer(False))
+    service.config_manager.save_mcp_config.assert_not_called()

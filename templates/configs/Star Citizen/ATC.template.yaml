@@ -8,6 +8,7 @@ discoverable_mcps:
   - wingman_date_time
   - wingman_starhead
   - wingman_galactapedia
+  - wingman_versetime
 prompts:
   backstory: |
     Your name is "ATC" and you are an Air Traffic Controller stationed at a major space station in the Star Citizen universe.

@@ -15,11 +15,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from os import path
 from typing import TYPE_CHECKING
 
 from api.enums import StarCitizenFeatureKind
 from api.interface import (
     ConfigDirInfo,
+    McpConfig,
+    McpServerConfig,
     SkillBase,
     StarCitizenFeature,
     StarCitizenGameFolder,
@@ -63,7 +66,7 @@ FEATURES = (
     # answered twice.
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
     _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ("Computer",)),
-    _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ()),
+    _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
     # StarHead covers trading by default; UEX is the alternative to switch on.
     _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
 )
@@ -119,6 +122,8 @@ class StarCitizenSetupService:
                 settings.star_citizen.game_path = folder.path
         await self.settings_service.save_settings(settings)
 
+        if plays:
+            self._add_missing_servers()
         available = self._available()
         for config_dir, wingman_file in self._shipped_wingmen():
             for feature in FEATURES:
@@ -160,6 +165,40 @@ class StarCitizenSetupService:
             return configured
         found = find_game_folder()
         return inspect_game_folder(found) if found else configured
+
+    def _add_missing_servers(self) -> None:
+        """Put the Star Citizen MCP servers Wingman ships back into mcp.yaml
+        if they are missing there, from the template. An mcp.yaml from before
+        a server shipped, or one the server was deleted from, would otherwise
+        leave it out of the setup for good."""
+        names = {f.name for f in FEATURES if f.kind == StarCitizenFeatureKind.MCP}
+        mcp_config = self.config_manager.mcp_config or McpConfig(servers=[])
+        have = {server.name for server in mcp_config.servers}
+        if names <= have:
+            return
+        try:
+            template = self.config_manager.read_config(
+                path.join(self.config_manager.templates_dir, "configs", "mcp.template.yaml")
+            )
+            shipped = [
+                McpServerConfig(**server)
+                for server in (template or {}).get("servers") or []
+                if server.get("name") in names - have
+            ]
+        except Exception as error:
+            self.printr.print(
+                f"Star Citizen MCP servers not added: {error}", server_only=True
+            )
+            return
+        if not shipped:
+            return
+        mcp_config.servers.extend(shipped)
+        self.config_manager.mcp_config = mcp_config
+        self.config_manager.save_mcp_config()
+        self.printr.print(
+            f"Added to mcp.yaml: {', '.join(s.name for s in shipped)}.",
+            server_only=True,
+        )
 
     def _shipped_wingmen(self) -> list[tuple[ConfigDirInfo, WingmanConfigFileInfo]]:
         config_dir = self.config_manager.get_config_dir(STAR_CITIZEN_CONFIG)
