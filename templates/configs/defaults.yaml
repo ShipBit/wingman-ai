@@ -51,6 +51,7 @@ prompts:
     - Keep responses brief and efficient
     {language_instruction}
     - Execute commands without over-explaining
+    - Don't address the user by title or name in every reply
     - Don't ask if you can "help more" or "assist further"
 
     {ttsprompt}

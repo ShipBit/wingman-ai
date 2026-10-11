@@ -35,7 +35,21 @@ the text is still exactly the old one.
 
 defaults.yaml: the Inworld model is the current one if it is still the old
 default; a user who picked a model keeps it.
+
+The Computer Wingman hung "Pilot" or "Commander" on nearly every reply and made
+up ship status ("shields on standby, no warnings") it has no way of knowing.
+Its backstory now says how to address the user and that it has no telemetry,
+and the system prompt tells every Wingman not to address the user by title or
+name in every reply.
+
+- The system prompt is reset to the shipped one, the same way 3.2.3 did it: it
+  is not user content, and a per-Wingman override is deleted outright.
+- The Computer's backstory IS user content, so it is only replaced when it is
+  still the one 3.2.7 shipped. A backstory the user edited is kept.
 """
+
+from os import path
+from typing import Optional
 
 from services.migrations.base_migration import BaseMigration
 from services.star_citizen.game_folder import DEFAULT_GAME_PATH
@@ -56,6 +70,34 @@ COMMAND_TEXT_FIXES = {
 OLD_INWORLD_MODEL = "inworld-tts-1"
 INWORLD_MODEL = "inworld-tts-2-flash"
 
+COMPUTER_TEMPLATE = path.join("configs", "Star Citizen", "Computer.template.yaml")
+
+OLD_COMPUTER_BACKSTORY = """Your name is "Computer" and you are the AI board computer of a spacecraft in the Star Citizen universe.
+
+**Communication Style:**
+- Speak with technical precision and efficiency
+- Use spacecraft terminology naturally
+- Provide brief status confirmations after actions
+- Sound like an advanced ship AI, not a casual assistant
+
+**Your Role Context:**
+- You control all ship systems: navigation, weapons, shields, power
+- You execute commands immediately without seeking confirmation
+- You treat each request as a fresh directive
+- This universe is your reality (never reference "the game")
+
+**Personality:**
+- Authoritative and confident
+- Efficient and action-oriented
+- Technically precise
+- Loyal to your pilot
+"""
+
+
+def _same_text(a: str, b: str) -> bool:
+    """Equal apart from whitespace: saving through the client reflows the YAML."""
+    return a.split() == b.split()
+
 
 class Migration327To328(BaseMigration):
     """Migration from 3.2.7 to 3.2.8."""
@@ -63,17 +105,55 @@ class Migration327To328(BaseMigration):
     old_version = "3_2_7"
     new_version = "3_2_8"
 
+    def _template_prompts(self, relative_path: str) -> dict:
+        file_path = path.join(self.templates_dir, relative_path)
+        if not path.exists(file_path):
+            return {}
+        template = self.config_manager.read_config(file_path) or {}
+        return template.get("prompts") or {}
+
+    def _shipped_system_prompt(self) -> Optional[str]:
+        return self._template_prompts(
+            path.join("configs", "defaults.yaml")
+        ).get("system_prompt")
+
+    def _shipped_computer_backstory(self) -> Optional[str]:
+        return self._template_prompts(COMPUTER_TEMPLATE).get("backstory")
+
     def migrate_defaults(self, old: dict) -> dict:
         inworld = old.get("inworld")
         if isinstance(inworld, dict) and inworld.get("model_id") == OLD_INWORLD_MODEL:
             inworld["model_id"] = INWORLD_MODEL
             self.log(f"- inworld.model_id: {OLD_INWORLD_MODEL} -> {INWORLD_MODEL}")
+        self._reset_system_prompt(old)
         return old
 
+    def _reset_system_prompt(self, old: dict) -> None:
+        """Put the shipped system prompt back into defaults.yaml."""
+        shipped = self._shipped_system_prompt()
+        if not shipped:
+            self.log_warning(
+                "- could not read the shipped system prompt; leaving it alone"
+            )
+            return
+
+        prompts = old.get("prompts")
+        if not isinstance(prompts, dict) or "system_prompt" not in prompts:
+            return
+
+        if prompts["system_prompt"] != shipped:
+            prompts["system_prompt"] = shipped
+            self.log("- defaults: system prompt reset to the shipped one")
+
     def migrate_wingman(self, old: dict) -> dict:
+        self._add_template_extras(old)
+        self._fix_prompts(old)
+        return old
+
+    def _add_template_extras(self, old: dict) -> None:
         template = self.shipped_template()
         if not template:
-            return old
+            return
         name = old.get("name") or template.get("name")
         for key in ("discoverable_skills", "discoverable_mcps"):
             have = list(old.get(key) or [])
@@ -88,7 +168,32 @@ class Migration327To328(BaseMigration):
             if fixed:
                 command["additional_context"] = fixed
                 self.log(f"- {name}: fixed the text of command '{command.get('name')}'")
-        return old
+
+    def _fix_prompts(self, old: dict) -> None:
+        prompts = old.get("prompts")
+        if not isinstance(prompts, dict):
+            return
+
+        if "system_prompt" in prompts:
+            prompts.pop("system_prompt")
+            self.log(
+                f"- {old.get('name', 'wingman')}: removed its own system prompt; "
+                "it uses the shipped one now"
+            )
+
+        backstory = prompts.get("backstory")
+        if isinstance(backstory, str) and _same_text(backstory, OLD_COMPUTER_BACKSTORY):
+            shipped = self._shipped_computer_backstory()
+            if shipped:
+                prompts["backstory"] = shipped
+                self.log(
+                    f"- {old.get('name', 'wingman')}: backstory updated "
+                    "(no more \"Pilot\"/\"Commander\", no made-up ship status)"
+                )
+
+        # An empty prompts block is noise in the file.
+        if not prompts:
+            old.pop("prompts")
 
     def migrate_settings(self, old: dict) -> dict:
         if "star_citizen" not in old:
