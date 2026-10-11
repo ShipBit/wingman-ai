@@ -6,6 +6,7 @@ the ones that must come out as "decide the way you did before".
 """
 
 import asyncio
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -23,6 +24,7 @@ from services.jev_decisions import (
     triage_questions,
     vocabulary_questions,
 )
+from services import jev_gate
 from services.jev_gate import MAX_COMMAND_OPTIONS, JevGate
 from services.turn_metrics import TurnMetrics
 from wingmen.facade import SkillSystemOne, SystemOneAnswers
@@ -209,6 +211,54 @@ def test_a_switched_off_gate_reaches_no_model():
     assert gate.ask_sync({"x": 1}, {"q": {"type": "noul"}}) is None
     assert gate.triage("hi", ["Computer"], during_playback=False) == {}
     assert gate.confirm_vocabulary("hi", [("a", "B", False)]) is None
+
+
+# ── the vocabulary check never holds up the transcript ──────────────
+
+
+def _vocabulary_gate(monkeypatch, answer):
+    """An active gate whose model call runs ``answer`` and counts the calls."""
+    monkeypatch.setattr(jev_gate, "VOCABULARY_DEADLINE", 0.05)
+    gate = JevGate("STT", settings=_settings(True))
+    gate.client.api_key = "k"
+    calls = []
+
+    def system_one(state, questions):
+        calls.append(state)
+        return answer()
+
+    gate.client.system_one = system_one
+    return gate, calls
+
+
+PROPOSALS = [("radar", "Yadar", True)]
+
+
+def test_a_slow_answer_is_not_waited_for(monkeypatch):
+    def slow():
+        time.sleep(0.5)
+        return _vocab_result([0.9])
+
+    gate, _ = _vocabulary_gate(monkeypatch, slow)
+    started = time.monotonic()
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
+    assert time.monotonic() - started < 0.3
+
+
+def test_after_a_failure_the_check_pauses(monkeypatch):
+    gate, calls = _vocabulary_gate(monkeypatch, lambda: JevResult(error="HTTP 502"))
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
+    assert len(calls) == 1
+
+
+def test_after_the_pause_the_check_asks_again(monkeypatch):
+    answers = [JevResult(error="HTTP 502"), _vocab_result([0.9])]
+    gate, calls = _vocabulary_gate(monkeypatch, lambda: answers.pop(0))
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
+    gate._vocabulary_paused_until = 0.0
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) == {0}
+    assert len(calls) == 2
 
 
 # ── what a skill sees ───────────────────────────────────────────────
