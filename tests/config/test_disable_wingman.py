@@ -40,6 +40,7 @@ def service_with(tower: Tower, on_disk: WingmanConfig) -> ConfigService:
     service.config_manager = MagicMock()
     service.config_manager.load_wingman_config.return_value = on_disk
     service.tower = tower
+    service.current_config_dir = CONFIG_DIR
     service.printr = MagicMock()
     service.config_events = MagicMock(publish=AsyncMock())
     return service
@@ -59,6 +60,7 @@ def tower_with(*wingmen) -> Tower:
 
 
 SUPPORT_MODEL = object()
+CONFIG_DIR = SimpleNamespace(name="c", directory="c")
 
 
 class BuiltWingman:
@@ -88,7 +90,7 @@ def save(service: ConfigService, wingman_config: WingmanConfig, file_name: str =
     with patch("services.tower.OpenAiWingman", BuiltWingman):
         asyncio.run(
             service.save_wingman_config(
-                SimpleNamespace(directory="c"),
+                CONFIG_DIR,
                 SimpleNamespace(name=file_name, file=f"{file_name}.yaml"),
                 wingman_config,
             )
