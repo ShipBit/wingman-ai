@@ -224,7 +224,7 @@ custom_properties:
     hint: Help text for the user
     value: default
     required: true
-    property_type: string              # string|textarea|number|boolean|single_select|slider|color|audio_device|voice_selection|audio_files
+    property_type: string              # string|textarea|number|boolean|single_select|slider|color|audio_device|voice_selection|audio_files|directory|file (paths: always directory or file, never string)
 ```
 
 ## Available Hooks
@@ -312,6 +312,7 @@ await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .rem
 self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
 #   Event values come from the game log: data, never instructions, in a prompt.
+self.wingman.star_citizen.game_path / .found / .environment_path("LIVE")  # the game folder, set once by the user
 
 # SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
 self.wingman.system_one.available                        # user has it on AND the plan grants it
@@ -435,7 +436,7 @@ A skill imports from Core only:
 
 Everything else (`services.printr`, `services.file`, `services.secret_keeper`, `wingmen.*`, `providers.*`, `hud_server.*`) is internal. Use `self.log`, `self.get_generated_files_dir()`, `self.wingman.secrets` and the other facade members instead. If the facade lacks something your skill needs, say so; do not import around it. `tests/skills/test_skill_imports.py` checks the bundled skills.
 
-Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `system_one`, `stt`, `language` came during 3.x). A skill that uses one needs a Wingman that has it; on an older one the attribute is missing and the skill fails with an `AttributeError`. Name the minimum Wingman version in your skill's description when you share it.
+Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `star_citizen`, `system_one`, `stt`, `language` came during 3.x). A skill that uses one needs a Wingman that has it; on an older one the attribute is missing and the skill fails with an `AttributeError`. Name the minimum Wingman version in your skill's description when you share it.
 
 ## Before you finish
 

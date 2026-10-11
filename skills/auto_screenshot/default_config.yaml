@@ -27,6 +27,6 @@ custom_properties:
   - hint: Defaults to your WingmanAI APPDATA directory in a subdirectory called "generated_files" if left blank.
     id: default_directory
     name: Default directory
-    property_type: string
+    property_type: directory
     required: false
     value: ""

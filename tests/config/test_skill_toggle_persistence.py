@@ -66,3 +66,36 @@ def test_switching_off_the_last_one_saves_an_empty_list():
 def test_switching_on_twice_adds_it_once():
     config = toggled("toggle_wingman_skill", "Timer", True, {**WINGMAN, "discoverable_skills": ["Timer"]})
     assert config.discoverable_skills == ["Timer"]
+
+
+def test_before_sign_in_the_toggle_writes_the_file_and_reloads_the_config():
+    """The Star Citizen step of the first-start setup runs before sign-in,
+    when Core has no Tower yet. The switch used to be dropped with "Tower not
+    initialized" while the log said "enabled"."""
+    service = ConfigService.__new__(ConfigService)
+    service.config_manager = MagicMock()
+    service.config_manager.load_wingman_config.return_value = WingmanConfig(
+        **deep_merge_configs(template("defaults.yaml"), WINGMAN)
+    )
+    service.tower = None
+    service.printr = MagicMock()
+    service.current_config_dir = SimpleNamespace(name="Star Citizen")
+    service.config_events = MagicMock()
+    service.config_events.publish = MagicMock(side_effect=lambda *a: asyncio.sleep(0))
+    reloaded = []
+
+    async def load_config(config_dir):
+        reloaded.append(config_dir.name)
+
+    service.load_config = load_config
+    asyncio.run(
+        service.toggle_wingman_mcp(
+            SimpleNamespace(name="Star Citizen", directory="Star Citizen"),
+            SimpleNamespace(name="Computer", file="Computer.yaml"),
+            "wingman_starhead",
+            True,
+        )
+    )
+    saved = service.config_manager.save_wingman_config.call_args.kwargs["wingman_config"]
+    assert "wingman_starhead" in saved.discoverable_mcps
+    assert reloaded == ["Star Citizen"]
