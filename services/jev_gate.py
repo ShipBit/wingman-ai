@@ -25,9 +25,7 @@ from providers.typesafe_jev import JevClient, JevResult
 from services.jev_decisions import (
     command_questions,
     read_command,
-    read_triage,
     read_vocabulary,
-    triage_questions,
     vocabulary_questions,
 )
 from services.printr import Printr
@@ -231,36 +229,6 @@ class JevGate:
                 server_only=True,
             )
         return []
-
-    # ── what an utterance actually was ──────────────────────────────
-
-    def triage(
-        self,
-        transcript: str,
-        wingman_names: list[str],
-        during_playback: bool,
-        speaking_text: str = "",
-    ) -> dict:
-        """Synchronous: the transcription thread calls this and has nothing
-        else to do meanwhile. Returns probabilities, not a verdict — the
-        thresholds belong at the call site, where the consequences are.
-
-        An empty dict means "decide as before".
-        """
-        if not self.active:
-            return {}
-        result = self.client.system_one(
-            {
-                "transcript": transcript,
-                "assistant_is_speaking": during_playback,
-                "assistant_current_sentence": speaking_text if during_playback else "",
-            },
-            triage_questions(wingman_names, during_playback),
-        )
-        self._record("Utterance triage", result)
-        if result.error:
-            return {}
-        return read_triage(result)
 
     # ── which proposed name corrections are real ────────────────────
 
