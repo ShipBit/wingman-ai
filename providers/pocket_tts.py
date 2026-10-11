@@ -58,7 +58,7 @@ from providers.pocket_tts_r2 import (
     build_r2_config,
     download_url_to_path,
     hf_uri_to_https_url,
-    prefetch_gated_weights,
+    prefetch_model_files,
     use_r2_mirror,
 )
 from services.file import get_custom_voices_dir, get_pocket_tts_models_dir
@@ -379,7 +379,7 @@ class PocketTTS:
                 # continue — the library falls back to the public non-cloning
                 # weights instead of silently breaking with no explanation.
                 try:
-                    prefetch_gated_weights(
+                    prefetch_model_files(
                         model_id,
                         log=lambda msg: self.printr.print(
                             msg, color=LogType.INFO, server_only=True

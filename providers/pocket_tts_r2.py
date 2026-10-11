@@ -8,10 +8,17 @@ have. On first start the download therefore fails, the library silently falls ba
 to the non-cloning weights, and any clone attempt raises ``VOICE_CLONING_UNSUPPORTED``.
 
 We mirror the required files (unmodified) to our own R2 bucket - permitted by the
-model's CC-BY-4.0 license - and rewrite the configs at load time so every ``hf://``
-URI points at ``release.wingman-ai.com`` instead. ``pocket_tts``'s own
+model's CC-BY-4.0 license - and rewrite the configs at load time so every gated
+``hf://`` URI points at ``release.wingman-ai.com`` instead. The public ones become
+plain ``https://huggingface.co/.../resolve/...`` URLs. ``pocket_tts``'s own
 ``download_if_necessary`` already understands plain ``https://`` URLs, so no library
 patching is needed.
+
+No ``hf://`` URI is left for ``huggingface_hub``: its cache links snapshot files to
+blobs with symlinks, and Windows 11 (build 26200) refuses to follow them from some
+processes with "untrusted mount point (os error 448)". The tokenizer, opened by
+Rust code, failed that way on a fresh install. A plain https URL lands as a plain
+file in ``~/.cache/pocket_tts``.
 
 Both this module (runtime rewrite) and ``scripts/mirror_pocket_tts_r2.py`` (upload)
 derive R2 URLs through :func:`hf_uri_to_r2_url`, so the paths are guaranteed to match.
@@ -26,6 +33,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import requests
+import yaml
 
 # Public base URL of the R2 ``wingman-releases`` bucket (custom domain), plus the
 # top-level ``models/`` prefix. This prefix is NOT touched by the release-cleanup
@@ -103,22 +111,20 @@ def is_gated_uri(hf_uri: str) -> bool:
     return hf_uri.startswith(GATED_REPO_PREFIX)
 
 
+def resolve_uri(hf_uri: str) -> str:
+    """The URL a rewritten config uses for ``hf_uri``: R2 for the gated repo,
+    a direct HuggingFace download URL for the public ones."""
+    return hf_uri_to_r2_url(hf_uri) if is_gated_uri(hf_uri) else hf_uri_to_https_url(hf_uri)
+
+
 def rewrite_config_text(text: str) -> str:
-    """Rewrite gated ``hf://`` URIs in a raw YAML config to their R2 equivalent.
+    """Rewrite every ``hf://`` URI in a raw YAML config to a plain https URL:
+    gated ones to R2, public ones (tokenizer, non-cloning weights) to HuggingFace.
 
-    Only URIs from the gated repo are redirected to R2; public URIs (tokenizer,
-    non-cloning weights) are left untouched so they keep downloading straight from HF.
-
-    Operates on the raw text (not a parsed tree) so comments and formatting are kept
-    verbatim. ``hf://`` URIs are unquoted YAML scalars with no whitespace, so the
+    ``hf://`` URIs are unquoted YAML scalars with no whitespace, so the
     ``\\S+`` match cleanly captures exactly one URI.
     """
-
-    def _sub(m: "re.Match") -> str:
-        uri = m.group(0)
-        return hf_uri_to_r2_url(uri) if is_gated_uri(uri) else uri
-
-    return _HF_URI_RE.sub(_sub, text)
+    return _HF_URI_RE.sub(lambda m: resolve_uri(m.group(0)), text)
 
 
 def iter_gated_uris(text: str):
@@ -154,7 +160,14 @@ def build_r2_config(model_id: str, cache_dir: str) -> str:
     # Atomic write: a settings-change reload (daemon thread) may race the initial
     # deferred load; never let the library read a half-written config.
     tmp_path = out_dir / f".{model_id}.yaml.{os.getpid()}.tmp"
-    tmp_path.write_text(rewrite_config_text(src.read_text()))
+    config = yaml.safe_load(rewrite_config_text(src.read_text(encoding="utf-8")))
+    # pocket_tts opens the config without an encoding, so on Windows it is read
+    # as cp1252. The German config has typographic quotes, which failed to load
+    # ("'charmap' codec can't decode byte 0x9d"). Dumped as ASCII, every other
+    # character is a YAML escape and reads the same in any encoding.
+    tmp_path.write_text(
+        yaml.safe_dump(config, allow_unicode=False, sort_keys=False), encoding="ascii"
+    )
     os.replace(tmp_path, out_path)
     return str(out_path)
 
@@ -188,12 +201,19 @@ def _library_cache_path(url: str) -> Path:
     return make_cache_directory() / (hashlib.sha256(url.encode()).hexdigest() + "." + suffix)
 
 
-def r2_urls_for_model(model_id: str) -> list[str]:
-    """The R2 URLs a rewritten config for ``model_id`` will reference."""
+def prefetch_urls_for_model(model_id: str) -> list[str]:
+    """The URLs a rewritten config for ``model_id`` needs on every load: the
+    gated weights on R2 and the public files besides weights (the tokenizer).
+    The public non-cloning weights are left out: the library only fetches them
+    when the gated ones fail, and they are hundreds of MB."""
     src = library_config_path(model_id)
     if not src.exists():
         return []
-    return [hf_uri_to_r2_url(u) for u in iter_gated_uris(src.read_text())]
+    urls = []
+    for uri in _HF_URI_RE.findall(src.read_text(encoding="utf-8")):
+        if is_gated_uri(uri) or not uri.split("@")[0].endswith(".safetensors"):
+            urls.append(resolve_uri(uri))
+    return urls
 
 
 def _download_to_cache(url: str, cache_path: Path, log: Optional[Callable[[str], None]]) -> None:
@@ -253,10 +273,11 @@ def download_url_to_path(
     _download_to_cache(url, dest, log)
 
 
-def prefetch_gated_weights(
+def prefetch_model_files(
     model_id: str, log: Optional[Callable[[str], None]] = None
 ) -> None:
-    """Ensure the R2-mirrored weights for ``model_id`` are in pocket_tts's cache.
+    """Ensure the R2-mirrored weights and the tokenizer for ``model_id`` are in
+    pocket_tts's cache.
 
     Called before ``TTSModel.load_model`` so the library finds the weights
     already cached and never exercises its own fragile download path. No-op
@@ -265,7 +286,7 @@ def prefetch_gated_weights(
     to surface a warning and continue (the library then falls back to the
     public non-cloning weights).
     """
-    for url in r2_urls_for_model(model_id):
+    for url in prefetch_urls_for_model(model_id):
         cache_path = _library_cache_path(url)
         if cache_path.exists() and cache_path.stat().st_size > 0:
             continue
@@ -275,5 +296,5 @@ def prefetch_gated_weights(
             if cache_path.exists() and cache_path.stat().st_size > 0:
                 continue
             if log:
-                log(f"Downloading PocketTTS voice-cloning weights from R2 mirror: {url}")
+                log(f"Downloading PocketTTS model file: {url}")
             _download_to_cache(url, cache_path, log)

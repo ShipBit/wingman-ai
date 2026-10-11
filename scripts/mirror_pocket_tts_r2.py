@@ -141,7 +141,7 @@ def main() -> int:
         if not cfg.exists():
             print(f"  [{lang}] SKIP - no bundled config at {cfg}")
             continue
-        gated = iter_gated_uris(cfg.read_text())
+        gated = iter_gated_uris(cfg.read_text(encoding="utf-8"))
         if not gated:
             print(f"  [{lang}] no gated files (nothing to mirror)")
             continue
