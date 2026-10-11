@@ -27,6 +27,7 @@ derive R2 URLs through :func:`hf_uri_to_r2_url`, so the paths are guaranteed to 
 import hashlib
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -44,7 +45,8 @@ POCKET_TTS_R2_BASE = "https://release.wingman-ai.com/models"
 # download without an HF token, and thus the entire cause of the bug. The tokenizer
 # and non-cloning weights live in a public repo and are fetched straight from HF (no
 # token needed), which also keeps our R2 storage/footprint to the minimum and leaves
-# a genuine cross-host fallback if R2 is ever unreachable.
+# a cross-host fallback if R2 is ever unreachable. That fallback is fetched by the
+# library itself, in one request without timeout or retry.
 GATED_REPO_PREFIX = "hf://kyutai/pocket-tts/"
 
 # Escape hatch for developers: set to ``hf`` to bypass the R2 mirror and let the
@@ -201,19 +203,51 @@ def _library_cache_path(url: str) -> Path:
     return make_cache_directory() / (hashlib.sha256(url.encode()).hexdigest() + "." + suffix)
 
 
-def prefetch_urls_for_model(model_id: str) -> list[str]:
-    """The URLs a rewritten config for ``model_id`` needs on every load: the
-    gated weights on R2 and the public files besides weights (the tokenizer).
-    The public non-cloning weights are left out: the library only fetches them
-    when the gated ones fail, and they are hundreds of MB."""
+def _prefetch_uris(model_id: str) -> list[str]:
+    """The ``hf://`` URIs a rewritten config for ``model_id`` needs on every
+    load: the gated weights and the public files besides weights (the
+    tokenizer). The public non-cloning weights are left out: the library only
+    fetches them when the gated ones fail, and they are hundreds of MB."""
     src = library_config_path(model_id)
     if not src.exists():
         return []
-    urls = []
-    for uri in _HF_URI_RE.findall(src.read_text(encoding="utf-8")):
-        if is_gated_uri(uri) or not uri.split("@")[0].endswith(".safetensors"):
-            urls.append(resolve_uri(uri))
-    return urls
+    return [
+        uri
+        for uri in _HF_URI_RE.findall(src.read_text(encoding="utf-8"))
+        if is_gated_uri(uri) or not uri.split("@")[0].endswith(".safetensors")
+    ]
+
+
+def prefetch_urls_for_model(model_id: str) -> list[str]:
+    """The URLs of :func:`_prefetch_uris`, as the rewritten config has them."""
+    return [resolve_uri(uri) for uri in _prefetch_uris(model_id)]
+
+
+def _copy_from_hf_cache(hf_uri: str, cache_path: Path) -> bool:
+    """Copy a public file the HuggingFace cache already has into
+    ``cache_path``. Returns False when it has none or the copy fails.
+
+    Up to 3.2.8 the tokenizer came through ``hf_hub_download``. Without this,
+    an existing user starting offline after the update would have no tokenizer
+    under its new URL and no Pocket TTS."""
+    body = hf_uri[len("hf://") :]
+    body, _, revision = body.partition("@")
+    parts = body.split("/")
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        cached = try_to_load_from_cache(
+            "/".join(parts[:2]), "/".join(parts[2:]), revision=revision or None
+        )
+        if not isinstance(cached, str):
+            return False
+        temp_path = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.part")
+        shutil.copyfile(cached, temp_path)
+        os.replace(temp_path, cache_path)
+        return True
+    except Exception:
+        # Not there, or Windows refuses the symlink in the HF cache: download.
+        return False
 
 
 def _download_to_cache(url: str, cache_path: Path, log: Optional[Callable[[str], None]]) -> None:
@@ -283,10 +317,12 @@ def prefetch_model_files(
     already cached and never exercises its own fragile download path. No-op
     (and no network access) when the cache is already warm, so offline starts
     with a warm cache keep working. Raises on failure — callers decide whether
-    to surface a warning and continue (the library then falls back to the
-    public non-cloning weights).
+    to surface a warning and continue (for the weights the library then falls
+    back to the public non-cloning ones; without the tokenizer the model does
+    not load).
     """
-    for url in prefetch_urls_for_model(model_id):
+    for uri in _prefetch_uris(model_id):
+        url = resolve_uri(uri)
         cache_path = _library_cache_path(url)
         if cache_path.exists() and cache_path.stat().st_size > 0:
             continue
@@ -294,6 +330,8 @@ def prefetch_model_files(
         # not write the same cache entry on top of each other.
         with _PREFETCH_LOCK:
             if cache_path.exists() and cache_path.stat().st_size > 0:
+                continue
+            if not is_gated_uri(uri) and _copy_from_hf_cache(uri, cache_path):
                 continue
             if log:
                 log(f"Downloading PocketTTS model file: {url}")

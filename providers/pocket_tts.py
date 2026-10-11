@@ -375,9 +375,10 @@ class PocketTTS:
                 )
                 # Pre-populate pocket_tts's cache with retries + atomic writes so
                 # its own fragile download path (no timeout/retry/size check)
-                # never runs for the large cloning weights. On failure, warn and
-                # continue — the library falls back to the public non-cloning
-                # weights instead of silently breaking with no explanation.
+                # never runs for the cloning weights and the tokenizer. On
+                # failure, warn and continue: without the cloning weights the
+                # library falls back to the public non-cloning ones; without
+                # the tokenizer the load below fails with its own error.
                 try:
                     prefetch_model_files(
                         model_id,
@@ -387,9 +388,9 @@ class PocketTTS:
                     )
                 except Exception as fetch_err:
                     self.printr.toast_warning(
-                        "Could not download the PocketTTS voice-cloning weights. "
-                        "Voice cloning may be unavailable — check your internet "
-                        f"connection and restart Wingman AI.\nError: {fetch_err}"
+                        "Could not download a Pocket TTS model file. Pocket TTS "
+                        "may not load, or may not clone voices. Check your "
+                        f"internet connection and restart Wingman AI.\nError: {fetch_err}"
                     )
                 self.model = TTSModel.load_model(
                     config=config_path, temp=BUILTIN_MODEL_TEMPERATURE
