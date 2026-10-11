@@ -544,12 +544,13 @@ class ConfigService:
             wingman_config.discoverable_skills = discoverable_skills
 
             # Save the config WITHOUT reinitializing all skills
-            await self.save_wingman_config(
+            if not await self.save_wingman_config(
                 config_dir=config_dir,
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-            )
+            ):
+                return
 
             # Incrementally toggle just this skill on the active wingman
             wingman = (
@@ -983,12 +984,13 @@ class ConfigService:
             wingman_config.discoverable_mcps = discoverable_mcps
 
             # Save the config WITHOUT reinitializing all MCPs
-            await self.save_wingman_config(
+            if not await self.save_wingman_config(
                 config_dir=config_dir,
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-            )
+            ):
+                return
 
             # Incrementally toggle just this MCP on the active wingman
             wingman = (
@@ -1563,13 +1565,6 @@ class ConfigService:
             skip_config_validation: If False, validate the config before applying
         """
 
-        # Check if tower is available
-        if not self.tower:
-            self.printr.toast_error(
-                "Cannot save wingman config: Tower not initialized. Please wait for the config to fully load."
-            )
-            return
-
         # Load current on-disk config for merge/preservation
         existing_config: WingmanConfig | None = None
         try:
@@ -1606,6 +1601,25 @@ class ConfigService:
             if "discoverable_mcps" not in wingman_config.model_fields_set:
                 merged_config.discoverable_mcps = existing_config.discoverable_mcps
 
+        # Before sign-in there is no Tower, only the parsed config it will be
+        # built from (the Star Citizen step of the first-start setup switches
+        # skills then), and a Wingman of another config is not loaded at all.
+        # The file is all there is to change; the current config is parsed
+        # again so the Tower starts with the change.
+        is_current = bool(self.current_config_dir) and (
+            config_dir.name == self.current_config_dir.name
+        )
+        if not self.tower or not is_current:
+            self.config_manager.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=merged_config,
+            )
+            if is_current:
+                await self.load_config(self.current_config_dir)
+            await self.config_events.publish("wingman_config_saved", merged_config)
+            return True
+
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if not wingman:
@@ -1624,7 +1638,7 @@ class ConfigService:
             # else fail
             if not wingman:
                 self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
-                return
+                return False
 
         updated = await wingman.update_config(
             config=merged_config,
@@ -1635,7 +1649,7 @@ class ConfigService:
             self.printr.toast_error(
                 f"New config for Wingman '{merged_config.name}' is invalid."
             )
-            return
+            return False
 
         # save the config file
         self.config_manager.save_wingman_config(
@@ -1652,6 +1666,7 @@ class ConfigService:
 
         # Notify listeners that a wingman config was saved (for input hook refresh)
         await self.config_events.publish("wingman_config_saved", merged_config)
+        return True
 
     @staticmethod
     def _merge_skill_configs(
