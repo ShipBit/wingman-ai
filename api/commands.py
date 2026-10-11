@@ -156,6 +156,14 @@ class SkillDialogCommand(WebSocketCommandModel):
     """A data URL, shown under the text."""
 
 
+class SubscriptionTokenSavedCommand(WebSocketCommandModel):
+    """Sent when the client has saved the subscription's device token. Core can
+    ask the backend from now on; the client waits for this before it asks Core
+    for anything that needs the token."""
+
+    command: Literal["subscription_token_saved"] = "subscription_token_saved"
+
+
 class ScGameLogStateChangedCommand(WebSocketCommandModel):
     """Sent when the Star Citizen log reader starts, stops, finds a Game.log
     or gets new rules, and when the rules cannot be updated."""

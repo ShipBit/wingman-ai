@@ -150,3 +150,36 @@ def test_asking_for_subscription_models_before_sign_in_never_prompts(secrets_dir
         asyncio.run(WingmanCore._fetch_subscription_models(core))
 
     assert SecretKeeper._connection_manager.sent == []
+
+
+def _command_handler(keeper):
+    from services.command_handler import CommandHandler
+
+    handler = CommandHandler.__new__(CommandHandler)
+    handler.secret_keeper = keeper
+    handler.connection_manager = SecretKeeper._connection_manager
+    return handler
+
+
+def test_saving_the_device_token_tells_the_client_core_has_it(secrets_dir):
+    """The client asks Core for the subscription's models only after this, so
+    the first answer is not an empty list from a Core without the token."""
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="wingman_pro", secret_value="token", show_message=False), None
+    ))
+
+    assert [c.command for c in SecretKeeper._connection_manager.sent] == ["subscription_token_saved"]
+
+
+def test_saving_another_secret_says_nothing_about_the_subscription(secrets_dir):
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="openai", secret_value="sk-test", show_message=False), None
+    ))
+
+    assert SecretKeeper._connection_manager.sent == []

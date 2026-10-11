@@ -10,6 +10,7 @@ from api.commands import (
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
     SaveSecretCommand,
+    SubscriptionTokenSavedCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
     ClientLoggedInCommand,
@@ -108,6 +109,8 @@ class CommandHandler:
         secret_value = command.secret_value
         self.secret_keeper.secrets[secret_name] = secret_value
         await self.secret_keeper.save()
+        if secret_name == "wingman_pro":
+            await self.connection_manager.broadcast(SubscriptionTokenSavedCommand())
 
         if command.show_message:
             await self.printr.print_async(
