@@ -194,6 +194,9 @@ class Wingman:
         self._memory_turns = 0
         self._memory_last_checkpoint = time.time()
         self._memory_idle_handle: asyncio.TimerHandle | None = None
+        # Set by unload(): a turn still running when the Wingman is switched
+        # off neither speaks nor writes to memory.
+        self._unloaded = False
 
         # --- Image generation (lazy) ---
         self._image_subscription = None
@@ -327,6 +330,7 @@ class Wingman:
     # ──────────────────────────────── Lifecycle ─────────────────────────────────── #
 
     async def unload(self):
+        self._unloaded = True
         # Wait for any background memory extraction tasks to finish
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
@@ -335,6 +339,7 @@ class Wingman:
         if self.persistent_memory_service:
             await self._memory_checkpoint(final=True)
             self.persistent_memory_service.close()
+            self.persistent_memory_service = None
 
         # Unsubscribe from secret events to prevent duplicate handlers
         self.secret_keeper.secret_events.unsubscribe(
@@ -351,6 +356,8 @@ class Wingman:
     # ──────────────────────────────── Memory ──────────────────────────────────── #
 
     def ensure_memory_initialized(self) -> bool:
+        if self._unloaded:
+            return False
         if self.persistent_memory_service and not self.config.persistent_memory:
             self.persistent_memory_service.close()
             self.persistent_memory_service = None
@@ -371,7 +378,7 @@ class Wingman:
     def _memory_after_turn(self, response) -> None:
         """Count the turn, keep the reply, run a checkpoint when it is time,
         and re-arm the idle timer that closes the session."""
-        if not self.persistent_memory_service:
+        if self._unloaded or not self.persistent_memory_service:
             return
         from services.persistent_memory import CHECKPOINT_SECONDS, CHECKPOINT_TURNS, IDLE_SECONDS
 
@@ -1133,6 +1140,8 @@ class Wingman:
         no_interrupt: bool = False,
         sound_config: Optional[SoundConfig] = None,
     ):
+        if self._unloaded:
+            return
         if sound_config:
             printr.print(
                 "Using custom sound config for playback", LogType.INFO, server_only=True
@@ -1147,6 +1156,8 @@ class Wingman:
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
+            if self._unloaded:
+                return
 
         changed_text = text
         for skill in self.skills:

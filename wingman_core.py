@@ -1594,6 +1594,7 @@ class WingmanCore(WebSocketUser):
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
             settings_service=self.settings_service,
+            local_ai_service=self.local_ai_service,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -1601,10 +1602,6 @@ class WingmanCore(WebSocketUser):
 
         for rec in skill_catalog.drain_runtime_records():
             await self._connection_manager.broadcast(SkillRegisteredCommand(**rec))
-
-        for wingman in self.tower.wingmen:
-            if isinstance(wingman, OpenAiWingman):
-                wingman.local_ai_service = self.local_ai_service
 
         # Only show toast errors for non-MCP errors (MCP errors are already logged in mcp_client.py)
         for error in self.tower_errors:
@@ -1816,11 +1813,11 @@ class WingmanCore(WebSocketUser):
 
     # called when AudioRecorder regonized voice
     def _stt_hotwords(self) -> list[str]:
-        """Words the local decoder should recognise: the name of every wingman
-        in the active config plus whatever their skills added at runtime."""
+        """Words the local decoder should recognise: the name of every running
+        wingman plus whatever their skills added at runtime."""
         if not self.tower:
             return []
-        words: list[str] = spoken_names(self.tower.config)
+        words: list[str] = spoken_names(w.config for w in self.tower.wingmen)
         for wingman in self.tower.wingmen:
             words.extend(wingman.stt_hotwords)
         return words

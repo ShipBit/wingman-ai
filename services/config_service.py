@@ -1610,22 +1610,30 @@ class ConfigService:
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if merged_config.disabled:
             # A disabled wingman leaves the Tower, so no sentence reaches it.
-            # Its config is still saved, the user may edit it while it is off.
+            # Its config is still saved, the user may edit it while it is off,
+            # and the Tower keeps that copy for when it is switched on again.
             if wingman:
                 await self.tower.disable_wingman(wingman_file.name)
+            self.tower.keep_disabled_config(wingman_file.name, merged_config)
         elif not wingman:
-            # try to enable a previously disabled wingman
-            disabled_config = self.tower.get_disabled_wingman_by_name(
-                merged_config.name
-            )
-            if disabled_config:
+            # try to enable a previously disabled wingman, built from this
+            # save's config (a rename included)
+            previous = self.tower.get_disabled_wingman_by_name(wingman_file.name)
+            if previous:
+                self.tower.keep_disabled_config(wingman_file.name, merged_config)
                 enabled = await self.tower.enable_wingman(
                     wingman_name=merged_config.name,
                     settings=self.config_manager.settings_config,
                 )
-                if enabled:
-                    # now this should work
-                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+                if not enabled:
+                    # The reasons were shown by the Tower. Nothing is saved,
+                    # it stays off as the file says, and Enable can try again.
+                    self.tower.keep_disabled_config(merged_config.name, previous)
+                    self.printr.toast_error(
+                        f"Wingman '{merged_config.name}' could not be switched on."
+                    )
+                    return
+                wingman = self.tower.get_wingman_by_name(merged_config.name)
             # else fail
             if not wingman:
                 self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
