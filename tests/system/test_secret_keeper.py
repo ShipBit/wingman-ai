@@ -131,3 +131,22 @@ def test_posting_secrets_adds_new_keys_and_overwrites_existing_ones(secrets_dir)
     assert keeper.secrets == expected
     assert read_yaml(secrets_file(secrets_dir)) == expected
 
+
+
+# ── the subscription's device token ──
+
+
+def test_asking_for_subscription_models_before_sign_in_never_prompts(secrets_dir):
+    """The client asks for the TTS models as soon as it knows the plan, before
+    it has saved the device token. That popped "WingmanPro needs to know a
+    secret" on a fresh install, for a token the user cannot know."""
+    from types import SimpleNamespace
+
+    from wingman_core import WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper())
+
+    with pytest.raises(ValueError):
+        asyncio.run(WingmanCore._fetch_subscription_models(core))
+
+    assert SecretKeeper._connection_manager.sent == []

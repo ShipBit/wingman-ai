@@ -3261,9 +3261,14 @@ class WingmanCore(WebSocketUser):
         One request for both, because the two pickers in the client are on screen
         at the same time and the backend assembles them from the same catalogue.
         """
+        # The device token, saved by the client on sign-in. Never ask for it: the
+        # user does not know it, and the client may ask for the models before
+        # it has saved the token.
         wingman_pro_token = await self.secret_keeper.retrieve(
-            key="wingman_pro", requester="WingmanPro"
+            key="wingman_pro", requester="WingmanPro", prompt_if_missing=False
         )
+        if not wingman_pro_token:
+            raise ValueError("Not signed in.")
         response = requests.get(
             url=f"{self.settings_service.settings.wingman_pro.base_url}/api/v1/models",
             timeout=10,
