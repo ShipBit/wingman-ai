@@ -6,9 +6,12 @@ value, so the next volume or model change put the old default back.
 """
 
 import asyncio
+from os import listdir, path
 from unittest.mock import AsyncMock, MagicMock
 
-from api.interface import WingmanConfig
+import pytest
+
+from api.interface import WingmanConfig, WingmanConfigFileInfo
 from services.config_service import ConfigService
 
 
@@ -50,7 +53,10 @@ def test_star_switches_the_default_off_and_on_again(boot_config_manager):
     assert defaults(config_manager, config_dir) == {"ATC": True, "Computer": False}
 
 
-def test_saving_an_older_copy_keeps_the_star(boot_config_manager):
+# The edit page sends the file name, the chat input of older clients only
+# the Wingman's name.
+@pytest.mark.parametrize("file", ["Computer.yaml", "Computer"])
+def test_saving_an_older_copy_keeps_the_star(boot_config_manager, file):
     config_manager = boot_config_manager()
     service = service_on(config_manager)
     config_dir = config_manager.get_config_dir("Star Citizen")
@@ -59,8 +65,8 @@ def test_saving_an_older_copy_keeps_the_star(boot_config_manager):
     older_copy = WingmanConfig.model_validate(
         config.wingmen["Computer"].model_dump(mode="json")
     )
-    wingman_file = next(
-        f for f in config_manager.get_wingmen_configs(config_dir) if f.name == "Computer"
+    wingman_file = WingmanConfigFileInfo(
+        file=file, name="Computer", is_deleted=False, avatar=""
     )
 
     click_star(service, config_dir, "Computer")
@@ -74,3 +80,5 @@ def test_saving_an_older_copy_keeps_the_star(boot_config_manager):
     _dir, config = config_manager.parse_config(config_dir)
     assert config.wingmen["Computer"].is_voice_activation_default
     assert config.wingmen["Computer"].sound.volume == 0.5
+    config_folder = path.join(config_manager.config_dir, config_dir.directory)
+    assert "Computer" not in listdir(config_folder)

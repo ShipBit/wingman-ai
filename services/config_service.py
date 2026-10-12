@@ -1568,6 +1568,12 @@ class ConfigService:
                 from the payload. Only the star (set_default_wingman) does that.
         """
 
+        # The chat input of clients up to 3.2.8 sends the bare name as file.
+        # Without the extension the disk read below fails and the save goes
+        # to an extension-less file that is never loaded again.
+        if not wingman_file.file.endswith(".yaml"):
+            wingman_file.file = f"{wingman_file.file}.yaml"
+
         # Load current on-disk config for merge/preservation
         existing_config: WingmanConfig | None = None
         try:
