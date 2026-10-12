@@ -69,10 +69,11 @@ FEATURES = (
     _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
     # Lore questions go to the Computer; ATC sticks to traffic control.
     _Feature(StarCitizenFeatureKind.MCP, "wingman_galactapedia", ("Computer",)),
-    # Both react to the game log. On one Wingman only, or every event is
+    # Reacts to the game log. On one Wingman only, or every event is
     # answered twice.
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
-    _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ("Computer",)),
+    # Off until the user wants it: not everyone keeps books on their aUEC.
+    _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ()),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
     # Listed here so the setup can switch it per Wingman next to the HUD
     # server, for players of any game.

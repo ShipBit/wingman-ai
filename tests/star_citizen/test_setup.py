@@ -136,7 +136,6 @@ def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
     assert service.files["Computer"].discoverable_skills == [
         "UEXCorp",
         "ScGameEvents",
-        "SC_Accountant",
     ]
     assert service.files["Computer"].discoverable_mcps == list(SERVERS)
 
