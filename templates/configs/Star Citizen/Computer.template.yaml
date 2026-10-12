@@ -5,6 +5,7 @@ description: |
 discoverable_skills:
   - Timer
   - VisionAI
+  - ScGameEvents
 discoverable_mcps:
   - wingman_date_time
   - wingman_starhead

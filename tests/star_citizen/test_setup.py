@@ -129,7 +129,10 @@ def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
     assert settings.pronunciation.presets == ["star_citizen"]
     assert settings.star_citizen.plays is True
     assert service.files["ATC"].discoverable_skills == ["UEXCorp"]
-    assert service.files["ATC"].discoverable_mcps == list(SERVERS)
+    assert service.files["ATC"].discoverable_mcps == [
+        "wingman_starhead",
+        "wingman_versetime",
+    ]
     assert service.files["Computer"].discoverable_skills == [
         "UEXCorp",
         "ScGameEvents",
@@ -183,6 +186,21 @@ def test_the_setup_lists_every_feature_with_its_state(service):
     states = {f.name: (f.kind, f.enabled, f.on_by_default) for f in computer.features}
     assert states["UEXCorp"] == (StarCitizenFeatureKind.SKILL, True, False)
     assert states["wingman_galactapedia"] == (StarCitizenFeatureKind.MCP, False, True)
+
+
+def test_galactapedia_is_on_by_default_for_the_computer_only(service):
+    atc, computer = service.get_setup().wingmen
+
+    def on(wingman):
+        return {f.name for f in wingman.features if f.on_by_default}
+
+    assert "wingman_galactapedia" not in on(atc)
+    assert "wingman_galactapedia" in on(computer)
+
+
+def test_uexcorp_is_listed_right_after_starhead(service):
+    names = [f.name for f in service.get_setup().wingmen[0].features]
+    assert names[names.index("wingman_starhead") + 1] == "UEXCorp"
 
 
 def test_a_skill_that_is_not_installed_is_left_out(service, monkeypatch):

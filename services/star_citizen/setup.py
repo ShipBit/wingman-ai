@@ -61,14 +61,16 @@ class _Feature:
 
 FEATURES = (
     _Feature(StarCitizenFeatureKind.MCP, "wingman_starhead", ALL_WINGMEN),
-    _Feature(StarCitizenFeatureKind.MCP, "wingman_galactapedia", ALL_WINGMEN),
+    # StarHead covers trading by default; UEX is the alternative to switch on.
+    # Listed right after StarHead so the two show up next to each other.
+    _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
+    # Lore questions go to the Computer; ATC sticks to traffic control.
+    _Feature(StarCitizenFeatureKind.MCP, "wingman_galactapedia", ("Computer",)),
     # Both react to the game log. On one Wingman only, or every event is
     # answered twice.
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
     _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ("Computer",)),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
-    # StarHead covers trading by default; UEX is the alternative to switch on.
-    _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
 )
 
 
