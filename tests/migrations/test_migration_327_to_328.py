@@ -1,5 +1,6 @@
 """3.2.8: the Star Citizen folder moves from the log reader to its own
-`star_citizen` block, and every user is asked once whether they play."""
+`star_citizen` block, and every user is asked once whether they play.
+System One (Jev) is off for everyone and has to be switched on."""
 
 from unittest.mock import MagicMock
 
@@ -31,3 +32,21 @@ def test_the_template_asks_and_keeps_the_folder_in_one_place():
     settings = template("settings.yaml")
     assert settings["star_citizen"]["plays"] is None
     assert "game_path" not in settings["sc_gamelog"]
+
+
+def test_system_one_is_switched_off():
+    out = migrate({"system_one": {"enabled": True, "commands": True}})
+    assert out["system_one"]["enabled"] is False
+
+
+def test_the_command_switch_keeps_the_users_choice():
+    out = migrate({"system_one": {"enabled": True, "commands": False}})
+    assert out["system_one"] == {"enabled": False, "commands": False}
+
+
+def test_a_missing_system_one_block_is_written_switched_off():
+    assert migrate({})["system_one"] == {"enabled": False, "commands": True}
+
+
+def test_the_template_starts_with_system_one_off():
+    assert template("settings.yaml")["system_one"]["enabled"] is False

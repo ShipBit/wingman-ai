@@ -105,9 +105,9 @@ def test_the_old_per_wingman_switch_is_removed():
     assert _migration().migrate_defaults(defaults)["features"] == {}
 
 
-def test_a_323_install_comes_out_with_system_one_on(users_dir, boot_config_manager):
+def test_a_323_install_comes_out_with_the_system_one_block(users_dir, boot_config_manager):
     """The whole chain, as a 3.2.3 user runs it: the block is added and the
-    user's own values are kept."""
+    user's own values are kept. 3.2.8 switches System One off again."""
     old_configs = path.join(users_dir, "3_2_3", "configs")
     makedirs(path.join(old_configs, "General"))
     settings = _settings_323()
@@ -125,7 +125,7 @@ def test_a_323_install_comes_out_with_system_one_on(users_dir, boot_config_manag
 
     assert "Unable to migrate settings.yaml" not in service.log_message
     migrated = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "settings.yaml"))
-    assert migrated["system_one"] == {"enabled": True, "commands": True}
+    assert migrated["system_one"] == {"enabled": False, "commands": True}
     assert migrated["debug_mode"] is True
     assert migrated["filler_responses"] is True
     SettingsConfig(**migrated)
