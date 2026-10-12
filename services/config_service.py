@@ -1542,6 +1542,7 @@ class ConfigService:
         wingman_config: WingmanConfig,
         silent: bool = False,
         skip_config_validation: bool = True,
+        set_voice_activation_default: bool = False,
     ):
         """Save wingman configuration and optionally update the active wingman.
 
@@ -1563,6 +1564,8 @@ class ConfigService:
             wingman_config: The wingman configuration to save
             silent: If True, don't show toast notification
             skip_config_validation: If False, validate the config before applying
+            set_voice_activation_default: If True, take `is_voice_activation_default`
+                from the payload. Only the star (set_default_wingman) does that.
         """
 
         # Load current on-disk config for merge/preservation
@@ -1600,6 +1603,14 @@ class ConfigService:
                 merged_config.discoverable_skills = existing_config.discoverable_skills
             if "discoverable_mcps" not in wingman_config.model_fields_set:
                 merged_config.discoverable_mcps = existing_config.discoverable_mcps
+
+            # The client keeps copies of the config that the star does not
+            # update. A later save from one of them (volume, model, edit page)
+            # would put the old default back, so only the star changes it.
+            if not set_voice_activation_default:
+                merged_config.is_voice_activation_default = (
+                    existing_config.is_voice_activation_default
+                )
 
         # Before sign-in there is no Tower, only the parsed config it will be
         # built from (the Star Citizen step of the first-start setup switches
@@ -1938,6 +1949,7 @@ class ConfigService:
                     wingman_file=wingman_config_file,
                     wingman_config=wingman_config,
                     silent=True,
+                    set_voice_activation_default=True,
                 )
                 made_changes = False
 
