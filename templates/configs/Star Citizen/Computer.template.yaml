@@ -32,7 +32,6 @@ prompts:
     - Technically precise
     - Loyal to your pilot
 record_key: end
-is_voice_activation_default: true
 inworld:
   voice_id: Ashley
 wingman_pro:
