@@ -123,13 +123,17 @@ class StarCitizenSetupService:
         a config changed by it never comes with the question still open."""
         settings = deepcopy(self.settings_service.settings)
         settings.star_citizen.plays = plays
-        settings.sc_gamelog.enabled = plays
         _set_preset(settings.pronunciation.presets, plays)
         _set_preset(settings.stt.presets, plays)
+        # Without the game there is no Game.log to read: the log reader and
+        # the skills that need it stay off until the user picks the folder.
+        log_reader = False
         if plays:
             folder = self._game_folder()
             if folder.environments:
                 settings.star_citizen.game_path = folder.path
+                log_reader = True
+        settings.sc_gamelog.enabled = log_reader
         await self.settings_service.save_settings(settings)
 
         if plays:
@@ -139,7 +143,7 @@ class StarCitizenSetupService:
         for config_dir, wingman_file in self._shipped_wingmen():
             try:
                 changed |= self._switch_features(
-                    config_dir, wingman_file, available, plays
+                    config_dir, wingman_file, available, plays, log_reader
                 )
             except Exception as error:
                 self.printr.print(
@@ -176,6 +180,7 @@ class StarCitizenSetupService:
         wingman_file: WingmanConfigFileInfo,
         available: dict,
         plays: bool,
+        log_reader: bool,
     ) -> bool:
         """Write the new skill and MCP lists of one Wingman straight to its
         file. True if anything changed."""
@@ -190,6 +195,9 @@ class StarCitizenSetupService:
             if not feature.star_citizen:
                 continue
             if plays and not on_by_default(feature, wingman_file.name):
+                continue
+            _, requires = available[(feature.kind, feature.name)]
+            if plays and not log_reader and "sc_gamelog" in requires:
                 continue
             names = skills if feature.kind == StarCitizenFeatureKind.SKILL else mcps
             if plays and feature.name not in names:

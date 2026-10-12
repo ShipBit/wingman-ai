@@ -28,13 +28,21 @@ def service(monkeypatch, tmp_path):
             lambda: [
                 SimpleNamespace(
                     name=name,
-                    config=SimpleNamespace(display_name=name, platforms=None, requires=None),
+                    config=SimpleNamespace(
+                        display_name=name,
+                        platforms=None,
+                        requires=["sc_gamelog"]
+                        if name in ("ScGameEvents", "SC_Accountant")
+                        else None,
+                    ),
                 )
                 for name in SKILLS
             ]
         ),
     )
     monkeypatch.setattr(sc_setup, "find_game_folder", lambda: None)
+    game = tmp_path / "StarCitizen"
+    (game / "LIVE").mkdir(parents=True)
 
     config_dir = ConfigDirInfo(
         name="Star Citizen", directory="Star Citizen", is_default=True, is_deleted=False
@@ -95,7 +103,7 @@ def service(monkeypatch, tmp_path):
             sc_gamelog=SimpleNamespace(enabled=True),
             pronunciation=SimpleNamespace(presets=["star_citizen"]),
             stt=SimpleNamespace(presets=["star_citizen", "elite"]),
-            star_citizen=SimpleNamespace(plays=None, game_path=str(tmp_path / "missing")),
+            star_citizen=SimpleNamespace(plays=None, game_path=str(game)),
         ),
         save_settings=save_settings,
     )
@@ -213,11 +221,22 @@ def test_a_skill_that_is_not_installed_is_left_out(service, monkeypatch):
 def test_yes_takes_the_folder_core_found_when_the_set_one_is_not_the_game(
     service, monkeypatch, tmp_path
 ):
-    game = tmp_path / "StarCitizen"
+    service.settings_service.settings.star_citizen.game_path = str(tmp_path / "missing")
+    game = tmp_path / "Found" / "StarCitizen"
     (game / "LIVE").mkdir(parents=True)
     monkeypatch.setattr(sc_setup, "find_game_folder", lambda: str(game))
     asyncio.run(service.apply_answer(True))
     assert service.saved[0].star_citizen.game_path == str(game)
+
+
+def test_yes_without_the_game_leaves_the_log_reader_and_its_skills_off(
+    service, tmp_path
+):
+    service.settings_service.settings.star_citizen.game_path = str(tmp_path / "missing")
+    asyncio.run(service.apply_answer(True))
+    assert service.saved[0].sc_gamelog.enabled is False
+    assert "ScGameEvents" not in service.files["Computer"].discoverable_skills
+    assert "wingman_starhead" in service.files["Computer"].discoverable_mcps
 
 
 def test_a_picked_live_folder_checks_the_folder_above_it(service, tmp_path):
