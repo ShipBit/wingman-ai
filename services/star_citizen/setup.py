@@ -74,6 +74,8 @@ FEATURES = (
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
     # Off until the user wants it: not everyone keeps books on their aUEC.
     _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ()),
+    # Background chatter is a matter of taste: offered, but off.
+    _Feature(StarCitizenFeatureKind.SKILL, "RadioChatter", ()),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
     # Listed here so the setup can switch it per Wingman next to the HUD
     # server, for players of any game.

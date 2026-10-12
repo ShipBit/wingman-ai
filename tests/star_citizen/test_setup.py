@@ -15,7 +15,7 @@ from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
 from tests.support import template
 
-SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp", "HUD")
+SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp", "HUD", "RadioChatter")
 SERVERS = ("wingman_starhead", "wingman_galactapedia", "wingman_versetime")
 
 
@@ -290,3 +290,11 @@ def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
         star_citizen=SimpleNamespace(plays=plays),
     )
     assert sc_setup.log_reader_on(settings) is runs
+
+
+def test_radio_chatter_is_offered_but_off_for_both(service):
+    asyncio.run(service.apply_answer(True))
+    for wingman in service.get_setup().wingmen:
+        chatter = {f.name: f for f in wingman.features}["RadioChatter"]
+        assert chatter.on_by_default is False
+        assert chatter.enabled is False

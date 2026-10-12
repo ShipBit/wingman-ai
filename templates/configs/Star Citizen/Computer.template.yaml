@@ -8,6 +8,7 @@ discoverable_skills:
   - ScGameEvents
 discoverable_mcps:
   - wingman_date_time
+  - wingman_websearch
   - wingman_starhead
   - wingman_galactapedia
   - wingman_versetime
