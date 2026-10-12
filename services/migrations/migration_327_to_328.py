@@ -19,10 +19,42 @@ like a broken microphone or a Wingman that did not listen. It is optional now,
 and whoever wants it switches it on under Settings. Only `enabled` changes;
 `commands` keeps what the user chose, so switching System One back on brings
 back the setup they had.
+
+Most users come from 2.1.1 and never saw a 3.x default. Their Wingmen keep
+everything they made - backstory, voice, commands - but the Wingmen Wingman
+ships get the skills and MCP servers their template has and they lack, e.g.
+Wingman Web Search on Computer. Only added, never removed: the Star Citizen
+question right after the update switches the game's features off for users
+who say No. The users' own Wingmen are left alone: the skills that are
+discoverable by default there include the Star Citizen ones, and on every
+Wingman each game event would be answered many times.
+
+Four command texts on Computer had typos in 2.1.x ("Missle",
+"countermeassures"); the template is fixed, the users' copies are fixed where
+the text is still exactly the old one.
+
+defaults.yaml: the Inworld model is the current one if it is still the old
+default; a user who picked a model keeps it.
 """
 
 from services.migrations.base_migration import BaseMigration
 from services.star_citizen.game_folder import DEFAULT_GAME_PATH
+
+
+# Old text -> fixed text, as the Computer template had and has them.
+COMMAND_TEXT_FIXES = {
+    "Missle salvo size cycled by +1": "Missile salvo size cycled by +1",
+    "Missle salvo size set to one": "Missile salvo size set to one",
+    "Decoy count configuration increased for next use of decoy countermeassures": (
+        "Decoy count configuration increased for next use of decoy countermeasures"
+    ),
+    "Decoy count configuration decreased for next use of decoy countermeassures": (
+        "Decoy count configuration decreased for next use of decoy countermeasures"
+    ),
+}
+
+OLD_INWORLD_MODEL = "inworld-tts-1"
+INWORLD_MODEL = "inworld-tts-2-flash"
 
 
 class Migration327To328(BaseMigration):
@@ -30,6 +62,33 @@ class Migration327To328(BaseMigration):
 
     old_version = "3_2_7"
     new_version = "3_2_8"
+
+    def migrate_defaults(self, old: dict) -> dict:
+        inworld = old.get("inworld")
+        if isinstance(inworld, dict) and inworld.get("model_id") == OLD_INWORLD_MODEL:
+            inworld["model_id"] = INWORLD_MODEL
+            self.log(f"- inworld.model_id: {OLD_INWORLD_MODEL} -> {INWORLD_MODEL}")
+        return old
+
+    def migrate_wingman(self, old: dict) -> dict:
+        template = self.shipped_template()
+        if not template:
+            return old
+        name = old.get("name") or template.get("name")
+        for key in ("discoverable_skills", "discoverable_mcps"):
+            have = list(old.get(key) or [])
+            missing = [item for item in template.get(key) or [] if item not in have]
+            if missing:
+                old[key] = have + missing
+                self.log(f"- {name}: {key} + {', '.join(missing)}")
+        for command in old.get("commands") or []:
+            if not isinstance(command, dict):
+                continue
+            fixed = COMMAND_TEXT_FIXES.get(command.get("additional_context"))
+            if fixed:
+                command["additional_context"] = fixed
+                self.log(f"- {name}: fixed the text of command '{command.get('name')}'")
+        return old
 
     def migrate_settings(self, old: dict) -> dict:
         if "star_citizen" not in old:

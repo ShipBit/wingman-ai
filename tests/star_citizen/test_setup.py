@@ -15,7 +15,7 @@ from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
 from tests.support import template
 
-SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp")
+SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp", "HUD", "RadioChatter")
 SERVERS = ("wingman_starhead", "wingman_galactapedia", "wingman_versetime")
 
 
@@ -28,13 +28,21 @@ def service(monkeypatch, tmp_path):
             lambda: [
                 SimpleNamespace(
                     name=name,
-                    config=SimpleNamespace(display_name=name, platforms=None, requires=None),
+                    config=SimpleNamespace(
+                        display_name=name,
+                        platforms=None,
+                        requires=["sc_gamelog"]
+                        if name in ("ScGameEvents", "SC_Accountant")
+                        else None,
+                    ),
                 )
                 for name in SKILLS
             ]
         ),
     )
     monkeypatch.setattr(sc_setup, "find_game_folder", lambda: None)
+    game = tmp_path / "StarCitizen"
+    (game / "LIVE").mkdir(parents=True)
 
     config_dir = ConfigDirInfo(
         name="Star Citizen", directory="Star Citizen", is_default=True, is_deleted=False
@@ -95,7 +103,7 @@ def service(monkeypatch, tmp_path):
             sc_gamelog=SimpleNamespace(enabled=True),
             pronunciation=SimpleNamespace(presets=["star_citizen"]),
             stt=SimpleNamespace(presets=["star_citizen", "elite"]),
-            star_citizen=SimpleNamespace(plays=None, game_path=str(tmp_path / "missing")),
+            star_citizen=SimpleNamespace(plays=None, game_path=str(game)),
         ),
         save_settings=save_settings,
     )
@@ -129,11 +137,13 @@ def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
     assert settings.pronunciation.presets == ["star_citizen"]
     assert settings.star_citizen.plays is True
     assert service.files["ATC"].discoverable_skills == ["UEXCorp"]
-    assert service.files["ATC"].discoverable_mcps == list(SERVERS)
+    assert service.files["ATC"].discoverable_mcps == [
+        "wingman_starhead",
+        "wingman_versetime",
+    ]
     assert service.files["Computer"].discoverable_skills == [
         "UEXCorp",
         "ScGameEvents",
-        "SC_Accountant",
     ]
     assert service.files["Computer"].discoverable_mcps == list(SERVERS)
 
@@ -185,6 +195,21 @@ def test_the_setup_lists_every_feature_with_its_state(service):
     assert states["wingman_galactapedia"] == (StarCitizenFeatureKind.MCP, False, True)
 
 
+def test_galactapedia_is_on_by_default_for_the_computer_only(service):
+    atc, computer = service.get_setup().wingmen
+
+    def on(wingman):
+        return {f.name for f in wingman.features if f.on_by_default}
+
+    assert "wingman_galactapedia" not in on(atc)
+    assert "wingman_galactapedia" in on(computer)
+
+
+def test_uexcorp_is_listed_right_after_starhead(service):
+    names = [f.name for f in service.get_setup().wingmen[0].features]
+    assert names[names.index("wingman_starhead") + 1] == "UEXCorp"
+
+
 def test_a_skill_that_is_not_installed_is_left_out(service, monkeypatch):
     monkeypatch.setattr(
         sc_setup.ModuleManager, "read_available_skills", staticmethod(lambda: [])
@@ -196,11 +221,22 @@ def test_a_skill_that_is_not_installed_is_left_out(service, monkeypatch):
 def test_yes_takes_the_folder_core_found_when_the_set_one_is_not_the_game(
     service, monkeypatch, tmp_path
 ):
-    game = tmp_path / "StarCitizen"
+    service.settings_service.settings.star_citizen.game_path = str(tmp_path / "missing")
+    game = tmp_path / "Found" / "StarCitizen"
     (game / "LIVE").mkdir(parents=True)
     monkeypatch.setattr(sc_setup, "find_game_folder", lambda: str(game))
     asyncio.run(service.apply_answer(True))
     assert service.saved[0].star_citizen.game_path == str(game)
+
+
+def test_yes_without_the_game_leaves_the_log_reader_and_its_skills_off(
+    service, tmp_path
+):
+    service.settings_service.settings.star_citizen.game_path = str(tmp_path / "missing")
+    asyncio.run(service.apply_answer(True))
+    assert service.saved[0].sc_gamelog.enabled is False
+    assert "ScGameEvents" not in service.files["Computer"].discoverable_skills
+    assert "wingman_starhead" in service.files["Computer"].discoverable_mcps
 
 
 def test_a_picked_live_folder_checks_the_folder_above_it(service, tmp_path):
@@ -226,3 +262,39 @@ def test_no_adds_no_servers(service):
     service.config_manager.read_config.return_value = template("mcp.template.yaml")
     asyncio.run(service.apply_answer(False))
     service.config_manager.save_mcp_config.assert_not_called()
+
+
+@pytest.mark.parametrize("plays", [True, False])
+def test_the_answer_leaves_the_hud_as_it_is(service, plays):
+    service.files["ATC"].discoverable_skills = ["HUD"]
+    asyncio.run(service.apply_answer(plays))
+    assert "HUD" in service.files["ATC"].discoverable_skills
+    assert "HUD" not in service.files["Computer"].discoverable_skills
+
+
+def test_the_hud_is_listed_and_marked_as_not_star_citizen(service):
+    service.files["ATC"].discoverable_skills = ["HUD"]
+    hud = {f.name: f for f in service.get_setup().wingmen[0].features}["HUD"]
+    assert hud.enabled is True
+    assert hud.star_citizen is False
+    assert hud.on_by_default is False
+
+
+@pytest.mark.parametrize(
+    "enabled, plays, runs",
+    [(True, True, True), (True, None, False), (True, False, False), (False, True, False)],
+)
+def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
+    settings = SimpleNamespace(
+        sc_gamelog=SimpleNamespace(enabled=enabled),
+        star_citizen=SimpleNamespace(plays=plays),
+    )
+    assert sc_setup.log_reader_on(settings) is runs
+
+
+def test_radio_chatter_is_offered_but_off_for_both(service):
+    asyncio.run(service.apply_answer(True))
+    for wingman in service.get_setup().wingmen:
+        chatter = {f.name: f for f in wingman.features}["RadioChatter"]
+        assert chatter.on_by_default is False
+        assert chatter.enabled is False

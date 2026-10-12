@@ -101,6 +101,10 @@ class ConfigMigrationService:
             # Only check 1.8.1 and 1.8.2 (most users come from 1.8.1, 1.8.2 was dev-only)
             self.migrate_audio_library()
 
+            # Version dirs that exist now. A dir the chain builds on its way
+            # is gone again at the end; these stay.
+            existing_versions = set(next(os.walk(self.users_dir))[1])
+
             # Perform migrations along the pre-validated chain
             for old_version, new_version in zip(
                 migration_chain, migration_chain[1:]
@@ -123,6 +127,7 @@ class ConfigMigrationService:
                     self.log_message += f"{warning_message}\n"
 
             self.audit_skill_availability()
+            self._remove_intermediate_versions(migration_chain, existing_versions)
 
             self.log_highlight(
                 f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}"
@@ -322,6 +327,29 @@ class ConfigMigrationService:
                 f"Migration step to {new_version.replace('_', '.')} was interrupted - "
                 "removed its partial configs so the next launch retries the step."
             )
+
+    def _remove_intermediate_versions(
+        self, chain: list[str], existing_versions: set[str]
+    ) -> None:
+        """Delete the version dirs this run built between the start and the
+        latest version. Only the run wrote to them, from the start version's
+        configs and the templates, and the user never ran those versions, so
+        nothing in them is theirs. The start version stays: it is the user's
+        original. A dir that was there before the run stays too. The latest
+        version's .migration holds the log of every step."""
+        for version in chain[1:-1]:
+            if version in existing_versions:
+                continue
+            version_dir = path.join(self.users_dir, version)
+            if not path.exists(path.join(version_dir, CONFIGS_DIR, MIGRATION_LOG)):
+                continue
+            try:
+                shutil.rmtree(version_dir)
+                self.log(f"Removed intermediate version {version.replace('_', '.')}")
+            except OSError as error:
+                self.log_warning(
+                    f"Could not remove intermediate version {version.replace('_', '.')}: {error}"
+                )
 
     def build_migration_chain(self, start_version):
         """Resolve the ordered list of versions from start_version to the latest.
@@ -1127,6 +1155,9 @@ class ConfigMigrationService:
                         f"Migrating Wingman {config_dir_name}/{filename}..."
                     )
                     # defaults are already migrated because the Wingman config is in a subdirectory
+                    # Which file it is, for migrations that treat the Wingmen
+                    # Wingman ships differently (BaseMigration.shipped_template).
+                    self.current_wingman = (config_dir_name, filename)
                     try:
                         default_config = self.config_manager.read_default_config()
                         migrated_wingman = migrate_wingman(

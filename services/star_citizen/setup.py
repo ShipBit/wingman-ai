@@ -57,19 +57,37 @@ class _Feature:
     on_for: tuple[str, ...] | None
     """The shipped Wingmen it is switched on for when the user plays the
     game; None for all of them, () for none."""
+    star_citizen: bool = True
+    """False for a feature that works without the game, like the HUD. The
+    answer to "Do you play Star Citizen?" leaves it as it is."""
 
 
 FEATURES = (
     _Feature(StarCitizenFeatureKind.MCP, "wingman_starhead", ALL_WINGMEN),
-    _Feature(StarCitizenFeatureKind.MCP, "wingman_galactapedia", ALL_WINGMEN),
-    # Both react to the game log. On one Wingman only, or every event is
+    # StarHead covers trading by default; UEX is the alternative to switch on.
+    # Listed right after StarHead so the two show up next to each other.
+    _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
+    # Lore questions go to the Computer; ATC sticks to traffic control.
+    _Feature(StarCitizenFeatureKind.MCP, "wingman_galactapedia", ("Computer",)),
+    # Reacts to the game log. On one Wingman only, or every event is
     # answered twice.
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
-    _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ("Computer",)),
+    # Off until the user wants it: not everyone keeps books on their aUEC.
+    _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ()),
+    # Background chatter is a matter of taste: offered, but off.
+    _Feature(StarCitizenFeatureKind.SKILL, "RadioChatter", ()),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
-    # StarHead covers trading by default; UEX is the alternative to switch on.
-    _Feature(StarCitizenFeatureKind.SKILL, "UEXCorp", ()),
+    # Listed here so the setup can switch it per Wingman next to the HUD
+    # server, for players of any game.
+    _Feature(StarCitizenFeatureKind.SKILL, "HUD", (), star_citizen=False),
 )
+
+
+def log_reader_on(settings) -> bool:
+    """Whether the log reader runs: switched on, and the user said they play
+    Star Citizen. Before the answer the default "on" would read a folder
+    that is not there on every computer without the game."""
+    return bool(settings.sc_gamelog.enabled) and settings.star_citizen.plays is True
 
 
 def on_by_default(feature: _Feature, wingman_name: str) -> bool:
@@ -114,13 +132,17 @@ class StarCitizenSetupService:
         a config changed by it never comes with the question still open."""
         settings = deepcopy(self.settings_service.settings)
         settings.star_citizen.plays = plays
-        settings.sc_gamelog.enabled = plays
         _set_preset(settings.pronunciation.presets, plays)
         _set_preset(settings.stt.presets, plays)
+        # Without the game there is no Game.log to read: the log reader and
+        # the skills that need it stay off until the user picks the folder.
+        log_reader = False
         if plays:
             folder = self._game_folder()
             if folder.environments:
                 settings.star_citizen.game_path = folder.path
+                log_reader = True
+        settings.sc_gamelog.enabled = log_reader
         await self.settings_service.save_settings(settings)
 
         if plays:
@@ -130,7 +152,7 @@ class StarCitizenSetupService:
         for config_dir, wingman_file in self._shipped_wingmen():
             try:
                 changed |= self._switch_features(
-                    config_dir, wingman_file, available, plays
+                    config_dir, wingman_file, available, plays, log_reader
                 )
             except Exception as error:
                 self.printr.print(
@@ -167,6 +189,7 @@ class StarCitizenSetupService:
         wingman_file: WingmanConfigFileInfo,
         available: dict,
         plays: bool,
+        log_reader: bool,
     ) -> bool:
         """Write the new skill and MCP lists of one Wingman straight to its
         file. True if anything changed."""
@@ -178,7 +201,12 @@ class StarCitizenSetupService:
         for feature in FEATURES:
             if (feature.kind, feature.name) not in available:
                 continue
+            if not feature.star_citizen:
+                continue
             if plays and not on_by_default(feature, wingman_file.name):
+                continue
+            _, requires = available[(feature.kind, feature.name)]
+            if plays and not log_reader and "sc_gamelog" in requires:
                 continue
             names = skills if feature.kind == StarCitizenFeatureKind.SKILL else mcps
             if plays and feature.name not in names:
@@ -314,6 +342,7 @@ class StarCitizenSetupService:
                     enabled=enabled,
                     on_by_default=on_by_default(feature, wingman_file.name),
                     requires=requires,
+                    star_citizen=feature.star_citizen,
                 )
             )
         return features

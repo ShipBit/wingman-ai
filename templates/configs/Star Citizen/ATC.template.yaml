@@ -7,7 +7,6 @@ discoverable_skills:
 discoverable_mcps:
   - wingman_date_time
   - wingman_starhead
-  - wingman_galactapedia
   - wingman_versetime
 prompts:
   backstory: |

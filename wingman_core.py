@@ -103,7 +103,7 @@ from services.audio.device_names import with_full_names
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
 from services.star_citizen.game_folder import inspect_game_folder
-from services.star_citizen.setup import StarCitizenSetupService
+from services.star_citizen.setup import StarCitizenSetupService, log_reader_on
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -1094,7 +1094,7 @@ class WingmanCore(WebSocketUser):
         await self._apply_sc_gamelog_settings(self.settings_service.settings)
 
     async def _apply_sc_gamelog_settings(self, settings: SettingsConfig):
-        enabled = settings.sc_gamelog.enabled
+        enabled = log_reader_on(settings)
         game_path = settings.star_citizen.game_path
         await ScGameLogService().apply_settings(enabled, game_path)
         # The client shows the warning with a link to the setting; this is
