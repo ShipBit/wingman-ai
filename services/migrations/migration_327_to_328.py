@@ -12,6 +12,13 @@ folder. Skills see it as `self.wingman.star_citizen`.
 before. The client asks once after the update whether they play Star Citizen:
 the log reader is new in 3.2.x and is on for everyone, and the answer
 switches it and the other Star Citizen features on or off in one go.
+
+System One (Jev) is off for everyone. It was on by default since 3.2.4, and
+testers did not know it was deciding things for them: what it got wrong looked
+like a broken microphone or a Wingman that did not listen. It is optional now,
+and whoever wants it switches it on under Settings. Only `enabled` changes;
+`commands` keeps what the user chose, so switching System One back on brings
+back the setup they had.
 """
 
 from services.migrations.base_migration import BaseMigration
@@ -33,4 +40,12 @@ class Migration327To328(BaseMigration):
             game_path = game_path or DEFAULT_GAME_PATH
             old["star_citizen"] = {"plays": None, "game_path": game_path}
             self.log(f"- added star_citizen, game folder {game_path}")
+
+        block = old.get("system_one")
+        if not isinstance(block, dict):
+            old["system_one"] = {"enabled": False, "commands": True}
+        else:
+            block["enabled"] = False
+            block.setdefault("commands", True)
+        self.log("- system_one: off — switch it on under Settings if you want it")
         return old
