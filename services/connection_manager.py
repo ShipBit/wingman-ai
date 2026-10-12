@@ -80,6 +80,12 @@ class ConnectionManager:
                 await self.disconnect(websocket)
                 return
 
+    # State updates, not events: a client that connects later reads the
+    # current state itself. Queued, an old one would arrive after the state
+    # had changed - a log reader stopped in the meantime still warned that it
+    # cannot find the game.
+    EPHEMERAL = ("core_state_changed", "sc_gamelog_state_changed")
+
     async def broadcast(self, command: WebSocketCommandModel) -> None:
         json_str = command.model_dump_json()
 
@@ -87,8 +93,7 @@ class ConnectionManager:
             connections_snapshot = list(self.active_connections)
 
         if not connections_snapshot:
-            # Don't queue ephemeral state updates - client can poll /ping for current state
-            if command.command != "core_state_changed":
+            if command.command not in self.EPHEMERAL:
                 async with self._lock:
                     self.message_queue.append(command)
             return
@@ -111,7 +116,7 @@ class ConnectionManager:
             async with self._lock:
                 has_live_connections = bool(self.active_connections)
 
-            if not has_live_connections and command.command != "core_state_changed":
+            if not has_live_connections and command.command not in self.EPHEMERAL:
                 async with self._lock:
                     self.message_queue.append(command)
 

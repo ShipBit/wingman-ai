@@ -278,3 +278,15 @@ def test_the_hud_is_listed_and_marked_as_not_star_citizen(service):
     assert hud.enabled is True
     assert hud.star_citizen is False
     assert hud.on_by_default is False
+
+
+@pytest.mark.parametrize(
+    "enabled, plays, runs",
+    [(True, True, True), (True, None, False), (True, False, False), (False, True, False)],
+)
+def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
+    settings = SimpleNamespace(
+        sc_gamelog=SimpleNamespace(enabled=enabled),
+        star_citizen=SimpleNamespace(plays=plays),
+    )
+    assert sc_setup.log_reader_on(settings) is runs

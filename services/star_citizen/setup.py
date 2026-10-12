@@ -81,6 +81,13 @@ FEATURES = (
 )
 
 
+def log_reader_on(settings) -> bool:
+    """Whether the log reader runs: switched on, and the user said they play
+    Star Citizen. Before the answer the default "on" would read a folder
+    that is not there on every computer without the game."""
+    return bool(settings.sc_gamelog.enabled) and settings.star_citizen.plays is True
+
+
 def on_by_default(feature: _Feature, wingman_name: str) -> bool:
     return feature.on_for is None or wingman_name in feature.on_for
 
