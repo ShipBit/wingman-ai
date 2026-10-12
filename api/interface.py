@@ -1572,7 +1572,7 @@ class StarCitizenGameFolder(BaseModel):
 
 
 class StarCitizenFeature(BaseModel):
-    """A Star Citizen skill or MCP server on one of the shipped Wingmen."""
+    """A skill or MCP server on one of the shipped Star Citizen Wingmen."""
 
     kind: StarCitizenFeatureKind
     name: str
@@ -1584,6 +1584,9 @@ class StarCitizenFeature(BaseModel):
     """Switched on when the user says they play Star Citizen."""
     requires: list[SkillRequirement]
     """Settings the feature needs switched on, e.g. the log reader."""
+    star_citizen: bool = True
+    """False for a feature that works without the game, like the HUD. The
+    answer to "Do you play Star Citizen?" leaves it as it is."""
 
 
 class StarCitizenSetupWingman(BaseModel):

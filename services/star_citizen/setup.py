@@ -57,6 +57,9 @@ class _Feature:
     on_for: tuple[str, ...] | None
     """The shipped Wingmen it is switched on for when the user plays the
     game; None for all of them, () for none."""
+    star_citizen: bool = True
+    """False for a feature that works without the game, like the HUD. The
+    answer to "Do you play Star Citizen?" leaves it as it is."""
 
 
 FEATURES = (
@@ -71,6 +74,9 @@ FEATURES = (
     _Feature(StarCitizenFeatureKind.SKILL, "ScGameEvents", ("Computer",)),
     _Feature(StarCitizenFeatureKind.SKILL, "SC_Accountant", ("Computer",)),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
+    # Listed here so the setup can switch it per Wingman next to the HUD
+    # server, for players of any game.
+    _Feature(StarCitizenFeatureKind.SKILL, "HUD", (), star_citizen=False),
 )
 
 
@@ -179,6 +185,8 @@ class StarCitizenSetupService:
         mcps = list(config.discoverable_mcps or [])
         for feature in FEATURES:
             if (feature.kind, feature.name) not in available:
+                continue
+            if not feature.star_citizen:
                 continue
             if plays and not on_by_default(feature, wingman_file.name):
                 continue
@@ -316,6 +324,7 @@ class StarCitizenSetupService:
                     enabled=enabled,
                     on_by_default=on_by_default(feature, wingman_file.name),
                     requires=requires,
+                    star_citizen=feature.star_citizen,
                 )
             )
         return features
