@@ -23,6 +23,9 @@ def _old_computer() -> dict:
     computer["discoverable_skills"] = ["Timer", "VisionAI"]
     computer["discoverable_mcps"] = ["wingman_date_time", "wingman_starhead"]
     computer["prompts"]["backstory"] = "My own Computer, grumpy and old."
+    for command in computer["commands"]:
+        if command["name"] == "More missiles":
+            command["additional_context"] = "Missle salvo size cycled by +1"
     return computer
 
 
@@ -87,3 +90,12 @@ def test_an_old_inworld_default_becomes_the_current_one(users_dir, boot_config_m
 
     migrated = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "defaults.yaml"))
     assert migrated["inworld"]["model_id"] == "inworld-tts-2-flash"
+
+
+def test_the_old_typos_in_command_texts_are_fixed(users_dir, boot_config_manager):
+    make_old_version(users_dir, OLD_VERSION_DIR, {"Star Citizen": {"Computer.yaml": _old_computer()}})
+
+    boot_and_migrate(boot_config_manager)
+
+    commands = {c["name"]: c for c in _wingman(users_dir, "Star Citizen", "Computer")["commands"]}
+    assert commands["More missiles"]["additional_context"] == "Missile salvo size cycled by +1"
