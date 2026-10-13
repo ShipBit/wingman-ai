@@ -9,9 +9,9 @@ Included modules:
 - hud_manager.py: State management for HUD groups
 - http_client.py: HTTP client for skills to use
 - types.py: Type definitions (enums, property classes) for HUD elements
-- overlay/overlay.py: PIL-based overlay renderer (Windows)
+- overlay/overlay.py: PIL-based overlay renderer (any OS)
 - rendering/markdown.py: Markdown rendering
-- platform/win32.py: Win32 API definitions
+- platform/: the bridge to the OS, one window backend per OS (Windows for now)
 
 Type-Safe Usage:
     from hud_server import HudHttpClient, Anchor, HudColor, FontFamily

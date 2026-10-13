@@ -49,19 +49,9 @@ from hud_server.models import (
     ChatMessageResponse,
 )
 
-# Try to import overlay support (bundled with hud_server)
-OVERLAY_AVAILABLE = False
-HeadsUpOverlay = None
-PIL_AVAILABLE = False
-
-try:
-    from hud_server.overlay.overlay import HeadsUpOverlay as _HeadsUpOverlay, PIL_AVAILABLE as _PIL_AVAILABLE
-    OVERLAY_AVAILABLE = _PIL_AVAILABLE and _HeadsUpOverlay is not None
-    HeadsUpOverlay = _HeadsUpOverlay
-    PIL_AVAILABLE = _PIL_AVAILABLE
-except ImportError:
-    _HeadsUpOverlay = None
-    _PIL_AVAILABLE = False
+# The overlay renders on every OS; the platform backend puts it on screen
+from hud_server.overlay.overlay import HeadsUpOverlay, PIL_AVAILABLE
+from hud_server.platform import create_backend
 
 printr = Printr()
 
@@ -633,9 +623,18 @@ class HudServer:
 
     def _start_overlay(self):
         """Start the overlay renderer in a background thread (if available)."""
-        if not OVERLAY_AVAILABLE or HeadsUpOverlay is None:
+        if not PIL_AVAILABLE:
             printr.print(
                 hud_const.LOG_OVERLAY_NOT_AVAILABLE,
+                color=LogType.WARNING,
+                server_only=True
+            )
+            return
+
+        backend = create_backend()
+        if not backend.supported:
+            printr.print(
+                hud_const.LOG_OVERLAY_UNSUPPORTED.format(backend.unsupported_reason),
                 color=LogType.WARNING,
                 server_only=True
             )
@@ -661,6 +660,7 @@ class HudServer:
                 layout_spacing=self._layout_spacing,
                 screen=self._screen,
                 event_callback=self._on_overlay_event,
+                backend=backend,
             )
 
             # Register callback to send commands to overlay

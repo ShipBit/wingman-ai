@@ -709,7 +709,7 @@ discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
 # the skill out and tells the user which setting to turn on first.
-# hud_server = the HUD (Windows only), sc_gamelog = the Star Citizen log.
+# hud_server = the HUD (Windows for now), sc_gamelog = the Star Citizen log.
 # Leave it out when your skill needs neither.
 requires:
   - sc_gamelog
@@ -1550,15 +1550,15 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 
 ### `self.wingman.hud` — the HUD overlay
 
-Core's HUD server draws the overlay, on Windows only and only when the user
-switched it on in the settings. All Wingmen share two containers, the chat and
+Core's HUD server draws the overlay, on an OS the HUD supports (Windows for
+now) and only when the user switched it on in the settings. All Wingmen share two containers, the chat and
 the info panel; where they are and how they look comes from the user's HUD
 profile. Every call checks that the HUD runs and returns `False` when it does
 not. The shared containers also follow the Wingman's own HUD switches.
 
 | Member | Description |
 | --- | --- |
-| `.available` | `bool` — the HUD runs (switched on, Windows). |
+| `.available` | `bool` — the HUD runs (switched on, on a supported OS). |
 | `.chat_enabled` / `.info_enabled` | `bool` — the HUD runs and this Wingman uses the chat container / the info panel. |
 | `.profile` | The HUD profile in use, read-only: `chat` and `info` are the containers' areas (`x1`, `y1`, `x2`, `y2` in pixels), `style` their look. `None` before a config is loaded. |
 | `await .show_message(title, text, *, duration=10.0, color=None)` | A message in the shared chat container for `duration` seconds. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |

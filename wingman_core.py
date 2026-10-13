@@ -136,6 +136,7 @@ from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
+from hud_server.platform import hud_supported, unsupported_reason
 from hud_server.validation import validate_hud_settings, get_invalid_summary
 
 # Share of a transcript's words that must occur in what the wingman is saying
@@ -1070,7 +1071,7 @@ class WingmanCore(WebSocketUser):
 
         # 6. HUD server
         hud_settings = getattr(self.settings_service.settings, "hud_server", None)
-        if hud_settings and hud_settings.enabled:
+        if hud_settings and hud_settings.enabled and hud_supported():
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
                 message="Starting HUD server...",
@@ -1113,9 +1114,9 @@ class WingmanCore(WebSocketUser):
         if not hud_settings or not hud_settings.enabled:
             return
 
-        if platform.system() != "Windows":
+        if not hud_supported():
             self.printr.print(
-                "[HUD] Server is only supported on Windows.",
+                f"[HUD] {unsupported_reason()}",
                 color=LogType.WARNING,
                 server_only=True,
             )
@@ -1161,7 +1162,7 @@ class WingmanCore(WebSocketUser):
         should_run = (
             hud_settings is not None
             and hud_settings.enabled
-            and platform.system() == "Windows"
+            and hud_supported()
         )
         is_running = self._hud_server is not None and self._hud_server.is_running
 

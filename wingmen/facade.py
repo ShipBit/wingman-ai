@@ -1238,9 +1238,9 @@ class SkillHud:
     `show_timer`, or draws its own group with `group()`, which takes the
     profile's look for everything it does not set itself.
 
-    The HUD runs on Windows only, and only when the user switched it on. Every
-    call checks that: when the HUD is off, nothing happens and the call
-    returns False. The shared containers also respect this Wingman's own
+    The HUD runs only when the user switched it on, on an OS the HUD supports
+    (Windows for now). Every call checks that: when the HUD is off, nothing
+    happens and the call returns False. The shared containers also respect this Wingman's own
     switches (`chat_enabled`, `info_enabled`).
     """
 
@@ -1264,7 +1264,7 @@ class SkillHud:
 
     @property
     def available(self) -> bool:
-        """The HUD runs: the user switched it on and this is Windows."""
+        """The HUD runs: the user switched it on and the OS supports it."""
         return self._service().available
 
     @property

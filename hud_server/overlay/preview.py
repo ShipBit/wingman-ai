@@ -15,26 +15,7 @@ from typing import Dict, Optional
 from PIL import Image, ImageDraw
 
 from hud_server.constants import GROUP_CHAT, GROUP_INFO
-from hud_server.platform.win32 import (
-    IDC_ARROW,
-    IDC_SIZEALL,
-    IDC_SIZENESW,
-    IDC_SIZENS,
-    IDC_SIZENWSE,
-    IDC_SIZEWE,
-    MA_NOACTIVATE,
-    WM_CAPTURECHANGED,
-    WM_LBUTTONDOWN,
-    WM_LBUTTONUP,
-    WM_MOUSEACTIVATE,
-    WM_MOUSEMOVE,
-    WM_SETCURSOR,
-    get_cursor_pos,
-    set_click_through,
-    set_cursor,
-    set_message_handler,
-    user32,
-)
+from hud_server.platform import Cursor, Pointer
 
 PREVIEW_CONTAINERS = {"chat": "message", "info": "persistent"}
 SHARED_GROUPS = (GROUP_CHAT, GROUP_INFO)
@@ -46,15 +27,15 @@ EVENT_INTERVAL = 0.1  # seconds between live events while dragging
 BASE_ALPHA = 3  # invisible, but keeps every pixel of the area clickable
 
 _CURSORS = {
-    "move": IDC_SIZEALL,
-    "n": IDC_SIZENS,
-    "s": IDC_SIZENS,
-    "w": IDC_SIZEWE,
-    "e": IDC_SIZEWE,
-    "nw": IDC_SIZENWSE,
-    "se": IDC_SIZENWSE,
-    "ne": IDC_SIZENESW,
-    "sw": IDC_SIZENESW,
+    "move": Cursor.MOVE,
+    "n": Cursor.RESIZE_NS,
+    "s": Cursor.RESIZE_NS,
+    "w": Cursor.RESIZE_WE,
+    "e": Cursor.RESIZE_WE,
+    "nw": Cursor.RESIZE_NWSE,
+    "se": Cursor.RESIZE_NWSE,
+    "ne": Cursor.RESIZE_NESW,
+    "sw": Cursor.RESIZE_NESW,
 }
 
 _LABELS = {"chat": "Chat", "info": "Info Panel"}
@@ -93,11 +74,12 @@ class PreviewMixin:
         self._preview_active = bool(self._preview_windows)
         self._preview_interactive = interactive
         for win in self._preview_windows.values():
-            set_click_through(win["hwnd"], not interactive)
+            if win.get("handle") is not None:
+                self._backend.set_click_through(win["handle"], not interactive)
 
     def _clear_preview(self) -> None:
         if self._drag:
-            user32.ReleaseCapture()
+            self._backend.release_pointer()
             self._drag = None
         for container in list(self._preview_windows):
             self._destroy_preview_window(container)
@@ -132,12 +114,11 @@ class PreviewMixin:
             self._preview_windows[container] = win
             self._register_layout(name, win, int(win["props"].get("max_height", 600)))
             x, y = self._layout_manager.get_position(name) or (0, 0)
-            hwnd = self._create_overlay_window(f"HUD_{name}", x, y, int(win["props"].get("width", 400)), 100)
-            if hwnd:
-                win["window_dc"], win["mem_dc"] = self._init_gdi(hwnd)
-                win["hwnd"] = hwnd
-                set_message_handler(
-                    hwnd, lambda m, w, l, c=container: self._on_preview_mouse(c, m, w, l)
+            handle = self._backend.create_window(f"HUD_{name}", x, y, int(win["props"].get("width", 400)), 100)
+            win["handle"] = handle
+            if handle is not None:
+                self._backend.set_pointer_handler(
+                    handle, lambda event, px, py, c=container: self._on_preview_pointer(c, event, px, py)
                 )
         else:
             win["explicit_props"].update(self._preview_props(props))
@@ -153,7 +134,8 @@ class PreviewMixin:
         win = self._preview_windows.pop(container, None)
         if not win:
             return
-        set_message_handler(win.get("hwnd"), None)
+        if win.get("handle") is not None:
+            self._backend.set_pointer_handler(win["handle"], None)
         # _destroy_window works on self._windows; borrow the slot
         name = f"preview_{container}"
         self._windows[name] = win
@@ -203,7 +185,7 @@ class PreviewMixin:
         """No mouse-leave message arrives; drop the highlight once the pointer is elsewhere."""
         if self._drag or not any(self._hover.values()):
             return
-        mx, my = self._screen_to_monitor(*get_cursor_pos())
+        mx, my = self._screen_to_monitor(*self._backend.cursor_position())
         for container, zone in list(self._hover.items()):
             if zone is None or container not in self._preview_windows:
                 continue
@@ -307,54 +289,48 @@ class PreviewMixin:
             zone += "e"
         return zone or "move"
 
-    def _on_preview_mouse(self, container: str, msg: int, wparam, lparam):
+    def _on_preview_pointer(self, container: str, event: Pointer, x: int, y: int) -> Optional[Cursor]:
+        """The mouse over a preview window (screen coordinates); answers with the cursor to show."""
         if container not in self._preview_windows or not self._preview_interactive:
             return None
 
-        if msg == WM_MOUSEACTIVATE:
-            return MA_NOACTIVATE
+        mx, my = self._screen_to_monitor(x, y)
 
-        mx, my = self._screen_to_monitor(*get_cursor_pos())
-
-        if msg == WM_SETCURSOR:
+        if event == Pointer.HOVER:
             zone = self._drag["zone"] if self._drag else self._hit_zone(container, mx, my)
-            set_cursor(_CURSORS.get(zone, IDC_ARROW))
-            return 1
+            return _CURSORS.get(zone, Cursor.ARROW)
 
-        if msg == WM_LBUTTONDOWN:
+        if event == Pointer.PRESS:
             self._drag = {
                 "container": container,
                 "zone": self._hit_zone(container, mx, my),
                 "start": (mx, my),
                 "rect": self._preview_rect(container),
             }
-            user32.SetCapture(self._preview_windows[container]["hwnd"])
+            self._backend.capture_pointer(self._preview_windows[container]["handle"])
             self._invalidate_preview(container)
-            return 0
+            return None
 
-        if msg == WM_MOUSEMOVE:
+        if event == Pointer.MOVE:
             if self._drag and self._drag["container"] == container:
-                set_cursor(_CURSORS.get(self._drag["zone"], IDC_ARROW))
                 self._drag_to(mx, my)
-            else:
-                zone = self._hit_zone(container, mx, my)
-                if self._hover.get(container) != zone:
-                    self._hover[container] = zone
-                    self._invalidate_preview(container)
-            return 0
+                return _CURSORS.get(self._drag["zone"], Cursor.ARROW)
+            zone = self._hit_zone(container, mx, my)
+            if self._hover.get(container) != zone:
+                self._hover[container] = zone
+                self._invalidate_preview(container)
+            return None
 
-        if msg == WM_LBUTTONUP:
+        if event == Pointer.RELEASE:
             if self._drag and self._drag["container"] == container:
                 self._drag_to(mx, my)
                 self._end_drag()
-                user32.ReleaseCapture()
-            return 0
+                self._backend.release_pointer()
+            return None
 
-        if msg == WM_CAPTURECHANGED:
+        if event == Pointer.LOST:
             if self._drag and self._drag["container"] == container:
                 self._end_drag()
-            return 0
-
         return None
 
     def _drag_to(self, mx: int, my: int) -> None:

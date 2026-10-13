@@ -3,7 +3,8 @@ HeadsUp Overlay - PIL-based implementation with sophisticated Markdown rendering
 
 This implementation uses ONLY:
 - PIL (Pillow) for rendering (text, shapes, images)
-- Win32 API for window management
+- a platform backend (hud_server/platform) for the OS's windows, so the
+  renderer itself runs on every OS
 """
 
 import os
@@ -14,8 +15,6 @@ import time
 import queue
 import math
 import re
-import ctypes
-from ctypes import wintypes
 from typing import Tuple, Dict, Optional
 import traceback
 
@@ -33,45 +32,7 @@ except ImportError:
 
 from hud_server.rendering.markdown import MarkdownRenderer
 
-if sys.platform != "win32":
-    raise ImportError("hud_server.overlay is only available on Windows")
-
-from hud_server.platform.win32 import (
-    user32,
-    gdi32,
-    kernel32,
-    BITMAPINFOHEADER,
-    BITMAPINFO,
-    MSG,
-    WS_POPUP,
-    WS_EX_LAYERED,
-    WS_EX_TRANSPARENT,
-    WS_EX_TOPMOST,
-    WS_EX_TOOLWINDOW,
-    WS_EX_NOACTIVATE,
-    SWP_SHOWWINDOW,
-    SWP_HIDEWINDOW,
-    SWP_NOACTIVATE,
-    SWP_NOMOVE,
-    SWP_NOSIZE,
-    DIB_RGB_COLORS,
-    BI_RGB,
-    ULW_ALPHA,
-    AC_SRC_OVER,
-    AC_SRC_ALPHA,
-    BLENDFUNCTION,
-    SW_SHOWNOACTIVATE,
-    HWND_TOPMOST,
-    PM_REMOVE,
-    _ensure_window_class,
-    _class_name,
-    force_on_top,
-    WINEVENTPROC,
-    EVENT_SYSTEM_FOREGROUND,
-    WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS,
-    get_monitor_dimensions,
-)
+from hud_server.platform import HudBackend, create_backend
 from hud_server.layout import LayoutManager, Anchor, LayoutMode, Align
 from hud_server.overlay.preview import PreviewMixin
 from hud_server.constants import (
@@ -107,6 +68,7 @@ class HeadsUpOverlay(PreviewMixin):
         layout_spacing: int = 15,
         screen: int = 1,
         event_callback=None,
+        backend: Optional[HudBackend] = None,
     ):
         self.running = True
         self.msg_queue = command_queue if command_queue else queue.Queue()
@@ -120,10 +82,8 @@ class HeadsUpOverlay(PreviewMixin):
         self._layout_spacing = layout_spacing
         self._screen = screen
 
-        # Reactive foreground management
-        self._foreground_changed = threading.Event()
-        self._win_event_hook = None
-        self._win_event_proc = None  # prevent GC of the callback
+        # The OS's windows (hud_server/platform)
+        self._backend = backend or create_backend()
 
         # =====================================================================
         # UNIFIED WINDOW SYSTEM
@@ -135,12 +95,9 @@ class HeadsUpOverlay(PreviewMixin):
         # - 'type': str - 'message', 'persistent', or 'chat'
         # - 'group': str - the group name this window belongs to
         # - 'props': dict - display properties (x, y, width, colors, etc.)
-        # - 'hwnd': window handle
-        # - 'window_dc': device context
-        # - 'mem_dc': memory device context
+        # - 'handle': the backend's window (None until created)
         # - 'canvas': PIL Image
         # - 'canvas_dirty': bool
-        # - 'dib_bitmap', 'dib_bits', 'old_bitmap', 'dib_width', 'dib_height': DIB resources
         # - 'fade_state': 0=hidden, 1=fade_in, 2=visible, 3=fade_out
         # - 'opacity': current opacity (0-255)
         # - 'target_opacity': target opacity (0-255)
@@ -254,14 +211,12 @@ class HeadsUpOverlay(PreviewMixin):
         # =====================================================================
         # Automatic positioning and stacking to prevent window overlap
         # Get screen dimensions and offset based on selected monitor
-        screen_width, screen_height, screen_offset_x, screen_offset_y = (
-            get_monitor_dimensions(self._screen)
-        )
+        monitor = self._backend.monitor(self._screen)
         self._layout_manager = LayoutManager(
-            screen_width=screen_width,
-            screen_height=screen_height,
-            screen_offset_x=screen_offset_x,
-            screen_offset_y=screen_offset_y,
+            screen_width=monitor.width,
+            screen_height=monitor.height,
+            screen_offset_x=monitor.x,
+            screen_offset_y=monitor.y,
             default_margin=self._layout_margin,
             default_spacing=self._layout_spacing,
         )
@@ -419,16 +374,9 @@ class HeadsUpOverlay(PreviewMixin):
             "group": group,
             "explicit_props": explicit_props,
             "props": merged_props,
-            "hwnd": None,
-            "window_dc": None,
-            "mem_dc": None,
+            "handle": None,
             "canvas": None,
             "canvas_dirty": False,
-            "dib_bitmap": None,
-            "dib_bits": None,
-            "old_bitmap": None,
-            "dib_width": 0,
-            "dib_height": 0,
             "fade_state": 0,  # hidden
             "opacity": 0,
             "target_opacity": int(merged_props.get("opacity", 0.85) * 255),
@@ -477,7 +425,7 @@ class HeadsUpOverlay(PreviewMixin):
             state = self._create_window_state(window_type, group, props)
             self._windows[name] = state
 
-            # Create the actual Win32 window
+            # Create the OS window
             window_props = state["props"]
             w = int(window_props.get("width", 400))
             h = 100  # Initial height, will be adjusted during rendering
@@ -492,12 +440,7 @@ class HeadsUpOverlay(PreviewMixin):
                 x = int(window_props.get("x", 20))
                 y = int(window_props.get("y", 20))
 
-            hwnd = self._create_overlay_window(f"HUD_{name}", x, y, w, h)
-            if hwnd:
-                window_dc, mem_dc = self._init_gdi(hwnd)
-                state["hwnd"] = hwnd
-                state["window_dc"] = window_dc
-                state["mem_dc"] = mem_dc
+            state["handle"] = self._backend.create_window(f"HUD_{name}", x, y, w, h)
         elif props:
             win = self._windows[name]
             win.setdefault("explicit_props", {}).update(props)
@@ -528,36 +471,12 @@ class HeadsUpOverlay(PreviewMixin):
 
         state = self._windows[name]
 
-        # Cleanup DIB
-        if state.get("old_bitmap") and state.get("mem_dc"):
+        if state.get("handle") is not None:
             try:
-                gdi32.SelectObject(state["mem_dc"], state["old_bitmap"])
-            except:
+                self._backend.destroy_window(state["handle"])
+            except Exception:
                 pass
-        if state.get("dib_bitmap"):
-            try:
-                gdi32.DeleteObject(state["dib_bitmap"])
-            except:
-                pass
-
-        # Cleanup DCs
-        if state.get("mem_dc"):
-            try:
-                gdi32.DeleteDC(state["mem_dc"])
-            except:
-                pass
-        if state.get("window_dc") and state.get("hwnd"):
-            try:
-                user32.ReleaseDC(state["hwnd"], state["window_dc"])
-            except:
-                pass
-
-        # Destroy window
-        if state.get("hwnd"):
-            try:
-                user32.DestroyWindow(state["hwnd"])
-            except:
-                pass
+            state["handle"] = None
 
         # Unregister from layout manager
         self._layout_manager.unregister_window(name)
@@ -646,8 +565,8 @@ class HeadsUpOverlay(PreviewMixin):
         positions = self._layout_manager.compute_positions(force=True)
 
         for name, win in self._windows.items():
-            hwnd = win.get("hwnd")
-            if not hwnd:
+            handle = win.get("handle")
+            if handle is None:
                 continue
 
             # Skip windows that are manually hidden
@@ -677,7 +596,7 @@ class HeadsUpOverlay(PreviewMixin):
 
                 if x != old_x or y != old_y:
                     # Position changed - move window and mark for reblit
-                    user32.MoveWindow(hwnd, x, y, w, h, True)  # True = repaint
+                    self._backend.move_window(handle, x, y, w, h)
                     win["_last_x"] = x
                     win["_last_y"] = y
                     win["canvas_dirty"] = True  # Force reblit after move
@@ -798,24 +717,21 @@ class HeadsUpOverlay(PreviewMixin):
         self._update_window_fade(win, has_content=bool(items))
 
     def _show_window_if_hidden(self, win: Dict):
-        """Re-show a layered window that was hidden via SWP_HIDEWINDOW (fade_state==0).
+        """Re-show a window that was hidden when it faded out (fade_state==0).
 
         Several code paths set fade_state to 1 directly (bypassing _update_window_fade)
         as a fast path when new content arrives - each of those must call this first
         (before overwriting fade_state) or the window stays invisible forever, since
-        SWP_HIDEWINDOW/SWP_SHOWWINDOW visibility is independent of per-pixel alpha.
+        a hidden window stays hidden whatever opacity it is drawn with.
         """
-        hwnd = win.get("hwnd")
-        if hwnd and win.get("fade_state") == 0:
-            user32.SetWindowPos(
-                hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-            )
+        handle = win.get("handle")
+        if handle is not None and win.get("fade_state") == 0:
+            self._backend.show_window(handle)
 
     def _update_window_fade(self, win: Dict, has_content: bool):
         """Update fade animation for a window."""
-        hwnd = win.get("hwnd")
-        if not hwnd:
+        handle = win.get("handle")
+        if handle is None:
             return
 
         # If manually hidden, force has_content to False so fade out completes
@@ -849,8 +765,7 @@ class HeadsUpOverlay(PreviewMixin):
 
         if win["fade_state"] == 1:  # Fade in
             win["opacity"] = min(target, win.get("opacity", 0) + fade_amount)
-            # Opacity is applied per-pixel at blit time (BLENDFUNCTION.SourceConstantAlpha
-            # in _blit_window), not via SetLayeredWindowAttributes - force a re-blit.
+            # Opacity is applied when the canvas is presented (_blit_window) - force a re-blit.
             win["canvas_dirty"] = True
             if win["opacity"] >= target:
                 win["fade_state"] = 2
@@ -869,10 +784,7 @@ class HeadsUpOverlay(PreviewMixin):
                 # there's no content, so that final blit is never guaranteed to
                 # run on this exact frame. Without this, the window would be
                 # stuck showing its last visible frame forever.
-                user32.SetWindowPos(
-                    hwnd, None, 0, 0, 0, 0,
-                    SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-                )
+                self._backend.hide_window(handle)
 
         elif win["fade_state"] == 2:  # Visible - maintain target opacity
             if win["opacity"] != target:
@@ -1242,15 +1154,15 @@ class HeadsUpOverlay(PreviewMixin):
         # Get position from layout manager
         pos = self._layout_manager.get_position(name)
 
-        hwnd = win.get("hwnd")
-        if hwnd:
+        handle = win.get("handle")
+        if handle is not None:
             if pos:
                 x, y_pos = pos
             else:
                 # Fallback to props
                 x = int(props.get("x", 20))
                 y_pos = int(props.get("y", 20))
-            user32.MoveWindow(hwnd, x, y_pos, width, final_h, True)
+            self._backend.move_window(handle, x, y_pos, width, final_h)
 
     def _draw_persistent_window(self, name: str, win: Dict):
         """Draw content for a persistent window."""
@@ -1613,15 +1525,15 @@ class HeadsUpOverlay(PreviewMixin):
         # Get position from layout manager
         pos = self._layout_manager.get_position(name)
 
-        hwnd = win.get("hwnd")
-        if hwnd:
+        handle = win.get("handle")
+        if handle is not None:
             if pos:
                 x, y_pos = pos
             else:
                 # Fallback to props
                 x = int(props.get("x", 20))
                 y_pos = int(props.get("y", 20))
-            user32.MoveWindow(hwnd, x, y_pos, width, final_h, True)
+            self._backend.move_window(handle, x, y_pos, width, final_h)
 
     def _update_chat_window(self, name: str, win: Dict):
         """Update chat window state (fade logic and auto-hide)."""
@@ -1895,105 +1807,37 @@ class HeadsUpOverlay(PreviewMixin):
         self._layout_manager.update_window_height(name, final_h)
         pos = self._layout_manager.get_position(name)
 
-        hwnd = win.get("hwnd")
-        if hwnd:
+        handle = win.get("handle")
+        if handle is not None:
             if pos:
                 x, y_pos = pos
             else:
                 x = int(props.get("x", 20))
                 y_pos = int(props.get("y", 20))
-            user32.MoveWindow(hwnd, x, y_pos, width, final_h, True)
+            self._backend.move_window(handle, x, y_pos, width, final_h)
 
     def _blit_window(self, name: str, win: Dict):
-        """Blit a window's canvas to its Win32 window using true per-pixel alpha
-        (UpdateLayeredWindow), so background transparency (bg_opacity) is actually
-        respected on screen instead of being discarded by a plain BitBlt."""
+        """Hand a window's canvas to the backend, faded to the window's opacity."""
         if win.get("opacity", 0) <= 0:
             return
         if not win.get("canvas_dirty", False):
             return
 
         canvas = win.get("canvas")
-        hwnd = win.get("hwnd")
-        mem_dc = win.get("mem_dc")
-
-        if not all([canvas, hwnd, mem_dc]):
-            return
-
-        w, h = canvas.size
-
-        # Check if DIB needs resize
-        if w != win.get("dib_width", 0) or h != win.get("dib_height", 0):
-            # Cleanup old DIB
-            if win.get("old_bitmap"):
-                gdi32.SelectObject(mem_dc, win["old_bitmap"])
-            if win.get("dib_bitmap"):
-                gdi32.DeleteObject(win["dib_bitmap"])
-
-            # Create new DIB
-            win["dib_width"] = w
-            win["dib_height"] = h
-            bmi = BITMAPINFO()
-            bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-            bmi.bmiHeader.biWidth = w
-            bmi.bmiHeader.biHeight = -h  # Top-down
-            bmi.bmiHeader.biPlanes = 1
-            bmi.bmiHeader.biBitCount = 32
-            bmi.bmiHeader.biCompression = BI_RGB
-
-            dib_bits = ctypes.c_void_p()
-            dib_bitmap = gdi32.CreateDIBSection(
-                mem_dc,
-                ctypes.byref(bmi),
-                DIB_RGB_COLORS,
-                ctypes.byref(dib_bits),
-                None,
-                0,
-            )
-            if dib_bitmap:
-                win["old_bitmap"] = gdi32.SelectObject(mem_dc, dib_bitmap)
-                win["dib_bitmap"] = dib_bitmap
-                win["dib_bits"] = dib_bits
-
-        dib_bits = win.get("dib_bits")
-        if not dib_bits:
+        handle = win.get("handle")
+        if canvas is None or handle is None:
             return
 
         try:
-            # UpdateLayeredWindow with AC_SRC_ALPHA requires premultiplied alpha:
-            # R/G/B must already be scaled by their own pixel's alpha.
-            r, g, b, a = canvas.split()
-            r = ImageChops.multiply(r, a)
-            g = ImageChops.multiply(g, a)
-            b = ImageChops.multiply(b, a)
-            premultiplied = Image.merge("RGBA", (r, g, b, a))
-
-            rgba = premultiplied.tobytes("raw", "BGRA")
-            buffer_size = w * h * 4
-            ctypes.memmove(dib_bits, rgba, buffer_size)
-
-            blend = BLENDFUNCTION()
-            blend.BlendOp = AC_SRC_OVER
-            blend.BlendFlags = 0
-            blend.SourceConstantAlpha = max(0, min(255, int(win.get("opacity", 255))))
-            blend.AlphaFormat = AC_SRC_ALPHA
-
-            size = wintypes.SIZE(w, h)
-            src_pos = wintypes.POINT(0, 0)
-
-            ctypes.set_last_error(0)
-            ok = user32.UpdateLayeredWindow(
-                hwnd, None, None, ctypes.byref(size), mem_dc,
-                ctypes.byref(src_pos), 0, ctypes.byref(blend), ULW_ALPHA
-            )
-            if not ok:
-                err = ctypes.get_last_error()
-                self._report_exception(
-                    "blit_window", RuntimeError(f"UpdateLayeredWindow failed, GetLastError={err}")
-                )
-            win["canvas_dirty"] = False
+            self._backend.present(handle, canvas, max(0, min(255, int(win.get("opacity", 255)))))
         except Exception as e:
-            self._report_exception("blit_window", e)
+            # Still dirty: the next frame tries again; reported once per failure
+            if not win.get("present_failed"):
+                self._report_exception("blit_window", e)
+            win["present_failed"] = True
+            return
+        win["present_failed"] = False
+        win["canvas_dirty"] = False
 
     def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
         """Parse hex color string to RGB tuple. Supports #RGB, #RRGGBB, #RRGGBBAA formats."""
@@ -2104,71 +1948,15 @@ class HeadsUpOverlay(PreviewMixin):
         if cache_key in self._font_cache:
             return self._font_cache[cache_key]
 
-        # Map font family names to Windows font files
-        font_map = {
-            "segoe ui": {
-                "normal": "segoeuisl.ttf",
-                "bold": "segoeuib.ttf",
-                "italic": "segoeuii.ttf",
-                "bold_italic": "segoeuiz.ttf",
-            },
-            "arial": {
-                "normal": "arial.ttf",
-                "bold": "arialbd.ttf",
-                "italic": "ariali.ttf",
-                "bold_italic": "arialbi.ttf",
-            },
-            "verdana": {
-                "normal": "verdana.ttf",
-                "bold": "verdanab.ttf",
-                "italic": "verdanai.ttf",
-                "bold_italic": "verdanaz.ttf",
-            },
-            "tahoma": {
-                "normal": "tahoma.ttf",
-                "bold": "tahomabd.ttf",
-                "italic": "tahoma.ttf",
-                "bold_italic": "tahomabd.ttf",
-            },
-            "trebuchet ms": {
-                "normal": "trebuc.ttf",
-                "bold": "trebucbd.ttf",
-                "italic": "trebucit.ttf",
-                "bold_italic": "trebucbi.ttf",
-            },
-            "calibri": {
-                "normal": "calibri.ttf",
-                "bold": "calibrib.ttf",
-                "italic": "calibrii.ttf",
-                "bold_italic": "calibriz.ttf",
-            },
-            "consolas": {
-                "normal": "consola.ttf",
-                "bold": "consolab.ttf",
-                "italic": "consolai.ttf",
-                "bold_italic": "consolaz.ttf",
-            },
-            "courier new": {
-                "normal": "cour.ttf",
-                "bold": "courbd.ttf",
-                "italic": "couri.ttf",
-                "bold_italic": "courbi.ttf",
-            },
-        }
-
-        family_lower = family.lower()
-        font_files = font_map.get(family_lower, font_map["segoe ui"])
-        fonts_dir = "C:/Windows/Fonts/"
+        # The OS's font files for this family (hud_server/platform)
+        font_set = self._backend.font_set(family)
 
         pil_size = size
         pil_code_size = max(1, size - 1)  # Code font slightly smaller, but at least 1
 
         # Load emoji fonts
         emoji_font = None
-        emoji_font_paths = [
-            fonts_dir + "seguiemj.ttf",
-            fonts_dir + "seguisym.ttf",
-        ]
+        emoji_font_paths = list(font_set.emoji) if font_set else []
         for emoji_path in emoji_font_paths:
             try:
                 emoji_font = ImageFont.truetype(emoji_path, pil_size)
@@ -2207,35 +1995,36 @@ class HeadsUpOverlay(PreviewMixin):
             except:
                 pass
 
-        # Try to load fonts from Windows fonts directory
         try:
+            if font_set is None:
+                raise OSError(f"No font files for {family}")
             fonts_dict = {
                 "normal": ImageFont.truetype(
-                    fonts_dir + font_files["normal"], pil_size
+                    font_set.normal, pil_size
                 ),
-                "bold": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size),
+                "bold": ImageFont.truetype(font_set.bold, pil_size),
                 "italic": ImageFont.truetype(
-                    fonts_dir + font_files["italic"], pil_size
+                    font_set.italic, pil_size
                 ),
                 "bold_italic": ImageFont.truetype(
-                    fonts_dir + font_files["bold_italic"], pil_size
+                    font_set.bold_italic, pil_size
                 ),
-                "code": ImageFont.truetype(fonts_dir + "consola.ttf", pil_code_size),
-                "h1": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size + 10),
-                "h2": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size + 6),
-                "h3": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size + 3),
-                "h4": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size + 1),
-                "h5": ImageFont.truetype(fonts_dir + font_files["bold"], pil_size),
+                "code": ImageFont.truetype(font_set.code, pil_code_size),
+                "h1": ImageFont.truetype(font_set.bold, pil_size + 10),
+                "h2": ImageFont.truetype(font_set.bold, pil_size + 6),
+                "h3": ImageFont.truetype(font_set.bold, pil_size + 3),
+                "h4": ImageFont.truetype(font_set.bold, pil_size + 1),
+                "h5": ImageFont.truetype(font_set.bold, pil_size),
                 "h6": ImageFont.truetype(
-                    fonts_dir + font_files["bold_italic"], pil_size - 1
+                    font_set.bold_italic, pil_size - 1
                 ),
                 "header": ImageFont.truetype(
-                    fonts_dir + font_files["bold"], pil_size + 4
+                    font_set.bold, pil_size + 4
                 ),
                 "emoji": (
                     emoji_font
                     if emoji_font
-                    else ImageFont.truetype(fonts_dir + font_files["normal"], pil_size)
+                    else ImageFont.truetype(font_set.normal, pil_size)
                 ),
                 "emoji_h1": emoji_fonts.get("emoji_h1", emoji_font),
                 "emoji_h2": emoji_fonts.get("emoji_h2", emoji_font),
@@ -2615,20 +2404,15 @@ class HeadsUpOverlay(PreviewMixin):
             if self.use_stdin:
                 threading.Thread(target=self._read_stdin, daemon=True).start()
 
-            if not _ensure_window_class():
-                self._report_exception(
-                    "init", RuntimeError("Failed to register window class")
-                )
+            try:
+                self._backend.start()
+            except Exception as e:
+                self._report_exception("init", e)
                 return
 
             self._init_fonts()
 
             self.last_update_time = time.time()
-
-            # Install WinEvent hook for reactive foreground monitoring.
-            # The callback fires only when a different window becomes the foreground
-            # window, so we re-apply topmost to all HUD windows only when needed.
-            self._install_foreground_hook()
 
             # Signal successful start
             self._emit_heartbeat()
@@ -2639,11 +2423,8 @@ class HeadsUpOverlay(PreviewMixin):
                     self.dt = start - self.last_update_time
                     self.last_update_time = start
 
-                    # Pump the Win32 message queue (handles both windows)
-                    msg = MSG()
-                    while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
-                        user32.TranslateMessage(ctypes.byref(msg))
-                        user32.DispatchMessageW(ctypes.byref(msg))
+                    # OS events: mouse input, keeping the HUD above other apps
+                    self._backend.pump_events()
 
                     target_fps = self._global_framerate
                     frame_time = 1.0 / target_fps
@@ -2670,12 +2451,6 @@ class HeadsUpOverlay(PreviewMixin):
                     # =========================================================
                     self._update_all_windows()
 
-                    # Re-apply topmost to all HUD windows when the foreground
-                    # window changed (event-driven, not polled).
-                    if self._foreground_changed.is_set():
-                        self._foreground_changed.clear()
-                        self._reapply_topmost()
-
                     self._emit_heartbeat()
 
                     elapsed = time.time() - start
@@ -2689,57 +2464,11 @@ class HeadsUpOverlay(PreviewMixin):
         except Exception as e:
             self._report_exception("run_crash", e)
         finally:
-            self._uninstall_foreground_hook()
             self._clear_preview()
             # Cleanup unified windows (including chat windows)
             for name in list(self._windows.keys()):
                 self._destroy_window(name)
-
-    def _install_foreground_hook(self):
-        """Install a WinEvent hook to detect foreground window changes.
-
-        Uses EVENT_SYSTEM_FOREGROUND which fires whenever a different window
-        becomes the foreground window. WINEVENT_OUTOFCONTEXT means the callback
-        runs in our own process/thread context (no DLL injection needed).
-        WINEVENT_SKIPOWNPROCESS avoids firing for our own HUD windows.
-        """
-
-        def _on_foreground_change(
-            hook, event, hwnd, id_object, id_child, event_thread, event_time
-        ):
-            self._foreground_changed.set()
-
-        # Must keep a reference to prevent garbage collection of the ctypes callback
-        self._win_event_proc = WINEVENTPROC(_on_foreground_change)
-        self._win_event_hook = user32.SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,  # eventMin
-            EVENT_SYSTEM_FOREGROUND,  # eventMax
-            None,  # hmodWinEventProc (None for out-of-context)
-            self._win_event_proc,  # callback
-            0,  # idProcess (0 = all processes)
-            0,  # idThread (0 = all threads)
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
-        )
-
-    def _uninstall_foreground_hook(self):
-        """Remove the WinEvent hook on shutdown."""
-        if self._win_event_hook:
-            try:
-                user32.UnhookWinEvent(self._win_event_hook)
-            except Exception:
-                pass
-            self._win_event_hook = None
-            self._win_event_proc = None
-
-    def _reapply_topmost(self):
-        """Re-apply topmost z-order to all visible HUD windows."""
-        for win in list(self._windows.values()) + list(self._preview_windows.values()):
-            hwnd = win.get("hwnd")
-            if not hwnd:
-                continue
-            # Only re-apply to windows that are visible or fading in
-            if win.get("fade_state", 0) in (1, 2, 3):
-                force_on_top(hwnd)
+            self._backend.stop()
 
     def _handle_message(self, msg):
         try:
@@ -3111,15 +2840,8 @@ class HeadsUpOverlay(PreviewMixin):
                         "target_opacity": int(default_props.get("opacity", 0.85) * 255),
                         "fade_state": 0,  # 0=hidden, 1=fade_in, 2=visible, 3=fade_out
                         "canvas_dirty": True,
-                        "hwnd": None,
-                        "window_dc": None,
-                        "mem_dc": None,
+                        "handle": None,
                         "canvas": None,
-                        "dib_bitmap": None,
-                        "dib_bits": None,
-                        "old_bitmap": None,
-                        "dib_width": 0,
-                        "dib_height": 0,
                         "last_render_state": None,
                     }
 
@@ -3174,15 +2896,9 @@ class HeadsUpOverlay(PreviewMixin):
                         x = int(default_props.get("x", 20))
                         y = int(default_props.get("y", 20))
 
-                    hwnd = self._create_overlay_window(
+                    self._windows[window_name]["handle"] = self._backend.create_window(
                         f"HeadsUpChat_{chat_name}", x, y, w, h
                     )
-                    if hwnd:
-                        # Store hwnd in the unified window state
-                        self._windows[window_name]["hwnd"] = hwnd
-                        window_dc, mem_dc = self._init_gdi(hwnd)
-                        self._windows[window_name]["window_dc"] = window_dc
-                        self._windows[window_name]["mem_dc"] = mem_dc
 
             elif t == "update_chat_window":
                 chat_name = msg.get("name")
@@ -3202,16 +2918,15 @@ class HeadsUpOverlay(PreviewMixin):
                         or "width" in props
                         or "max_height" in props
                     ):
-                        hwnd = win.get("hwnd")
-                        if hwnd:
+                        handle = win.get("handle")
+                        if handle is not None:
                             chat_props = win["props"]
                             x = int(chat_props.get("x", 20))
                             y = int(chat_props.get("y", 20))
                             w = int(chat_props.get("width", 400))
                             h = int(chat_props.get("max_height", 400))
-                            user32.SetWindowPos(
-                                hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE
-                            )
+                            self._backend.move_window(handle, x, y, w, h)
+                            self._backend.raise_window(handle)
 
             elif t == "delete_chat_window":
                 chat_name = msg.get("name")
@@ -3366,9 +3081,9 @@ class HeadsUpOverlay(PreviewMixin):
                 self._screen = new_screen
                 # Get new monitor dimensions
                 try:
-                    screen_width, screen_height, screen_offset_x, screen_offset_y = (
-                        get_monitor_dimensions(self._screen)
-                    )
+                    monitor = self._backend.monitor(self._screen)
+                    screen_width, screen_height = monitor.width, monitor.height
+                    screen_offset_x, screen_offset_y = monitor.x, monitor.y
                 except Exception as e:
                     # Fall back to current dimensions
                     screen_width, screen_height = self._layout_manager.screen_size
@@ -3400,47 +3115,6 @@ class HeadsUpOverlay(PreviewMixin):
 
         # Force position recalculation and window repositioning
         self._update_all_window_positions()
-
-    def _create_overlay_window(self, name, x, y, w, h):
-        ex = (
-            WS_EX_LAYERED
-            | WS_EX_TRANSPARENT
-            | WS_EX_TOPMOST
-            | WS_EX_TOOLWINDOW
-            | WS_EX_NOACTIVATE
-        )
-        hwnd = user32.CreateWindowExW(
-            ex,
-            _class_name,
-            name,
-            WS_POPUP,
-            x,
-            y,
-            w,
-            h,
-            None,
-            None,
-            kernel32.GetModuleHandleW(None),
-            None,
-        )
-        if hwnd:
-            # Do NOT call SetLayeredWindowAttributes here: once a window has been
-            # given per-simple-transparency attributes that way, subsequent
-            # UpdateLayeredWindow calls on it fail with ERROR_INVALID_PARAMETER (87).
-            # The window stays undefined/invisible until the first real blit via
-            # UpdateLayeredWindow (in _blit_window) establishes its content.
-            user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
-            user32.SetWindowPos(
-                hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW
-            )
-        return hwnd
-
-    def _init_gdi(self, hwnd):
-        if not hwnd:
-            return None, None
-        window_dc = user32.GetDC(hwnd)
-        mem_dc = gdi32.CreateCompatibleDC(window_dc)
-        return window_dc, mem_dc
 
     def _get_cached_progress_track(
         self, width: int, height: int, bg_color: Tuple[int, int, int], scale: int = 2

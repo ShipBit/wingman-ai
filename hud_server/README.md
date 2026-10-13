@@ -11,7 +11,7 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **Persistent Items**: Progress bars, timers, and status indicators
 - **Chat Windows**: Multi-user chat overlays with auto-hide and message history
 - **State Management**: Persist and restore HUD state across sessions
-- **Overlay Integration**: Optional PIL-based overlay rendering on Windows
+- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows for now, see [Platforms](#platforms))
 
 ## Architecture
 
@@ -36,6 +36,12 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
                     ┌──────────────────┐
                     │  HeadsUpOverlay  │
                     │  (PIL Renderer)  │
+                    └─────────┬────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │ Platform backend │
+                    │ (OS windows)     │
                     └──────────────────┘
 ```
 
@@ -45,10 +51,35 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **`hud_manager.py`**: Thread-safe state management for all HUD groups
 - **`http_client.py`**: Async/sync HTTP client for interacting with the server
 - **`models.py`**: Pydantic models for API requests/responses with validation
-- **`overlay/overlay.py`**: PIL-based overlay renderer (Windows only, optional)
+- **`overlay/overlay.py`**: PIL-based overlay renderer (any OS; draws through the platform backend)
 - **`layout/manager.py`**: Automatic positioning and stacking system
 - **`rendering/markdown.py`**: Sophisticated Markdown renderer
-- **`platform/win32.py`**: Windows API integration
+- **`platform/`**: The bridge to the operating system, one backend per OS (see [Platforms](#platforms))
+
+## Platforms
+
+The overlay renders every HUD window into a PIL image, on every OS. Only the
+platform backend touches the OS: it shows those images in transparent,
+always-on-top, click-through windows, moves and hides them, routes the mouse
+for the preview, lists the monitors and finds the font files.
+
+`hud_server/platform/` is the bridge:
+
+| File | Role |
+| --- | --- |
+| `__init__.py` | Picks the backend for the OS Core runs on: `create_backend()`, `hud_supported()`, `unsupported_reason()`. |
+| `base.py` | `HudBackend`, the interface every backend implements, and its types (`Monitor`, `FontSet`, `Cursor`, `Pointer`). |
+| `windows.py` | The Windows backend: layered Win32 windows with per-pixel alpha. |
+| `win32.py` | The ctypes bindings `windows.py` uses. |
+| `linux.py`, `macos.py` | Registered, not written yet: they report the HUD as unsupported and say why. |
+
+Core starts the HUD server only where `hud_supported()` is true. Elsewhere it
+logs the reason, and skills see `self.wingman.hud.available == False`.
+
+To add an OS, implement `HudBackend` in its module and set `supported = True`.
+The overlay, layout, preview and Core stay as they are. The backend's window
+calls run on the overlay thread. Tests drive the overlay through a backend
+without an OS (`FakeHudBackend` in `tests/support.py`), so they run on every OS.
 
 ## Quick Start
 
@@ -614,7 +645,7 @@ server.start(port=7863)
 ### Overlay not showing
 
 1. Check PIL is installed: `pip install Pillow`
-2. Windows only - not supported on macOS/Linux
+2. Only Windows has a platform backend so far; on macOS/Linux the log says `[HUD] The HUD does not run on ... yet.`
 3. Check logs for overlay errors
 
 ### Connection failures
