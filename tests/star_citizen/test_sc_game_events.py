@@ -139,6 +139,45 @@ def test_switched_off_categories_stay_quiet(reader, tmp_path):
     assert wingman.said == []
 
 
+def test_a_switched_off_type_stays_quiet_while_its_group_reacts(reader, tmp_path):
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman, react_armistice_zone=False)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        with log.open("a") as stream:
+            stream.write(ARMISTICE)
+        await asyncio.sleep(0.3)
+        assert wingman.said == []
+
+        with log.open("a") as stream:  # The same group, another type.
+            stream.write(
+                ARMISTICE.replace("Entering Armistice Zone", "Entered Monitored Space")
+                .replace("10:00:02", "10:06:00")
+            )
+        await until(lambda: wingman.said)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    assert "monitored space" in wingman.prompts[0][1].lower()
+
+
+def test_every_type_of_event_has_a_switch():
+    from skills.sc_game_events.main import SWITCHES
+    from skills.sc_game_events.notifications import _TEMPLATES, NOTIFICATION_OPTIONS
+
+    raw = yaml.safe_load(open(CONFIG, encoding="utf-8"))
+    ids = {prop["id"] for prop in raw["custom_properties"]}
+    assert {f"react_{switch}" for switch in SWITCHES} <= ids
+    covered = {kind for kinds in NOTIFICATION_OPTIONS.values() for kind in kinds}
+    assert covered == set(_TEMPLATES)
+
+
 def test_the_tool_answers_in_short_lines(reader, tmp_path):
     write_game_log(tmp_path, FIRST, LOGIN, ARMISTICE, CONTRACT)
     wingman = FakeWingman()

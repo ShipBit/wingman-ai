@@ -9,7 +9,8 @@ events through `self.wingman.sc_gamelog`:
     self._subscription.unsubscribe()    # in unload()
 
 Which events are worth a word, and how often, decides the policy Mallachi wrote
-for the SC Log Reader skill (notifications.py). The line itself comes from the
+for the SC Log Reader skill (notifications.py), with its settings: one switch
+per type of event, under one master per category. The line itself comes from the
 support model, in character and in the user's language, and is shown in the
 chat and the HUD, spoken and kept in the conversation.
 """
@@ -22,17 +23,25 @@ from typing import TYPE_CHECKING, Literal
 from api.interface import SettingsConfig, SkillConfig
 from services.skill_local_ai import SamplingPreset
 from skills.sc_game_events.notifications import (
+    _CATEGORIES,
     _DETAIL_FIELDS,
     _TEMPLATES,
+    NOTIFICATION_OPTIONS,
     NotificationPolicy,
     _literal,
+    enabled_notification_events,
 )
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
-CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
+# The masters are `react_<category>`, as the 3.2.5 migration saved them, and the
+# switches per type `react_<type>`. The policy calls both `notify_...`, the
+# names they had in SC Log Reader.
+SWITCHES = tuple(_CATEGORIES) + tuple(
+    option.removeprefix("notify_") for option in NOTIFICATION_OPTIONS
+)
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 HUD_SKILL = "HUD"
 BACKSTORY_CHARS = 1200
@@ -46,19 +55,20 @@ class ScGameEvents(Skill):
         super().__init__(config=config, settings=settings, wingman=wingman)
         self._subscription = None
         self._policy: NotificationPolicy | None = None
-        self._categories: frozenset[str] = frozenset()
+        self._events: frozenset[str] = frozenset()
         self._reaction: asyncio.Task | None = None
         self._unanswered = 0
         """Reactions since the user last said something."""
 
     # --- settings, read fresh -------------------------------------------------
 
-    def _enabled_categories(self) -> frozenset[str]:
-        return frozenset(
-            category
-            for category in CATEGORIES
-            if self.retrieve_custom_property_value(f"react_{category}", [])
-        )
+    def _enabled_events(self) -> frozenset[str]:
+        settings = {}
+        for switch in SWITCHES:
+            value = self.retrieve_custom_property_value(f"react_{switch}", [])
+            if value is not None:  # A missing switch counts as on.
+                settings[f"notify_{switch}"] = bool(value)
+        return enabled_notification_events(settings)
 
     def _max_unanswered(self) -> int:
         """0 means no limit."""
@@ -94,13 +104,13 @@ class ScGameEvents(Skill):
     # --- reacting ---------------------------------------------------------------
 
     def _on_event(self, event) -> None:
-        categories = self._enabled_categories()
-        if not categories:
+        events = self._enabled_events()
+        if not events:
             return
-        if self._policy is None or categories != self._categories:
+        if self._policy is None or events != self._events:
             # The policy remembers what it said; a new selection starts fresh.
-            self._policy = NotificationPolicy(enabled_categories=categories)
-            self._categories = categories
+            self._policy = NotificationPolicy(enabled_events=events)
+            self._events = events
         now = time.monotonic()
         self._policy.offer(
             {
