@@ -6,6 +6,7 @@ import copy
 import json
 import math
 
+from . import item_names
 from .contracts import field_errors
 from .reader import Event
 
@@ -274,6 +275,12 @@ class State:
         ):
             s["last_source_timestamp"] = timestamp
         s["game_build_verified"] = event.game_build_verified
+        if kind in ("shop_buy", "shop_sell") and f.get("item_name"):
+            # The log has only the class name; the pending request keeps the
+            # name too, so the confirmed purchase carries it.
+            f["item_display_name"] = item_names.display_name(
+                f.get("item_guid"), f["item_name"]
+            )
         row = {
             "event_type": kind,
             "data": copy.deepcopy(f),

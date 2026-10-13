@@ -68,8 +68,8 @@ _DETAIL_FIELDS = {
     "reward_earned": ("mission_name",),
     "fined": (),
     "money_sent": ("recipient",),
-    "shop_buy": ("item_name",),
-    "shop_sell": ("item_name",),
+    "shop_buy": ("item_display_name", "item_name"),
+    "shop_sell": ("item_display_name", "item_name"),
 }
 # User-facing observations supported by the reader but omitted from the first
 # replacement notification panel. Wording never upgrades a request to success.
