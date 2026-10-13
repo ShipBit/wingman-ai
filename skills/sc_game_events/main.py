@@ -104,6 +104,8 @@ class ScGameEvents(Skill):
     # --- reacting ---------------------------------------------------------------
 
     def _on_event(self, event) -> None:
+        if event.type in ("shop_buy", "shop_sell") and event.status == "requested":
+            return  # React once, to the confirmed trade with its name and amount.
         events = self._enabled_events()
         if not events:
             return

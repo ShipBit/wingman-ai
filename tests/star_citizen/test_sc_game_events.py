@@ -167,6 +167,35 @@ def test_a_switched_off_type_stays_quiet_while_its_group_reacts(reader, tmp_path
     assert "monitored space" in wingman.prompts[0][1].lower()
 
 
+def test_a_purchase_gets_one_reaction_once_it_is_confirmed(reader, tmp_path):
+    from tests.star_citizen.test_item_names import BUY, DONE
+
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        with log.open("a") as stream:
+            stream.write(BUY)
+        await asyncio.sleep(0.3)
+        assert wingman.said == []  # Only requested so far.
+        with log.open("a") as stream:
+            stream.write(DONE)
+        await until(lambda: wingman.said)
+        await asyncio.sleep(0.2)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    report = wingman.prompts[0][1]
+    assert "confirmed" in report and "-17" in report
+    assert "Food_burrito_01_a" not in report  # The in-game name, not the class.
+
+
 def test_every_type_of_event_has_a_switch():
     from skills.sc_game_events.main import SWITCHES
     from skills.sc_game_events.notifications import _TEMPLATES, NOTIFICATION_OPTIONS
