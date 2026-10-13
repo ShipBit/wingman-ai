@@ -258,11 +258,15 @@ class ScGameEvents(Skill):
         missions = list((state.get("active_missions") or {}).values())
         if not missions:
             return "No active missions in the log. The log only knows missions accepted this session."
-        lines = [
-            f"- {_literal(mission.get('name')) or 'Unnamed'}"
-            + (f": {_literal(mission['objective'])}" if mission.get("objective") else "")
-            for mission in missions[:10]
-        ]
+        lines = []
+        for mission in missions[:10]:
+            objectives = mission.get("objectives") or (
+                [mission["objective"]] if mission.get("objective") else []
+            )
+            shown = "; ".join(_literal(o) for o in objectives[:6])
+            if len(objectives) > 6:
+                shown += f"; (and {len(objectives) - 6} more)"
+            lines.append(f"- {_literal(mission.get('name')) or 'Unnamed'}" + (f": {shown}" if shown else ""))
         more = f"\n(and {len(missions) - 10} more)" if len(missions) > 10 else ""
         return "Active missions:\n" + "\n".join(lines) + more
 

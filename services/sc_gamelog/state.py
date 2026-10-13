@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 
 from . import item_names
 from .contracts import field_errors
@@ -25,6 +26,29 @@ def _identity(value):
     return isinstance(value, str) and any(
         c not in "0-" and not c.isspace() for c in value
     )
+
+
+_ROMAN = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
+MAX_OBJECTIVES = 16
+
+
+def _ship_words(name):
+    """'RSI_Constellation_Mk5_Centaurus' and 'RSI Constellation Mk V Centaurus'
+    both become ['rsi', 'constellation', 'mk5', 'centaurus']."""
+    words = []
+    for word in re.split(r"[\s_]+", str(name).strip().lower()):
+        if words and words[-1] == "mk" and _ROMAN.get(word, word).isdigit():
+            words[-1] = "mk" + _ROMAN.get(word, word)
+        elif word:
+            words.append(word)
+    return words
+
+
+def _same_ship_model(entity_class, display_name):
+    """The class is logged with its manufacturer code (DRAK_), the display name
+    with the manufacturer's name (Drake): compare what follows it."""
+    model, name = _ship_words(entity_class)[1:], _ship_words(display_name)
+    return bool(model) and name[-len(model):] == model
 
 
 def _fresh():
@@ -343,6 +367,7 @@ class State:
                         "mission_id": mid,
                         "name": f["mission_name"],
                         "objective": None,
+                        "objectives": [],
                     }
                 row["event_type"] = "mission_accepted"
             elif kind in (
@@ -375,11 +400,17 @@ class State:
                         orphan + [evidence]
                     )[-100:]
                 if mid in missions:
+                    # A contract can hand out several objectives at once
+                    # (collect and deliver three cargo types); keep them all.
+                    # "objective" stays the latest open one.
+                    open_ = missions[mid].setdefault("objectives", [])
                     if kind == "objective_new":
-                        missions[mid]["objective"] = f["objective"]
+                        if f["objective"] not in open_:
+                            open_[:] = (open_ + [f["objective"]])[-MAX_OBJECTIVES:]
                         row["event_type"] = "mission_objective_new"
-                    elif missions[mid]["objective"] == f["objective"]:
-                        missions[mid]["objective"] = None
+                    elif f["objective"] in open_:
+                        open_.remove(f["objective"])
+                    missions[mid]["objective"] = open_[-1] if open_ else None
             elif kind not in ("contract_shared", "contract_available"):
                 return []
         elif kind == "injury" and need("body_part", "severity"):
@@ -438,7 +469,10 @@ class State:
                 location_code=f["location"],
                 system=loc["system"],
                 location_status="at",
-                location_guid=None,
+                # The inventory move logged with the arrival names the
+                # location's inventory; the game stopped writing it into the
+                # personal inventory line (build 12660092 or earlier).
+                location_guid=(s["_inventory_candidate"] or {}).get("guid"),
             )
             s["_arrival_time"] = now
             row["event_type"] = "location_arrived"
@@ -466,9 +500,22 @@ class State:
                 return []
             output = []
             if (
+                s["location_status"] == "at"
+                and s["location_guid"] is None
+                and f["loc_to"] != "0"
+                and now is not None
+                and s["_arrival_time"] is not None
+                and 0 <= now - s["_arrival_time"] <= 15
+            ):
+                # The arrival was logged just before its inventory move.
+                s["location_guid"] = f["loc_to"]
+            elif (
                 f["loc_from"] != "0"
                 and f["loc_from"] == s["location_guid"]
                 and f["loc_to"] != f["loc_from"]
+                # Walking into another inventory at the same station and back
+                # is no departure; leaving is done aboard a ship.
+                and s["aboard_ship"]
             ):
                 s["location_guid"] = None
                 s["location_status"] = "departed"
@@ -513,10 +560,16 @@ class State:
                 return []
         elif kind in ("qt_arrived", "fatal_collision"):
             model = f.get("entity_class", f.get("vehicle"))
-            if not model or not s["aboard_ship"] or not s["ship_class"]:
+            if not model or not s["aboard_ship"]:
                 return []
+            same_model = (
+                model == s["ship_class"]
+                if s["ship_class"]
+                # Boarded under its display name: compare the names.
+                else bool(s["ship"]) and _same_ship_model(model, s["ship"])
+            )
             if (
-                model != s["ship_class"]
+                not same_model
                 or kind == "fatal_collision"
                 and f.get("player_pilot") != 1
             ):
