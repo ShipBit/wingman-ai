@@ -57,6 +57,10 @@ class ConversationManager:
         self._skill_registry = None
         self._tool_skills: dict = {}
 
+        self.message_listeners: list[Callable] = []
+        """Awaited with (role, content, tool_calls) for every user and assistant
+        message; the HUD shows the conversation this way."""
+
     def set_skill_context(
         self,
         skills: list,
@@ -71,6 +75,17 @@ class ConversationManager:
         self._skills = skills
         self._skill_registry = skill_registry
         self._tool_skills = tool_skills
+
+    async def _notify_listeners(self, role: str, content, tool_calls) -> None:
+        for listener in self.message_listeners:
+            try:
+                await listener(role, content, tool_calls)
+            except Exception as e:
+                printr.print(
+                    f"Conversation listener failed: {type(e).__name__}: {e}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
 
     # ------------------------------------------------------------------
     # GPT / assistant response helpers
@@ -94,6 +109,7 @@ class ConversationManager:
                 await skill.on_add_assistant_message(
                     message.content, message.tool_calls
                 )
+        await self._notify_listeners("assistant", message.content, message.tool_calls)
 
         # do not tamper with this message as it will lead to 400 errors!
         self.messages.append(message)
@@ -340,6 +356,7 @@ class ConversationManager:
         for skill in self._skills:
             if skill.is_prepared:
                 await skill.on_add_user_message(content)
+        await self._notify_listeners("user", content, None)
 
         if images:
             msg_content = []
@@ -371,6 +388,7 @@ class ConversationManager:
         for skill in self._skills:
             if skill.is_prepared:
                 await skill.on_add_assistant_message(content, [])
+        await self._notify_listeners("assistant", content, [])
 
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
@@ -527,7 +545,7 @@ class ConversationManager:
     def message_text(msg) -> str:
         """The text a message puts into a request: its content and, for a tool
         call, the arguments. A HUD table the model wrote lives in the arguments
-        of its ``hud_add_info`` call, so leaving them out undercounts exactly
+        of its ``hud_set_info`` call, so leaving them out undercounts exactly
         the messages that grow."""
         if isinstance(msg, Mapping):
             content, calls = msg.get("content", ""), msg.get("tool_calls")

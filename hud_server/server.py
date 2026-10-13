@@ -29,6 +29,9 @@ from hud_server.types import WindowType
 from hud_server.models import (
     CreateGroupRequest,
     UpdateGroupRequest,
+    DefaultsRequest,
+    PreviewRequest,
+    PreviewResponse,
     MessageRequest,
     AppendMessageRequest,
     LoaderRequest,
@@ -106,6 +109,10 @@ class HudServer:
         self._overlay_thread: Optional[threading.Thread] = None
         self._command_queue: Optional[queue.Queue] = None
         self._error_queue: Optional[queue.Queue] = None
+        self._error_thread: Optional[threading.Thread] = None
+
+        # Called with overlay events (e.g. preview_changed), from the overlay thread
+        self._event_listeners: list = []
 
         # Create FastAPI app
         self.app = self._create_app()
@@ -229,6 +236,42 @@ class HudServer:
             )
             return {"status": "ok", "message": "Settings updated"}
 
+        # ─────────────────────────────── Defaults ─────────────────────────────── #
+
+        @app.get(hud_const.PATH_DEFAULTS, response_model=DefaultsRequest, tags=["defaults"])
+        async def get_defaults():
+            """The values groups use for props their own calls leave out."""
+            return DefaultsRequest(**self.manager.get_defaults())
+
+        @app.put(hud_const.PATH_DEFAULTS, response_model=OperationResponse, tags=["defaults"])
+        async def set_defaults(request: DefaultsRequest):
+            """Replace the defaults. Existing windows pick them up immediately."""
+            self.manager.set_defaults(request.props, request.groups)
+            return OperationResponse(status="ok", message="Defaults updated")
+
+        # ─────────────────────────────── Preview ─────────────────────────────── #
+
+        @app.get(hud_const.PATH_PREVIEW, response_model=PreviewResponse, tags=["preview"])
+        async def get_preview():
+            """The current preview of the shared containers, if one is shown."""
+            preview = self.manager.get_preview()
+            if preview is None:
+                return PreviewResponse(active=False)
+            return PreviewResponse(active=True, **preview)
+
+        @app.post(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        @app.put(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        async def set_preview(request: PreviewRequest):
+            """Show or update the preview of the chat and info containers."""
+            self.manager.set_preview(request.containers, request.interactive)
+            return OperationResponse(status="ok")
+
+        @app.delete(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        async def clear_preview():
+            """End the preview; the real containers come back."""
+            self.manager.clear_preview()
+            return OperationResponse(status="ok")
+
         # ─────────────────────────────── Groups ─────────────────────────────── #
 
         @app.post("/groups", response_model=OperationResponse, tags=["groups"])
@@ -347,7 +390,8 @@ class HudServer:
                 title=request.title,
                 description=request.description,
                 color=request.color,
-                duration=request.duration
+                duration=request.duration,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -400,7 +444,8 @@ class HudServer:
                 maximum=request.maximum,
                 description=request.description,
                 color=request.color,
-                auto_close=request.auto_close
+                auto_close=request.auto_close,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -415,7 +460,8 @@ class HudServer:
                 description=request.description,
                 color=request.color,
                 auto_close=request.auto_close,
-                initial_progress=request.initial_progress
+                initial_progress=request.initial_progress,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -614,6 +660,7 @@ class HudServer:
                 layout_margin=self._layout_margin,
                 layout_spacing=self._layout_spacing,
                 screen=self._screen,
+                event_callback=self._on_overlay_event,
             )
 
             # Register callback to send commands to overlay
@@ -625,6 +672,14 @@ class HudServer:
                 name=hud_const.THREAD_NAME_OVERLAY
             )
             self._overlay_thread.start()
+
+            self._error_thread = threading.Thread(
+                target=self._drain_overlay_errors,
+                args=(self._error_queue,),
+                daemon=True,
+                name="HUDOverlayErrorThread",
+            )
+            self._error_thread.start()
 
             printr.print(
                 hud_const.LOG_OVERLAY_STARTED,
@@ -668,6 +723,10 @@ class HudServer:
 
             self._overlay = None
             self._command_queue = None
+            if self._error_queue:
+                self._error_queue.put(None)  # stops the drain thread
+            self._error_queue = None
+            self._error_thread = None
             self.manager.unregister_command_callback(self._send_to_overlay)
 
             printr.print(
@@ -681,6 +740,54 @@ class HudServer:
                 f"[HUD Server] Error stopping overlay: {type(e).__name__}: {e}",
                 color=LogType.ERROR,
                 server_only=True
+            )
+
+    def add_event_listener(self, listener) -> None:
+        """Call `listener(event)` for overlay events such as `preview_changed`.
+
+        Runs on the overlay thread: hand the work to your own loop quickly.
+        """
+        if listener not in self._event_listeners:
+            self._event_listeners.append(listener)
+
+    def remove_event_listener(self, listener) -> None:
+        if listener in self._event_listeners:
+            self._event_listeners.remove(listener)
+
+    def _on_overlay_event(self, event: dict[str, Any]) -> None:
+        if event.get("type") == "preview_changed":
+            self.manager.preview_moved(
+                event["container"], event["x1"], event["y1"], event["x2"], event["y2"]
+            )
+        for listener in list(self._event_listeners):
+            try:
+                listener(event)
+            except Exception as e:
+                printr.print(
+                    f"[HUD Server] Event listener failed: {type(e).__name__}: {e}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+
+    def _drain_overlay_errors(self, error_queue: queue.Queue):
+        """Log what the overlay thread reports. Heartbeats are dropped, and an
+        error repeating every frame is logged once per 10 seconds."""
+        last_logged: dict[tuple, float] = {}
+        while True:
+            report = error_queue.get()
+            if report is None:
+                return
+            if not isinstance(report, dict) or report.get("type") != "error":
+                continue
+            key = (report.get("context"), report.get("error"))
+            now = time.time()
+            if now - last_logged.get(key, 0) < 10:
+                continue
+            last_logged[key] = now
+            printr.print(
+                f"[HUD Overlay] {report.get('context', '?')}: {report.get('error', '')}",
+                color=LogType.ERROR,
+                server_only=True,
             )
 
     def _send_to_overlay(self, command: dict[str, Any]):
@@ -736,11 +843,12 @@ class HudServer:
         )
         self._thread.start()
 
-        # Wait for server to start
+        # Wait until uvicorn finished its startup: the lifespan has started the
+        # overlay and hooked it to the manager, so nothing sent after this is lost
         max_checks = int(self.STARTUP_TIMEOUT_SECONDS / self.STARTUP_CHECK_INTERVAL)
         for _ in range(max_checks):
             time.sleep(self.STARTUP_CHECK_INTERVAL)
-            if self._running:
+            if self._running and self._server is not None and self._server.started:
                 printr.print(
                     hud_const.LOG_SERVER_STARTED.format(self._host, self._port),
                     color=LogType.INFO,

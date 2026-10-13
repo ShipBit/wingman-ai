@@ -2051,6 +2051,7 @@ class ConfigManager:
             "perplexity",
             "xai",
             "openai_compatible_tts",
+            "hud",
         ]:
             if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

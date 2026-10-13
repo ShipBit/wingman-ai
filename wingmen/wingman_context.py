@@ -51,9 +51,10 @@ _REMOVED_MEMBERS = {
 class WingmanContext:
     """What skills see (`self.wingman`). Feature namespaces only — nothing raw."""
 
-    def __init__(self, wingman: "Wingman"):
+    def __init__(self, wingman: "Wingman", skill_name: Optional[str] = None):
         # Name-mangled: skills cannot reach the raw Wingman via ctx._wingman by accident.
         self.__wingman = wingman
+        self.__skill_name = skill_name
         self.__ai = None
         self.__local_ai = None
         self.__tts = None
@@ -223,7 +224,7 @@ class WingmanContext:
         """The HUD overlay; every call checks that the user has it on."""
         if self.__hud is None:
             from wingmen.facade import SkillHud
-            self.__hud = SkillHud(self.__wingman)
+            self.__hud = SkillHud(self.__wingman, self.__skill_name)
         return self.__hud
 
     @property
@@ -249,6 +250,12 @@ class WingmanContext:
         return self.__skills
 
     # --- utility ---
+
+    def _release(self) -> None:
+        """Called by Core after the skill unloaded: drop what the facade holds
+        for it (the HUD groups it drew)."""
+        if self.__hud is not None:
+            self.__hud._release()
 
     def run_in_thread(self, function, *args):
         """Run a blocking callable off the event loop."""

@@ -4,6 +4,6 @@ Layout Manager for HUD elements.
 Provides automatic positioning and stacking to prevent overlapping.
 """
 
-from hud_server.layout.manager import LayoutManager, Anchor, LayoutMode
+from hud_server.layout.manager import LayoutManager, Anchor, LayoutMode, Align
 
-__all__ = ["LayoutManager", "Anchor", "LayoutMode"]
+__all__ = ["LayoutManager", "Anchor", "LayoutMode", "Align"]

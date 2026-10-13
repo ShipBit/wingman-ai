@@ -49,7 +49,8 @@ from urllib.parse import quote
 from api.enums import LogType
 from hud_server.constants import PATH_GROUPS, PATH_STATE, PATH_STATE_RESTORE, PATH_HEALTH, PATH_MESSAGE, \
     PATH_MESSAGE_APPEND, PATH_MESSAGE_HIDE, PATH_LOADER, PATH_ITEMS, PATH_PROGRESS, PATH_TIMER, PATH_CHAT_WINDOW, \
-    PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE
+    PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE, PATH_DEFAULTS, \
+    PATH_PREVIEW
 from services.printr import Printr
 from hud_server import constants as hud_const
 from hud_server.types import (
@@ -326,10 +327,11 @@ class HudHttpClient:
             True if successful, False otherwise
         """
         encoded_group = quote(group_name, safe='')
-        result = await self._request("PATCH", f"{PATH_GROUPS}/{encoded_group}", {
-            "element": _resolve_enum(element),
-            "props": _resolve_props(props)
-        })
+        result = await self._request(
+            "PUT",
+            f"{PATH_GROUPS}/{encoded_group}/{_resolve_enum(element)}",
+            {"props": _resolve_props(props) or {}},
+        )
         return result is not None
 
     async def delete_group(self, group_name: str, element: WindowType) -> Optional[dict]:
@@ -340,6 +342,43 @@ class HudHttpClient:
     async def get_groups(self) -> Optional[dict]:
         """Get list of all group names."""
         return await self._request("GET", PATH_GROUPS)
+
+    # ─────────────────────────────── Defaults ─────────────────────────────── #
+
+    async def get_defaults(self) -> Optional[dict]:
+        """The defaults groups use for props their own calls leave out."""
+        return await self._request("GET", PATH_DEFAULTS)
+
+    async def set_defaults(
+        self,
+        props: Optional[dict] = None,
+        groups: Optional[dict[str, dict]] = None,
+    ) -> bool:
+        """Replace the defaults: `props` for every group, `groups` per group name.
+
+        Existing windows pick them up immediately.
+        """
+        result = await self._request("PUT", PATH_DEFAULTS, {
+            "props": _resolve_props(props) or {},
+            "groups": {name: _resolve_props(p) or {} for name, p in (groups or {}).items()},
+        })
+        return result is not None
+
+    # ─────────────────────────────── Preview ─────────────────────────────── #
+
+    async def set_preview(self, containers: dict[str, dict], interactive: bool = False) -> bool:
+        """Show or update the preview: "chat"/"info" mapped to resolved props."""
+        result = await self._request("PUT", PATH_PREVIEW, {
+            "containers": {name: _resolve_props(p) or {} for name, p in containers.items()},
+            "interactive": interactive,
+        })
+        return result is not None
+
+    async def clear_preview(self) -> bool:
+        return await self._request("DELETE", PATH_PREVIEW) is not None
+
+    async def get_preview(self) -> Optional[dict]:
+        return await self._request("GET", PATH_PREVIEW)
 
     # ─────────────────────────────── State ─────────────────────────────── #
 
@@ -471,7 +510,8 @@ class HudHttpClient:
         title: str,
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Add a persistent item to a group.
 
@@ -482,6 +522,7 @@ class HudHttpClient:
             description: Item description text
             color: Optional item color (use HudColor enum or hex string)
             duration: Optional auto-remove duration in seconds
+            added_by: Who adds it, e.g. a Wingman's name
 
         Returns:
             Server response dict or None if failed
@@ -506,6 +547,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if duration is not None:
             data["duration"] = duration
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_ITEMS, data)
 
@@ -547,8 +590,9 @@ class HudHttpClient:
 
     async def remove_item(self, group_name: str, element: WindowType, title: str) -> Optional[dict]:
         """Remove an item from a group."""
+        encoded_group = quote(group_name, safe='')
         encoded_title = quote(title, safe='')
-        return await self._request("DELETE", f"{PATH_ITEMS}/{group_name}/{_resolve_enum(element)}/{encoded_title}")
+        return await self._request("DELETE", f"{PATH_ITEMS}/{encoded_group}/{_resolve_enum(element)}/{encoded_title}")
 
     async def clear_items(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Clear all items from a group."""
@@ -567,7 +611,8 @@ class HudHttpClient:
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
-        props: Optional[BaseProps] = None
+        props: Optional[BaseProps] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Show or update a progress bar.
 
@@ -610,6 +655,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if props:
             data["props"] = _resolve_props(props)
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_PROGRESS, data)
 
@@ -623,7 +670,8 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
-        props: Optional[BaseProps] = None
+        props: Optional[BaseProps] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Show a timer-based progress bar.
 
@@ -665,6 +713,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if props:
             data["props"] = _resolve_props(props)
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_TIMER, data)
 
@@ -1048,6 +1098,12 @@ class HudHttpClientSync:
 
     def delete_group(self, group_name: str, element: WindowType):
         return self._run_coro(self._client.delete_group(group_name, element)) if self._client else None
+
+    def get_defaults(self) -> Optional[dict]:
+        return self._run_coro(self._client.get_defaults()) if self._client else None
+
+    def set_defaults(self, props: Optional[dict] = None, groups: Optional[dict] = None) -> bool:
+        return self._run_coro(self._client.set_defaults(props, groups)) if self._client else False
 
     def get_groups(self):
         return self._run_coro(self._client.get_groups()) if self._client else None

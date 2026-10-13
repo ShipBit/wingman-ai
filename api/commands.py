@@ -13,6 +13,7 @@ from api.interface import (
     AudioFile,
     BenchmarkResult,
     CommandActionConfig,
+    HudProfilesState,
     ScGameLogStatus,
     TokenUsage,
 )
@@ -117,6 +118,15 @@ class SttVocabularyChangedCommand(WebSocketCommandModel):
 
     command: Literal["stt_vocabulary_changed"] = "stt_vocabulary_changed"
     vocabulary: list[str]
+
+
+class HudProfilesChangedCommand(WebSocketCommandModel):
+    """Sent when the HUD profiles change outside the settings page too: a
+    container dragged in the preview, a config switch that picks another
+    profile, the HUD server starting or stopping."""
+
+    command: Literal["hud_profiles_changed"] = "hud_profiles_changed"
+    state: HudProfilesState
 
 
 class McpStateChangedCommand(WebSocketCommandModel):

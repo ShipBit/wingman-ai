@@ -328,9 +328,92 @@ user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
 user32.UnhookWinEvent.restype = wintypes.BOOL
 
 
+# Mouse input (only windows that are not click-through receive it)
+WM_SETCURSOR = 0x0020
+WM_MOUSEACTIVATE = 0x0021
+WM_MOUSEMOVE = 0x0200
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+WM_CAPTURECHANGED = 0x0215
+MA_NOACTIVATE = 3
+
+IDC_ARROW = 32512
+IDC_SIZENWSE = 32642
+IDC_SIZENESW = 32643
+IDC_SIZEWE = 32644
+IDC_SIZENS = 32645
+IDC_SIZEALL = 32646
+
+if ctypes.sizeof(ctypes.c_void_p) == 8:
+    _GetWindowLong = user32.GetWindowLongPtrW
+    _SetWindowLong = user32.SetWindowLongPtrW
+    _LONG_PTR = ctypes.c_int64
+else:
+    _GetWindowLong = user32.GetWindowLongW
+    _SetWindowLong = user32.SetWindowLongW
+    _LONG_PTR = ctypes.c_long
+_GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
+_GetWindowLong.restype = _LONG_PTR
+_SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, _LONG_PTR]
+_SetWindowLong.restype = _LONG_PTR
+
+user32.SetCapture.argtypes = [wintypes.HWND]
+user32.SetCapture.restype = wintypes.HWND
+user32.ReleaseCapture.argtypes = []
+user32.ReleaseCapture.restype = wintypes.BOOL
+user32.GetCapture.argtypes = []
+user32.GetCapture.restype = wintypes.HWND
+user32.LoadCursorW.argtypes = [wintypes.HINSTANCE, wintypes.LPVOID]
+user32.LoadCursorW.restype = wintypes.HANDLE
+user32.SetCursor.argtypes = [wintypes.HANDLE]
+user32.SetCursor.restype = wintypes.HANDLE
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.GetCursorPos.restype = wintypes.BOOL
+
+# hwnd -> handler(msg, wparam, lparam); a handler returns None to fall through
+_message_handlers: dict = {}
+
+
+def set_message_handler(hwnd, handler) -> None:
+    """Route this window's messages to `handler` (None removes the route)."""
+    if not hwnd:
+        return
+    if handler is None:
+        _message_handlers.pop(int(hwnd), None)
+    else:
+        _message_handlers[int(hwnd)] = handler
+
+
+def set_click_through(hwnd, click_through: bool) -> None:
+    """Let the mouse pass through the window, or let the window receive it."""
+    if not hwnd:
+        return
+    style = _GetWindowLong(hwnd, GWL_EXSTYLE)
+    if click_through:
+        style |= WS_EX_TRANSPARENT
+    else:
+        style &= ~WS_EX_TRANSPARENT
+    _SetWindowLong(hwnd, GWL_EXSTYLE, style)
+
+
+def get_cursor_pos() -> tuple[int, int]:
+    pt = wintypes.POINT()
+    user32.GetCursorPos(ctypes.byref(pt))
+    return pt.x, pt.y
+
+
+def set_cursor(cursor_id: int) -> None:
+    user32.SetCursor(user32.LoadCursorW(None, ctypes.c_void_p(cursor_id)))
+
+
 def _wnd_proc(hwnd, msg, wparam, lparam):
     """Window procedure callback - must handle all message types safely."""
     try:
+        handler = _message_handlers.get(int(hwnd)) if hwnd else None
+        if handler is not None:
+            result = handler(msg, wparam, lparam)
+            if result is not None:
+                return result
         return user32.DefWindowProcW(hwnd, msg, WPARAM(wparam), LPARAM(lparam))
     except:
         return 0

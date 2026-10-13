@@ -72,7 +72,8 @@ from hud_server.platform.win32 import (
     WINEVENT_SKIPOWNPROCESS,
     get_monitor_dimensions,
 )
-from hud_server.layout import LayoutManager, Anchor, LayoutMode
+from hud_server.layout import LayoutManager, Anchor, LayoutMode, Align
+from hud_server.overlay.preview import PreviewMixin
 from hud_server.constants import (
     MAX_PROGRESS_TRACK_CACHE_SIZE,
     MAX_PROGRESS_GRADIENT_CACHE_SIZE,
@@ -82,7 +83,7 @@ from hud_server.constants import (
 )
 
 
-class HeadsUpOverlay:
+class HeadsUpOverlay(PreviewMixin):
     """HUD Overlay with sophisticated Markdown rendering.
 
     Architecture (Rework v2):
@@ -105,6 +106,7 @@ class HeadsUpOverlay:
         layout_margin: int = 20,
         layout_spacing: int = 15,
         screen: int = 1,
+        event_callback=None,
     ):
         self.running = True
         self.msg_queue = command_queue if command_queue else queue.Queue()
@@ -182,12 +184,13 @@ class HeadsUpOverlay:
             "font_family": "Segoe UI",
             "color_emojis": True,
             "typewriter_effect": True,
-            # Persistent window defaults
-            "persistent_x": 20,
-            "persistent_y": 300,
         }
 
-        # Per-group props storage (set via create_group/update_group)
+        # Server defaults (set_defaults): for every group, and per group name
+        self._server_defaults: Dict = {}
+        self._group_defaults: Dict[str, Dict] = {}
+
+        # Explicit group props (create_group/update_group), keyed by window name
         self._group_props: Dict[str, Dict] = {}
 
         # Progress animation transition duration
@@ -263,6 +266,9 @@ class HeadsUpOverlay:
             default_spacing=self._layout_spacing,
         )
 
+        # Preview of the shared containers (see preview.py)
+        self._init_preview(event_callback)
+
     # =========================================================================
     # RENDER CACHE MANAGEMENT
     # =========================================================================
@@ -310,34 +316,108 @@ class HeadsUpOverlay:
         """Generate a unique window name from type and group."""
         return f"{window_type}_{group}"
 
-    def _get_default_window_props(self, window_type: str, group: str) -> dict:
-        """Get default properties for a new window, merging group props if available."""
+    def _resolve_window_props(
+        self, window_type: str, group: str, explicit: dict = None
+    ) -> dict:
+        """Built-in values, then server defaults, then group defaults, then the
+        group's own props, then the props sent with commands for this window."""
         props = dict(self._default_props)
-
-        # Apply group-specific props if available
-        if group in self._group_props:
-            props.update(self._group_props[group])
-
-        # Adjust defaults based on window type
-        if window_type == self.WINDOW_TYPE_PERSISTENT:
-            # Use persistent_* props for position
-            props["x"] = props.get("x", 20)
-            props["y"] = props.get("y", 300)
-            props["width"] = props.get("width", 300)
-
+        props.update(self._server_defaults)
+        props.update(self._group_defaults.get(group, {}))
+        props.update(self._group_props.get(self._get_window_name(window_type, group), {}))
+        if explicit:
+            props.update(explicit)
         return props
+
+    def _layout_params(self, win: Dict) -> dict:
+        """Layout manager arguments for a window, taken from its resolved props."""
+        props = win["props"]
+        try:
+            anchor = Anchor(props.get("anchor", "top_left"))
+        except ValueError:
+            anchor = Anchor.TOP_LEFT
+        try:
+            mode = LayoutMode(props.get("layout_mode", "auto"))
+        except ValueError:
+            mode = LayoutMode.AUTO
+        try:
+            align = Align(props.get("align", "top"))
+        except ValueError:
+            align = Align.TOP
+
+        priority = int(props.get("priority", 10))
+        # Persistent windows stack below the message window of the same priority
+        if win.get("type") == self.WINDOW_TYPE_PERSISTENT:
+            priority = max(0, priority - 5)
+
+        manual = mode == LayoutMode.MANUAL
+        return {
+            "anchor": anchor,
+            "mode": mode,
+            "priority": priority,
+            "width": int(props.get("width", 400)),
+            "manual_x": int(props.get("x", 20)) if manual else None,
+            "manual_y": int(props.get("y", 20)) if manual else None,
+            "align": align,
+            "area_height": int(props.get("max_height", 600)) if manual else None,
+            "margin": int(props.get("margin", self._layout_margin)),
+            "spacing": int(props.get("spacing", self._layout_spacing)),
+        }
+
+    def _register_layout(self, name: str, win: Dict, height: int):
+        params = self._layout_params(win)
+        margin = params.pop("margin")
+        self._layout_manager.register_window(
+            name=name,
+            height=height,
+            margin_x=margin,
+            margin_y=margin,
+            group=win.get("group"),
+            **params,
+        )
+
+    def _refresh_window(self, name: str, win: Dict):
+        """Re-resolve a window's props after defaults or group props changed."""
+        new_props = self._resolve_window_props(
+            win["type"], win["group"], win.get("explicit_props")
+        )
+        old_props = win.get("props", {})
+        if new_props == old_props:
+            return
+
+        win["props"] = new_props
+        win["target_opacity"] = int(new_props.get("opacity", 0.85) * 255)
+        win["last_render_state"] = None
+        win["canvas_dirty"] = True
+        if old_props.get("width") != new_props.get("width"):
+            win["canvas"] = None
+        if old_props.get("font_size") != new_props.get("font_size") or old_props.get(
+            "font_family"
+        ) != new_props.get("font_family"):
+            win["current_blocks"] = None
+
+        self._layout_manager.update_window(name, **self._layout_params(win))
+
+    def _refresh_windows(self, group: str = None, window_type: str = None):
+        """Refresh every window, or those of one group (and optionally one type)."""
+        for name, win in list(self._windows.items()):
+            if group is not None and win.get("group") != group:
+                continue
+            if window_type is not None and win.get("type") != window_type:
+                continue
+            self._refresh_window(name, win)
 
     def _create_window_state(
         self, window_type: str, group: str, props: dict = None
     ) -> Dict:
         """Create a new window state dictionary."""
-        merged_props = self._get_default_window_props(window_type, group)
-        if props:
-            merged_props.update(props)
+        explicit_props = dict(props or {})
+        merged_props = self._resolve_window_props(window_type, group, explicit_props)
 
         state = {
             "type": window_type,
             "group": group,
+            "explicit_props": explicit_props,
             "props": merged_props,
             "hwnd": None,
             "window_dc": None,
@@ -402,50 +482,7 @@ class HeadsUpOverlay:
             w = int(window_props.get("width", 400))
             h = 100  # Initial height, will be adjusted during rendering
 
-            # Register with layout manager
-            layout_mode_str = window_props.get("layout_mode", "auto")
-            anchor_str = window_props.get("anchor", "top_left")
-            priority = int(window_props.get("priority", 10))
-            margin = int(window_props.get("margin", 20))
-            spacing = int(window_props.get("spacing", 10))
-
-            # Map string to enum
-            try:
-                anchor = Anchor(anchor_str)
-            except ValueError:
-                anchor = Anchor.TOP_LEFT
-
-            try:
-                layout_mode = LayoutMode(layout_mode_str)
-            except ValueError:
-                layout_mode = LayoutMode.AUTO
-
-            # Adjust priority for persistent windows (lower so they stack below messages)
-            if window_type == self.WINDOW_TYPE_PERSISTENT:
-                priority = max(0, priority - 5)
-
-            self._layout_manager.register_window(
-                name=name,
-                anchor=anchor,
-                mode=layout_mode,
-                priority=priority,
-                width=w,
-                height=h,
-                margin_x=margin,
-                margin_y=margin,
-                spacing=spacing,
-                group=group,
-                manual_x=(
-                    int(window_props.get("x", 20))
-                    if layout_mode == LayoutMode.MANUAL
-                    else None
-                ),
-                manual_y=(
-                    int(window_props.get("y", 20))
-                    if layout_mode == LayoutMode.MANUAL
-                    else None
-                ),
-            )
+            self._register_layout(name, state, h)
 
             # Get initial position from layout manager
             pos = self._layout_manager.get_position(name)
@@ -462,35 +499,22 @@ class HeadsUpOverlay:
                 state["window_dc"] = window_dc
                 state["mem_dc"] = mem_dc
         elif props:
-            # Update existing window props
-            self._windows[name]["props"].update(props)
-            self._windows[name]["target_opacity"] = int(
-                self._windows[name]["props"].get("opacity", 0.85) * 255
-            )
-
-            # Update layout manager if layout props changed
-            window_props = self._windows[name]["props"]
-            layout_mode_str = window_props.get("layout_mode", "auto")
-            anchor_str = window_props.get("anchor", "top_left")
-
-            try:
-                anchor = Anchor(anchor_str)
-            except ValueError:
-                anchor = Anchor.TOP_LEFT
-
-            try:
-                layout_mode = LayoutMode(layout_mode_str)
-            except ValueError:
-                layout_mode = LayoutMode.AUTO
-
-            self._layout_manager.update_window(
-                name,
-                anchor=anchor,
-                mode=layout_mode,
-                priority=int(window_props.get("priority", 10)),
-            )
+            win = self._windows[name]
+            win.setdefault("explicit_props", {}).update(props)
+            self._refresh_window(name, win)
 
         return self._windows[name]
+
+    def _command_window_types(self, msg: dict) -> list:
+        """The element a group command targets, or every type if it names none."""
+        element = msg.get("element")
+        if element:
+            return [element]
+        return [
+            self.WINDOW_TYPE_MESSAGE,
+            self.WINDOW_TYPE_PERSISTENT,
+            self.WINDOW_TYPE_CHAT,
+        ]
 
     def _get_window(self, window_type: str, group: str) -> Dict:
         """Get a window state, or None if it doesn't exist."""
@@ -564,8 +588,8 @@ class HeadsUpOverlay:
             try:
                 win_type = win.get("type")
                 group = win.get("group", "default")
-                # Check if window is manually hidden
-                is_hidden = win.get("hidden", False)
+                # Check if window is manually hidden or steps aside for a preview
+                is_hidden = win.get("hidden", False) or self._is_suppressed(win)
 
                 if win_type == self.WINDOW_TYPE_MESSAGE:
                     message_windows[group] = win
@@ -596,7 +620,7 @@ class HeadsUpOverlay:
         # Second pass: check collisions and update persistent windows
         for group, pers_win in persistent_windows.items():
             try:
-                is_hidden = pers_win.get("hidden", False)
+                is_hidden = pers_win.get("hidden", False) or self._is_suppressed(pers_win)
                 # Only blit if not hidden
                 if not is_hidden:
                     msg_win = message_windows.get(group)
@@ -612,6 +636,9 @@ class HeadsUpOverlay:
         # Third pass: Update ALL window positions from layout manager
         # This ensures windows reposition when others hide/show/resize
         self._update_all_window_positions()
+
+        if self._preview_windows:
+            self._update_preview_windows()
 
     def _update_all_window_positions(self):
         """Update positions of all windows based on layout manager calculations."""
@@ -792,7 +819,7 @@ class HeadsUpOverlay:
             return
 
         # If manually hidden, force has_content to False so fade out completes
-        if win.get("hidden", False):
+        if win.get("hidden", False) or self._is_suppressed(win):
             has_content = False
 
         fade_amount = int(1080 * self.dt)
@@ -1465,9 +1492,14 @@ class HeadsUpOverlay:
 
         # Finalize canvas
         bottom_padding = padding - 4
-        # Calculate final height - constrain to max_height if content exceeds it
-        calculated_height = max(60, y + bottom_padding)
-        final_h = min(calculated_height, max_height)
+        # Calculate final height - use fixed height if specified, else
+        # constrain to max_height if content exceeds it
+        fixed_height = props.get("height")
+        if fixed_height is not None:
+            final_h = int(fixed_height)
+        else:
+            calculated_height = max(60, y + bottom_padding)
+            final_h = min(calculated_height, max_height)
 
         # Determine if content is clipped (overflows the final window height)
         content_clipped = y > final_h
@@ -2531,21 +2563,24 @@ class HeadsUpOverlay:
         if not pers_win.get("items"):
             return False
 
-        # Get message window rect
-        msg_props = msg_win.get("props", {})
-        msg_x = int(msg_props.get("x", 20))
-        msg_y = int(msg_props.get("y", 20))
-        msg_w = int(msg_props.get("width", 400))
-        msg_canvas = msg_win.get("canvas")
-        msg_h = msg_canvas.height if msg_canvas else 200
+        msg_info = self._layout_manager.get_window(
+            self._get_window_name(self.WINDOW_TYPE_MESSAGE, msg_win.get("group"))
+        )
+        pers_info = self._layout_manager.get_window(
+            self._get_window_name(self.WINDOW_TYPE_PERSISTENT, pers_win.get("group"))
+        )
+        if not msg_info or not pers_info:
+            return False
 
-        # Get persistent window rect
-        pers_props = pers_win.get("props", {})
-        pers_x = int(pers_props.get("x", pers_props.get("x", 20)))
-        pers_y = int(pers_props.get("y", pers_props.get("y", 300)))
-        pers_w = int(pers_props.get("width", pers_props.get("width", 400)))
+        msg_x, msg_y = msg_info.computed_x, msg_info.computed_y
+        msg_w = msg_info.width
+        msg_canvas = msg_win.get("canvas")
+        msg_h = msg_canvas.height if msg_canvas else msg_info.height
+
+        pers_x, pers_y = pers_info.computed_x, pers_info.computed_y
+        pers_w = pers_info.width
         pers_canvas = pers_win.get("canvas")
-        pers_h = pers_canvas.height if pers_canvas else 200
+        pers_h = pers_canvas.height if pers_canvas else pers_info.height
 
         # Check intersection (AABB test)
         return not (
@@ -2655,6 +2690,7 @@ class HeadsUpOverlay:
             self._report_exception("run_crash", e)
         finally:
             self._uninstall_foreground_hook()
+            self._clear_preview()
             # Cleanup unified windows (including chat windows)
             for name in list(self._windows.keys()):
                 self._destroy_window(name)
@@ -2697,7 +2733,7 @@ class HeadsUpOverlay:
 
     def _reapply_topmost(self):
         """Re-apply topmost z-order to all visible HUD windows."""
-        for win in self._windows.values():
+        for win in list(self._windows.values()) + list(self._preview_windows.values()):
             hwnd = win.get("hwnd")
             if not hwnd:
                 continue
@@ -2742,80 +2778,42 @@ class HeadsUpOverlay:
             # GROUP MANAGEMENT COMMANDS
             # =====================================================================
             if t == "create_group":
-                props = msg.get("props", {})
-                if group not in self._group_props:
-                    self._group_props[group] = {}
-                self._group_props[group].update(props)
+                for window_type in self._command_window_types(msg):
+                    name = self._get_window_name(window_type, group)
+                    self._group_props.setdefault(name, {}).update(msg.get("props") or {})
+                    if name in self._windows:
+                        self._refresh_window(name, self._windows[name])
                 return
 
             elif t == "update_group":
-                props = msg.get("props", {})
-                if group not in self._group_props:
-                    self._group_props[group] = {}
-                self._group_props[group].update(props)
-
-                # Update existing windows for this group and force re-render
-                matched_count = 0
-                for name, state in self._windows.items():
-                    if state.get("group") == group:
-                        matched_count += 1
-                        old_width = state["props"].get("width")
-                        state["props"].update(props)
-                        new_width = state["props"].get("width")
-                        state["target_opacity"] = int(
-                            state["props"].get("opacity", 0.85) * 255
-                        )
-                        # Invalidate render cache to force re-render with new props
-                        state["last_render_state"] = None
-                        state["canvas_dirty"] = True
-                        # Clear cached canvas if width changed (forces new canvas creation)
-                        if "width" in props:
-                            state["canvas"] = None
-                        # Update layout manager with new layout properties
-                        layout_kwargs = {}
-                        if "width" in props:
-                            layout_kwargs["width"] = int(props["width"])
-                        if "anchor" in props:
-                            try:
-                                layout_kwargs["anchor"] = Anchor(props["anchor"])
-                            except ValueError:
-                                pass
-                        if "priority" in props:
-                            layout_kwargs["priority"] = int(props["priority"])
-                        if layout_kwargs:
-                            self._layout_manager.update_window(name, **layout_kwargs)
-
-                # Re-init fonts in case font properties changed
-                old_size = self.fonts.get("_font_size") if self.fonts else None
-                old_family = self.fonts.get("_font_family") if self.fonts else None
-                new_size = props.get("font_size")
-                new_family = props.get("font_family")
-                if (new_size is not None and new_size != old_size) or (
-                    new_family is not None and new_family != old_family
-                ):
-                    font_size = int(new_size) if new_size is not None else old_size
-                    font_family = new_family if new_family is not None else old_family
-                    self._init_fonts(font_size, font_family)
-                    # Rebuild markdown renderer with new fonts
-                    text_color = self._hex_to_rgb(props.get("text_color", "#f0f0f0"))
-                    accent_color = self._hex_to_rgb(
-                        props.get("accent_color", "#00aaff")
-                    )
-                    bg_color = self._hex_to_rgb(props.get("bg_color", "#1e212b"))
-                    colors = {
-                        "text": text_color,
-                        "accent": accent_color,
-                        "bg": bg_color,
-                    }
-                    color_emojis = props.get("color_emojis", True)
-                    self.md_renderer = MarkdownRenderer(
-                        self.fonts, colors, color_emojis
-                    )
+                props = msg.get("props") or {}
+                for window_type in self._command_window_types(msg):
+                    name = self._get_window_name(window_type, group)
+                    self._group_props.setdefault(name, {}).update(props)
+                    win = self._windows.get(name)
+                    if win:
+                        # Props sent with earlier commands must not outvote the update
+                        win.setdefault("explicit_props", {}).update(props)
+                        self._refresh_window(name, win)
                 return
 
             elif t == "delete_group":
-                self._group_props.pop(group, None)
-                self._destroy_group_windows(group)
+                for window_type in self._command_window_types(msg):
+                    name = self._get_window_name(window_type, group)
+                    self._group_props.pop(name, None)
+                    self._destroy_window(name)
+                return
+
+            elif t in ("set_preview", "clear_preview"):
+                self._handle_preview_command(msg)
+                return
+
+            elif t == "set_defaults":
+                self._server_defaults = dict(msg.get("props") or {})
+                self._group_defaults = {
+                    name: dict(p) for name, p in (msg.get("groups") or {}).items()
+                }
+                self._refresh_windows()
                 return
 
             # =====================================================================
@@ -2852,54 +2850,6 @@ class HeadsUpOverlay:
                 is_append = (
                     win["current_message"] and old_msg and new_msg.startswith(old_msg)
                 )
-
-                if props:
-                    # Check for font changes
-                    old_size = win["props"].get("font_size")
-                    old_family = win["props"].get("font_family")
-
-                    # Update window props (excluding persistent_* keys)
-                    msg_props = {
-                        k: v
-                        for k, v in props.items()
-                        if not k.startswith("persistent_")
-                    }
-                    win["props"].update(msg_props)
-                    win["target_opacity"] = int(win["props"].get("opacity", 0.85) * 255)
-
-                    new_size = win["props"].get("font_size")
-                    new_family = win["props"].get("font_family")
-
-                    # Re-init fonts if size or family changed
-                    if old_size != new_size or old_family != new_family:
-                        font_size = (
-                            int(new_size)
-                            if new_size is not None
-                            else int(old_size) if old_size is not None else 16
-                        )
-                        font_family = (
-                            new_family
-                            if new_family is not None
-                            else old_family if old_family is not None else "Segoe UI"
-                        )
-                        self._init_fonts(font_size, font_family)
-                        colors = {
-                            "text": self._hex_to_rgb(
-                                win["props"].get("text_color", "#f0f0f0")
-                            ),
-                            "accent": self._hex_to_rgb(
-                                win["props"].get("accent_color", "#00aaff")
-                            ),
-                            "bg": self._hex_to_rgb(
-                                win["props"].get("bg_color", "#1e212b")
-                            ),
-                        }
-                        color_emojis = win["props"].get("color_emojis", True)
-                        self.md_renderer = MarkdownRenderer(
-                            self.fonts, colors, color_emojis
-                        )
-                        win["current_blocks"] = None
-                        win["last_render_state"] = None
 
                 win["current_message"] = msg
 
@@ -3152,6 +3102,7 @@ class HeadsUpOverlay:
                     self._windows[window_name] = {
                         "type": self.WINDOW_TYPE_CHAT,
                         "group": chat_name,  # Chat window name is also the group name
+                        "explicit_props": dict(default_props),
                         "props": default_props,
                         "messages": [],
                         "last_message_time": 0,
@@ -3239,6 +3190,8 @@ class HeadsUpOverlay:
                 if chat_name and window_name in self._windows:
                     win = self._windows[window_name]
                     props = msg.get("props", {})
+                    # Kept with the window, so a later defaults change keeps it too
+                    win.setdefault("explicit_props", {}).update(props)
                     win["props"].update(props)
                     win["canvas_dirty"] = True
 
@@ -3435,52 +3388,15 @@ class HeadsUpOverlay:
                 self._reregister_all_windows()
 
     def _reregister_all_windows(self):
-        """Re-register all windows with the layout manager after screen change.
-
-        This ensures windows are repositioned to the new screen's coordinates.
-        """
-        # Use current margin/spacing values when re-registering
-        current_margin = self._layout_margin
-        current_spacing = self._layout_spacing
-
+        """Re-register all windows with the layout manager after a screen or
+        margin/spacing change, keeping manual placement."""
         for name, win in self._windows.items():
-            props = win.get("props", {})
-
-            # Get anchor and layout mode from props or defaults
-            anchor_str = props.get("anchor", "top_left")
-            layout_mode_str = props.get("layout_mode", "auto")
-
-            try:
-                anchor = Anchor(anchor_str)
-            except ValueError:
-                anchor = Anchor.TOP_LEFT
-
-            try:
-                layout_mode = (
-                    LayoutMode(layout_mode_str)
-                    if layout_mode_str == "manual"
-                    else LayoutMode.AUTO
-                )
-            except ValueError:
-                layout_mode = LayoutMode.AUTO
-
-            # Get dimensions
-            width = props.get("width", 400)
-            height = win.get("canvas", {}).size[1] if win.get("canvas") else 200
-            priority = props.get("priority", 10)
-
-            # Re-register with layout manager, using CURRENT margin/spacing values
-            self._layout_manager.register_window(
-                name=name,
-                anchor=anchor,
-                mode=layout_mode,
-                priority=priority,
-                width=width,
-                height=height,
-                margin_x=current_margin,
-                margin_y=current_margin,
-                spacing=current_spacing,
-            )
+            canvas = win.get("canvas")
+            height = canvas.size[1] if canvas else 200
+            self._register_layout(name, win, height)
+            if win.get("fade_state", 0) == 0:
+                self._layout_manager.set_window_visible(name, False)
+        self._reregister_preview_windows()
 
         # Force position recalculation and window repositioning
         self._update_all_window_positions()

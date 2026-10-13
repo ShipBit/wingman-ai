@@ -41,6 +41,8 @@ from api.enums import (
 )
 from providers.interfaces import LlmInterface, TtsInterface
 from services.audio.vocabulary_tools import VOCABULARY_TOOLS
+from services.hud_service import HudService
+from services.hud_tools import HUD_TOOLS, run_hud_tool
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -140,6 +142,11 @@ class Wingman:
         self.context_builder = ContextBuilder(config, settings, name)
         self.tool_executor = ToolExecutor(
             config, settings, name, budget_fn=lambda: self.context_budget
+        )
+        # The shared HUD: the conversation in the chat container, info panel tools
+        self.conversation.message_listeners.append(self._show_on_hud)
+        self.tool_executor.hud_tool_runner = (
+            lambda function_name, args: run_hud_tool(self, function_name, args)
         )
         self.command_executor = CommandExecutor(
             config=config,
@@ -1270,7 +1277,13 @@ class Wingman:
         if self.settings_service:
             tools.extend(VOCABULARY_TOOLS)
 
+        if self.config.hud.info and HudService().available:
+            tools.extend(HUD_TOOLS)
+
         return tools
+
+    async def _show_on_hud(self, role: str, content, tool_calls) -> None:
+        await HudService().on_conversation_message(self, role, content, tool_calls)
 
     # ───────────────── Backward-compat delegation ────────────── #
 

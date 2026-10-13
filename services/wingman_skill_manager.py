@@ -117,7 +117,7 @@ class WingmanSkillManager:
 
     def _instantiate_skill(self, skill_config: SkillConfig) -> Skill | None:
         """Create WingmanContext, call ModuleManager.load_skill, bind helpers."""
-        context = WingmanContext(self._wingman)
+        context = WingmanContext(self._wingman, skill_name=skill_config.display_name)
         skill = ModuleManager.load_skill(
             config=skill_config,
             settings=self.settings,
@@ -383,6 +383,7 @@ class WingmanSkillManager:
 
         try:
             await skill_to_remove.unload()
+            self._release_facade(skill_to_remove)
             self.skills.remove(skill_to_remove)
             await self.unprepare_skill(skill_to_remove)
 
@@ -399,6 +400,18 @@ class WingmanSkillManager:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False, error_msg
 
+    @staticmethod
+    def _release_facade(skill: Skill) -> None:
+        """What the skill drew through the facade (HUD groups) goes with it."""
+        release = getattr(getattr(skill, "wingman", None), "_release", None)
+        if callable(release):
+            try:
+                release()
+            except Exception as e:
+                printr.print(
+                    f"Error releasing '{skill.name}': {e}", color=LogType.WARNING, server_only=True
+                )
+
     async def unload_skills(self):
         for skill in self.skills:
             if not skill.is_prepared:
@@ -413,6 +426,7 @@ class WingmanSkillManager:
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
+            self._release_facade(skill)
         self.tool_skills = {}
         self.skill_tools = []
         self.command_action_skills = {}

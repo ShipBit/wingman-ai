@@ -12,6 +12,9 @@ Complete API reference for the Wingman AI HUD Server REST API.
 
 - [Health & Status](#health--status)
 - [Groups](#groups)
+- [Defaults](#defaults)
+- [Shared Containers](#shared-containers)
+- [Preview](#preview)
 - [Messages](#messages)
 - [Loader](#loader)
 - [Persistent Items](#persistent-items)
@@ -52,9 +55,14 @@ Create or update a HUD group.
 
 **Request Body**:
 
+A group is a name plus an element: `message` (one message at a time),
+`persistent` (items, progress bars, timers) or `chat`. The same name can have
+one group per element.
+
 ```json
 {
   "group_name": "my_wingman",
+  "element": "message",
   "props": {
     "x": 20,
     "y": 20,
@@ -87,12 +95,14 @@ Create or update a HUD group.
 }
 ```
 
-### PATCH /groups/{group_name}
+### PUT /groups/{group_name}/{element}
 
-Update properties of an existing group (real-time updates).
+Update properties of an existing group (real-time updates). `PATCH` works the
+same. Windows follow right away, position and layout mode included.
 
 **URL Parameters**:
 - `group_name` (string): Name of the group to update
+- `element` (string): `message`, `persistent` or `chat`
 
 **Request Body**:
 
@@ -114,12 +124,13 @@ Update properties of an existing group (real-time updates).
 }
 ```
 
-### DELETE /groups/{group_name}
+### DELETE /groups/{group_name}/{element}
 
-Delete a HUD group.
+Delete a HUD group. Only that element's window goes.
 
 **URL Parameters**:
 - `group_name` (string): Name of the group to delete
+- `element` (string): `message`, `persistent` or `chat`
 
 **Response**: `200 OK`
 
@@ -141,6 +152,104 @@ Get list of all group names.
   "groups": ["wingman1", "wingman2", "alerts"]
 }
 ```
+
+### Placement props
+
+| Prop | Meaning |
+|---|---|
+| `layout_mode` | `auto`: stack at `anchor` with other windows there. `manual`: a free area at `x`/`y`, `width` wide and up to `max_height` high. A manual window takes no place in an anchor's stack. |
+| `anchor`, `priority` | Auto mode: the screen corner or edge, and the order there (higher = closer to it). |
+| `x`, `y`, `width`, `max_height` | Manual mode: the area, in pixels on the HUD screen. |
+| `align` | Manual mode: `top` sticks to `y` and grows down, `bottom` sticks to `y + max_height` and grows up. |
+
+---
+
+## Defaults
+
+Props a group's own calls leave out come from the server's defaults. The
+resolution order for every window is:
+
+1. built-in values,
+2. `props` of the defaults (for every group),
+3. `groups[group_name]` of the defaults,
+4. the group's own props (`POST /groups`, `PUT /groups/...`),
+5. the props sent with a call (`POST /message` ...).
+
+Changing the defaults restyles and moves existing windows right away. Wingman
+AI Core sets them from the active HUD profile.
+
+### GET /defaults
+
+**Response**: `200 OK`
+
+```json
+{
+  "props": {"font_size": 16, "accent_color": "#00aaff", "opacity": 0.85},
+  "groups": {
+    "wingman_chat": {"layout_mode": "manual", "x": 20, "y": 20, "width": 400, "max_height": 500, "align": "top"}
+  }
+}
+```
+
+### PUT /defaults
+
+Replace the defaults. Same body as the response above.
+
+---
+
+## Shared Containers
+
+Wingman AI Core writes the conversation of every Wingman to one chat container
+and their info panels to one info panel:
+
+| Group | Element | Content |
+|---|---|---|
+| `wingman_chat` | `message` | The conversation, one message at a time |
+| `wingman_info` | `persistent` | Info panels, progress bars, timers |
+
+Their place and look come from the defaults (`groups.wingman_chat`,
+`groups.wingman_info`). Other programs can write to them like to any group.
+
+---
+
+## Preview
+
+Shows the shared containers as preview panels: sample content in their real
+style, always filling the whole area. While a preview runs, the real
+containers are hidden.
+
+### PUT /preview
+
+`POST` works the same.
+
+```json
+{
+  "containers": {
+    "chat": {"x": 20, "y": 20, "width": 400, "max_height": 500, "font_size": 16, "accent_color": "#00aaff"},
+    "info": {"x": 20, "y": 540, "width": 400, "max_height": 500}
+  },
+  "interactive": true
+}
+```
+
+With `interactive`, the mouse moves a panel (drag the middle) and resizes it
+(drag an edge or corner). The new area is reported to in-process listeners
+(`HudServer.add_event_listener`) as a `preview_changed` event and shows in
+`GET /preview`.
+
+### GET /preview
+
+```json
+{
+  "active": true,
+  "interactive": true,
+  "containers": {"chat": {"x": 120, "y": 80, "width": 600, "max_height": 400}}
+}
+```
+
+### DELETE /preview
+
+End the preview; the real containers come back.
 
 ---
 
@@ -209,7 +318,7 @@ Append content to the current message (for streaming).
 }
 ```
 
-### POST /message/hide/{group_name}
+### POST /message/hide/{group_name}/{element}
 
 Hide the current message in a group.
 
@@ -271,7 +380,8 @@ Add a persistent item to a group.
   "title": "Status",
   "description": "System operational",
   "color": "#00ff00",
-  "duration": 30.0
+  "duration": 30.0,
+  "added_by": "Computer"
 }
 ```
 
@@ -281,6 +391,7 @@ Add a persistent item to a group.
 - `description` (string, optional): Item description
 - `color` (string, optional): Hex color (#RRGGBB)
 - `duration` (number, optional): Auto-remove after N seconds
+- `added_by` (string, optional): Who adds it, e.g. a Wingman's name. Not drawn; kept for whoever reads the panel. `POST /progress` and `POST /timer` take it too.
 
 **Response**: `200 OK`
 
@@ -313,7 +424,7 @@ Update an existing item.
 }
 ```
 
-### DELETE /items/{group_name}/{title}
+### DELETE /items/{group_name}/{element}/{title}
 
 Remove an item from a group.
 
@@ -329,7 +440,7 @@ Remove an item from a group.
 }
 ```
 
-### DELETE /items/{group_name}
+### DELETE /items/{group_name}/{element}
 
 Clear all items from a group.
 

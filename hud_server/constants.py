@@ -106,6 +106,12 @@ PATH_ELEMENT_SHOW = "/element/show"
 PATH_ELEMENT_HIDE = "/element/hide"
 PATH_STATE = "/state"
 PATH_STATE_RESTORE = "/state/restore"
+PATH_DEFAULTS = "/defaults"
+PATH_PREVIEW = "/preview"
+
+# Shared containers every Wingman writes to; their look comes from the defaults
+GROUP_CHAT = "wingman_chat"  # element "message"
+GROUP_INFO = "wingman_info"  # element "persistent"
 
 # Window Types
 WINDOW_TYPE_MESSAGE = "message"
@@ -133,6 +139,10 @@ ANCHOR_CENTER = "center"
 LAYOUT_MODE_AUTO = "auto"
 LAYOUT_MODE_MANUAL = "manual"
 LAYOUT_MODE_HYBRID = "hybrid"
+
+# Manual-mode alignment inside the area
+ALIGN_TOP = "top"
+ALIGN_BOTTOM = "bottom"
 
 # HTTP Status Codes
 HTTP_OK = 200

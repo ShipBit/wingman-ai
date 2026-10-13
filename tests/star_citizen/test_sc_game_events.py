@@ -20,7 +20,7 @@ CONFIG = path.join(REPO_ROOT, "skills", "sc_game_events", "default_config.yaml")
 
 
 class FakeWingman:
-    def __init__(self, loaded_skills=()):
+    def __init__(self, hud_chat=False):
         self.name = "Computer"
         self.said: list[str] = []
         self.shown: list[str] = []
@@ -48,8 +48,7 @@ class FakeWingman:
             self.on_hud.append(text)
             return True
 
-        self.hud = SimpleNamespace(show_message=show_message)
-        self.skills = SimpleNamespace(has=lambda name: name in loaded_skills)
+        self.hud = SimpleNamespace(show_message=show_message, chat_enabled=hud_chat)
         self.local_ai = SimpleNamespace(available=True, generate=generate)
         self.ai = SimpleNamespace(generate=generate)
         self.tts = SimpleNamespace(speak=speak)
@@ -164,9 +163,9 @@ def test_the_tool_answers_in_short_lines(reader, tmp_path):
     assert all(len(answer) < 600 for answer in answers.values())
 
 
-def test_the_hud_skill_shows_it_so_the_line_is_not_shown_twice(reader, tmp_path):
+def test_core_shows_a_remembered_line_on_the_hud_so_it_is_not_shown_twice(reader, tmp_path):
     log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman(loaded_skills=("HUD",))
+    wingman = FakeWingman(hud_chat=True)
 
     async def run():
         await reader.start(str(tmp_path / "game"))
@@ -180,7 +179,7 @@ def test_the_hud_skill_shows_it_so_the_line_is_not_shown_twice(reader, tmp_path)
         await reader.stop()
 
     asyncio.run(run())
-    assert wingman.history == wingman.said  # The HUD skill picks it up from there.
+    assert wingman.history == wingman.said  # Core's chat container picks it up from there.
     assert wingman.on_hud == []
 
 

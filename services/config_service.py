@@ -1416,6 +1416,10 @@ class ConfigService:
         new_config_dir = self.config_manager.rename_config(
             config_dir=config_dir, new_name=new_name
         )
+        if new_config_dir:
+            await self.config_events.publish(
+                "config_renamed", (config_dir.name, new_config_dir.name)
+            )
         if new_config_dir and config_dir.name == self.current_config_dir.name:
             await self.load_config(new_config_dir)
 
@@ -1426,6 +1430,7 @@ class ConfigService:
     # DELETE config
     async def delete_config(self, config_dir: ConfigDirInfo):
         self.config_manager.delete_config(config_dir=config_dir)
+        await self.config_events.publish("config_deleted", config_dir.name)
         if config_dir.name == self.current_config_dir.name:
             await self.load_config()
 

@@ -41,6 +41,8 @@ class HudItem:
     color: Optional[str] = None
     duration: Optional[float] = None
     added_at: float = field(default_factory=time.time)
+    added_by: Optional[str] = None
+    """Who put it there, e.g. a Wingman's name, so others know it is not theirs."""
 
     # Progress bar support
     is_progress: bool = False
@@ -102,6 +104,7 @@ class GroupState:
                     "color": item.color,
                     "duration": item.duration,
                     "added_at": item.added_at,
+                    "added_by": item.added_by,
                     "is_progress": item.is_progress,
                     "progress_current": item.progress_current,
                     "progress_maximum": item.progress_maximum,
@@ -161,6 +164,7 @@ class GroupState:
                 color=item_data.get("color"),
                 duration=item_data.get("duration"),
                 added_at=item_data.get("added_at", time.time()),
+                added_by=item_data.get("added_by"),
                 is_progress=item_data.get("is_progress", False),
                 progress_current=item_data.get("progress_current", 0),
                 progress_maximum=item_data.get("progress_maximum", 100),
@@ -196,6 +200,10 @@ class HudManager:
         self._groups: dict[str, GroupState] = {}
         self._lock = threading.RLock()
         self._command_callbacks: list = []  # Callbacks for overlay integration
+        # Values a call leaves out: "props" for every group, "groups" per group name
+        self._defaults: dict[str, Any] = {"props": {}, "groups": {}}
+        # Preview of the shared containers: {"containers": {...}, "interactive": bool}
+        self._preview: Optional[dict[str, Any]] = None
 
     def register_command_callback(self, callback) -> None:
         """
@@ -232,6 +240,83 @@ class HudManager:
                     server_only=True
                 )
 
+    # ─────────────────────────────── Defaults ─────────────────────────────── #
+
+    def set_defaults(
+        self,
+        props: Optional[dict[str, Any]] = None,
+        groups: Optional[dict[str, dict[str, Any]]] = None,
+    ) -> None:
+        """Replace the defaults. Existing windows pick them up immediately.
+
+        Resolution order for every window: the overlay's built-in values, then
+        `props`, then `groups[group_name]`, then the group's own props, then the
+        props of the call itself.
+        """
+        with self._lock:
+            self._defaults = {
+                "props": dict(props or {}),
+                "groups": {name: dict(p) for name, p in (groups or {}).items()},
+            }
+            self._notify_callbacks({"type": "set_defaults", **self.get_defaults()})
+
+    def get_defaults(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "props": dict(self._defaults["props"]),
+                "groups": {name: dict(p) for name, p in self._defaults["groups"].items()},
+            }
+
+    def resolve_props(self, group_name: str, element: str) -> dict[str, Any]:
+        """Defaults plus the group's own props, without the overlay's built-ins."""
+        with self._lock:
+            resolved = dict(self._defaults["props"])
+            resolved.update(self._defaults["groups"].get(group_name, {}))
+            state = self._groups.get(self._make_key(group_name, element))
+            if state:
+                resolved.update(state.props)
+            return resolved
+
+    # ─────────────────────────────── Preview ─────────────────────────────── #
+
+    def set_preview(self, containers: dict[str, dict[str, Any]], interactive: bool = False) -> None:
+        """Show (or update) the preview of the chat and info containers.
+
+        `containers` maps "chat" and/or "info" to fully resolved props; the
+        preview always fills the whole area (x, y, width, max_height).
+        """
+        with self._lock:
+            self._preview = {
+                "containers": {name: dict(p) for name, p in containers.items()},
+                "interactive": bool(interactive),
+            }
+            self._notify_callbacks({"type": "set_preview", **self.get_preview()})
+
+    def clear_preview(self) -> None:
+        with self._lock:
+            if self._preview is None:
+                return
+            self._preview = None
+            self._notify_callbacks({"type": "clear_preview"})
+
+    def get_preview(self) -> Optional[dict[str, Any]]:
+        with self._lock:
+            if self._preview is None:
+                return None
+            return {
+                "containers": {name: dict(p) for name, p in self._preview["containers"].items()},
+                "interactive": self._preview["interactive"],
+            }
+
+    def preview_moved(self, container: str, x1: int, y1: int, x2: int, y2: int) -> None:
+        """The overlay moved or resized a preview container with the mouse."""
+        with self._lock:
+            if self._preview is None or container not in self._preview["containers"]:
+                return
+            self._preview["containers"][container].update(
+                {"x": x1, "y": y1, "width": x2 - x1, "max_height": y2 - y1}
+            )
+
     # ─────────────────────────────── Group Management ─────────────────────────────── #
 
     def _make_key(self, group_name: str, element: str) -> str:
@@ -247,7 +332,8 @@ class HudManager:
 
             if props:
                 self._groups[key].props.update(props)
-                self._groups[key].is_chat_window = props.get("is_chat_window", False)
+                if "is_chat_window" in props:
+                    self._groups[key].is_chat_window = bool(props["is_chat_window"])
 
             self._notify_callbacks({
                 "type": "create_group",
@@ -285,7 +371,8 @@ class HudManager:
 
                 self._notify_callbacks({
                     "type": "delete_group",
-                    "group": group_name
+                    "group": group_name,
+                    "element": element,
                 })
 
                 return True
@@ -445,7 +532,8 @@ class HudManager:
         title: str,
         description: str = "",
         color: Optional[str] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        added_by: Optional[str] = None,
     ) -> bool:
         """Add a persistent item to a group."""
         key = self._make_key(group_name, element)
@@ -457,7 +545,8 @@ class HudManager:
                 title=title,
                 description=description,
                 color=color,
-                duration=duration
+                duration=duration,
+                added_by=added_by,
             )
 
             self._notify_callbacks({
@@ -527,6 +616,33 @@ class HudManager:
                 return True
             return False
 
+    # The overlay removes a finished auto-closing timer or progress bar this long after
+    AUTO_CLOSE_DELAY = 2.0
+
+    @classmethod
+    def _gone(cls, item: HudItem, now: float) -> bool:
+        """Off the screen already: expired, or a finished timer/bar that closes itself."""
+        if item.duration and now > item.added_at + item.duration:
+            return True
+        if item.auto_close and item.is_timer:
+            return now >= item.timer_start + item.timer_duration + cls.AUTO_CLOSE_DELAY
+        if item.auto_close and item.is_progress:
+            return item.progress_current >= item.progress_maximum
+        return False
+
+    def get_items(self, group_name: str, element: str) -> list[dict[str, Any]]:
+        """The group's items as they are on screen, oldest first."""
+        key = self._make_key(group_name, element)
+        now = time.time()
+        with self._lock:
+            state = self._groups.get(key)
+            if not state:
+                return []
+            for title in [t for t, item in state.items.items() if self._gone(item, now)]:
+                del state.items[title]
+            items = list(state.to_dict()["items"].values())
+        return sorted(items, key=lambda i: i["added_at"])
+
     def clear_items(self, group_name: str, element: str) -> bool:
         """Clear all items from a group."""
         key = self._make_key(group_name, element)
@@ -554,7 +670,8 @@ class HudManager:
         maximum: float = 100,
         description: str = "",
         color: Optional[str] = None,
-        auto_close: bool = False
+        auto_close: bool = False,
+        added_by: Optional[str] = None,
     ) -> bool:
         """Show or update a progress bar."""
         key = self._make_key(group_name, element)
@@ -571,6 +688,8 @@ class HudManager:
                     item.description = description
                 if color:
                     item.progress_color = color
+                if added_by:
+                    item.added_by = added_by
             else:
                 items[title] = HudItem(
                     title=title,
@@ -579,7 +698,8 @@ class HudManager:
                     progress_current=current,
                     progress_maximum=maximum,
                     progress_color=color,
-                    auto_close=auto_close
+                    auto_close=auto_close,
+                    added_by=added_by,
                 )
 
             self._notify_callbacks({
@@ -604,7 +724,8 @@ class HudManager:
         description: str = "",
         color: Optional[str] = None,
         auto_close: bool = True,
-        initial_progress: float = 0
+        initial_progress: float = 0,
+        added_by: Optional[str] = None,
     ) -> bool:
         """Show a timer-based progress bar."""
         key = self._make_key(group_name, element)
@@ -623,7 +744,8 @@ class HudManager:
                 progress_current=initial_progress,
                 progress_maximum=duration,
                 progress_color=color,
-                auto_close=auto_close
+                auto_close=auto_close,
+                added_by=added_by,
             )
 
             self._notify_callbacks({

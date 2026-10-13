@@ -137,6 +137,36 @@ with HudHttpClientSync() as client:
 
 > **Note:** Groups require an `element` parameter to specify the window type (`message`, `persistent`, or `chat`).
 
+### Defaults
+
+- `GET /defaults` - The values groups use for props their own calls leave out
+- `PUT /defaults` - Replace them: `props` for every group, `groups` per group name
+
+Every window resolves its props as: built-in values, then `defaults.props`,
+then `defaults.groups[group_name]`, then the group's own props, then the props
+sent with a call. A change to the defaults restyles and moves existing windows
+right away. Wingman AI Core sets them from the active HUD profile, so a skill
+that creates a group with only a position gets the user's look.
+
+### Shared Containers
+
+Core writes every Wingman's conversation to the group `wingman_chat`
+(element `message`) and the info panels to `wingman_info` (element
+`persistent`). Their area and look come from the defaults.
+
+### Preview
+
+- `PUT /preview` (or `POST`) - Show the chat and info containers as preview panels that fill their whole area, in their real style
+- `GET /preview` - The preview and its current areas
+- `DELETE /preview` - End it
+
+With `"interactive": true` the mouse moves a panel (drag the middle) and
+resizes it (drag an edge or corner). In-process listeners registered with
+`HudServer.add_event_listener()` get a `preview_changed` event with the new
+area (`x1`, `y1`, `x2`, `y2`, `final` on mouse-up). Coordinates are pixels on
+the HUD screen; the process is DPI-unaware, so on a scaled display both the
+windows and the mouse use the same virtualized pixels.
+
 ### Element Visibility
 
 - `POST /element/show` - Show a hidden element (message, persistent, or chat)
@@ -152,14 +182,14 @@ This allows you to temporarily hide HUD elements while preserving their state an
 
 - `POST /message` - Show a message in a group
 - `POST /message/append` - Append content to current message (streaming)
-- `POST /message/hide/{group_name}` - Hide the current message
+- `POST /message/hide/{group_name}/{element}` - Hide the current message
 
 ### Persistent Items
 
 - `POST /items` - Add a persistent item
 - `PUT /items` - Update an existing item
-- `DELETE /items/{group_name}/{title}` - Remove an item
-- `DELETE /items/{group_name}` - Clear all items
+- `DELETE /items/{group_name}/{element}/{title}` - Remove an item
+- `DELETE /items/{group_name}/{element}` - Clear all items
 
 ### Progress & Timers
 
@@ -266,7 +296,8 @@ props = {
     # Layout (automatic positioning)
     "layout_mode": "auto",      # auto | manual | hybrid
     "anchor": "top_left",       # top_left | top_right | bottom_left | bottom_right | center
-    "priority": 10              # stacking order (0-100)
+    "priority": 10,             # stacking order (0-100)
+    "align": "top",             # manual mode: top | bottom of the area
 }
 ```
 
@@ -291,11 +322,12 @@ These properties can be set when creating or updating a HUD group:
 | `layout_mode` | string | `"auto"` | `"auto"`, `"manual"`, or `"hybrid"` |
 | `anchor` | string | `"top_left"` | Screen anchor point (see below) |
 | `priority` | int | `10` | Stacking priority (higher = closer to anchor) |
+| `align` | string | `"top"` | Manual mode: `"top"` sticks to `y` and grows down, `"bottom"` sticks to `y + max_height` and grows up |
 
 ### Layout Modes
 
 - **`auto`** (default): Windows are automatically positioned and stacked based on anchor and priority
-- **`manual`**: Windows use the `x` and `y` properties directly (no auto-stacking)
+- **`manual`**: Windows live in the area `x`, `y`, `width`, `max_height` (no auto-stacking). They take no place in an anchor's stack and are kept on the screen.
 - **`hybrid`**: Reserved for future use with offset adjustments
 
 ### Anchor Points

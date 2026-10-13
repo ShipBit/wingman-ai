@@ -57,6 +57,15 @@ class LayoutMode(Enum):
     HYBRID = "hybrid"    # Reserved for future use (currently behaves like AUTO)
 
 
+class Align(Enum):
+    """Where a manual window sits inside its area when it is shorter than the area."""
+    TOP = "top"          # Top edge at manual_y, grows down
+    BOTTOM = "bottom"    # Bottom edge at manual_y + area_height, grows up
+
+
+_UNSET = object()
+
+
 @dataclass
 class WindowInfo:
     """
@@ -79,6 +88,9 @@ class WindowInfo:
     # For manual/hybrid mode - user-specified offsets
     manual_x: Optional[int] = None
     manual_y: Optional[int] = None
+    # Manual windows: the area they live in (manual_y .. manual_y + area_height)
+    align: Align = Align.TOP
+    area_height: Optional[int] = None
 
     # Computed position (updated by layout manager)
     computed_x: int = 0
@@ -156,6 +168,8 @@ class LayoutManager:
         group: Optional[str] = None,
         manual_x: Optional[int] = None,
         manual_y: Optional[int] = None,
+        align: Align = Align.TOP,
+        area_height: Optional[int] = None,
     ) -> WindowInfo:
         """
         Register a window for layout management.
@@ -173,6 +187,8 @@ class LayoutManager:
             group: Optional group name for related windows
             manual_x: Manual x position (for manual/hybrid mode)
             manual_y: Manual y position (for manual/hybrid mode)
+            align: Manual mode - stick to the top or the bottom of the area
+            area_height: Manual mode - height of the area below manual_y
 
         Returns:
             The WindowInfo object (can be modified directly, but call invalidate_cache after)
@@ -191,6 +207,8 @@ class LayoutManager:
                 group=group,
                 manual_x=manual_x,
                 manual_y=manual_y,
+                align=align,
+                area_height=area_height,
             )
             self._windows[name] = window
             self._invalidate_cache()
@@ -219,9 +237,18 @@ class LayoutManager:
         priority: Optional[int] = None,
         anchor: Optional[Anchor] = None,
         mode: Optional[LayoutMode] = None,
+        manual_x=_UNSET,
+        manual_y=_UNSET,
+        align: Optional[Align] = None,
+        area_height=_UNSET,
+        margin: Optional[int] = None,
+        spacing: Optional[int] = None,
     ) -> bool:
         """
         Update window properties.
+
+        manual_x, manual_y and area_height accept None to clear them, so they
+        are only touched when passed.
 
         Returns True if window exists and was updated.
         """
@@ -231,6 +258,24 @@ class LayoutManager:
                 return False
 
             changed = False
+            for attr, value in (
+                ("manual_x", manual_x),
+                ("manual_y", manual_y),
+                ("area_height", area_height),
+            ):
+                if value is not _UNSET and getattr(window, attr) != value:
+                    setattr(window, attr, value)
+                    changed = True
+            if align is not None and window.align != align:
+                window.align = align
+                changed = True
+            if margin is not None and (window.margin_x != margin or window.margin_y != margin):
+                window.margin_x = margin
+                window.margin_y = margin
+                changed = True
+            if spacing is not None and window.spacing != spacing:
+                window.spacing = spacing
+                changed = True
             if height is not None and window.height != height:
                 window.height = height
                 changed = True
@@ -281,10 +326,15 @@ class LayoutManager:
 
             positions: Dict[str, Tuple[int, int]] = {}
 
-            # Group windows by anchor
+            # Manual windows are placed on their own and take no slot in an
+            # anchor's stack; everything else is grouped by anchor.
             by_anchor: Dict[Anchor, List[WindowInfo]] = {a: [] for a in Anchor}
             for window in self._windows.values():
-                if window.visible:
+                if not window.visible:
+                    continue
+                if self._is_manual(window):
+                    positions[window.name] = self._compute_manual_position(window)
+                else:
                     by_anchor[window.anchor].append(window)
 
             # Process each anchor zone
@@ -315,6 +365,23 @@ class LayoutManager:
             self._cache_valid = True
             return positions_with_offset
 
+    @staticmethod
+    def _is_manual(window: WindowInfo) -> bool:
+        return (
+            window.mode == LayoutMode.MANUAL
+            and window.manual_x is not None
+            and window.manual_y is not None
+        )
+
+    def _compute_manual_position(self, window: WindowInfo) -> Tuple[int, int]:
+        """Place a manual window inside its area and keep it on the screen."""
+        x, y = window.manual_x, window.manual_y
+        if window.align == Align.BOTTOM and window.area_height is not None:
+            y = y + window.area_height - window.height
+        x = max(0, min(x, self._screen_width - window.width))
+        y = max(0, min(y, self._screen_height - window.height))
+        return (x, y)
+
     def _compute_anchor_positions(
         self,
         anchor: Anchor,
@@ -326,18 +393,12 @@ class LayoutManager:
         if anchor == Anchor.CENTER:
             # Center mode: each window is centered, no stacking
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    x, y = window.manual_x, window.manual_y
-                else:
-                    x = self._screen_width // 2 - window.width // 2
-                    y = self._screen_height // 2 - window.height // 2
+                x = self._screen_width // 2 - window.width // 2
+                y = self._screen_height // 2 - window.height // 2
                 positions[window.name] = (x, y)
             return positions
 
-        # Helper to handle manual positioning
         def get_position(window: WindowInfo, auto_x: int, auto_y: int) -> Tuple[int, int]:
-            if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                return (window.manual_x, window.manual_y)
             return (auto_x, auto_y)
 
         # Calculate starting position based on anchor

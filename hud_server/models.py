@@ -144,16 +144,44 @@ class CreateGroupRequest(BaseModel):
 
 
 class UpdateGroupRequest(BaseModel):
-    """Request to update group properties."""
+    """Request to update group properties. The path names the group and element."""
 
-    group_name: str
-    """Name of the group to update."""
+    group_name: Optional[str] = None
+    """Name of the group to update (ignored, the path wins)."""
 
-    element: WindowType
-    """The element type."""
+    element: Optional[WindowType] = None
+    """The element type (ignored, the path wins)."""
 
     props: dict[str, Any]
     """Properties to update."""
+
+
+class DefaultsRequest(BaseModel):
+    """Values every group uses for the props its own calls leave out."""
+
+    props: dict[str, Any] = {}
+    """Defaults for every group (style)."""
+
+    groups: dict[str, dict[str, Any]] = {}
+    """Defaults per group name, applied on top of `props` (e.g. a container's area)."""
+
+
+class PreviewRequest(BaseModel):
+    """Show the shared containers as preview panels that fill their whole area."""
+
+    containers: dict[str, dict[str, Any]]
+    """"chat" and/or "info" mapped to fully resolved props (x, y, width, max_height, style)."""
+
+    interactive: bool = False
+    """Let the mouse move and resize the preview panels."""
+
+
+class PreviewResponse(BaseModel):
+    """The current preview, with the areas as the mouse left them."""
+
+    active: bool
+    interactive: bool = False
+    containers: dict[str, dict[str, Any]] = {}
 
 
 class MessageRequest(BaseModel):
@@ -225,6 +253,9 @@ class ItemRequest(BaseModel):
     duration: Optional[float] = None
     """Auto-remove after this many seconds."""
 
+    added_by: Optional[str] = None
+    """Who adds it, e.g. a Wingman's name. Shown to whoever reads the panel."""
+
 
 class UpdateItemRequest(BaseModel):
     """Request to update an existing item."""
@@ -256,6 +287,8 @@ class ProgressRequest(BaseModel):
     description: str = ""
     color: Optional[str] = None
     auto_close: bool = False
+    added_by: Optional[str] = None
+    """Who adds it, e.g. a Wingman's name. Shown to whoever reads the panel."""
     props: Optional[dict[str, Any]] = None
 
 
@@ -270,6 +303,8 @@ class TimerRequest(BaseModel):
     color: Optional[str] = None
     auto_close: bool = True
     initial_progress: float = 0
+    added_by: Optional[str] = None
+    """Who adds it, e.g. a Wingman's name. Shown to whoever reads the panel."""
     props: Optional[dict[str, Any]] = None
 
 

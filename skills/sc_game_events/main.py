@@ -34,7 +34,6 @@ if TYPE_CHECKING:
 
 CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
-HUD_SKILL = "HUD"
 BACKSTORY_CHARS = 1200
 REACTION_CHARS = 300
 
@@ -140,11 +139,10 @@ class ScGameEvents(Skill):
             )
             if self._remember():
                 await self.wingman.conversation.add_assistant(line)
-            # The HUD skill already shows every line that goes into the history
-            # (unless its own "show chat messages" switch is off, which a skill
-            # cannot read; then only this line is missing on the HUD).
-            hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
-            if self._show_in_hud() and not hud_skill_shows_it:
+            # Core already shows every line that goes into the history in the
+            # chat container, when this Wingman's HUD chat is on.
+            core_shows_it = self._remember() and self.wingman.hud.chat_enabled
+            if self._show_in_hud() and not core_shows_it:
                 await self.wingman.hud.show_message(
                     self.wingman.name, line, duration=15
                 )

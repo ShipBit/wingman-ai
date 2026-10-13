@@ -25,8 +25,6 @@ from typing import TYPE_CHECKING, Optional
 
 from api.interface import SettingsConfig, SkillConfig
 from skills.skill_base import Skill
-from hud_server.http_client import HudHttpClient
-from hud_server.types import LayoutMode, PersistentProps, WindowType
 
 if TYPE_CHECKING:
     from api.interface import MicStatusResponse
@@ -47,13 +45,11 @@ class MicStatus(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self._group = re.sub(r"[^a-zA-Z0-9_-]", "_", self.wingman.name) + "_mic"
-
         skill_dir = os.path.dirname(os.path.abspath(__file__))
         self._mic_on_img = os.path.join(skill_dir, "mic_on.png").replace("\\", "/")
         self._mic_off_img = os.path.join(skill_dir, "mic_off.png").replace("\\", "/")
 
-        self._client: Optional[HudHttpClient] = None
+        self._hud = None  # this skill's HUD group, once the HUD runs
         self._task: Optional[asyncio.Task] = None
         self._subscription = None
         self._status: Optional["MicStatusResponse"] = None
@@ -73,14 +69,9 @@ class MicStatus(Skill):
         await super().update_config(new_config)
         if (old_config.custom_properties or []) == (new_config.custom_properties or []):
             return
-        # No .connected check: a transient HUD hiccup flips it False with nothing here to
-        # reset it, and HudHttpClient auto-reconnects on the next request anyway.
-        if not self._client:
+        if not self._hud:
             return
-        await self._client.delete_group(self._group, WindowType.PERSISTENT)
-        await self._client.create_group(
-            self._group, WindowType.PERSISTENT, props=self._build_props()
-        )
+        await self._hud.update(**self._build_props())
         self._rendered_img = None
         await self._refresh()
 
@@ -90,8 +81,8 @@ class MicStatus(Skill):
         val = self.retrieve_custom_property_value(key, [])
         return val if val is not None else default
 
-    def _build_props(self) -> PersistentProps:
-        common = dict(
+    def _build_props(self) -> dict:
+        props = dict(
             priority=100,
             width=int(self._get_prop("icon_size", 72)),
             content_padding=8,
@@ -101,17 +92,14 @@ class MicStatus(Skill):
         )
         mode = str(self._get_prop("layout_mode", "auto")).lower()
         if mode == "manual":
-            return PersistentProps(
-                layout_mode=LayoutMode.MANUAL,
+            props.update(
+                layout_mode="manual",
                 x=int(self._get_prop("pos_x", 20)),
                 y=int(self._get_prop("pos_y", 20)),
-                **common,
             )
-        return PersistentProps(
-            layout_mode=LayoutMode.AUTO,
-            anchor=str(self._get_prop("anchor", "top_right")),
-            **common,
-        )
+        else:
+            props.update(layout_mode="auto", anchor=str(self._get_prop("anchor", "top_right")))
+        return props
 
     # ---- recording icon ----
 
@@ -208,7 +196,7 @@ class MicStatus(Skill):
     # ---- run + render ----
 
     async def _run(self) -> None:
-        """Connect to the HUD and follow Core's mic state via the facade event."""
+        """Wait for the HUD and follow Core's mic state via the facade event."""
         hud_settings = getattr(self.settings, "hud_server", None)
         if not hud_settings or not getattr(hud_settings, "enabled", False):
             self.log.warning(
@@ -217,30 +205,11 @@ class MicStatus(Skill):
             )
             return
 
-        host = getattr(hud_settings, "host", "127.0.0.1") or "127.0.0.1"
-        hud_port = getattr(hud_settings, "port", 7862) or 7862
-        self._client = HudHttpClient(base_url=f"http://{host}:{hud_port}")
-        # The HUD server may start after this skill: retry until it is there.
+        # The HUD server may start after this skill: wait until it runs.
         # Unload cancels this task.
-        while True:
-            try:
-                if await self._client.connect(timeout=3.0) and (
-                    await self._client.create_group(
-                        self._group, WindowType.PERSISTENT, props=self._build_props()
-                    )
-                    is not None
-                ):
-                    break
-            except asyncio.CancelledError:
-                raise
-            except Exception as error:
-                self.log.warning(f"HUD connect failed: {error}", server_only=True)
-            else:
-                self.log.warning(
-                    f"Could not reach the HUD server, retrying in {self.RETRY_SECONDS} s.",
-                    server_only=True,
-                )
+        while not self.wingman.hud.available:
             await asyncio.sleep(self.RETRY_SECONDS)
+        self._hud = self.wingman.hud.group("mic", **self._build_props())
 
         # drop any leftover subscription before re-subscribing
         if self._subscription is not None:
@@ -258,7 +227,7 @@ class MicStatus(Skill):
 
     async def _refresh(self) -> None:
         """Draw the icon for the current state. Recording wins; else listening AND not playing."""
-        if not self._client:
+        if not self._hud:
             return
         # Serialize and re-read the status inside the lock: two rapid state changes spawn
         # two refreshes, and without this the older draw could land on the HUD last.
@@ -282,25 +251,9 @@ class MicStatus(Skill):
                 self._rendered_img = img
 
     async def _draw(self, img: str) -> bool:
-        """Ensure the group exists with our props, then add the icon item; True only if
-        the HUD accepted both. The create_group must come first on EVERY draw: after a
-        HUD server restart the group is gone and add_item would auto-create it with
-        default props (default-styled window). create_group is create-or-update and
-        doesn't re-render an existing window, so this is cheap and flicker-free."""
-        created = await self._client.create_group(
-            self._group, WindowType.PERSISTENT, props=self._build_props()
-        )
-        if created is None:
-            return False
-        return await self._add_item(img) is not None
-
-    async def _add_item(self, img: str):
-        return await self._client.add_item(
-            group_name=self._group,
-            element=WindowType.PERSISTENT,
-            title=self.ITEM_TITLE,
-            description=f"![]({img})",
-        )
+        """Put the icon on the HUD; True only if the HUD took it. The group is made
+        again with its props if the HUD server restarted in between."""
+        return await self._hud.add_info(self.ITEM_TITLE, f"![]({img})")
 
     async def _cleanup(self) -> None:
         if self._subscription is not None:
@@ -309,17 +262,13 @@ class MicStatus(Skill):
             except Exception:
                 pass
             self._subscription = None
-        if not self._client:
+        if not self._hud:
             return
         try:
-            await self._client.delete_group(self._group, WindowType.PERSISTENT)
+            await self._hud.delete()
         except Exception:
             pass
-        try:
-            await self._client.disconnect()
-        except Exception:
-            pass
-        self._client = None
+        self._hud = None
 
     async def unload(self) -> None:
         await super().unload()

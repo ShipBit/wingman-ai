@@ -534,6 +534,7 @@ class ConfigMigrationService:
             "ask_perplexity",
             "nms_assistant",
             "star_head",
+            "hud",
         }
 
         builtin_skills.update(removed_builtin_skills)

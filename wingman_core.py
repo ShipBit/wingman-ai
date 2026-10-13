@@ -19,6 +19,7 @@ import mouse.mouse as mouse
 from api.commands import (
     AudioLibraryPlaybackFinishedCommand,
     CoreStateChangedCommand,
+    HudProfilesChangedCommand,
     LogCommand,
     ScGameLogStateChangedCommand,
     SttVocabularyChangedCommand,
@@ -109,6 +110,7 @@ from services.local_model_manager import LocalModelManager
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
+from services.hud_service import HudService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
@@ -826,6 +828,12 @@ class WingmanCore(WebSocketUser):
             "wingman_config_saved", self.on_wingman_config_saved
         )
 
+        # HUD profiles and the shared HUD containers
+        self.hud_service = HudService()
+        self.hud_service.configure(config_manager, self.config_service)
+        self.hud_service.broadcast_state = self._broadcast_hud_profiles
+        self.hud_service.run_on_main_loop = self._run_on_main_loop
+
         self.secret_keeper: SecretKeeper = SecretKeeper()
 
         self.event_queue = asyncio.Queue()
@@ -1135,6 +1143,8 @@ class WingmanCore(WebSocketUser):
                     server_only=False,
                 )
                 self._hud_server = None
+            else:
+                await self.hud_service.attach_server(self._hud_server)
         except Exception as e:
             self.printr.print(
                 f"[HUD] Server error: {e}",
@@ -1178,8 +1188,13 @@ class WingmanCore(WebSocketUser):
     async def _stop_hud_server(self):
         """Stop the HUD server if running."""
         if self._hud_server and self._hud_server.is_running:
+            await self.hud_service.detach_server()
             await self._hud_server.stop()
             self._hud_server = None
+
+    async def _broadcast_hud_profiles(self, state) -> None:
+        if self._connection_manager:
+            await self._connection_manager.broadcast(HudProfilesChangedCommand(state=state))
 
     async def _broadcast_loading_status(
         self, message: str, progress: float | None = None
@@ -2318,6 +2333,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_started()
+        self.hud_service.playback_started(wingman_name)
         if getattr(self, "audio_input", None):
             self.audio_input.set_output_busy(True)
         self._emit_voice_state()
@@ -2339,6 +2355,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_finished()
+        self.hud_service.playback_finished(wingman_name)
         if getattr(self, "audio_input", None):
             self.audio_input.set_output_busy(False)
         self._emit_voice_state()
