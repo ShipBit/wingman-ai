@@ -214,8 +214,7 @@ def _defaults_310() -> dict:
     return defaults
 
 
-@pytest.fixture
-def migrated_310(users_dir, boot_config_manager):
+def _make_310(users_dir):
     old_configs = path.join(users_dir, "3_1_0", "configs")
     makedirs(old_configs)
     write_yaml(path.join(old_configs, "settings.yaml"), _settings_310())
@@ -227,6 +226,11 @@ def migrated_310(users_dir, boot_config_manager):
         path.join(TEMPLATES, "General", "Clippy.template.yaml"),
         path.join(old_configs, "General", "Clippy.yaml"),
     )
+
+
+@pytest.fixture
+def migrated_310(users_dir, boot_config_manager):
+    _make_310(users_dir)
     return boot_and_migrate(boot_config_manager)
 
 
@@ -253,7 +257,15 @@ def test_a_long_chain_keeps_the_users_settings(users_dir, migrated_310):
     assert config_manager.settings_config.debug_mode is True
 
 
-def test_each_step_writes_its_settings_for_the_next(users_dir, migrated_310):
+def test_each_step_writes_its_settings_for_the_next(users_dir, boot_config_manager, monkeypatch):
+    from services.config_migration_service import ConfigMigrationService
+
+    # The run deletes its intermediate folders at the end; keep them to look.
+    monkeypatch.setattr(
+        ConfigMigrationService, "_remove_intermediate_versions", lambda *args: None
+    )
+    _make_310(users_dir)
+    boot_and_migrate(boot_config_manager)
     intermediate = read_yaml(path.join(users_dir, "3_1_1", "configs", "settings.yaml"))
     assert intermediate["voice_activation"]["stt_provider"] == "parakeet"
 

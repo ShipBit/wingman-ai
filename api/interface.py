@@ -12,6 +12,7 @@ from api.enums import (
     PocketTtsQuality,
     ScGameLogRulesProblem,
     SkillRequirement,
+    StarCitizenFeatureKind,
     SpokenLanguage,
     McpAuthType,
     McpTransportType,
@@ -80,24 +81,6 @@ class SystemInfo(BaseModel):
 class ErrorReportingState(BaseModel):
     enabled: Optional[bool]
     """None until the user has chosen. Core sends nothing before that."""
-
-
-class ChangelogEntry(BaseModel):
-    """One published changelog entry, proxied from the public Canny RSS feed."""
-
-    version: str
-    """Entry title — our changelog entries are titled with the release version."""
-    category: Optional[str] = None
-    """Canny entry type: new, improved or fixed."""
-    published_at: Optional[str] = None
-    """Publication date as ISO string (YYYY-MM-DD)."""
-    url: Optional[str] = None
-    """Link to the full entry on Canny."""
-    html: str
-    """Entry body as HTML, authored on Canny."""
-    unstable_only: bool = False
-    """True for entries titled with an "(unstable)" marker on Canny — dev-build
-    notes that clients only show to testers on the unstable update channel."""
 
 
 class WingmanInitializationError(BaseModel):
@@ -1639,15 +1622,71 @@ class OtherLanguageSetting(BaseModel):
     """Its English name, e.g. "Dutch", for the conversation model."""
 
 
+class StarCitizenSettings(BaseModel):
+    """Star Citizen for every feature that needs the game: the log reader now,
+    the key bindings later. Skills read it as `self.wingman.star_citizen`."""
+
+    plays: Optional[bool] = None
+    """The answer to "Do you play Star Citizen?" from the setup after the
+    first start. None until the user answered; the client asks while it is.
+    The default is needed: the settings are written without None values."""
+    game_path: str
+    """The StarCitizen folder that holds LIVE, PTU and the other environments."""
+
+
+class StarCitizenGameFolder(BaseModel):
+    """What Core found in a Star Citizen folder."""
+
+    path: str
+    exists: bool
+    environments: list[str]
+    """Environment folders in it, e.g. ["LIVE", "PTU"]. Empty for a folder
+    that exists but is not the game's."""
+
+
+class StarCitizenFeature(BaseModel):
+    """A skill or MCP server on one of the shipped Star Citizen Wingmen."""
+
+    kind: StarCitizenFeatureKind
+    name: str
+    """The skill name or MCP server name, as in discoverable_skills or
+    discoverable_mcps."""
+    display_name: str
+    enabled: bool
+    on_by_default: bool
+    """Switched on when the user says they play Star Citizen."""
+    requires: list[SkillRequirement]
+    """Settings the feature needs switched on, e.g. the log reader."""
+    star_citizen: bool = True
+    """False for a feature that works without the game, like the HUD. The
+    answer to "Do you play Star Citizen?" leaves it as it is."""
+
+
+class StarCitizenSetupWingman(BaseModel):
+    """A shipped Star Citizen Wingman and its Star Citizen features."""
+
+    config_dir: ConfigDirInfo
+    wingman_file: WingmanConfigFileInfo
+    features: list[StarCitizenFeature]
+
+
+class StarCitizenSetup(BaseModel):
+    """Everything the Star Citizen step of the first-start setup shows."""
+
+    game_folder: StarCitizenGameFolder
+    """The folder from the settings, or the one Core found if that one is
+    not the game's."""
+    wingmen: list[StarCitizenSetupWingman]
+
+
 class ScGameLogSettings(BaseModel):
     """Core reads Star Citizen's Game.log live and hands the events to skills
-    (services/sc_gamelog, `self.wingman.sc_gamelog`)."""
+    (services/sc_gamelog, `self.wingman.sc_gamelog`). The folder it reads is
+    `star_citizen.game_path`."""
 
     enabled: bool
     """Off for someone who does not play Star Citizen. On, the reader waits
     for a Game.log at almost no cost."""
-    game_path: str
-    """The StarCitizen folder that holds LIVE, PTU and the other environments."""
 
 
 class ScGameLogMaintainer(BaseModel):
@@ -1664,7 +1703,7 @@ class ScGameLogStatus(BaseModel):
     running: bool
     game_path: str
     game_path_found: bool
-    """Whether the StarCitizen folder exists."""
+    """Whether the StarCitizen folder holds at least one environment."""
     environments: list[str]
     """Environments with a Game.log right now, e.g. ["LIVE"]."""
     active_environment: Optional[str] = None
@@ -1693,6 +1732,7 @@ class SettingsConfig(BaseModel):
     system_one: SystemOneSettings
     hud_server: HudServerSettings
     hud_profiles: list[HudProfile]
+    star_citizen: StarCitizenSettings
     sc_gamelog: ScGameLogSettings
     debug_mode: bool
     streamer_mode: bool

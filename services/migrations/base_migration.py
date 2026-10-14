@@ -5,7 +5,8 @@ Provides common utilities and decorators for migration implementations.
 
 from abc import ABC, abstractmethod
 from functools import wraps
-from typing import TYPE_CHECKING, Callable
+from os import path
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from services.config_migration_service import ConfigMigrationService
@@ -202,6 +203,26 @@ class BaseMigration(ABC):
         self.service.err(message)
 
     # Utility methods
+
+    def shipped_template(self) -> Optional[dict]:
+        """The template of the Wingman migrate_wingman is called for, if it
+        is one Wingman ships (templates/configs/<config>/<name>.template.yaml),
+        else None. Only valid inside migrate_wingman."""
+        current = getattr(self.service, "current_wingman", None)
+        if not current:
+            return None
+        config_dir, filename = current
+        if not filename.endswith(".yaml"):
+            return None
+        template_path = path.join(
+            self.templates_dir,
+            "configs",
+            strip_legacy_prefixes(config_dir),
+            f"{filename[: -len('.yaml')]}.template.yaml",
+        )
+        if not path.exists(template_path):
+            return None
+        return self.config_manager.read_config(template_path) or None
 
     @staticmethod
     def no_op(old: dict) -> dict:

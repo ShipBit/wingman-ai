@@ -17,6 +17,9 @@ dial they cannot measure makes their own experience worse.
 
 import asyncio
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Optional
 
 from api.enums import LogType
@@ -25,9 +28,7 @@ from providers.typesafe_jev import JevClient, JevResult
 from services.jev_decisions import (
     command_questions,
     read_command,
-    read_triage,
     read_vocabulary,
-    triage_questions,
     vocabulary_questions,
 )
 from services.printr import Printr
@@ -72,6 +73,23 @@ should not scored 0.36 or below. Both errors cost the same here — a wrong
 replacement and a missed one each hand the model a word the user did not
 say — so there is no reason to lean either way."""
 
+VOCABULARY_DEADLINE = _threshold("WINGMAN_JEV_VOCABULARY_DEADLINE", 1.5)
+"""Seconds the transcript waits for the vocabulary check, end to end.
+
+The check sits between the speech model and the wingman, so every second
+here is a second the user waits for an answer. The client's own timeout is
+4 s per read, and a read is not the whole call. Past this, the matcher's
+own answer goes through, exactly as with the gate switched off.
+
+1.5 s is about twice the median System One call in the field (770 ms over
+28 calls, 2026-10-11), and above all but two of them."""
+
+VOCABULARY_PAUSE = _threshold("WINGMAN_JEV_VOCABULARY_PAUSE", 60.0)
+"""Seconds the check is not asked again after it failed or ran out of time.
+
+A gateway that is down or slow stays that way for a while. Without a pause,
+every utterance with a name in it would wait out the deadline again."""
+
 
 class JevGate:
     """The wingman's line to the System One model.
@@ -96,6 +114,14 @@ class JevGate:
         """A plan without System One access must not say so on every utterance."""
         self._warned_about_command_count = False
         """Nor must a config too big to ask about."""
+        self._vocabulary_paused_until = 0.0
+        """Until when the vocabulary check is skipped after a failure, in
+        ``time.monotonic()`` seconds."""
+        self._vocabulary_pool = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="jev-vocabulary"
+        )
+        """Runs the call so the transcript can stop waiting at the deadline.
+        A call that outlives it finishes here, and its answer is dropped."""
 
     def update_settings(self, settings: SettingsConfig) -> None:
         """Settings changed in the client. The subscription goes with them: a
@@ -232,36 +258,6 @@ class JevGate:
             )
         return []
 
-    # ── what an utterance actually was ──────────────────────────────
-
-    def triage(
-        self,
-        transcript: str,
-        wingman_names: list[str],
-        during_playback: bool,
-        speaking_text: str = "",
-    ) -> dict:
-        """Synchronous: the transcription thread calls this and has nothing
-        else to do meanwhile. Returns probabilities, not a verdict — the
-        thresholds belong at the call site, where the consequences are.
-
-        An empty dict means "decide as before".
-        """
-        if not self.active:
-            return {}
-        result = self.client.system_one(
-            {
-                "transcript": transcript,
-                "assistant_is_speaking": during_playback,
-                "assistant_current_sentence": speaking_text if during_playback else "",
-            },
-            triage_questions(wingman_names, during_playback),
-        )
-        self._record("Utterance triage", result)
-        if result.error:
-            return {}
-        return read_triage(result)
-
     # ── which proposed name corrections are real ────────────────────
 
     def confirm_vocabulary(
@@ -278,12 +274,28 @@ class JevGate:
         """
         if not self.active or not proposals:
             return None
+        if time.monotonic() < self._vocabulary_paused_until:
+            return None
         candidates = [(heard, entry) for heard, entry, _blocked in proposals]
-        result = self.client.system_one(
-            {"transcript": text}, vocabulary_questions(candidates)
+        future = self._vocabulary_pool.submit(
+            self.client.system_one, {"transcript": text}, vocabulary_questions(candidates)
         )
+        try:
+            result = future.result(timeout=VOCABULARY_DEADLINE)
+        except FutureTimeout:
+            result = JevResult(
+                seconds=VOCABULARY_DEADLINE,
+                error=f"no answer within {VOCABULARY_DEADLINE:.1f} s",
+            )
         self._record("Vocabulary check", result)
         if result.error:
+            self._vocabulary_paused_until = time.monotonic() + VOCABULARY_PAUSE
+            printr.print(
+                f"Jev vocabulary check failed ({result.error}) - the matcher "
+                f"decides alone for the next {VOCABULARY_PAUSE:.0f} s.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             return None
         confirmed = read_vocabulary(result, candidates, VOCABULARY_THRESHOLD)
         applied = [candidates[i] for i in sorted(confirmed or set())]
@@ -301,7 +313,7 @@ class JevGate:
     async def ask(self, state, questions: dict) -> Optional[JevResult]:
         """Any questions a skill wants answered. None when the feature is off.
 
-        Deliberately unconstrained: the four decisions above are Core's, and a
+        Deliberately unconstrained: the two decisions above are Core's, and a
         skill's will be something we did not think of. What it does not get is
         a way around the switch — off is off, here as everywhere.
         """

@@ -184,7 +184,6 @@ discoverable_skills:
 - VisionAI
 inworld:
   voice_id: Edward
-is_voice_activation_default: true
 name: Clippy
 prompts:
   backstory: 'You are Clippy, the iconic Microsoft Office paperclip assistant, now resurrected with AI

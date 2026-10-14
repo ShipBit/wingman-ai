@@ -9,6 +9,7 @@ Skills that legitimately need to change something use a sanctioned capability
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -1448,6 +1449,65 @@ class SkillHudGroup:
         from services.hud_service import HudService
 
         return HudService().delete_group(self.name, self.element)
+
+
+class SkillStarCitizen:
+    """Where Star Citizen is installed (`self.wingman.star_citizen`).
+
+    One folder for every skill that reads the game's files. The user sets it
+    once, in the setup after the first start or in Settings. Read-only.
+
+        live = self.wingman.star_citizen.environment_path("LIVE")
+        if live:
+            profiles = live / "user" / "client" / "0" / "Profiles"
+    """
+
+    __slots__ = ("_wingman",)
+
+    def __init__(self, wingman: "Wingman") -> None:
+        object.__setattr__(self, "_wingman", wingman)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FacadeError("star_citizen is read-only for skills.")
+
+    def _settings(self):
+        return object.__getattribute__(self, "_wingman").settings.star_citizen
+
+    @property
+    def plays(self) -> Optional[bool]:
+        """What the user answered to "Do you play Star Citizen?", None
+        before they answered."""
+        return self._settings().plays
+
+    @property
+    def game_path(self) -> Optional[Path]:
+        """The StarCitizen folder that holds LIVE, PTU and the other
+        environments, as the user set it. It may not exist; see `found`."""
+        game_path = self._settings().game_path
+        return Path(game_path) if game_path else None
+
+    @property
+    def environments(self) -> tuple[str, ...]:
+        """Environment folders in it right now, e.g. ("LIVE", "PTU")."""
+        from services.star_citizen.game_folder import inspect_game_folder
+
+        return tuple(inspect_game_folder(self._settings().game_path).environments)
+
+    @property
+    def found(self) -> bool:
+        """The folder holds at least one environment."""
+        return bool(self.environments)
+
+    def environment_path(self, environment: str = "LIVE") -> Optional[Path]:
+        """`<game_path>/<environment>` if that folder exists, else None."""
+        game_path = self.game_path
+        if not game_path:
+            return None
+        folder = game_path / environment.upper()
+        try:
+            return folder if folder.is_dir() else None
+        except OSError:
+            return None
 
 
 class SkillScGameLog:

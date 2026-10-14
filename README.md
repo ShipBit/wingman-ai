@@ -233,6 +233,8 @@ Talking to a Wingman is like chatting with ChatGPT but with your voice. And it c
 
 The magic happens when you configure _commands_ or key bindings. GPT will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `Request landing permission`).
 
+After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead, Galactapedia and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
+
 ### StarHead
 
 ![StarHead](https://star-head.de/assets/images/logo/LOGO_@290.png)

@@ -59,7 +59,7 @@ def _config():
 
 
 def test_spoken_names_are_the_runtime_vocabulary():
-    assert spoken_names(_config()) == ["Computer", "Flight Ready", "Deploy gear"]
+    assert spoken_names(_config().wingmen.values()) == ["Computer", "Flight Ready", "Deploy gear"]
 
 
 def test_mapping_entries_replace_exactly():
@@ -170,3 +170,8 @@ def test_preset_overrides_are_a_diff_against_the_bundle():
         "Hurston", "Crusader", "Orison", "Jumptown"
     ]
     assert diff_override(bundled, bundled) == ([], [])
+
+
+def test_spoken_english_shorthand_is_not_a_name():
+    # "kinda" is one letter from the Star Citizen name "Kinga".
+    assert Vocabulary(["Kinga"]).correct("It's like kinda green.") == "It's like kinda green."

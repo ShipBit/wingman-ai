@@ -1,9 +1,8 @@
 name: Build Core (Windows)
 
+# Only called by dev-build.yml and by the client's release run, never by a tag.
+# Tags mark what the testers got; pushing one must not build anything.
 on:
-  push:
-    tags:
-      - '*'
   workflow_call:
     inputs:
       runner:

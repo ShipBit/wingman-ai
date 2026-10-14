@@ -544,12 +544,13 @@ class ConfigService:
             wingman_config.discoverable_skills = discoverable_skills
 
             # Save the config WITHOUT reinitializing all skills
-            await self.save_wingman_config(
+            if not await self.save_wingman_config(
                 config_dir=config_dir,
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-            )
+            ):
+                return
 
             # Incrementally toggle just this skill on the active wingman
             wingman = (
@@ -983,12 +984,13 @@ class ConfigService:
             wingman_config.discoverable_mcps = discoverable_mcps
 
             # Save the config WITHOUT reinitializing all MCPs
-            await self.save_wingman_config(
+            if not await self.save_wingman_config(
                 config_dir=config_dir,
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-            )
+            ):
+                return
 
             # Incrementally toggle just this MCP on the active wingman
             wingman = (
@@ -1545,6 +1547,7 @@ class ConfigService:
         wingman_config: WingmanConfig,
         silent: bool = False,
         skip_config_validation: bool = True,
+        set_voice_activation_default: bool = False,
     ):
         """Save wingman configuration and optionally update the active wingman.
 
@@ -1566,14 +1569,15 @@ class ConfigService:
             wingman_config: The wingman configuration to save
             silent: If True, don't show toast notification
             skip_config_validation: If False, validate the config before applying
+            set_voice_activation_default: If True, take `is_voice_activation_default`
+                from the payload. Only the star (set_default_wingman) does that.
         """
 
-        # Check if tower is available
-        if not self.tower:
-            self.printr.toast_error(
-                "Cannot save wingman config: Tower not initialized. Please wait for the config to fully load."
-            )
-            return
+        # The chat input of clients up to 3.2.8 sends the bare name as file.
+        # Without the extension the disk read below fails and the save goes
+        # to an extension-less file that is never loaded again.
+        if not wingman_file.file.endswith(".yaml"):
+            wingman_file.file = f"{wingman_file.file}.yaml"
 
         # Load current on-disk config for merge/preservation
         existing_config: WingmanConfig | None = None
@@ -1611,36 +1615,77 @@ class ConfigService:
             if "discoverable_mcps" not in wingman_config.model_fields_set:
                 merged_config.discoverable_mcps = existing_config.discoverable_mcps
 
+            # The client keeps copies of the config that the star does not
+            # update. A later save from one of them (volume, model, edit page)
+            # would put the old default back, so only the star changes it.
+            if not set_voice_activation_default:
+                merged_config.is_voice_activation_default = (
+                    existing_config.is_voice_activation_default
+                )
+
+        # Before sign-in there is no Tower, only the parsed config it will be
+        # built from (the Star Citizen step of the first-start setup switches
+        # skills then), and a Wingman of another config is not loaded at all.
+        # The file is all there is to change; the current config is parsed
+        # again so the Tower starts with the change.
+        is_current = bool(self.current_config_dir) and (
+            config_dir.name == self.current_config_dir.name
+        )
+        if not self.tower or not is_current:
+            self.config_manager.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=merged_config,
+            )
+            if is_current:
+                await self.load_config(self.current_config_dir)
+            await self.config_events.publish("wingman_config_saved", merged_config)
+            return True
+
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
-        if not wingman:
-            # try to enable a previously disabled wingman
-            disabled_config = self.tower.get_disabled_wingman_by_name(
-                merged_config.name
-            )
-            if disabled_config and not merged_config.disabled:
+        if merged_config.disabled:
+            # A disabled wingman leaves the Tower, so no sentence reaches it.
+            # Its config is still saved, the user may edit it while it is off,
+            # and the Tower keeps that copy for when it is switched on again.
+            if wingman:
+                await self.tower.disable_wingman(wingman_file.name)
+            self.tower.keep_disabled_config(wingman_file.name, merged_config)
+        elif not wingman:
+            # try to enable a previously disabled wingman, built from this
+            # save's config (a rename included)
+            previous = self.tower.get_disabled_wingman_by_name(wingman_file.name)
+            if previous:
+                self.tower.keep_disabled_config(wingman_file.name, merged_config)
                 enabled = await self.tower.enable_wingman(
                     wingman_name=merged_config.name,
                     settings=self.config_manager.settings_config,
                 )
-                if enabled:
-                    # now this should work
-                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+                if not enabled:
+                    # The reasons were shown by the Tower. Nothing is saved,
+                    # it stays off as the file says, and Enable can try again.
+                    self.tower.keep_disabled_config(merged_config.name, previous)
+                    self.printr.toast_error(
+                        f"Wingman '{merged_config.name}' could not be switched on."
+                    )
+                    return False
+                wingman = self.tower.get_wingman_by_name(merged_config.name)
             # else fail
             if not wingman:
                 self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
-                return
+                return False
 
-        updated = await wingman.update_config(
-            config=merged_config,
-            skip_config_validation=skip_config_validation,
-        )
-
-        if not updated:
-            self.printr.toast_error(
-                f"New config for Wingman '{merged_config.name}' is invalid."
+        if not merged_config.disabled:
+            updated = await wingman.update_config(
+                config=merged_config,
+                skip_config_validation=skip_config_validation,
             )
-            return
+
+            if not updated:
+                self.printr.toast_error(
+                    f"New config for Wingman '{merged_config.name}' is invalid."
+                )
+                return False
 
         # save the config file
         self.config_manager.save_wingman_config(
@@ -1657,6 +1702,7 @@ class ConfigService:
 
         # Notify listeners that a wingman config was saved (for input hook refresh)
         await self.config_events.publish("wingman_config_saved", merged_config)
+        return True
 
     @staticmethod
     def _merge_skill_configs(
@@ -1914,6 +1960,7 @@ class ConfigService:
                     wingman_file=wingman_config_file,
                     wingman_config=wingman_config,
                     silent=True,
+                    set_voice_activation_default=True,
                 )
                 made_changes = False
 

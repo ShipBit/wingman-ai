@@ -89,6 +89,10 @@ class CustomPropertyType(Enum):
     AUDIO_DEVICE = "audio_device"
     COLOR = "color"
     RANGE_SLIDER = "range_slider"
+    DIRECTORY = "directory"
+    """A folder on the user's computer. The client offers a folder picker."""
+    FILE = "file"
+    """A file on the user's computer. The client offers a file picker."""
 
 
 class TtsVoiceGender(Enum):
@@ -216,6 +220,13 @@ class SkillRequirement(Enum):
     """The HUD (settings.hud_server). Runs on Windows only."""
     SC_GAMELOG = "sc_gamelog"
     """The Star Citizen log reader (settings.sc_gamelog)."""
+
+
+class StarCitizenFeatureKind(Enum):
+    """What a Star Citizen feature on a shipped Wingman is."""
+
+    SKILL = "skill"
+    MCP = "mcp"
 
 
 class HudAlign(Enum):
@@ -433,6 +444,10 @@ class SkillRequirementEnumModel(BaseEnumModel):
     skill_requirement: SkillRequirement
 
 
+class StarCitizenFeatureKindEnumModel(BaseEnumModel):
+    star_citizen_feature_kind: StarCitizenFeatureKind
+
+
 class HudAlignEnumModel(BaseEnumModel):
     hud_align: HudAlign
 
@@ -474,6 +489,7 @@ ENUM_TYPES = {
     "LocalAiMode": LocalAiModeEnumModel,
     "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
     "SkillRequirement": SkillRequirementEnumModel,
+    "StarCitizenFeatureKind": StarCitizenFeatureKindEnumModel,
     "HudAlign": HudAlignEnumModel,
     "SpokenLanguage": SpokenLanguageEnumModel,
     "PocketTtsQuality": PocketTtsQualityEnumModel,

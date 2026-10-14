@@ -1,5 +1,5 @@
 """The skill facade (`self.wingman` in a skill): audio devices, the voice,
-command categories and the HUD connection."""
+command categories, the HUD connection and the Star Citizen folder."""
 
 import asyncio
 from types import SimpleNamespace
@@ -197,3 +197,30 @@ def test_a_skills_own_group_is_named_after_the_wingman_and_goes_with_the_skill(m
 
     service.create_group.assert_called_with("Bob_mic", "persistent", {"anchor": "top_right", "width": 72})
     service.delete_group.assert_called_once_with("Bob_mic", "persistent")
+
+
+def _star_citizen(game_path: str):
+    settings = SimpleNamespace(star_citizen=SimpleNamespace(plays=True, game_path=game_path))
+    return facade.SkillStarCitizen(SimpleNamespace(settings=settings))
+
+
+def test_star_citizen_gives_skills_the_environment_folder(tmp_path):
+    (tmp_path / "LIVE").mkdir()
+    star_citizen = _star_citizen(str(tmp_path))
+    assert star_citizen.found and star_citizen.environments == ("LIVE",)
+    assert star_citizen.environment_path("live") == tmp_path / "LIVE"
+    assert star_citizen.environment_path("PTU") is None
+
+
+def test_star_citizen_without_a_folder_has_nothing_to_give():
+    star_citizen = _star_citizen("")
+    assert star_citizen.game_path is None and not star_citizen.found
+    assert star_citizen.environment_path() is None
+
+
+def test_star_citizen_is_read_only_for_skills():
+    try:
+        _star_citizen("").game_path = "C:\\elsewhere"
+    except facade.FacadeError:
+        return
+    raise AssertionError("a skill could move the game folder")

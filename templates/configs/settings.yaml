@@ -116,7 +116,8 @@ system_one:
   # The decision model in front of the main model: faster, cheaper and unable
   # to answer outside the options it is given. Which model serves it comes from
   # the subscription. Off means every decision is taken the way it was before.
-  enabled: true
+  # Off by default: whoever wants it switches it on under Settings.
+  enabled: false
   # Ask which command a request means before the main model is asked anything.
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
@@ -171,6 +172,14 @@ hud_profiles:
 # Core reads Star Citizen's Game.log live and hands the events to skills.
 # Switch it off if you do not play Star Citizen. On, it waits for a Game.log
 # at almost no cost. game_path is the folder that holds LIVE, PTU and so on.
+# Star Citizen for every feature that needs the game. plays is the answer
+# from the setup after the first start, null until the user gave it.
+# game_path is the folder that holds LIVE, PTU and so on.
+star_citizen:
+  plays: null
+  game_path: "C:\\Program Files\\Roberts Space Industries\\StarCitizen"
+# Core reads Star Citizen's Game.log live from star_citizen.game_path and
+# hands the events to skills. Switch it off if you do not play Star Citizen.
+# On, it waits for a Game.log at almost no cost.
 sc_gamelog:
   enabled: true
-  game_path: "C:\\Program Files\\Roberts Space Industries\\StarCitizen"

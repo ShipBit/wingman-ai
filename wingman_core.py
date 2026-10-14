@@ -1,13 +1,11 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from email.utils import parsedate_to_datetime
 import os
 import platform
 import re
 import threading
 import time
 from typing import Optional
-from xml.etree import ElementTree
 import pygame
 from google.genai import types
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
@@ -37,8 +35,10 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from api.interface import (
-    ScGameLogSettings,
     ScGameLogStatus,
+    SettingsConfig,
+    StarCitizenGameFolder,
+    StarCitizenSetup,
     AudioDevice,
     AudioFile,
     AvatarGenerationRequest,
@@ -46,7 +46,6 @@ from api.interface import (
     AvatarPromptRequest,
     AvatarVariant,
     BenchmarkResult,
-    ChangelogEntry,
     CommandJoystickConfig,
     Config,
     ConfigWithDirInfo,
@@ -101,6 +100,8 @@ from services.file import (
 from services.audio.device_names import with_full_names
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
+from services.star_citizen.game_folder import inspect_game_folder
+from services.star_citizen.setup import StarCitizenSetupService, log_reader_on
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -148,15 +149,6 @@ MIN_OWN_WORDS = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
-# Below this, a voice-activated utterance is taken as room noise rather than a
-# request, and nothing answers it. Low on purpose: an answer nobody asked for
-# is a nuisance, but silence when the user did ask is a bug report.
-#
-# 0.15 measured best on the triage set (evals/jev_bench, 2026-09-20): 93%
-# against 90% at 0.2, and it is the highest gate that drops none of the real
-# user speech. "No wait, I meant the other ship." scores 0.18 and is exactly
-# the kind of sentence that must still get through.
-NOT_ADDRESSED_BELOW = 0.15
 
 
 def _key_source(key) -> str:
@@ -190,7 +182,6 @@ class WingmanCore(WebSocketUser):
         self.is_client_logged_in: bool = False
         self.client_plan: str = "Free"
         self.client_account_name: str = ""
-        self._changelog_cache: Optional[tuple[float, list[ChangelogEntry]]] = None
 
         self.router = APIRouter()
         tags = ["core"]
@@ -199,13 +190,6 @@ class WingmanCore(WebSocketUser):
             path="/audio-devices",
             endpoint=self.get_audio_devices,
             response_model=list[AudioDevice],
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/changelog",
-            endpoint=self.get_changelog,
-            response_model=list[ChangelogEntry],
             tags=tags,
         )
         self.router.add_api_route(
@@ -231,6 +215,29 @@ class WingmanCore(WebSocketUser):
             path="/sc-gamelog/status",
             endpoint=self.get_sc_gamelog_status,
             response_model=ScGameLogStatus,
+            tags=tags,
+        )
+        # The Star Citizen step of the first-start setup. Its switches are
+        # the normal skill and MCP toggles.
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/star-citizen/game-folder",
+            endpoint=self.check_star_citizen_game_folder,
+            response_model=StarCitizenGameFolder,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/star-citizen/setup",
+            endpoint=self.get_star_citizen_setup,
+            response_model=StarCitizenSetup,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/star-citizen/plays",
+            endpoint=self.set_plays_star_citizen,
+            response_model=StarCitizenSetup,
             tags=tags,
         )
         self.router.add_api_route(
@@ -880,6 +887,9 @@ class WingmanCore(WebSocketUser):
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
         )
+        self.star_citizen_setup = StarCitizenSetupService(
+            config_service=self.config_service, settings_service=self.settings_service
+        )
         # Surface STT download/init progress during runtime settings switches
         # via the same LOADING_CONFIG indicator used at startup; flip back to
         # READY when the switch finishes.
@@ -1079,10 +1089,22 @@ class WingmanCore(WebSocketUser):
         await self._start_hud_server_if_enabled()
 
         # 7. Star Citizen log reader
-        await self._apply_sc_gamelog_settings(self.settings_service.settings.sc_gamelog)
+        await self._apply_sc_gamelog_settings(self.settings_service.settings)
 
-    async def _apply_sc_gamelog_settings(self, sc_gamelog: ScGameLogSettings):
-        await ScGameLogService().apply_settings(sc_gamelog.enabled, sc_gamelog.game_path)
+    async def _apply_sc_gamelog_settings(self, settings: SettingsConfig):
+        enabled = log_reader_on(settings)
+        game_path = settings.star_citizen.game_path
+        await ScGameLogService().apply_settings(enabled, game_path)
+        # The client shows the warning with a link to the setting; this is
+        # the line for the log file.
+        if enabled and not inspect_game_folder(game_path).environments:
+            self.printr.print(
+                f"Star Citizen is not in {game_path or 'an empty folder'}: "
+                "the log reader waits for a Game.log that never comes. "
+                "Set the game folder in Settings > Star Citizen.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
 
     async def _broadcast_sc_gamelog_status(self, status: ScGameLogStatus):
         if self._connection_manager:
@@ -1093,6 +1115,18 @@ class WingmanCore(WebSocketUser):
     # GET /sc-gamelog/status
     async def get_sc_gamelog_status(self) -> ScGameLogStatus:
         return ScGameLogService().status()
+
+    # GET /star-citizen/game-folder
+    def check_star_citizen_game_folder(self, path: str) -> StarCitizenGameFolder:
+        return self.star_citizen_setup.check_game_folder(path)
+
+    # GET /star-citizen/setup
+    def get_star_citizen_setup(self) -> StarCitizenSetup:
+        return self.star_citizen_setup.get_setup()
+
+    # POST /star-citizen/plays
+    async def set_plays_star_citizen(self, plays: bool) -> StarCitizenSetup:
+        return await self.star_citizen_setup.apply_answer(plays)
 
     def _get_validated_hud_settings(
         self, hud_settings, log_invalid: bool = True
@@ -1619,6 +1653,7 @@ class WingmanCore(WebSocketUser):
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
             settings_service=self.settings_service,
+            local_ai_service=self.local_ai_service,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -1626,10 +1661,6 @@ class WingmanCore(WebSocketUser):
 
         for rec in skill_catalog.drain_runtime_records():
             await self._connection_manager.broadcast(SkillRegisteredCommand(**rec))
-
-        for wingman in self.tower.wingmen:
-            if isinstance(wingman, OpenAiWingman):
-                wingman.local_ai_service = self.local_ai_service
 
         # Only show toast errors for non-MCP errors (MCP errors are already logged in mcp_client.py)
         for error in self.tower_errors:
@@ -1841,11 +1872,11 @@ class WingmanCore(WebSocketUser):
 
     # called when AudioRecorder regonized voice
     def _stt_hotwords(self) -> list[str]:
-        """Words the local decoder should recognise: the name of every wingman
-        in the active config plus whatever their skills added at runtime."""
+        """Words the local decoder should recognise: the name of every running
+        wingman plus whatever their skills added at runtime."""
         if not self.tower:
             return []
-        words: list[str] = spoken_names(self.tower.config)
+        words: list[str] = spoken_names(w.config for w in self.tower.wingmen)
         for wingman in self.tower.wingmen:
             words.extend(wingman.stt_hotwords)
         return words
@@ -1948,11 +1979,6 @@ class WingmanCore(WebSocketUser):
         target = wingman or self.tower.get_wingman_from_text(text)
         if not target:
             return
-        if wingman is None and not self._jev_addressed(text, target, during_playback):
-            # Voice activation only. A held key already says the utterance was
-            # meant for the wingman; there is nothing left to ask about, and
-            # asking would put a round trip in front of every push-to-talk turn.
-            return
         if playing:
             # Talking on means: skip the rest of the answer.
             self._run_on_main_loop(self.stop_playback())
@@ -1968,38 +1994,6 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
-
-    def _jev_addressed(self, text: str, target, during_playback: bool) -> bool:
-        """Whether a voice-activated utterance was really meant for a wingman.
-
-        The word matcher that runs above has no answer for this. It sorts an
-        utterance into stop, echo, or answer it — and everything that is not
-        one of the first two gets answered, including two people talking in
-        the room and the speech model writing "Thank you for watching!" over
-        a second of fan noise. This is the one question it cannot ask.
-
-        True whenever Jev is off, failed, or unsure, so the behaviour without
-        a working gateway is exactly today's.
-        """
-        gate = getattr(target, "jev", None)
-        if not gate or not gate.active:
-            return True
-        values = gate.triage(
-            transcript=text,
-            wingman_names=[w.name for w in self.tower.wingmen] if self.tower else [],
-            during_playback=during_playback,
-            speaking_text=self.audio_player.speaking_text,
-        )
-        addressed = values.get("addressed")
-        if addressed is None or addressed >= NOT_ADDRESSED_BELOW:
-            return True
-        self.printr.print(
-            f"Dropped '{text}': not addressed to a wingman "
-            f"(Jev {addressed:.2f}).",
-            server_only=True,
-            color=LogType.INFO,
-        )
-        return False
 
     def _is_stop(self, words: list[str]) -> bool:
         """Whether the whole utterance is a stop command. The phrases are read
@@ -3105,57 +3099,6 @@ class WingmanCore(WebSocketUser):
     # POST /open-filemanager/custom-skills
     def open_custom_skills_directory(self):
         show_in_file_manager(get_custom_skills_dir())
-
-    # GET /changelog
-    async def get_changelog(self) -> list[ChangelogEntry]:
-        """Proxy the public Canny changelog RSS feed (no API key required) so
-        clients can render entries inline without hitting CORS."""
-        now = time.time()
-        if self._changelog_cache and now - self._changelog_cache[0] < 1800:
-            return self._changelog_cache[1]
-        try:
-            response = requests.get(
-                url="https://wingman-ai.canny.io/api/changelog/feed.rss",
-                timeout=10,
-            )
-            response.raise_for_status()
-            root = ElementTree.fromstring(response.content)
-            entries: list[ChangelogEntry] = []
-            for item in root.iter("item"):
-                published_at = None
-                pub_date = item.findtext("pubDate")
-                if pub_date:
-                    try:
-                        published_at = (
-                            parsedate_to_datetime(pub_date).date().isoformat()
-                        )
-                    except (TypeError, ValueError):
-                        pass
-                # Entries titled with an "(unstable)" / "[unstable]" marker are
-                # dev-build notes meant only for testers on the unstable channel
-                title = item.findtext("title") or ""
-                version, marker_count = re.subn(
-                    r"\s*[\(\[]unstable[\)\]]", "", title, flags=re.IGNORECASE
-                )
-                entries.append(
-                    ChangelogEntry(
-                        version=version.strip(),
-                        category=item.findtext("category"),
-                        published_at=published_at,
-                        url=item.findtext("link"),
-                        html=item.findtext("description") or "",
-                        unstable_only=marker_count > 0,
-                    )
-                )
-            self._changelog_cache = (now, entries)
-            return entries
-        except Exception as e:
-            self.printr.print(
-                f"Could not load changelog: {str(e)}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            return []
 
     # GET /models/openrouter
     async def get_openrouter_models(self):
