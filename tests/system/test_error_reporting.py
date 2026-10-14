@@ -505,3 +505,60 @@ def test_dropped_event_reads_no_log(sentry, monkeypatch):
     flush()
 
     assert reads == []
+
+
+# ─── User folders (WINGMAN-CORE-W) ────────────────────────────────────────────
+
+
+WINDOWS_TMP = r"C:\Users\larse\AppData\Roaming\ShipBit\WingmanAI\models\x.yaml.23608.tmp"
+
+
+def test_windows_user_folder_is_scrubbed_from_exception_and_log(sentry, tmp_path):
+    exc = PermissionError(13, "Permission denied", WINDOWS_TMP)
+    # str() puts the repr of the path in: 'C:\\Users\\larse\\...'
+    assert r"C:\\Users\\larse" in str(exc)
+    (tmp_path / "session.log").write_text(
+        f"Failed to load PocketTTS model: {exc}\nsaving {WINDOWS_TMP}\n", encoding="utf-8"
+    )
+    error_reporting.set_enabled(True)
+    log_error(f"Failed to load PocketTTS model: {exc}", exc)
+    flush()
+
+    raw = repr(sentry.events[0])
+    log = sentry.attachments[0][error_reporting.LOG_ATTACHMENT_NAME].decode("utf-8")
+    assert "larse" not in raw
+    assert "larse" not in log
+    value = sentry.events[0]["exception"]["values"][-1]["value"]
+    assert r"~\\AppData\\Roaming" in value
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        r"C:\Users\larse\AppData",
+        r"'C:\\Users\\larse\\AppData'",
+        r"C:\\\\Users\\\\larse\\\\AppData",
+        "c:/users/larse/AppData",
+        r"D:\Documents and Settings\larse\AppData",
+        r"C:\Users\Lars Erik\AppData",
+        "/home/larse/.cache",
+        "/Users/larse/Library",
+    ],
+)
+def test_user_folders_are_scrubbed_in_every_form(text):
+    scrubbed = error_reporting._scrub_text(text, [], [])
+    assert "lars" not in scrubbed.lower()
+    assert scrubbed.lstrip("'").startswith("~")
+
+
+def test_home_path_is_scrubbed_in_repr_form_and_any_case(monkeypatch):
+    monkeypatch.setattr(error_reporting.path, "expanduser", lambda _: r"E:\Profiles\larse")
+    homes = error_reporting._home_paths()
+
+    for text in [r"E:\Profiles\larse\x", r"E:\\Profiles\\larse\\x", r"e:\profiles\LARSE\x"]:
+        assert "larse" not in error_reporting._scrub_text(text, [], homes).lower()
+
+
+def test_urls_with_users_in_the_path_stay():
+    text = "https://api.example.com/Users/123"
+    assert error_reporting._scrub_text(text, [], []) == text

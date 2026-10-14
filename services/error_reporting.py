@@ -12,7 +12,9 @@ POSITIVE, MEMORY, LOCALMODEL).
 
 What never goes out: API keys and other secrets (the stored secrets, Bearer
 tokens, ``sk-``/``AIza`` keys and ``?key=`` style parameters are replaced in
-the event and in the log), the user's home path (replaced with ``~``), request
+the event and in the log), the user's home path and any user folder like
+``C:\\Users\\<name>`` or ``/home/<name>``, also in the doubled-backslash form of
+exception messages (replaced with ``~``, in the event and in the log), request
 bodies and headers, local variables, the hostname and the IP (turned off in
 the Sentry project).
 
@@ -113,6 +115,21 @@ _SECRET_PATTERNS = [
         r'([?&][a-zA-Z_]*(?:key|token|secret|password|auth)[a-zA-Z_]*=)[^&\s"\']+',
         re.IGNORECASE,
     ),
+]
+
+# User folders in paths: the folder name is often the person's name. The home
+# of this machine is replaced first (_home_paths); these catch the rest, also
+# in the repr form Python puts in OSError messages, with doubled backslashes,
+# and doubled again when that text was escaped once more (JSON in a log line).
+_SEP = r"(?:\\{1,4}|/)"
+_USER_DIR_PATTERNS = [
+    re.compile(
+        r"\b[A-Za-z]:" + _SEP + r"(?:Users|Documents and Settings)" + _SEP
+        # Greedy up to the next separator or quote: names can have spaces.
+        + r"[^\\/:*?\"'<>|\r\n]+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(?<![\w.:/~])/(?:Users|home)/[^/\s'\"]+"),
 ]
 
 _lock = threading.Lock()
@@ -431,7 +448,13 @@ def _home_paths() -> list[str]:
     home = path.expanduser("~")
     if not home or home == "~":
         return []
-    return sorted({home, home.replace("\\", "/"), home.replace("/", "\\")}, key=len, reverse=True)
+    variants = {
+        home,
+        home.replace("\\", "/"),
+        home.replace("/", "\\"),
+        home.replace("/", "\\").replace("\\", "\\\\"),
+    }
+    return sorted(variants, key=len, reverse=True)
 
 
 def _scrub_text(text: str, secrets: list[str], homes: list[str]) -> str:
@@ -441,7 +464,10 @@ def _scrub_text(text: str, secrets: list[str], homes: list[str]) -> str:
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub(lambda m: m.group(1) + "[redacted]", text)
     for home in homes:
-        text = text.replace(home, "~")
+        # Windows paths are not case sensitive (c:\\users\\Name).
+        text = re.sub(re.escape(home), "~", text, flags=re.IGNORECASE)
+    for pattern in _USER_DIR_PATTERNS:
+        text = pattern.sub("~", text)
     return text
 
 
