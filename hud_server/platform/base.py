@@ -61,13 +61,24 @@ PointerHandler = Callable[[Pointer, int, int], Optional[Cursor]]
 
 @dataclass(frozen=True)
 class Monitor:
-    """A monitor in virtual desktop coordinates."""
+    """A monitor in the HUD's coordinates (the virtual desktop as this process
+    sees it). With Windows display scaling those are scaled pixels."""
 
     x: int
     y: int
     width: int
     height: int
     primary: bool = False
+    scale: float = 1.0
+    """Physical pixels per HUD pixel: 1.25 for a monitor at 125 % scaling."""
+
+    def describe(self) -> str:
+        """'3072x1728', or '3072x1728 (3840x2160 at 125 %)' on a scaled monitor."""
+        size = f"{self.width}x{self.height}"
+        if abs(self.scale - 1.0) < 0.01:
+            return size
+        physical = f"{round(self.width * self.scale)}x{round(self.height * self.scale)}"
+        return f"{size} ({physical} at {round(self.scale * 100)} %)"
 
 
 FALLBACK_MONITOR = Monitor(0, 0, 1920, 1080, True)
@@ -187,7 +198,7 @@ class HudBackend(ABC):
         printr.print(
             LOG_MONITORS_AVAILABLE.format(
                 ", ".join(
-                    f"{i + 1}: {m.width}x{m.height}{' (primary)' if m.primary else ''}"
+                    f"{i + 1}: {m.describe()}{' primary' if m.primary else ''}"
                     for i, m in enumerate(monitors)
                 )
             ),

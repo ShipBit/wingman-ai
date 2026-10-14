@@ -60,6 +60,7 @@ class LayoutMode(Enum):
 class Align(Enum):
     """Where a manual window sits inside its area when it is shorter than the area."""
     TOP = "top"          # Top edge at manual_y, grows down
+    CENTER = "center"    # Middle of the area, grows up and down
     BOTTOM = "bottom"    # Bottom edge at manual_y + area_height, grows up
 
 
@@ -187,7 +188,7 @@ class LayoutManager:
             group: Optional group name for related windows
             manual_x: Manual x position (for manual/hybrid mode)
             manual_y: Manual y position (for manual/hybrid mode)
-            align: Manual mode - stick to the top or the bottom of the area
+            align: Manual mode - stick to the top, the middle or the bottom of the area
             area_height: Manual mode - height of the area below manual_y
 
         Returns:
@@ -376,8 +377,11 @@ class LayoutManager:
     def _compute_manual_position(self, window: WindowInfo) -> Tuple[int, int]:
         """Place a manual window inside its area and keep it on the screen."""
         x, y = window.manual_x, window.manual_y
-        if window.align == Align.BOTTOM and window.area_height is not None:
-            y = y + window.area_height - window.height
+        if window.area_height is not None:
+            if window.align == Align.BOTTOM:
+                y = y + window.area_height - window.height
+            elif window.align == Align.CENTER:
+                y = y + (window.area_height - window.height) // 2
         x = max(0, min(x, self._screen_width - window.width))
         y = max(0, min(y, self._screen_height - window.height))
         return (x, y)

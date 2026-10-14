@@ -17,10 +17,14 @@ from services.migrations import discover_migrations
 from services.migrations.base_migration import strip_legacy_prefixes
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
-from services.system_manager import SystemManager
+from services.system_manager import LOCAL_VERSION, SystemManager
 
 MIGRATION_LOG = ".migration"
 MINIMUM_SUPPORTED_VERSION = "1_7_0"  # Versions older than this require a fresh start
+
+
+def _version_key(version: str) -> list[int]:
+    return [int(n) for n in version.split("_")]
 
 
 class ConfigMigrationService:
@@ -36,8 +40,13 @@ class ConfigMigrationService:
         self.users_dir = get_users_dir()
         self.templates_dir = config_manager.templates_dir
 
-        # Auto-discover migrations from migrations/ directory
-        self.migrations = discover_migrations()
+        # Auto-discover migrations from migrations/ directory. A step to a
+        # version newer than this Core, written ahead of its version bump,
+        # waits: Core reads the configs of LOCAL_VERSION, so the chain ends there.
+        current = _version_key(LOCAL_VERSION.replace(".", "_"))
+        discovered = discover_migrations()
+        self.migrations = [m for m in discovered if _version_key(m[1]) <= current]
+        self.waiting_migrations = [m for m in discovered if _version_key(m[1]) > current]
         self.latest_version = self.migrations[-1][1] if self.migrations else None
         self.latest_config_path = (
             path.join(self.users_dir, self.latest_version, CONFIGS_DIR)
@@ -46,6 +55,10 @@ class ConfigMigrationService:
         )
 
     def migrate_to_latest(self):
+        for _old, new, _cls in self.waiting_migrations:
+            version = new.replace("_", ".")
+            self.log(f"The migration to {version} waits until Core is {version}.")
+
         # Check if the latest version already exists with configs
         migration_file = path.join(self.latest_config_path, MIGRATION_LOG)
 

@@ -223,6 +223,8 @@ class HudAlign(Enum):
 
     TOP = "top"
     """Sticks to the top edge of the area and grows down."""
+    CENTER = "center"
+    """Stays in the middle of the area and grows up and down."""
     BOTTOM = "bottom"
     """Sticks to the bottom edge of the area and grows up."""
 

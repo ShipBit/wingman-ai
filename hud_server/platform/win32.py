@@ -230,6 +230,56 @@ class MONITORINFO(ctypes.Structure):
     ]
 
 
+class MONITORINFOEXW(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+        ("szDevice", wintypes.WCHAR * 32),
+    ]
+
+
+class DEVMODEW(ctypes.Structure):
+    """The display variant of DEVMODEW (220 bytes)."""
+
+    _fields_ = [
+        ("dmDeviceName", wintypes.WCHAR * 32),
+        ("dmSpecVersion", wintypes.WORD),
+        ("dmDriverVersion", wintypes.WORD),
+        ("dmSize", wintypes.WORD),
+        ("dmDriverExtra", wintypes.WORD),
+        ("dmFields", wintypes.DWORD),
+        ("dmPositionX", wintypes.LONG),
+        ("dmPositionY", wintypes.LONG),
+        ("dmDisplayOrientation", wintypes.DWORD),
+        ("dmDisplayFixedOutput", wintypes.DWORD),
+        ("dmColor", ctypes.c_short),
+        ("dmDuplex", ctypes.c_short),
+        ("dmYResolution", ctypes.c_short),
+        ("dmTTOption", ctypes.c_short),
+        ("dmCollate", ctypes.c_short),
+        ("dmFormName", wintypes.WCHAR * 32),
+        ("dmLogPixels", wintypes.WORD),
+        ("dmBitsPerPel", wintypes.DWORD),
+        ("dmPelsWidth", wintypes.DWORD),
+        ("dmPelsHeight", wintypes.DWORD),
+        ("dmDisplayFlags", wintypes.DWORD),
+        ("dmDisplayFrequency", wintypes.DWORD),
+        ("dmICMMethod", wintypes.DWORD),
+        ("dmICMIntent", wintypes.DWORD),
+        ("dmMediaType", wintypes.DWORD),
+        ("dmDitherType", wintypes.DWORD),
+        ("dmReserved1", wintypes.DWORD),
+        ("dmReserved2", wintypes.DWORD),
+        ("dmPanningWidth", wintypes.DWORD),
+        ("dmPanningHeight", wintypes.DWORD),
+    ]
+
+
+ENUM_CURRENT_SETTINGS = -1
+
+
 MONITORENUMPROC = ctypes.WINFUNCTYPE(
     wintypes.BOOL,
     wintypes.HMONITOR,
@@ -246,8 +296,10 @@ user32.EnumDisplayMonitors.argtypes = [
     LPARAM,
 ]
 user32.EnumDisplayMonitors.restype = wintypes.BOOL
-user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFOEXW)]
 user32.GetMonitorInfoW.restype = wintypes.BOOL
+user32.EnumDisplaySettingsW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(DEVMODEW)]
+user32.EnumDisplaySettingsW.restype = wintypes.BOOL
 user32.GetSystemMetrics.argtypes = [ctypes.c_int]
 user32.GetSystemMetrics.restype = ctypes.c_int
 

@@ -146,13 +146,13 @@ hud_profiles:
       y1: 20
       x2: 420
       y2: 520
-      align: top
+      align: center
     info:
       x1: 20
       y1: 540
       x2: 420
       y2: 1040
-      align: top
+      align: center
     style:
       font_size: 16
       font_family: Segoe UI

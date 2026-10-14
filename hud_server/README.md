@@ -328,7 +328,7 @@ props = {
     "layout_mode": "auto",      # auto | manual | hybrid
     "anchor": "top_left",       # top_left | top_right | bottom_left | bottom_right | center
     "priority": 10,             # stacking order (0-100)
-    "align": "top",             # manual mode: top | bottom of the area
+    "align": "top",             # manual mode: top | center | bottom of the area
 }
 ```
 
@@ -353,7 +353,7 @@ These properties can be set when creating or updating a HUD group:
 | `layout_mode` | string | `"auto"` | `"auto"`, `"manual"`, or `"hybrid"` |
 | `anchor` | string | `"top_left"` | Screen anchor point (see below) |
 | `priority` | int | `10` | Stacking priority (higher = closer to anchor) |
-| `align` | string | `"top"` | Manual mode: `"top"` sticks to `y` and grows down, `"bottom"` sticks to `y + max_height` and grows up |
+| `align` | string | `"top"` | Manual mode: `"top"` sticks to `y` and grows down, `"center"` stays in the middle of the area and grows both ways, `"bottom"` sticks to `y + max_height` and grows up |
 
 ### Layout Modes
 

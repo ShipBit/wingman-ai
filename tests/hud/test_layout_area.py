@@ -32,6 +32,29 @@ def test_a_top_aligned_window_stays_at_the_top_of_its_area():
     assert layout.get_position("persistent_info") == (40, 60)
 
 
+def test_a_centered_window_stays_in_the_middle_of_its_area_as_it_grows():
+    layout = _layout()
+    layout.register_window(
+        "message_chat", mode=LayoutMode.MANUAL, manual_x=100, manual_y=100,
+        align=Align.CENTER, area_height=400, height=100,
+    )
+
+    assert layout.get_position("message_chat") == (100, 250)
+
+    layout.update_window_height("message_chat", 300)
+    assert layout.get_position("message_chat") == (100, 150)
+
+
+def test_a_centered_window_taller_than_its_area_stays_on_the_screen():
+    layout = _layout()
+    layout.register_window(
+        "message_chat", mode=LayoutMode.MANUAL, manual_x=100, manual_y=0,
+        align=Align.CENTER, area_height=200, height=400,
+    )
+
+    assert layout.get_position("message_chat") == (100, 0)
+
+
 def test_a_manual_window_takes_no_slot_in_its_anchors_stack():
     layout = _layout()
     layout.register_window(

@@ -160,7 +160,7 @@ Get list of all group names.
 | `layout_mode` | `auto`: stack at `anchor` with other windows there. `manual`: a free area at `x`/`y`, `width` wide and up to `max_height` high. A manual window takes no place in an anchor's stack. |
 | `anchor`, `priority` | Auto mode: the screen corner or edge, and the order there (higher = closer to it). |
 | `x`, `y`, `width`, `max_height` | Manual mode: the area, in pixels on the HUD screen. |
-| `align` | Manual mode: `top` sticks to `y` and grows down, `bottom` sticks to `y + max_height` and grows up. |
+| `align` | Manual mode: `top` (default) sticks to `y` and grows down, `center` stays in the middle of the area and grows both ways, `bottom` sticks to `y + max_height` and grows up. |
 
 ---
 

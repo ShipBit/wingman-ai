@@ -109,6 +109,11 @@ def new_profile(name: str, source: HudProfile) -> HudProfile:
 _HEX = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
 
+def is_hex_color(value: Any) -> bool:
+    """#RGB, #RRGGBB or #RRGGBBAA."""
+    return isinstance(value, str) and bool(_HEX.match(value))
+
+
 def merge_alpha(hex_color: str, opacity_percent: float) -> str:
     """#RRGGBBAA with the alpha taken from a 0-100 percentage. Any alpha the
     colour had is replaced; an invalid colour comes back unchanged."""

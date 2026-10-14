@@ -43,8 +43,10 @@ Where the containers are and how they look is a **HUD profile**, under
 **Settings → HUD**. A profile holds:
 
 - the **chat area** and the **info panel area**: left, top, right and bottom
-  edge in pixels on the HUD screen, plus whether the container sticks to the
-  **top** of its area and grows down, or to the **bottom** and grows up,
+  edge in pixels on the HUD screen, plus where the container sits in its
+  area while its content is shorter: in the **center**, growing both ways
+  (the default), at the **top**, growing down, or at the **bottom**, growing
+  up,
 - the look: font, size, colours, background and overall transparency, corner
   radius, padding, typewriter effect,
 - how long chat messages stay, and whether the chat shows tool names.
@@ -80,8 +82,8 @@ The fields in the settings follow while you drag, and the new area is saved
 when you let go. The real containers step aside during the preview and come
 back when you switch it off.
 
-On a display with Windows scaling, the pixels of the areas are the HUD's own
-(unscaled) pixels; dragging always matches what you see.
+With Windows display scaling the areas count in scaled pixels: a 3840×2160
+monitor at 125 % is 3072×1728 for the HUD. Dragging always matches what you see.
 
 ## Skills on the HUD
 
@@ -94,10 +96,19 @@ Other programs can use the HUD server's HTTP API: [hud_server/API.md](../hud_ser
 
 ## Coming from the HUD skill
 
-The HUD skill is gone. When you update, each Wingman that had it on hands its
-settings to a HUD profile: the set most configs used becomes the default
-profile, any other set a profile for the configs that used it. A container
-that was placed at an anchor gets the area it had on your screen. Wingmen
-that had the skill on keep their chat (unless *Show Chat Messages* was off)
-and get the info panel tools; with the HUD on, Wingmen without the skill get
-both switches off, so nothing new appears.
+The HUD skill is gone. When you update to 3.2.9, the skill settings of the
+first Wingman that had it on become your default HUD profile: Wingmen that
+were switched on before switched-off ones, the config Core starts with before
+the others, then by name. The HUD skill settings of other Wingmen are not
+carried over.
+
+The chat and the info panel get the areas they had on your HUD screen,
+measured with its resolution and Windows scaling, so the HUD looks the same
+on the first start. An anchor at the top becomes **top**, one at the left or
+right side becomes **center** (the screen's center counts as its left side),
+one at the bottom becomes **bottom**. A chat and info panel that stacked at
+one anchor each get their full height, one after the other. Info panels the
+skill had saved are not carried over.
+
+Every Wingman gets the chat and the info panel switched on, and so does every
+Wingman you add later. Switch them off per Wingman in its settings.

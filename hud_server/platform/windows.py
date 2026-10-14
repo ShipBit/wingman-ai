@@ -29,7 +29,9 @@ from hud_server.platform.win32 import (
     BITMAPINFO,
     BITMAPINFOHEADER,
     BLENDFUNCTION,
+    DEVMODEW,
     DIB_RGB_COLORS,
+    ENUM_CURRENT_SETTINGS,
     EVENT_SYSTEM_FOREGROUND,
     GWL_EXSTYLE,
     HWND_TOPMOST,
@@ -42,7 +44,7 @@ from hud_server.platform.win32 import (
     LPARAM,
     MA_NOACTIVATE,
     MONITORENUMPROC,
-    MONITORINFO,
+    MONITORINFOEXW,
     MONITORINFOF_PRIMARY,
     MSG,
     PM_REMOVE,
@@ -148,6 +150,18 @@ def _ensure_window_class() -> bool:
         _class_registered = True
         return True
     return False
+
+
+def _scale(device: str, width: int) -> float:
+    """Physical pixels per HUD pixel. For a process that is not DPI aware, as
+    Core is, Windows scales every monitor to 100 %: 3840 px at 125 % become
+    3072 px. The HUD draws in those scaled pixels."""
+    mode = DEVMODEW()
+    mode.dmSize = ctypes.sizeof(DEVMODEW)
+    if width > 0 and user32.EnumDisplaySettingsW(device, ENUM_CURRENT_SETTINGS, ctypes.byref(mode)):
+        if mode.dmPelsWidth:
+            return round(mode.dmPelsWidth / width, 2)
+    return 1.0
 
 
 def _cursor_pos() -> tuple[int, int]:
@@ -420,17 +434,19 @@ class WindowsBackend(HudBackend):
         monitors: list[Monitor] = []
 
         def on_monitor(hmonitor, hdc, lprect, lparam):
-            mi = MONITORINFO()
-            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            mi = MONITORINFOEXW()
+            mi.cbSize = ctypes.sizeof(MONITORINFOEXW)
             if user32.GetMonitorInfoW(hmonitor, ctypes.byref(mi)):
                 rect = mi.rcMonitor
+                width = rect.right - rect.left
                 monitors.append(
                     Monitor(
                         x=rect.left,
                         y=rect.top,
-                        width=rect.right - rect.left,
+                        width=width,
                         height=rect.bottom - rect.top,
                         primary=bool(mi.dwFlags & MONITORINFOF_PRIMARY),
+                        scale=_scale(mi.szDevice, width),
                     )
                 )
             return True

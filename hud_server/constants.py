@@ -142,6 +142,7 @@ LAYOUT_MODE_HYBRID = "hybrid"
 
 # Manual-mode alignment inside the area
 ALIGN_TOP = "top"
+ALIGN_CENTER = "center"
 ALIGN_BOTTOM = "bottom"
 
 # HTTP Status Codes

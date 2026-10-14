@@ -52,6 +52,18 @@ def test_a_complete_chain_reaches_the_current_version(users_dir, boot_config_man
     assert chain[-1] == VERSION_DIR
 
 
+def test_a_step_past_this_cores_version_waits_for_the_version_bump(
+    users_dir, boot_config_manager, monkeypatch
+):
+    import services.config_migration_service as module
+
+    monkeypatch.setattr(module, "LOCAL_VERSION", "3.2.7")
+    service = migration_service(boot_config_manager())
+
+    assert service.latest_version == "3_2_7"
+    assert [(old, new) for old, new, _ in service.waiting_migrations][0] == ("3_2_7", "3_2_8")
+
+
 def test_a_missing_link_is_no_chain(users_dir, boot_config_manager):
     make_old_version(users_dir, OLD_VERSION_DIR, {"Star Citizen": {"Computer.yaml": None}})
     service = migration_service(boot_config_manager())
