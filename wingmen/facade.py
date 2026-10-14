@@ -316,7 +316,23 @@ class SkillAi:
         return self._wingman.context_budget.tool_cap
 
     async def _call(self, messages: list):
-        from services.context_budget import ContextOverflowError
+        from api.enums import ConversationProvider
+        from services.context_budget import ContextOverflowError, SUBSCRIPTION_MAX_REQUEST_CHARS
+        from services.conversation_manager import ConversationManager
+
+        # Wingman Pro refuses a request over its size limit (images count with
+        # their full base64): no need to send it to hear that.
+        if (
+            self._wingman.config.features.conversation_provider
+            == ConversationProvider.WINGMAN_PRO
+        ):
+            size = sum(ConversationManager.message_chars(m) for m in messages)
+            if size > SUBSCRIPTION_MAX_REQUEST_CHARS:
+                raise FacadeError(
+                    f"Skill tried to send {size:,} characters to Wingman Pro, but the "
+                    f"limit is {SUBSCRIPTION_MAX_REQUEST_CHARS:,} per request. Send less "
+                    f"(a smaller image, or less data)."
+                )
 
         try:
             return await self._wingman.actual_llm_call(messages)

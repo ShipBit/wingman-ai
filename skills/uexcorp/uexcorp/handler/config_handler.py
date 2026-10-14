@@ -285,6 +285,9 @@ class ConfigHandler:
         self.__cache_lifetime_long = cache_timeout_commodities
 
     def get_behavior_commodity_route_default_count(self) -> int:
+        # Before validate() (the skill never activated) only the stored value exists.
+        if not self.__property_retriever:
+            return self.__behavior_commodity_route_default_count
         errors = []
         value = self.__property_retriever("commodity_route_default_count", errors)
         if not errors:
@@ -295,6 +298,9 @@ class ConfigHandler:
         self.__behavior_commodity_route_default_count = default_count
 
     def get_behavior_commodity_route_use_estimated_availability(self) -> bool:
+        # Before validate() (the skill never activated) only the stored value exists.
+        if not self.__property_retriever:
+            return self.__behavior_commodity_route_use_estimated_availability
         errors = []
         value = self.__property_retriever("commodity_route_use_estimated_availability", errors)
         if not errors:
@@ -305,6 +311,9 @@ class ConfigHandler:
         self.__behavior_commodity_route_use_estimated_availability = use_estimated_availability
 
     def get_behavior_commodity_route_advanced_info(self) -> bool:
+        # Before validate() (the skill never activated) only the stored value exists.
+        if not self.__property_retriever:
+            return self.__behavior_commodity_route_advanced_info
         errors = []
         value = self.__property_retriever("commodity_route_advanced_info", errors)
         if not errors:
@@ -315,6 +324,9 @@ class ConfigHandler:
         self.__behavior_commodity_route_advanced_info = advanced_info
 
     def get_behavior_use_fasterwhisper_hotwords(self) -> bool:
+        # Before validate() (the skill never activated) only the stored value exists.
+        if not self.__property_retriever:
+            return self.__behavior_use_fasterwhisper_hotwords
         errors = []
         value = self.__property_retriever("add_fasterwhisper_hotwords", errors)
         if not errors:

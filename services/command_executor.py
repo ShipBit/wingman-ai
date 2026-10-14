@@ -324,24 +324,37 @@ class CommandExecutor:
                             )
 
                 if action.mouse:
-                    if action.mouse.move_to:
-                        x, y = action.mouse.move_to
-                        mouse.move(x, y)
+                    # On Linux the mouse library needs root: it raises
+                    # ImportError on first use. A setup problem, told to the
+                    # user outside the except so it is not reported as a bug.
+                    mouse_denied = False
+                    try:
+                        if action.mouse.move_to:
+                            x, y = action.mouse.move_to
+                            mouse.move(x, y)
 
-                    if action.mouse.move:
-                        x, y = action.mouse.move
-                        mouse.move(x, y, absolute=False, duration=0.5)
+                        if action.mouse.move:
+                            x, y = action.mouse.move
+                            mouse.move(x, y, absolute=False, duration=0.5)
 
-                    if action.mouse.scroll:
-                        mouse.wheel(action.mouse.scroll)
+                        if action.mouse.scroll:
+                            mouse.wheel(action.mouse.scroll)
 
-                    if action.mouse.button:
-                        if action.mouse.hold:
-                            mouse.press(button=action.mouse.button)
-                            time.sleep(action.mouse.hold)
-                            mouse.release(button=action.mouse.button)
-                        else:
-                            mouse.click(button=action.mouse.button)
+                        if action.mouse.button:
+                            if action.mouse.hold:
+                                mouse.press(button=action.mouse.button)
+                                time.sleep(action.mouse.hold)
+                                mouse.release(button=action.mouse.button)
+                            else:
+                                mouse.click(button=action.mouse.button)
+                    except ImportError:
+                        mouse_denied = True
+                    if mouse_denied:
+                        await printr.print_async(
+                            f"Command '{command.name}' of wingman '{self.wingman_name}' could not use the mouse: mouse actions on Linux need root or uinput access.",
+                            color=LogType.ERROR,
+                        )
+                        return collected
 
                 if action.write:
                     keyboard.write(action.write)
