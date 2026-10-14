@@ -1,7 +1,7 @@
 """Per-turn benchmark snapshot building and token-usage broadcasting."""
 
 from api.enums import ConversationProvider
-from api.interface import BenchmarkResult, TokenUsage, WingmanConfig
+from api.interface import BenchmarkResult, RequestUsage, TokenUsage, WingmanConfig
 from services.benchmark import Benchmark, format_ms
 from services.printr import Printr
 from services.token_utils import count_tokens
@@ -138,22 +138,30 @@ class TurnMetrics:
         """Forget what an earlier turn used, including one that ended early."""
         self._turn_usage = None
 
-    def add_call_usage(self, usage: TokenUsage) -> None:
+    def add_call_usage(self, usage: TokenUsage, tool_calls: list[str] | None = None) -> None:
         """Add one model request to the turn.
 
         ``last_turn_prompt_tokens`` stays what the *last* request sent: that is
         the size of the context, which the status bar and the condenser need.
         What the turn used is every request added up, because each one sends
-        the whole conversation again.
+        the whole conversation again. ``tool_calls`` names what the model
+        called in its answer, so the client can say what each request was for.
         """
         if not (usage.input_tokens or usage.output_tokens):
             return
         if self._turn_usage is None:
-            self._turn_usage = usage.model_copy()
-            return
+            self._turn_usage = TokenUsage(input_tokens=0, cached_tokens=0, output_tokens=0)
         self._turn_usage.input_tokens += usage.input_tokens
         self._turn_usage.cached_tokens += usage.cached_tokens
         self._turn_usage.output_tokens += usage.output_tokens
+        self._turn_usage.requests.append(
+            RequestUsage(
+                input_tokens=usage.input_tokens,
+                cached_tokens=usage.cached_tokens,
+                output_tokens=usage.output_tokens,
+                tool_calls=list(tool_calls or []),
+            )
+        )
 
     def take_turn_usage(self) -> TokenUsage | None:
         """What the turn used, once: the next message must not repeat it."""
