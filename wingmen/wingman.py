@@ -79,6 +79,16 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def tool_names(tool_calls) -> list[str]:
+    """The names of the tools a model answer calls, in order."""
+    names = []
+    for call in tool_calls or []:
+        function = getattr(call, "function", None)
+        name = getattr(function, "name", None)
+        if name:
+            names.append(name)
+    return names
+
 
 class Wingman:
     """Unified Wingman class.
@@ -599,7 +609,7 @@ class Wingman:
             completion, instant_command_executed is False
         )
 
-        self.metrics.add_call_usage(usage)
+        self.metrics.add_call_usage(usage, tool_names(tool_calls))
         turn_prompt_tokens = usage.input_tokens
         turn_completion_tokens = usage.output_tokens
 
@@ -672,7 +682,7 @@ class Wingman:
                 response_message, tool_calls, usage = await self._process_completion(
                     completion
                 )
-                self.metrics.add_call_usage(usage)
+                self.metrics.add_call_usage(usage, tool_names(tool_calls))
                 turn_prompt_tokens = usage.input_tokens
                 turn_completion_tokens += usage.output_tokens
 
