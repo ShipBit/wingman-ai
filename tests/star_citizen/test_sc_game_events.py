@@ -324,3 +324,86 @@ def test_the_next_reaction_sees_the_last_ones(reader, tmp_path):
     assert first_system == second_system  # The same every time, so it can be cached.
     angle = lambda text: text.split("This time: ")[1].splitlines()[0]
     assert angle(first_text) != angle(second_text)
+
+
+# ── what comes while the Wingman is busy, and what comes again ─────────────
+
+
+def _event(kind, **data):
+    return SimpleNamespace(type=kind, status="observed", data=data, environment="LIVE", catching_up=False)
+
+
+ARRIVAL = (
+    _event("armistice_zone", action="entered"),
+    _event("jurisdiction_change", jurisdiction="UEE"),
+    _event("location_arrived", location_name="Baijini Point"),
+)
+
+
+def _clocked(monkeypatch):
+    from skills.sc_game_events import main
+
+    clock = [1000.0]
+    monkeypatch.setattr(main, "_now", lambda: clock[0])
+    return clock
+
+
+def test_what_comes_while_the_wingman_speaks_goes_into_the_next_line(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+    wingman.audio.is_playing = True  # Still answering the pilot.
+
+    async def run():
+        skill = _skill(wingman, react_location=True, max_unanswered=0)
+        for event in ARRIVAL:  # An arrival logs all three within seconds.
+            skill._on_event(event)
+            clock[0] += 1
+        await asyncio.sleep(0.3)
+        assert wingman.said == []  # Never over the Wingman's voice.
+        wingman.audio.is_playing = False
+        await until(lambda: wingman.said)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    report = wingman.prompts[0][1]
+    assert "armistice" in report.lower() and "UEE" in report and "Baijini Point" in report
+
+
+def test_what_is_stale_by_then_is_dropped(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+    wingman.audio.is_playing = True
+
+    async def run():
+        skill = _skill(wingman, react_location=True, max_unanswered=0)
+        skill._on_event(ARRIVAL[2])
+        await asyncio.sleep(0.3)
+        clock[0] += 60  # The pilot talked for a minute.
+        await asyncio.sleep(0.4)
+        wingman.audio.is_playing = False
+        await asyncio.sleep(0.4)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert wingman.said == []
+
+
+def test_a_flickering_zone_is_said_once_and_does_not_use_up_the_limit(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+
+    async def run():
+        skill = _skill(wingman, max_unanswered=2)
+        skill._on_event(ARRIVAL[0])
+        await until(lambda: len(wingman.said) == 1)
+        for _ in range(3):  # The game logs it again and again.
+            clock[0] += 40
+            skill._on_event(ARRIVAL[0])
+            await asyncio.sleep(0.2)
+        assert len(wingman.said) == 1 and skill._unanswered == 1
+        skill._on_event(ARRIVAL[1])  # Something new is still said.
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+
+    asyncio.run(run())

@@ -48,6 +48,14 @@ PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 HUD_SKILL = "HUD"
 REACTION_CHARS = 300
 RECENT_LINES = 5
+FOLD_SECONDS = 15.0
+"""A report from while the Wingman was busy is still worth a word this long.
+Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
+REPEAT_SECONDS = 90.0
+"""The same report is not said again this soon: zones flicker in and out."""
+MAX_REPORTS = 4
+MAX_WAITING = 16
+_now = time.monotonic  # The skill's clock; tests replace it, never asyncio's.
 LINK_ANGLE = "Link it to where the pilot is or what the pilot is flying."
 # Each line gets one of these. Without it the persona finds one move (the same
 # joke, the same opening) and makes it on every event.
@@ -74,6 +82,9 @@ class ScGameEvents(Skill):
         """Reactions since the user last said something."""
         self._recent_lines: deque[str] = deque(maxlen=RECENT_LINES)
         self._angle = ""
+        self._waiting: list[tuple[float, str]] = []
+        """Reports not said yet, with the time they came."""
+        self._said_at: dict[str, float] = {}
 
     # --- settings, read fresh -------------------------------------------------
 
@@ -128,7 +139,7 @@ class ScGameEvents(Skill):
             # The policy remembers what it said; a new selection starts fresh.
             self._policy = NotificationPolicy(enabled_events=events)
             self._events = events
-        now = time.monotonic()
+        now = _now()
         self._policy.offer(
             {
                 "event_type": event.type,
@@ -141,21 +152,48 @@ class ScGameEvents(Skill):
             now=now,
             catching_up=event.catching_up,
         )
-        reports = [message["text"] for message in self._policy.flush(now=now)]
+        self._said_at = {r: t for r, t in self._said_at.items() if now - t < REPEAT_SECONDS}
+        reports = []
+        for message in self._policy.flush(now=now):
+            if message["text"] in self._said_at:
+                # Still flickering: stays quiet until it settles for a while.
+                self._said_at[message["text"]] = now
+            else:
+                reports.append(message["text"])
         if not reports:
             return
-        # One reaction at a time and never over the Wingman's voice. What
-        # happens meanwhile is not queued: by the time the Wingman is free it
-        # would be old news. The policy above already thins out bursts.
+        self._waiting = (self._waiting + [(now, r) for r in reports])[-MAX_WAITING:]
+        # One reaction at a time and never over the Wingman's voice. What comes
+        # meanwhile waits and goes into the next line while it is still fresh:
+        # an arrival logs zone, jurisdiction and place within seconds.
         if self._reaction and not self._reaction.done():
             return
-        if self.wingman.audio.is_playing:
-            return
-        limit = self._max_unanswered()
-        if limit and self._unanswered >= limit:
-            return
-        self._unanswered += 1
-        self._reaction = asyncio.create_task(self._react(reports[:3]))
+        self._reaction = asyncio.create_task(self._react_to_waiting())
+
+    def _take_fresh(self) -> list[str]:
+        now = _now()
+        fresh = [r for t, r in self._waiting if now - t < FOLD_SECONDS]
+        self._waiting.clear()
+        return list(dict.fromkeys(fresh))[:MAX_REPORTS]
+
+    async def _react_to_waiting(self) -> None:
+        while self._waiting:
+            while self.wingman.audio.is_playing and any(
+                _now() - t < FOLD_SECONDS for t, _ in self._waiting
+            ):
+                await asyncio.sleep(0.25)
+            reports = self._take_fresh()
+            if not reports:
+                return
+            limit = self._max_unanswered()
+            if limit and self._unanswered >= limit:
+                return
+            # Only what is said counts, and is not said again soon.
+            self._unanswered += 1
+            now = _now()
+            for report in reports:
+                self._said_at[report] = now
+            await self._react(reports)
 
     async def _react(self, reports: list[str]) -> None:
         try:
