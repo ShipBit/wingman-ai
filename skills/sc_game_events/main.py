@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Literal
 
 from api.interface import SettingsConfig, SkillConfig
 from services.skill_local_ai import SamplingPreset
+from services.token_utils import truncate_to_tokens
 from skills.sc_game_events.notifications import (
     _DETAIL_FIELDS,
     _TEMPLATES,
@@ -37,7 +38,8 @@ if TYPE_CHECKING:
 CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 HUD_SKILL = "HUD"
-BACKSTORY_CHARS = 1200
+# The cut the main conversation makes (services/context_builder.py).
+BACKSTORY_TOKENS = 2048
 REACTION_CHARS = 300
 RECENT_LINES = 5
 LINK_ANGLE = "Link it to where the pilot is or what the pilot is flying."
@@ -176,7 +178,9 @@ class ScGameEvents(Skill):
         self._angle = random.choice([a for a in ANGLES if a != self._angle])
         system = PROMPT_FILE.read_text(encoding="utf-8").format(
             name=self.wingman.name,
-            backstory=(self.wingman.config.prompts.backstory or "")[:BACKSTORY_CHARS],
+            backstory=truncate_to_tokens(
+                self.wingman.config.prompts.backstory or "", BACKSTORY_TOKENS
+            ),
             angle=self._angle,
             language=language,
         )
