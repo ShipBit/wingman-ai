@@ -112,8 +112,15 @@ class CommandExecutor:
             for command in self.config.commands:
                 for phrase in command.instant_activation or []:
                     key = tuple(words_of(phrase))
-                    if key:
-                        commands_by_phrase.setdefault(key, []).append(command)
+                    if not key:
+                        continue
+                    # "Lower landing gear" and "lower landing gear." are one
+                    # phrase, and a command copied into the list twice is one
+                    # command. Both used to fire it twice, and a toggle fired
+                    # twice ends where it started.
+                    listed = commands_by_phrase.setdefault(key, [])
+                    if all(other.name != command.name for other in listed):
+                        listed.append(command)
 
             # Compared word by word: the speech model adds punctuation and
             # capitals, and with voice activation the sentence opens with the

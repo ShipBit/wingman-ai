@@ -187,6 +187,11 @@ class ListenController:
         with self._lock:
             if self.held_source != source:
                 return False
+            if self._release_in is not None:
+                # A second key-up for a key already let go. Some hooks report
+                # it twice; it must neither restart the grace nor be reported
+                # as a second release.
+                return False
             self._release_in = max(1, int(round(RELEASE_GRACE_MS / FRAME_MS)))
             self._release_timer = threading.Timer(RELEASE_WATCHDOG_S, self._release_watchdog)
             self._release_timer.daemon = True

@@ -75,3 +75,15 @@ def test_two_commands_on_one_phrase_both_fire():
 def test_empty_phrase_never_matches_a_bare_name():
     executor, executed = executor_with([""], ["landing gear"])
     assert fired(executor, executed, "Computer.") == []
+
+
+def test_a_phrase_listed_twice_fires_its_command_once():
+    executor, executed = executor_with(["Lower landing gear", "lower landing gear."])
+    assert fired(executor, executed, "Lower Landing Gear.") == ["cmd0"]
+
+
+def test_a_command_listed_twice_fires_once():
+    executor, executed = executor_with(["landing gear"], ["landing gear"])
+    for command in executor.config.commands:
+        command.name = "LowerOrDeployLandingGear"
+    assert fired(executor, executed, "landing gear") == ["LowerOrDeployLandingGear"]
