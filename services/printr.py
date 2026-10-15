@@ -52,7 +52,12 @@ class StreamToLogger:
             )
 
     def flush(self):
-        self.stream.flush()
+        # The console may be gone (closed or detached on Windows): there is
+        # nothing left to flush to.
+        try:
+            self.stream.flush()
+        except (OSError, ValueError):
+            pass
 
     def isatty(self):
         return False
@@ -76,6 +81,8 @@ class Printr(WebSocketUser):
 
     _instance = None
     logger: logging.Logger
+    # The log file of this session; error reports attach its end.
+    log_file_path: str | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -87,10 +94,10 @@ class Printr(WebSocketUser):
             cls._instance.logger.propagate = False  # Prevent duplicate logging
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             # log file with timestamp
-            fh = RotatingFileHandler(
-                path.join(get_writable_dir("logs"), f"wingman-core.{timestamp}.log"),
-                encoding="utf-8",
+            cls.log_file_path = path.join(
+                get_writable_dir("logs"), f"wingman-core.{timestamp}.log"
             )
+            fh = RotatingFileHandler(cls.log_file_path, encoding="utf-8")
             fh.setLevel(logging.DEBUG)
             file_formatter = Formatter(
                 "%(asctime)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"

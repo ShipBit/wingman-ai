@@ -82,24 +82,6 @@ class ErrorReportingState(BaseModel):
     """None until the user has chosen. Core sends nothing before that."""
 
 
-class ChangelogEntry(BaseModel):
-    """One published changelog entry, proxied from the public Canny RSS feed."""
-
-    version: str
-    """Entry title — our changelog entries are titled with the release version."""
-    category: Optional[str] = None
-    """Canny entry type: new, improved or fixed."""
-    published_at: Optional[str] = None
-    """Publication date as ISO string (YYYY-MM-DD)."""
-    url: Optional[str] = None
-    """Link to the full entry on Canny."""
-    html: str
-    """Entry body as HTML, authored on Canny."""
-    unstable_only: bool = False
-    """True for entries titled with an "(unstable)" marker on Canny — dev-build
-    notes that clients only show to testers on the unstable update channel."""
-
-
 class WingmanInitializationError(BaseModel):
     wingman_name: str
     message: str
@@ -1773,6 +1755,19 @@ class BenchmarkResult(BaseModel):
 BenchmarkResult.model_rebuild()
 
 
+class RequestUsage(BaseModel):
+    """What one model request of a turn used, as the provider counted it."""
+
+    input_tokens: int
+    cached_tokens: int
+    output_tokens: int
+    tool_calls: list[str] = []
+    """The tools the model called in its answer to this request, in order.
+    Empty for the request that wrote the reply. It says what the request was
+    for: ``activate_capability`` loads a skill, which changes the tool list
+    and so starts the provider's prompt cache over."""
+
+
 class TokenUsage(BaseModel):
     """What one Wingman turn used, as the provider counted it.
 
@@ -1789,6 +1784,10 @@ class TokenUsage(BaseModel):
     0 when the provider does not report it."""
     output_tokens: int
     """Tokens the model wrote, summed over every request of the turn."""
+    requests: list[RequestUsage] = []
+    """Every request of the turn on its own, in order. The input of the last
+    one is how large the context is now; the sums above are what the turn
+    cost."""
 
 
 class AvatarPromptRequest(BaseModel):

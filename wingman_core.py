@@ -1,13 +1,11 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from email.utils import parsedate_to_datetime
 import os
 import platform
 import re
 import threading
 import time
 from typing import Optional
-from xml.etree import ElementTree
 import pygame
 from google.genai import types
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
@@ -47,7 +45,6 @@ from api.interface import (
     AvatarPromptRequest,
     AvatarVariant,
     BenchmarkResult,
-    ChangelogEntry,
     CommandJoystickConfig,
     Config,
     ConfigWithDirInfo,
@@ -182,7 +179,6 @@ class WingmanCore(WebSocketUser):
         self.is_client_logged_in: bool = False
         self.client_plan: str = "Free"
         self.client_account_name: str = ""
-        self._changelog_cache: Optional[tuple[float, list[ChangelogEntry]]] = None
 
         self.router = APIRouter()
         tags = ["core"]
@@ -191,13 +187,6 @@ class WingmanCore(WebSocketUser):
             path="/audio-devices",
             endpoint=self.get_audio_devices,
             response_model=list[AudioDevice],
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/changelog",
-            endpoint=self.get_changelog,
-            response_model=list[ChangelogEntry],
             tags=tags,
         )
         self.router.add_api_route(
@@ -3093,57 +3082,6 @@ class WingmanCore(WebSocketUser):
     def open_custom_skills_directory(self):
         show_in_file_manager(get_custom_skills_dir())
 
-    # GET /changelog
-    async def get_changelog(self) -> list[ChangelogEntry]:
-        """Proxy the public Canny changelog RSS feed (no API key required) so
-        clients can render entries inline without hitting CORS."""
-        now = time.time()
-        if self._changelog_cache and now - self._changelog_cache[0] < 1800:
-            return self._changelog_cache[1]
-        try:
-            response = requests.get(
-                url="https://wingman-ai.canny.io/api/changelog/feed.rss",
-                timeout=10,
-            )
-            response.raise_for_status()
-            root = ElementTree.fromstring(response.content)
-            entries: list[ChangelogEntry] = []
-            for item in root.iter("item"):
-                published_at = None
-                pub_date = item.findtext("pubDate")
-                if pub_date:
-                    try:
-                        published_at = (
-                            parsedate_to_datetime(pub_date).date().isoformat()
-                        )
-                    except (TypeError, ValueError):
-                        pass
-                # Entries titled with an "(unstable)" / "[unstable]" marker are
-                # dev-build notes meant only for testers on the unstable channel
-                title = item.findtext("title") or ""
-                version, marker_count = re.subn(
-                    r"\s*[\(\[]unstable[\)\]]", "", title, flags=re.IGNORECASE
-                )
-                entries.append(
-                    ChangelogEntry(
-                        version=version.strip(),
-                        category=item.findtext("category"),
-                        published_at=published_at,
-                        url=item.findtext("link"),
-                        html=item.findtext("description") or "",
-                        unstable_only=marker_count > 0,
-                    )
-                )
-            self._changelog_cache = (now, entries)
-            return entries
-        except Exception as e:
-            self.printr.print(
-                f"Could not load changelog: {str(e)}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            return []
-
     # GET /models/openrouter
     async def get_openrouter_models(self):
         try:
@@ -4468,6 +4406,9 @@ class WingmanCore(WebSocketUser):
 
     # PUT /memories/{entry_id}
     async def update_memory(self, entry_id: int, request: MemoryUpdateRequest):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4478,6 +4419,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{entry_id}
     def delete_memory(self, entry_id: int):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4488,6 +4432,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{wingman_name}/all
     def clear_memories(self, wingman_name: str):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         wingman = self.tower.get_wingman_by_name(wingman_name)
         if wingman and hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
             wingman.persistent_memory_service.clear_collection()
@@ -4500,7 +4447,8 @@ class WingmanCore(WebSocketUser):
         """Tidy a wingman's facts with one support-model pass: merge duplicates,
         drop moments that were stored as facts, keep the newer of two
         contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
         wingman.ensure_memory_initialized()
@@ -4537,7 +4485,8 @@ class WingmanCore(WebSocketUser):
 
         Returns the raw extraction result (facts + summary) without storing anything.
         """
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
 

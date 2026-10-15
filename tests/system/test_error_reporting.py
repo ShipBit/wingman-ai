@@ -21,17 +21,28 @@ class CaptureTransport(Transport):
     def __init__(self, options=None):
         super().__init__(options)
         self.events = []
+        self.attachments = []
 
     def capture_envelope(self, envelope):
         event = envelope.get_event()
         if event is not None:
             self.events.append(event)
+            self.attachments.append(
+                {
+                    item.headers.get("filename"): item.payload.get_bytes()
+                    for item in envelope.items
+                    if item.type == "attachment"
+                }
+            )
 
 
 @pytest.fixture
 def sentry(tmp_path, monkeypatch):
-    """Error reporting with its state file in tmp_path and a fake transport."""
+    """Error reporting with its state file in tmp_path and a fake transport.
+    The session log is a file in tmp_path that starts out missing."""
     monkeypatch.setattr(error_reporting, "get_users_dir", lambda: str(tmp_path))
+    Printr()
+    monkeypatch.setattr(Printr, "log_file_path", str(tmp_path / "session.log"))
     monkeypatch.setenv("WINGMAN_SENTRY", "1")
     transport = CaptureTransport()
     real_init = sentry_sdk.init
@@ -248,3 +259,306 @@ def test_channel_change_while_running(sentry):
     flush()
 
     assert sentry.events[0]["tags"]["channel"] == "stable"
+
+
+# ─── Noise that never reaches Sentry ──────────────────────────────────────────
+
+
+def openai_error(name: str, status_code: int, message: str = "error"):
+    """An exception that looks like one of the openai SDK, without a request."""
+
+    cls = type(name, (Exception,), {"__module__": "openai._exceptions"})
+    exc = cls(message)
+    exc.status_code = status_code
+    exc.message = message
+    return exc
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 404, 408, 409, 413, 429])
+def test_openai_errors_of_the_users_provider_are_dropped(sentry, status):
+    error_reporting.set_enabled(True)
+    log_error("Provider said no", openai_error("APIStatusError", status))
+    flush()
+
+    assert sentry.events == []
+
+
+def test_openai_unknown_model_is_dropped(sentry):
+    error_reporting.set_enabled(True)
+    log_error(
+        "Model missing",
+        openai_error("BadRequestError", 400, "The model `gpt-9` does not exist"),
+    )
+    log_error(
+        "Model missing",
+        openai_error("BadRequestError", 400, "Error code: 400 - model_not_found"),
+    )
+    flush()
+
+    assert sentry.events == []
+
+
+def test_other_openai_bad_requests_are_reported(sentry):
+    error_reporting.set_enabled(True)
+    log_error(
+        "Bad payload",
+        openai_error("BadRequestError", 400, "messages[3].content must be a string"),
+    )
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_same_status_outside_openai_is_reported(sentry):
+    class APIStatusError(Exception):
+        status_code = 404
+
+    error_reporting.set_enabled(True)
+    log_error("Our own 404", APIStatusError("missing"))
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_skill_and_context_errors_are_dropped(sentry):
+    from services.context_budget import ContextOverflowError
+    from wingmen.facade import FacadeError
+
+    error_reporting.set_enabled(True)
+    log_error("Skill wrote config", FacadeError("read-only"))
+    log_error("Too long", ContextOverflowError("window"))
+    flush()
+
+    assert sentry.events == []
+
+
+def raised_in(filename: str, exc: BaseException) -> BaseException:
+    """``exc`` with a traceback whose last frame is in ``filename``."""
+    code = compile("raise exc", filename, "exec")
+    try:
+        exec(code, {"exc": exc})
+    except BaseException as e:
+        return e
+    raise AssertionError("not raised")
+
+
+def windows_oserror(winerror: int) -> OSError:
+    exc = OSError(22, "The parameter is incorrect")
+    exc.winerror = winerror
+    return exc
+
+
+@pytest.mark.parametrize("winerror", [10022, 10054, 995])
+@pytest.mark.parametrize("module", ["proactor_events.py", "windows_events.py"])
+def test_windows_asyncio_oserrors_are_dropped(sentry, winerror, module):
+    error_reporting.set_enabled(True)
+    exc = raised_in(f"C:\\Python311\\Lib\\asyncio\\{module}", windows_oserror(winerror))
+    sentry_sdk.capture_exception(exc)
+    flush()
+
+    assert sentry.events == []
+
+
+def test_same_oserror_outside_asyncio_is_reported(sentry):
+    error_reporting.set_enabled(True)
+    sentry_sdk.capture_exception(raised_in("C:\\wingman\\services\\x.py", windows_oserror(10022)))
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_invalid_state_error_from_windows_event_loop_is_dropped(sentry):
+    import asyncio
+
+    error_reporting.set_enabled(True)
+    sentry_sdk.capture_exception(
+        raised_in("C:\\Python311\\Lib\\asyncio\\windows_events.py", asyncio.InvalidStateError("x"))
+    )
+    flush()
+
+    assert sentry.events == []
+
+
+def test_event_loop_handler_drops_windows_noise(sentry):
+    import asyncio
+
+    error_reporting.set_enabled(True)
+    loop = asyncio.new_event_loop()
+    try:
+        error_reporting.watch_event_loop(loop)
+        handler = loop.get_exception_handler()
+        noise = raised_in("/usr/lib/python3.11/asyncio/proactor_events.py", windows_oserror(10054))
+        handler(loop, {"message": "noise", "exception": noise})
+        handler(loop, {"message": "bug", "exception": raised_in("core.py", ValueError("bug"))})
+    finally:
+        loop.close()
+    flush()
+
+    assert [e["exception"]["values"][-1]["type"] for e in sentry.events] == ["ValueError"]
+
+
+# ─── Session log attachment ───────────────────────────────────────────────────
+
+
+def test_session_log_is_attached(sentry, tmp_path):
+    (tmp_path / "session.log").write_text("line one\nUSER: hello\n", encoding="utf-8")
+    error_reporting.set_enabled(True)
+    log_error("Failed", ValueError("boom"))
+    flush()
+
+    log = sentry.attachments[0][error_reporting.LOG_ATTACHMENT_NAME]
+    assert log.decode("utf-8") == "line one\nUSER: hello\n"
+
+
+def test_each_event_gets_the_log_as_it_is_then(sentry, tmp_path):
+    log_file = tmp_path / "session.log"
+    log_file.write_text("first\n", encoding="utf-8")
+    error_reporting.set_enabled(True)
+    log_error("a", ValueError("a"))
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write("second\n")
+    log_error("b", KeyError("b"))
+    flush()
+
+    logs = [a[error_reporting.LOG_ATTACHMENT_NAME].decode() for a in sentry.attachments]
+    assert logs == ["first\n", "first\nsecond\n"]
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_unhandled_exception_gets_the_log_too(sentry, tmp_path):
+    (tmp_path / "session.log").write_text("before the crash\n", encoding="utf-8")
+    error_reporting.set_enabled(True)
+
+    def crash():
+        raise RuntimeError("thread died")
+
+    thread = threading.Thread(target=crash)
+    thread.start()
+    thread.join()
+    flush()
+
+    assert sentry.attachments[0][error_reporting.LOG_ATTACHMENT_NAME] == b"before the crash\n"
+
+
+def test_long_log_is_cut_to_its_end_at_a_whole_line(sentry, tmp_path, monkeypatch):
+    monkeypatch.setattr(error_reporting, "LOG_TAIL_MAX_BYTES", 100)
+    lines = [f"line {i:04d} ü" for i in range(50)]
+    (tmp_path / "session.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    tail = error_reporting._read_log_tail(str(tmp_path / "session.log"), 100)
+
+    assert len(tail.encode("utf-8")) <= 100
+    assert tail.endswith("line 0049 ü\n")
+    assert tail.splitlines()[0] in lines
+    assert "\ufffd" not in tail
+
+
+def test_attached_log_is_scrubbed(sentry, tmp_path, monkeypatch):
+    from services.secret_keeper import SecretKeeper
+
+    keeper = SecretKeeper.__new__(SecretKeeper)
+    monkeypatch.setattr(SecretKeeper, "_instance", keeper)
+    monkeypatch.setattr(keeper, "secrets", {"custom": "my-own-secret-value"}, raising=False)
+    home = os.path.expanduser("~")
+    (tmp_path / "session.log").write_text(
+        f"key sk-proj-abcdefghijklmnopqrstuv\nvalue my-own-secret-value\n"
+        f"Bearer abcdefghijklmnop\nurl https://x.io/v1?key=AIzaSECRET\nfile {home}/config.yaml\n",
+        encoding="utf-8",
+    )
+    error_reporting.set_enabled(True)
+    log_error("Failed", ValueError("boom"))
+    flush()
+
+    log = sentry.attachments[0][error_reporting.LOG_ATTACHMENT_NAME].decode("utf-8")
+    assert "abcdefghijklmnopqrstuv" not in log
+    assert "my-own-secret-value" not in log
+    assert "abcdefghijklmnop" not in log
+    assert "AIzaSECRET" not in log
+    assert home not in log
+    assert "~/config.yaml" in log
+
+
+def test_missing_log_still_sends_the_event(sentry, tmp_path):
+    error_reporting.set_enabled(True)
+    log_error("Failed", ValueError("boom"))
+    flush()
+
+    assert len(sentry.events) == 1
+    assert sentry.attachments == [{}]
+
+
+def test_unreadable_log_still_sends_the_event(sentry, monkeypatch, tmp_path):
+    (tmp_path / "session.log").mkdir()
+    error_reporting.set_enabled(True)
+    log_error("Failed", ValueError("boom"))
+    flush()
+
+    assert len(sentry.events) == 1
+    assert sentry.attachments == [{}]
+
+
+def test_dropped_event_reads_no_log(sentry, monkeypatch):
+    reads = []
+    monkeypatch.setattr(error_reporting, "_read_log_tail", lambda *a: reads.append(a))
+    error_reporting.set_enabled(True)
+    log_error("Offline", ConnectionError("no route"))
+    flush()
+
+    assert reads == []
+
+
+# ─── User folders (WINGMAN-CORE-W) ────────────────────────────────────────────
+
+
+WINDOWS_TMP = r"C:\Users\larse\AppData\Roaming\ShipBit\WingmanAI\models\x.yaml.23608.tmp"
+
+
+def test_windows_user_folder_is_scrubbed_from_exception_and_log(sentry, tmp_path):
+    exc = PermissionError(13, "Permission denied", WINDOWS_TMP)
+    # str() puts the repr of the path in: 'C:\\Users\\larse\\...'
+    assert r"C:\\Users\\larse" in str(exc)
+    (tmp_path / "session.log").write_text(
+        f"Failed to load PocketTTS model: {exc}\nsaving {WINDOWS_TMP}\n", encoding="utf-8"
+    )
+    error_reporting.set_enabled(True)
+    log_error(f"Failed to load PocketTTS model: {exc}", exc)
+    flush()
+
+    raw = repr(sentry.events[0])
+    log = sentry.attachments[0][error_reporting.LOG_ATTACHMENT_NAME].decode("utf-8")
+    assert "larse" not in raw
+    assert "larse" not in log
+    value = sentry.events[0]["exception"]["values"][-1]["value"]
+    assert r"~\\AppData\\Roaming" in value
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        r"C:\Users\larse\AppData",
+        r"'C:\\Users\\larse\\AppData'",
+        r"C:\\\\Users\\\\larse\\\\AppData",
+        "c:/users/larse/AppData",
+        r"D:\Documents and Settings\larse\AppData",
+        r"C:\Users\Lars Erik\AppData",
+        "/home/larse/.cache",
+        "/Users/larse/Library",
+    ],
+)
+def test_user_folders_are_scrubbed_in_every_form(text):
+    scrubbed = error_reporting._scrub_text(text, [], [])
+    assert "lars" not in scrubbed.lower()
+    assert scrubbed.lstrip("'").startswith("~")
+
+
+def test_home_path_is_scrubbed_in_repr_form_and_any_case(monkeypatch):
+    monkeypatch.setattr(error_reporting.path, "expanduser", lambda _: r"E:\Profiles\larse")
+    homes = error_reporting._home_paths()
+
+    for text in [r"E:\Profiles\larse\x", r"E:\\Profiles\\larse\\x", r"e:\profiles\LARSE\x"]:
+        assert "larse" not in error_reporting._scrub_text(text, [], homes).lower()
+
+
+def test_urls_with_users_in_the_path_stay():
+    text = "https://api.example.com/Users/123"
+    assert error_reporting._scrub_text(text, [], []) == text

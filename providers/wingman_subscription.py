@@ -214,7 +214,13 @@ class WingmanSubscription:
                 message = ""
             if "too large" in message.lower() or is_context_overflow(message):
                 raise ContextOverflowError(message)
-            response.raise_for_status()
+            # A request Core built wrong is a bug and stays one.
+            if message in ("Body must be JSON.", "messages is required."):
+                response.raise_for_status()
+            # Anything else is the model turning this request down (an image
+            # it cannot read, a filter): the user is told why.
+            self.printr.toast_error(message or "The model rejected this request.")
+            return None
         else:
             response.raise_for_status()
 

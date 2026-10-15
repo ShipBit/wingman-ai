@@ -29,7 +29,6 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **AI providers** with different models:
   - OpenAI
   - Google (Gemini)
-  - Azure
   - Groq
   - Mistral Cloud
   - OpenRouter
@@ -56,10 +55,14 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
 - **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT)
 - **Command recording & execution** (keyboard & mouse)
-  - **AI-powered**: OpenAI decides when to execute commands based on user input. Users don't need to say exact phrases.
+  - **AI-powered**: The LLM decides when to execute commands based on user input. Users don't need to say exact phrases.
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
   - Optional: Predetermined responses
 - **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
+- **Persistent memory**: Wingmen remember facts about you across sessions, and you can ask them to forget them again
+- **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, or locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server
+- **HUD overlay** (Windows) that shows messages, panels, progress bars and timers on top of your game
+- **Star Citizen game log**: Wingman reads the game's log file and can react to missions, zones, injuries and trades
 - **Built-in Skills** - Internal Python modules that extend Wingman capabilities:
   - **File Manager**: Read, write, list, and search files
   - **Vision AI**: Screenshot analysis and visual understanding
@@ -77,6 +80,10 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **MSFS2020 Control**: Microsoft Flight Simulator 2020 integration
   - **ATS Telemetry**: American Truck Simulator data integration
   - **UEX Corp**: Star Citizen trading data (UEX Corp API)
+  - **Star Citizen Events**: Your Wingman reacts in character to what happens in Star Citizen (from the game log)
+  - **Star Citizen Accountant**: Tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
+  - **Voice Changer**: Changes the voice of your Wingman automatically
+  - **HUD Overlay** and **Microphone Status**: Show information and the live mic state on the HUD (Windows)
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers
   - Supports HTTP, STDIO, and SSE transports
@@ -85,10 +92,12 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
     - **Date & Time Utilities**: Time zone conversions and date calculations
     - **Perplexity AI Search**: AI-powered search (BYOK - bring your own API key)
     - **No Man's Sky Game Data**: Game information and wiki data
-    - **Starhead**: Star Citizen Game Data like ships, locations, and game mechanics
+    - **StarHead**: Star Citizen Game Data like ships, locations, and game mechanics
+    - **VerseTime**: Star Citizen time
+    - **Elite Dangerous**: Systems, stations and trade data
   - Developers can connect their own custom MCP servers (local or remote)
   - **Key difference**: Skills are built-in Python modules, MCP servers are external tools that can be developed in any language
-- **directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
+- **Directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
 - Wingman AI Core exposes a lot of its functionality via **REST services** (with an OpenAPI/Swagger spec) and can send and receive messages from clients, games etc. using **WebSockets**.
 - Sound Library to play mp3 or wav files in commands or Skills (similar to HCS Voice Packs for Voice Attack)
 - AI instant sound effects generation with Elevenlabs
@@ -107,7 +116,7 @@ The video that started it all:
 
 [![Early prototype on Wingman in Star Citizen](https://img.youtube.com/vi/hHy7OZQX_nQ/0.jpg)](https://www.youtube.com/watch?v=hHy7OZQX_nQ)
 
-Wingman AI is an external, universal tool that you can run alongside any game or program. As such, it does not currently interact directly with _Star Citizen_ or any other game, other than its ability to trigger system-wide keystrokes, which of course can have an effect on the game.
+Wingman AI is an external, universal tool that you can run alongside any game or program. It does not interact directly with _Star Citizen_ or any other game, other than its ability to trigger system-wide keystrokes, which of course can have an effect on the game. For _Star Citizen_, Wingman can also read the game's log file, so your Wingman knows about missions, zones and trades.
 However, if you find a way to interact with a game, either through an API or by reading the game's memory, you could - in theory - use it to directly trigger in-game actions or feed your models with live data. This is **not** the focus of Wingman AI, though.
 
 ## Who is this for?
@@ -120,15 +129,15 @@ If you're a developer, you can just clone the repository and start building your
 
 ### Gamers & other interested people
 
-If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. Since version 2, we offer an [easy-to-use client](https://www.wingman-ai.com) for Windows that you can use to configure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
+If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. We offer an [easy-to-use client](https://www.wingman-ai.com) for Windows, macOS and Linux that you can use to configure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
 
 ## Providers & cost
 
 Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we offer the Wingman Subscription: one account for chat models, speech recognition, speech output and image generation, with a monthly usage allowance instead of pay-per-use bills. Free gives you a taste, Pro has 10x the usage of Free, Ultra 30x. Pro and Ultra add Voice Activation and more voices; Ultra includes every voice. Invite a friend and you both get a Usage Reset when they subscribe.
 
-Check out the pricing and features here: [Wingman AI Pro](https://www.wingman-ai.com)
+Check out the pricing and features here: [Wingman Subscription](https://www.wingman-ai.com)
 
-Wingman AI also supports local providers that you have to setup on your own but can then use and connect with our client for free:
+Wingman AI also ships free local providers: Parakeet for speech recognition and PocketTTS for speech output run on your own machine. You can also connect your own local LLM (see below).
 
 ### Other providers
 
@@ -136,23 +145,17 @@ You can also use your own API key to use the following services:
 
 #### OpenAI
 
-Our Wingmen use OpenAI's APIs and they charge by usage. That means: You don't pay a flat subscription fee, but rather for each call you make to their APIs. You can find more information about the APIs and their [pricing](https://openai.com/pricing) on the [OpenAI website](https://beta.openai.com/docs/introduction). You will need to create your API key:
+OpenAI charges by usage. That means: You don't pay a flat subscription fee, but rather for each call you make to their APIs. You can find more information about their [pricing](https://platform.openai.com/docs/pricing) on the OpenAI website. You will need to create your API key:
 
-- Navigate to [openai.com](https://openai.com/) and click on "Try ChatGPT".
-- Choose "Sign-Up" and create an account.
-- (if you get an error, go back to [openai.com](https://openai.com/))
-- Click "Login".
-- Fill in your personal information and verify your phone number.
-- **Select API**. You don't need ChatGPT Plus to use Wingman AI.
-- (Go to "Settings > Limits" and set a low soft and hard "usage limit" for your API key. We recommend this to avoid unexpected costs. $5 is fine for now)
-- Go to "Billing" and add a payment method.
-- Select "API Key" from the menu on the left and create one. Copy it! If you forget it, you can always create a new one.
+- Navigate to [platform.openai.com](https://platform.openai.com/) and sign up or log in. You don't need ChatGPT Plus to use Wingman AI.
+- Go to "Billing" and add a payment method. We recommend setting a low usage limit to avoid unexpected costs.
+- Go to [API keys](https://platform.openai.com/api-keys) and create one. Copy it! If you forget it, you can always create a new one.
 
 #### ElevenLabs
 
 You don't have to use Elevenlabs as TTS provider, but their voices are great and you can generate instant sound effects with their API - fully integrated into Wingman AI. You can clone any voice with 3 minutes of clean audio, e.g. your friend, an actor or a recording of an NPC in your game.
 
-If you're interested in the service, please consider using our [referral link here](https://elevenlabs.io/pricing?from=partnerlewis2510). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
+If you're interested in the service, please consider using our [referral link here](https://try.elevenlabs.io/8hh1fha2h14r). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
 
 Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key. Enter that API key in Wingman AI when asked.
 
@@ -174,7 +177,7 @@ Microsoft Edge TTS is actually free and you don't need an API key to use it. How
 
 ### Are local LLMs replacing OpenAI supported?
 
-You can use any LLM offering an OpenAI-compatible API and connect it to Wingman AI Core easily.
+Yes. Use the "Local LLM" provider and connect any LLM offering an OpenAI-compatible API, for example a llama.cpp server, Ollama or LM Studio.
 
 ### Can I use a local TTS provider?
 
@@ -182,7 +185,7 @@ Yes! **PocketTTS** is bundled with Wingman AI and works out of the box as a loca
 
 If you want to offload TTS to a separate machine (e.g. a more powerful GPU server), you can use the [PocketTTS OpenAI Streaming Server](https://github.com/teddybear082/pocket-tts-openai_streaming_server) — a server wrapper that exposes PocketTTS via an OpenAI-compatible API. Connect to it in Wingman AI using the "OpenAI-compatible" TTS provider and point it at your server's address.
 
-XVASynth is also supported and installable via Steam.
+XVASynth (Windows only) is also supported and installable via Steam.
 
 ## Installing Wingman AI
 
@@ -197,9 +200,14 @@ If that doesn't work for some reason, try starting `Wingman AI Core.exe` manuall
 
 **If you're a developer**, you can also [run from source](#develop-with-wingman-ai). This way you can preview our latest changes on the `develop` branch and debug the code.
 
-### MacOS
+### macOS
 
-Wingman runs well on MacOS. While we don't offer a precompiled package for it, you can [run it from source](#develop-with-wingman-ai). Note that the TTS provider XVASynth is Windows-only and therefore not supported on MacOS.
+- Download the `.dmg` from [wingman-ai.com](https://www.wingman-ai.com) and move Wingman AI to your Applications folder.
+- It needs a Mac with Apple Silicon (M1 or newer) and macOS 14 (Sonoma) or newer.
+- On the first start, allow access to the microphone. For hotkeys and push-to-talk, also allow Accessibility in System Settings > Privacy & Security.
+- Not available on macOS: the HUD overlay, XVASynth and a few Windows-only skills.
+
+You can also [run it from source](#develop-with-wingman-ai).
 
 ### Linux
 
@@ -220,9 +228,9 @@ Our default Wingmen serve as examples and starting points for your own Wingmen, 
 
 ### Computer & ATC
 
-Our first two default Wingmen are using OpenAI's APIs. The basic process is as follows:
+Our default Wingmen for _Star Citizen_ are Computer and ATC. There is also Clippy in the "General" configuration. By default, they use the Wingman Subscription. The basic process is as follows:
 
-- Your speech is transcribed by the configured TTS provider.
+- Your speech is transcribed by the configured STT provider.
 - The transcript is then sent as text to the configured LLM, which responds with text and maybe function calls.
 - Wingman AI Core executes function calls which can be command executions or skill functions.
 - The response is then read out to you by the configured TTS provider.
@@ -230,17 +238,17 @@ Our first two default Wingmen are using OpenAI's APIs. The basic process is as f
 
 Talking to a Wingman is like chatting with ChatGPT but with your voice. And it can actually do everything that Python can do. This means that you can customize their behavior by giving them a backstory as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation.
 
-The magic happens when you configure _commands_ or key bindings. GPT will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `Request landing permission`).
+The magic happens when you configure _commands_ or key bindings. The LLM will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `Request landing permission`).
 
-After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead, Galactapedia and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
+After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
 
 ### StarHead
 
 ![StarHead](https://star-head.de/assets/images/logo/LOGO_@290.png)
 
-StarHead is where it gets really interesting. This Wingman is tailored to _Star Citizen_ and uses the [StarHead API](https://star-head.de) to enrich your gaming experience with external data. It is a showcase of how to build specialized Wingmen for specific use-cases and scenarios. Simply ask StarHead for the best trade route, and it will prompt you for your ship, location, and budget. It will then call the StarHead API and read the result back to you.
+StarHead is no longer a Wingman of its own. It is an MCP server that Computer and ATC use. It is tailored to _Star Citizen_ and uses the [StarHead API](https://star-head.de) to enrich your gaming experience with external data. Simply ask your Wingman for the best trade route, and it will ask you for your ship, location, and budget. It will then call the StarHead API and read the result back to you.
 
-Like all of our OpenAI Wingmen, it will remember the conversation history and you can ask follow-up questions. For example, you can ask what the starting point of the route, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
+Your Wingman remembers the conversation history and you can ask follow-up questions. For example, you can ask what the starting point of the route is, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
 
 StarHead is a community project that aims to provide a platform for _Star Citizen_ players to share their knowledge and experience. At the moment it is mainly focused on the trading aspect of _Star Citizen_. With a huge database of trade items, shop inventories and prices, it allows you to find the best trade routes and make the most profit. A large community of players is constantly working to keep the data up to date.
 
@@ -257,7 +265,13 @@ For updates and more information, visit the [StarHead website](https://star-head
 
 ## Can I configure Wingman AI Core without using your client?
 
-Yes, you can! You can edit all the configs in your `%APP_DATA%\ShipBit\WingmanAI\[version]` directory.
+Yes, you can! You can edit all the configs in the `configs` folder of your version directory:
+
+- Windows: `%APPDATA%\ShipBit\WingmanAI\[version]\configs`
+- macOS: `~/Library/Application Support/WingmanAI/[version]/configs`
+- Linux: `~/.local/share/WingmanAI/[version]/configs`
+
+`[version]` uses underscores, e.g. `3_2_9`.
 
 The YAML configs are very indentation-sensitive, so please be careful.
 
@@ -268,7 +282,7 @@ The YAML configs are very indentation-sensitive, so please be careful.
 Use these naming conventions to create different configurations for different games or scenarios:
 
 - any subdirectory in your config dir is a "configuration" or use case. Do not use special characters.
-  - `_[name]` (underscore): marks the default configuration that is launched on start, e.g. `_Star Citizen`.
+  - The configuration that is launched on start is stored in `context.yaml` as `default_config`.
 - Inside of a configuration directory, you can create different `wingmen` by adding `[name].yaml` files. Do not use special characters.
   - `.[name].yaml` (dot): marks the Wingman as "hidden" and skips it in the UI and on start, e.g. `.Computer.yaml`.
   - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`. The client's avatar studio paints one from the backstory in a style of your choice and keeps every variant in `generated_files/AvatarStudio/[wingman name]/`.
@@ -278,18 +292,16 @@ There are a couple of other files and directories in the config directory that y
 - `defaults.yaml` - contains the default settings for all Wingmen. This is merged with the settings of the individual Wingmen at runtime. Specific wingman settings always override the defaults. Once a wingman is saved using the client, it contains all the settings it needs to run and will no longer fallback to the defaults.
 - `settings.yaml` - contains user settings like the selected audio input and output devices
 - `secrets.yaml` - contains the API keys for different providers.
-- `mcp.template.yaml` - template for configuring MCP server connections
+- `mcp.yaml` - the MCP server connections
+- `context.yaml` - the default configuration and the template configurations and Wingmen you deleted, so they are not created again
 
 Access secrets in code by using `secret_keeper.py`. You can access everything else with `config_manager.py`.
 
 ## Does it support my language?
 
-Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
+Wingman has one language setting for speech recognition, answers and voice. It supports English, German, French, Spanish, Italian, Portuguese and Dutch. Pick it once in the settings, and Wingman sets up Parakeet, the answer language and the PocketTTS voices to match.
 
-Some STT providers need a simple configuration to specify a non-English language. Use might also have to find a voice that speaks the desired language.
-
-Then find the `backstory` setting for the Wingman you want to change and add a simple sentence to the `backstory` prompt: `Always answer in the language I'm using to talk to you.`
-or something like `Always answer in Portuguese.`
+For any other language, choose "Other" and name your language. Wingman then lets speech recognition detect the language, tells the AI to answer in it and uses a voice provider that has voices for it.
 
 The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
 
@@ -319,10 +331,10 @@ If you want to read some code first and understand how it all works, we recommen
 
 - `http://127.0.0.1:49111/docs` - The OpenAPI (ex: Swagger) spec
 - `wingman_core.py` - most of the public API endpoints that Wingman AI exposes
-- The config files in `%APP_DATA%\ShipBit\WingmanAI\[version]` to get an idea of what's configurable.
-- `Wingman.py` - the base class for all Wingmen
-- `OpenAIWingman.py` - derived from Wingman, using all the providers
-- `Tower.py` - the factory that creates Wingmen
+- The config files in your [config directory](#can-i-configure-wingman-ai-core-without-using-your-client) to get an idea of what's configurable.
+- `wingmen/wingman.py` - the base class for all Wingmen
+- `wingmen/open_ai_wingman.py` - derived from Wingman, using all the providers
+- `services/tower.py` - the factory that creates Wingmen
 
 If you're planning to develop a major feature or new integration, please contact us on [Discord](https://www.shipbit.de/discord) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
 
@@ -330,9 +342,9 @@ If you're planning to develop a major feature or new integration, please contact
 
 We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting pull requests. Key points:
 
-- Every PR must be linked to a GitHub issue and target the `develop` branch
+- PRs target the `develop` branch. Link an issue if there is one
 - PRs are squash-merged with linear history (rebase onto develop, no merge commits)
-- At least one approving review is required
+- At least one approving review is required, and the tests have to pass
 - Use the [Bug Report](https://github.com/ShipBit/wingman-ai/issues/new?template=bug_report.yml) or [Feature Request](https://github.com/ShipBit/wingman-ai/issues/new?template=feature_request.yml) templates when creating issues
 
 ## Acknowledgements
@@ -341,29 +353,56 @@ Thank you so much for your support. We really appreciate it!
 
 ### Open Source community
 
-Wingman makes use of other Open Source projects internally (without modifying them in any way).
-We would like to thank their creators for their great work and contributions to the Open Source community.
+Wingman makes use of other Open Source projects internally. We would like to thank their creators for their great work and contributions to the Open Source community.
+We use them without changes, except for [keyboard](https://github.com/boppreh/keyboard) and [mouse](https://github.com/boppreh/mouse), which ship as copies in this repository with our own fixes for macOS and Linux.
 
-- [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
-- [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2018 The Python Packaging Authority
-- [FastAPI](https://github.com/tiangolo/fastapi) - MIT, © 2018 Sebastián Ramírez
-- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023 NumPy Developers
+- [edge-tts](https://github.com/rany2/edge-tts) - LGPL-3.0
+- [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2023 lugia19
+- [FastAPI](https://github.com/fastapi/fastapi) - MIT, © 2018 Sebastián Ramírez
+- [google-genai](https://github.com/googleapis/python-genai) - Apache-2.0
+- [httpx](https://github.com/encode/httpx) - BSD 3, © 2019 Encode OSS Ltd.
+- [huggingface_hub](https://github.com/huggingface/huggingface_hub) - Apache-2.0
+- [hume](https://github.com/HumeAI/hume-python-sdk) - MIT, © Hume
+- [keyboard](https://github.com/boppreh/keyboard) - MIT, © 2016 BoppreH
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) - MIT, © 2023-2026 The ggml authors. Wingman downloads the official `llama-server` binaries to run the support model locally.
+- [mcp](https://github.com/modelcontextprotocol/python-sdk) - MIT, © 2024 Anthropic, PBC
+- [mouse](https://github.com/boppreh/mouse) - MIT, © 2016 BoppreH
+- [num2words](https://github.com/savoirfairelinux/num2words) - LGPL-2.1
+- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2025 NumPy Developers
+- [onnx-asr](https://github.com/istupakov/onnx-asr) - MIT, © 2025 Ilya Stupakov
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) - MIT, © Microsoft Corporation
 - [openai](https://github.com/openai/openai-python) - Apache-2.0
 - [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
 - [pedalboard](https://github.com/spotify/pedalboard) - GPL-3.0, © 2021-2023 Spotify AB
-- [pocket-tts](https://github.com/kyutai-labs/pocket-tts) - MIT
-- pocket-tts model weights - © Kyutai Labs, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), redistributed unmodified from [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Subject to Kyutai's acceptable-use terms: no voice cloning without explicit, lawful consent; no unlawful, harmful, deceptive or privacy-invasive use.
+- [Pillow](https://github.com/python-pillow/Pillow) - MIT-CMU, © 1997-2011 Secret Labs AB, © 1995-2011 Fredrik Lundh and contributors
 - [platformdirs](https://github.com/platformdirs/platformdirs) - MIT, © 2010-202x plaformdirs developers
+- [pocket-tts](https://github.com/kyutai-labs/pocket-tts) - MIT
 - [pydantic](https://github.com/pydantic/pydantic) - MIT, © 2017 to present Pydantic Services Inc. and individual contributors
+- [pygame](https://github.com/pygame/pygame) - LGPL-2.1
 - [pydirectinput-rgx](https://github.com/ReggX/pydirectinput_rgx) - MIT, © 2022 dev@reggx.eu, 2020 Ben Johnson
 - [pyinstaller](https://github.com/pyinstaller/pyinstaller) - extended GPL 2.0, © 2010-2023 PyInstaller Development Team
+- [PyTorch](https://github.com/pytorch/pytorch) and torchaudio - BSD 3, © 2016- Facebook, Inc and contributors
 - [PyYAML](https://github.com/yaml/pyyaml) - MIT, © 2017-2021 Ingy döt Net, 2006-2016 Kirill Simonov
+- [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) - MIT, © 2020-present Max Bachmann, © 2011 Adam Cohen
+- [regex](https://github.com/mrabarnett/mrab-regex) - Apache-2.0
+- [requests](https://github.com/psf/requests) - Apache-2.0
 - [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
+- [sentry-python](https://github.com/getsentry/sentry-python) - MIT, © 2018 Functional Software, Inc. dba Sentry
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
+- [tiktoken](https://github.com/openai/tiktoken) - MIT, © 2022 OpenAI, Shantanu Jain
 - [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-present, Encode OSS Ltd. All rights reserved.
-- [whispercpp](https://github.com/ggerganov/whisper.cpp) - MIT, © 2023-2024 The ggml authors
-- [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) - MIT, © 2023 SYSTRAN
+
+### AI models
+
+Wingman ships or downloads these models. We use them without changes.
+
+- [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) - © NVIDIA, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), in the ONNX conversion by Ilya Stupakov ([istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)). Local speech recognition.
+- pocket-tts model weights - © Kyutai Labs, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), redistributed unmodified from [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Subject to Kyutai's acceptable-use terms: no voice cloning without explicit, lawful consent; no unlawful, harmful, deceptive or privacy-invasive use.
+- [Silero VAD](https://github.com/snakers4/silero-vad) - MIT, © 2020-present Silero Team. Detects speech for voice activation.
+- [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) - by Qwen, Apache-2.0, as GGUF from [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF). Local support model.
+- [Gemma 4 E2B](https://huggingface.co/google/gemma-4-E2B-it) - © Google, Apache-2.0, as GGUF from [unsloth/gemma-4-E2B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF). Optional local support model.
+- [Nomic Embed Text v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) - © Nomic AI, Apache-2.0, as GGUF from [nomic-ai/nomic-embed-text-v1.5-GGUF](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF). Local embeddings for memory.
 
 ### Voice recordings
 
@@ -544,21 +583,4 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 - [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew), @teddybear082, @Thaendril and @Xul for outstanding moderation in Discord, constant feedback and valuable Core & Skill contributions
 - @lugia19 for developing and improving the amazing [elevenlabslib](https://github.com/lugia19/elevenlabslib).
 - [Knebel](https://www.youtube.com/@Knebel_DE) who helped us kickstart Wingman AI by showing it on stream and grants us access to the [StarHead API](https://star-head.de/) for Star Citizen.
-- @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api.html).
-
-#### Commanders (Patreons)
-
-To our greatest Patreon supporters we say: `o7` Commanders!
-
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
-- [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
-
-#### Premium Donators (Patreons)
-
-- [The Announcer](https://www.youtube.com/TheAnnouncerLive)
-- [Weyland](https://robertsspaceindustries.com/orgs/corp)
-- Morthius
-- [Grobi](https://www.twitch.tv/grobitalks)
-- Paradox
-- Gopalfreak aka Rockhound
-- [Averus](https://robertsspaceindustries.com/citizens/Averus)
+- @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api/documentation/).

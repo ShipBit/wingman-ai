@@ -6,6 +6,8 @@ through the HuggingFace cache, whose symlinks Windows 11 refuses to follow
 from some processes. Both stopped Pocket TTS on a fresh German install.
 """
 
+import os
+
 import pytest
 import yaml
 
@@ -75,3 +77,18 @@ def test_offline_after_the_update_the_tokenizer_comes_from_the_hf_cache(tmp_path
 
     tokenizer = next(u for u in prefetch_urls_for_model("german") if u.endswith("tokenizer.json"))
     assert r2._library_cache_path(tokenizer).read_text(encoding="utf-8") == "{}"
+
+
+def test_writing_the_config_again_leaves_no_temp_file(tmp_path):
+    """Two loads at once collided on one temp file per process ("Permission
+    denied" on Windows). Each write has its own now, and an unchanged config
+    is not written again."""
+    model_id = MODELS[0]
+    first = build_r2_config(model_id, str(tmp_path))
+    written_at = open(first).read(), os.stat(first).st_mtime_ns
+
+    second = build_r2_config(model_id, str(tmp_path))
+
+    assert second == first
+    assert (open(second).read(), os.stat(second).st_mtime_ns) == written_at
+    assert [p.name for p in (tmp_path / ".r2-configs").iterdir()] == [f"{model_id}.yaml"]

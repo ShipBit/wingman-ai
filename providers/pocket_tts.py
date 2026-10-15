@@ -137,6 +137,11 @@ BUILTIN_MODELS = [
 ]
 
 
+class VoiceNotFoundError(ValueError):
+    """The voice name is no built-in voice and no file in the custom voices
+    folder: a setting to fix, not a bug."""
+
+
 class PocketTTS:
     @staticmethod
     def normalize_remote_url(host: str, port: int) -> str:
@@ -230,6 +235,9 @@ class PocketTTS:
         self._async_gen_lock: Optional[asyncio.Lock] = None
         self._async_gen_lock_loop: Optional[asyncio.AbstractEventLoop] = None
         self._model_swap_lock = threading.Lock()
+        # The startup load, POST /pocket_tts/start and a settings reload may
+        # all call load_model() at once; they load one after the other.
+        self._load_lock = threading.Lock()
         # Serializes built-in voice embedding downloads so concurrent
         # get_voice_state calls for the same voice don't fetch it twice.
         self._builtin_voice_download_lock = threading.Lock()
@@ -347,6 +355,10 @@ class PocketTTS:
 
     def load_model(self):
         """Load the PocketTTS model using v2.0 API."""
+        with self._load_lock:
+            self._load_model()
+
+    def _load_model(self):
         self._loading = True
         try:
             model_id = self.model_id
@@ -1162,6 +1174,13 @@ class PocketTTS:
             self.voice_cache.move_to_end(resolved_key)
             return self.voice_cache[resolved_key]
 
+        # A name that resolved to no file would be opened as audio ("Error
+        # opening 'Zoe'").
+        if not os.path.exists(resolved_key):
+            raise VoiceNotFoundError(
+                f"Pocket TTS voice '{voice_id_or_path}' was not found in the custom voices folder."
+            )
+
         # v2's TTSModel is not thread-safe, and this method is called from
         # multiple threads (event loop for play_audio, executor for preload /
         # precompute). Serialize model access with the swap lock.
@@ -1283,6 +1302,7 @@ class PocketTTS:
         if not self.model:
             self.printr.toast_error("PocketTTS model not loaded.")
             return
+        voice_missing = None
         try:
             # We assume config.voice holds the voice ID or path
             voice_id = config.voice if config.voice else "alba"
@@ -1302,11 +1322,16 @@ class PocketTTS:
                         text, voice_state, sound_config, audio_player, wingman_name, voice_id
                     )
 
+        except VoiceNotFoundError as e:
+            voice_missing = str(e)
         except Exception as e:
             self.printr.toast_error(
                 f"PocketTTS Synthesis failed for {wingman_name}: {str(e)}"
             )
             self.printr.print(f"PocketTTS Generation failed: {e}", color=LogType.ERROR)
+        if voice_missing:
+            # Told outside the except: a missing voice is not reported as a bug.
+            self.printr.toast_error(f"{wingman_name}: {voice_missing}")
 
     async def _generate_and_play(
         self, text, voice_state, sound_config, audio_player, wingman_name, voice_id=None

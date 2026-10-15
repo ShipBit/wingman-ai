@@ -85,10 +85,10 @@ class QuickCommands(Skill):
 
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Hook to start learning process."""
-        if tool_calls:
-            self.wingman.run_in_thread(
-                self._process_messages, tool_calls, self.wingman.conversation.history()[-1]
-            )
+        # The history may be empty (just reset): nothing to learn from.
+        history = self.wingman.conversation.history()
+        if tool_calls and history:
+            self.wingman.run_in_thread(self._process_messages, tool_calls, history[-1])
 
     async def _process_messages(self, tool_calls, last_message) -> None:
         """Process messages to learn phrases and commands."""
