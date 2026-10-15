@@ -48,6 +48,7 @@ from services.markdown import cleanup_text
 from services.secret_keeper import SecretKeeper
 from services import speech_text
 from services.printr import Printr
+from services.user_activity import user_activity
 from services.websocket_user import WebSocketUser
 from services.audio_library import AudioLibrary
 from services.context_budget import (
@@ -526,6 +527,21 @@ class Wingman:
     # ──────────────────────────── The main processing loop ──────────────────────── #
 
     async def process(
+        self,
+        transcript: str,
+        images: list[tuple[str, str]] = None,
+        transcription_benchmark: BenchmarkResult | None = None,
+    ):
+        """Answer what the user said. While this runs the user counts as busy
+        (services/user_activity.py): nothing a wingman says on its own may
+        land between the question and the answer."""
+        user_activity.turn_started()
+        try:
+            await self._process(transcript, images, transcription_benchmark)
+        finally:
+            user_activity.turn_finished()
+
+    async def _process(
         self,
         transcript: str,
         images: list[tuple[str, str]] = None,

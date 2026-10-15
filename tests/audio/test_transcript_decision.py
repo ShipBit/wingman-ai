@@ -103,3 +103,38 @@ def test_talking_over_the_answer_keeps_only_the_users_words():
     words = _words("online und bereit für Ihre Befehle. Computer, öffne die Karte bitte.")
     assert not core._is_echo(words)
     assert core._without_echo(words) == ["computer", "öffne", "die", "karte", "bitte"]
+
+
+# --- the user's own words that the answer happens to contain ---
+
+THRUSTERS = (
+    "Landing thrusters deployed - assuming \"lineing\" meant landing, unless you've "
+    "invented a new kind of maneuvering. You're cleared to set her down whenever "
+    "the tower waves you in."
+)
+
+
+def test_single_shared_words_stay_with_the_user():
+    core = _core_with(THRUSTERS)
+    text = "Well I meant landing but you did exactly what I wanted, so that's fine."
+    words = _words(text)
+    assert core._without_echo(words) == words
+    assert not core._is_echo(words)
+
+
+def test_a_short_command_keeps_its_small_words():
+    core = _core_with("Armistice zone entered, Logan - try not to start a diplomatic incident.")
+    words = _words("Switch to Navigation mode.")
+    assert core._without_echo(words) == words
+
+
+def test_a_short_answer_heard_back_whole_is_an_echo():
+    core = _core_with("Copy that.")
+    assert core._is_echo(_words("copy that"))
+
+
+def test_the_users_words_keep_their_capitals_and_commas():
+    core = _core_with("Panel's on the glass. That's a proper day's work, Logan.")
+    text = "Panels on the glass. No, change the full spec max to the Yadar."
+    hits = core._echo_hits(_words(text))
+    assert core._text_without_echo(text, hits) == "Panels. No, change the full spec max to the Yadar"

@@ -130,6 +130,7 @@ from services.audio.vocabulary import apply_override, diff_override, list_preset
 from services.config_manager import ConfigManager
 from services import speech_text
 from services.printr import Printr
+from services.user_activity import user_activity
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
@@ -143,6 +144,10 @@ ECHO_RATIO = 0.6
 # Fewer words of the user's own than this, next to a mostly echoed sentence,
 # are misheard echo, not the user.
 MIN_OWN_WORDS = 3
+# Words the microphone picks up from the speakers come as a piece of the
+# wingman's sentence. A shorter run is the user using the same words:
+# "I meant landing" against an answer that said "meant landing" lost both.
+MIN_ECHO_RUN = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -1883,6 +1888,7 @@ class WingmanCore(WebSocketUser):
         """From the listen controller, on the audio consumer thread. `wingman` is
         the one whose key was held; None means voice activation, the text picks.
         `during_playback` says a wingman was speaking when this was said."""
+        user_activity.heard()
         self.transcription_worker.submit_utterance(
             utterance,
             on_text=lambda text, benchmark: self._on_transcript(
@@ -1922,7 +1928,8 @@ class WingmanCore(WebSocketUser):
         # With speakers the microphone hears the wingman, so what the user
         # said while it spoke arrives mixed with the wingman's own words.
         # Those are taken out first; the decisions below are about the rest.
-        own = self._without_echo(words) if during_playback else words
+        hits = self._echo_hits(words) if during_playback else [False] * len(words)
+        own = [w for w, hit in zip(words, hits) if not hit]
         if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
             # Over the wingman, a stop word anywhere in what the user said
             # is a stop; the rest of it was talking over an answer they did
@@ -1953,7 +1960,7 @@ class WingmanCore(WebSocketUser):
             )
             return
         if during_playback and len(own) < len(words):
-            stripped = " ".join(own)
+            stripped = self._text_without_echo(text, hits)
             self.printr.print(
                 f"Heard '{text}' over the wingman - taking '{stripped}'.",
                 server_only=True,
@@ -2019,27 +2026,73 @@ class WingmanCore(WebSocketUser):
         return any(word in on_its_own for word in words)
 
     def _echo_hits(self, words: list[str]) -> list[bool]:
-        """For each word, whether it is the wingman's own, said in this order.
+        """For each word, whether it is the wingman's own.
 
-        Counting them as a set drops sentences that only share vocabulary
-        with the answer: "is the gear on the target" against an answer about
-        the gear and the target. A user who repeats the wingman's own
-        sentence word for word is still taken for an echo - nothing in the
-        text tells those two apart.
+        A word counts only inside a run: at least MIN_ECHO_RUN words in a row
+        that the wingman said in a row, or the whole transcript when it is
+        that short. One misheard word inside a run does not break it. Single
+        words that also occur in the answer are the user's: people answer
+        with the words they just heard ("you meant landing").
+
+        A user who repeats the wingman's own sentence word for word is still
+        taken for an echo - nothing in the text tells those two apart.
         """
         spoken = _words(self.audio_player.speaking_text)
-        hits = []
-        at = 0
-        for word in words:
-            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
-            hits.append(found is not None)
-            if found is not None:
-                at = found + 1
+        hits = [False] * len(words)
+        i = 0
+        at = 0  # the echo moves forward through the answer
+        while i < len(words):
+            best_end, best_exact, best_next = i, 0, at
+            for j in range(at, len(spoken)):
+                if spoken[j] != words[i]:
+                    continue
+                k, m, exact = i, j, 0
+                while k < len(words) and m < len(spoken):
+                    if words[k] == spoken[m]:
+                        k, m, exact = k + 1, m + 1, exact + 1
+                    elif (
+                        k + 1 < len(words)
+                        and m + 1 < len(spoken)
+                        and words[k + 1] == spoken[m + 1]
+                    ):
+                        # One word misheard, the next one matches again.
+                        k, m = k + 2, m + 2
+                        exact += 1
+                    else:
+                        break
+                if exact > best_exact:
+                    best_end, best_exact, best_next = k, exact, m
+            whole = best_end - i == len(words) and best_exact >= min(2, len(words))
+            if best_exact >= MIN_ECHO_RUN or whole:
+                for k in range(i, best_end):
+                    hits[k] = True
+                i, at = best_end, best_next
+            else:
+                i += 1
         return hits
 
     def _without_echo(self, words: list[str]) -> list[str]:
         """The words that are not the wingman's: what the user said over it."""
         return [w for w, hit in zip(words, self._echo_hits(words)) if not hit]
+
+    @staticmethod
+    def _text_without_echo(text: str, hits: list[bool]) -> str:
+        """The transcript with the echoed words cut out, the user's own words
+        as they were written: capitals and punctuation stay, so "Yeah, I was
+        talking about" does not come out as "yeah was talking about"."""
+        matches = list(re.finditer(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower()))
+        out, last = [], 0
+        for match, hit in zip(matches, hits):
+            if hit:
+                out.append(text[last : match.start()])
+                last = match.end()
+        out.append(text[last:])
+        cleaned = "".join(out)
+        # What cutting leaves behind: doubled spaces, a comma with no word.
+        cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+        cleaned = re.sub(r"([,.;:!?])(?:\s*[,.;:!?])+", r"\1", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+        return cleaned.strip(" ,.;:-")
 
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With
@@ -2050,15 +2103,15 @@ class WingmanCore(WebSocketUser):
         foreign words do not make it the user. Several do, and the user's
         words are then taken without the wingman's.
         """
-        meaningful = [w for w in words if len(w) >= 3]
+        meaningful = [(w, hit) for w, hit in zip(words, self._echo_hits(words)) if len(w) >= 3]
         if not meaningful:
             # "hm", "ah": nothing to act on either way
             return True
-        hits = self._echo_hits(meaningful)
-        own = [w for w, hit in zip(meaningful, hits) if not hit]
+        own = [w for w, hit in meaningful if not hit]
         if not own:
             return True
-        return sum(hits) / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
+        echoed = len(meaningful) - len(own)
+        return echoed / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
 
     # GET /stt/vocabulary/presets
     async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
@@ -2280,6 +2333,7 @@ class WingmanCore(WebSocketUser):
         a held push-to-talk key or a wingman speaking must not flip it, and
         those are states of their own, so the state alone cannot say it.
         """
+        user_activity.set_holding(state == ListenState.HELD)
         self._run_on_main_loop(
             self._connection_manager.broadcast(
                 VoiceActivationMutedCommand(muted=self.listen_controller.user_muted)
