@@ -1,7 +1,9 @@
 import asyncio
 import os
 import json
+import re
 import zipfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
@@ -96,6 +98,91 @@ SUPPORTED_FILE_EXTENSIONS = [
     "yml",
     "yaml",
 ]
+# Files that run when opened or started. The model may only write them into
+# the default directory, so injected text cannot drop a script elsewhere.
+SCRIPT_EXTENSIONS = {"bat", "cmd", "ps1", "sh", "py", "js", "rb", "pl"}
+CORE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _real(path: str) -> str:
+    return os.path.normcase(os.path.realpath(os.path.expanduser(path)))
+
+
+def _is_inside(path: str, folder: str) -> bool:
+    path, folder = _real(path), _real(folder)
+    try:
+        return os.path.commonpath([path, folder]) == folder
+    except ValueError:  # different drives on Windows
+        return False
+
+
+def _secret_dirs() -> list[str]:
+    home = Path.home()
+    return [str(home / ".ssh"), str(home / ".aws"), str(home / ".gnupg")]
+
+
+def _protected_dirs(wingman_dir: str) -> list[str]:
+    """Folders the model must never write into: autostart, the system, the
+    user's keys and Wingman itself (configs, secrets, custom skills, code)."""
+    home = Path.home()
+    dirs = _secret_dirs() + [
+        str(home / ".config" / "autostart"),
+        str(home / ".config" / "systemd"),
+        str(home / "Library" / "LaunchAgents"),
+        "/Library/LaunchAgents",
+        "/Library/LaunchDaemons",
+        "/System",
+        "/etc",
+        "/usr",
+        "/bin",
+        "/sbin",
+        wingman_dir,
+        CORE_ROOT,
+    ]
+    for var in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)"):
+        if os.environ.get(var):
+            dirs.append(os.environ[var])
+    startup = os.path.join("Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+    for var in ("APPDATA", "ProgramData"):
+        if os.environ.get(var):
+            dirs.append(os.path.join(os.environ[var], startup))
+    return dirs
+
+
+def unsafe_name(name: str) -> bool:
+    """A file or folder name must stay in its directory: no absolute path,
+    no drive and no '..'. Subfolders like 'notes/today.txt' are fine."""
+    return (
+        os.path.isabs(name)
+        or bool(os.path.splitdrive(name)[0])
+        or name.startswith(("/", "\\"))
+        or ".." in re.split(r"[\\/]", name)
+    )
+
+
+def is_secret(path: str, wingman_dir: str) -> bool:
+    """Files that hold keys: .env files, Wingman's secrets.yaml, ~/.ssh and co."""
+    name = os.path.basename(path).lower()
+    if name == ".env" or name.endswith(".env"):
+        return True
+    if name == "secrets.yaml" and _is_inside(path, wingman_dir):
+        return True
+    return any(_is_inside(path, folder) for folder in _secret_dirs())
+
+
+def write_blocked(path: str, default_dir: str, wingman_dir: str) -> Optional[str]:
+    """Why the model may not write to `path`, or None if it may.
+
+    The default directory is always fine. Outside it, scripts are refused
+    and so are the protected folders."""
+    if _is_inside(path, default_dir):
+        return None
+    if path.split(".")[-1].lower() in SCRIPT_EXTENSIONS:
+        return f"Script files can only be saved in the default directory '{default_dir}'."
+    if any(_is_inside(path, folder) for folder in _protected_dirs(wingman_dir)):
+        if not _is_inside(path, os.path.join(wingman_dir, "generated_files")):
+            return f"Writing to '{path}' is not allowed, it is a protected system or Wingman folder."
+    return None
 
 
 class FileManager(Skill):
@@ -122,6 +209,15 @@ class FileManager(Skill):
         if not directory or directory.strip() == "":
             return self.get_default_directory()
         return directory
+
+    def _wingman_dir(self) -> str:
+        """Wingman's data folder: configs, secrets, custom skills, generated files."""
+        return os.path.dirname(os.path.dirname(self.get_generated_files_dir()))
+
+    def _directory(self, directory_path: Optional[str], default_dir: str) -> str:
+        if not directory_path or directory_path == ".":
+            return default_dir
+        return directory_path
 
     def _get_allow_overwrite_existing(self) -> bool:
         """Retrieve fresh allow_overwrite_existing setting at runtime."""
@@ -164,9 +260,7 @@ class FileManager(Skill):
             pdf_page_number_to_load: The page number of a pdf to load.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
         if not file_name or file_name == "":
             return "File name not provided."
@@ -175,7 +269,11 @@ class FileManager(Skill):
         if file_extension.lower() not in self.allowed_file_extensions:
             return f"Unsupported file extension: {file_extension}"
 
+        if unsafe_name(file_name):
+            return "The file name must not contain a path. Pass the folder as directory_path."
         file_path = os.path.join(directory_path, file_name)
+        if is_secret(file_path, self._wingman_dir()):
+            return f"'{file_path}' holds keys or passwords and cannot be loaded."
         try:
             if not os.path.isfile(file_path):
                 return f"File '{file_name}' not found in '{directory_path}'."
@@ -218,12 +316,12 @@ class FileManager(Skill):
             add_to_existing_file: Whether to add to an existing file.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
         if not file_name or not text_content or file_name == "":
             return "File name or text content not provided."
+        if unsafe_name(file_name):
+            return "The file name must not contain a path. Pass the folder as directory_path."
 
         file_extension = file_name.split(".")[-1]
         if file_extension.lower() not in self.allowed_file_extensions:
@@ -240,8 +338,11 @@ class FileManager(Skill):
             except json.JSONDecodeError as e:
                 return f"Invalid JSON content: {str(e)}"
 
-        os.makedirs(directory_path, exist_ok=True)
         file_path = os.path.join(directory_path, file_name)
+        blocked = write_blocked(file_path, default_dir, self._wingman_dir())
+        if blocked:
+            return blocked
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         # If file already exists, and user does not have overwrite option on, and LLM did not detect an intent to add to the existing file, stop
         if (
@@ -278,14 +379,17 @@ class FileManager(Skill):
             directory_path: The path of the directory. Defaults to configured directory.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
         if not folder_name or folder_name == "":
             return "Folder name not provided."
 
+        if unsafe_name(folder_name):
+            return "The folder name must not contain a path. Pass the parent folder as directory_path."
         full_path = os.path.join(directory_path, folder_name)
+        blocked = write_blocked(full_path, default_dir, self._wingman_dir())
+        if blocked:
+            return blocked
         try:
             os.makedirs(full_path, exist_ok=True)
             return f"Folder '{folder_name}' created at '{directory_path}'."
@@ -302,9 +406,7 @@ class FileManager(Skill):
             directory_path: The path of the directory. Defaults to configured directory.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
         if not folder_name or folder_name == "":
             return "Folder name not provided."
@@ -338,9 +440,7 @@ class FileManager(Skill):
             text_content: The content to read aloud.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
         # First check if there's text content, if so, just play that as the user just wants the AI to say something in its TTS voice
         if text_content:
@@ -352,7 +452,11 @@ class FileManager(Skill):
             if not file_name:
                 return "File name not provided."
             else:
+                if unsafe_name(file_name):
+                    return "The file name must not contain a path. Pass the folder as directory_path."
                 file_path = os.path.join(directory_path, file_name)
+                if is_secret(file_path, self._wingman_dir()):
+                    return f"'{file_path}' holds keys or passwords and cannot be read aloud."
                 if not os.path.isfile(file_path):
                     return f"File '{file_name}' not found in '{directory_path}'. To read text aloud, provide it as text_content."
                 else:
@@ -389,6 +493,8 @@ class FileManager(Skill):
         """
         if not os.path.isdir(folder_path):
             return f"Folder '{folder_path}' does not exist."
+        if is_secret(folder_path, self._wingman_dir()):
+            return f"'{folder_path}' holds keys or passwords and cannot be loaded."
         try:
             return await asyncio.to_thread(self._load_folder, folder_path)
         except Exception as e:
@@ -398,6 +504,8 @@ class FileManager(Skill):
         contents_of_files = ""
         loaded_count = 0
         unsupported_count = 0
+        secret_count = 0
+        wingman_dir = self._wingman_dir()
         unreadable = []
         too_large = []
         over_budget = []
@@ -408,6 +516,9 @@ class FileManager(Skill):
                 file_extension = file_path.split(".")[-1]
                 if file_extension.lower() not in self.allowed_file_extensions:
                     unsupported_count += 1
+                    continue
+                if is_secret(file_path, wingman_dir):
+                    secret_count += 1
                     continue
                 if loaded_count >= MAX_FOLDER_FILES:
                     over_budget.append(file_path)
@@ -431,6 +542,8 @@ class FileManager(Skill):
         notes = []
         if unsupported_count:
             notes.append(f"{unsupported_count} files with unsupported extensions")
+        if secret_count:
+            notes.append(f"{secret_count} files that hold keys or passwords")
         if unreadable:
             notes.append(f"unreadable: {', '.join(unreadable[:10])}")
         if too_large:
@@ -463,11 +576,14 @@ class FileManager(Skill):
             directory_path: The path of the directory where the zip file should be created.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
+        if unsafe_name(zip_file_name):
+            return "The zip file name must not contain a path. Pass the folder as directory_path."
         full_zip_path = os.path.join(directory_path, zip_file_name)
+        blocked = write_blocked(full_zip_path, default_dir, self._wingman_dir())
+        if blocked:
+            return blocked
         if os.path.exists(full_zip_path) and not self._get_allow_overwrite_existing():
             return f"Zip file '{full_zip_path}' already exists and overwrite is not allowed."
         try:
@@ -510,11 +626,14 @@ class FileManager(Skill):
             directory_path: The path of the directory where the zip file is located.
         """
         default_dir = self._get_default_directory()
-        directory_path = directory_path or default_dir
-        if directory_path == "" or directory_path == ".":
-            directory_path = default_dir
+        directory_path = self._directory(directory_path, default_dir)
 
+        if unsafe_name(zip_file_name):
+            return "The zip file name must not contain a path. Pass the folder as directory_path."
         full_zip_path = os.path.join(directory_path, zip_file_name)
+        blocked = write_blocked(full_zip_path, default_dir, self._wingman_dir())
+        if blocked:
+            return blocked
         try:
             if not isinstance(files_to_add, list):
                 files_to_add = [files_to_add]
@@ -548,8 +667,17 @@ class FileManager(Skill):
             zip_file_path: The absolute path of the zip file to extract.
             target_directory: The absolute path of the target directory.
         """
+        default_dir = self._get_default_directory()
+        wingman_dir = self._wingman_dir()
+        blocked = write_blocked(target_directory, default_dir, wingman_dir)
+        if blocked:
+            return blocked
         try:
             with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+                for name in zip_ref.namelist():
+                    blocked = write_blocked(os.path.join(target_directory, name), default_dir, wingman_dir)
+                    if blocked:
+                        return f"Extraction cancelled, '{name}' in the zip: {blocked}"
                 if not self._get_allow_overwrite_existing():
                     existing = [
                         name
