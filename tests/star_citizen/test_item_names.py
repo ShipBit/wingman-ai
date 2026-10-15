@@ -21,22 +21,27 @@ DONE = (
 )
 
 
-@pytest.fixture
-def table(tmp_path, monkeypatch):
-    path = tmp_path / "item_names.json"
-    path.write_text(json.dumps({
+def _table_json(revision=1, **names):
+    return json.dumps({
+        "format_version": 1,
+        "revision": revision,
         "by_guid": {"aaaa-1111": "Chicken Burrito"},
-        "by_class": {
+        "by_class": names or {
             "food_burrito_01_beef_a": "Beef Burrito",
             "sasu_carryable_case": "Medical Case",
             "cds_armor_core_01": "ADP Core",
             "shld_behr_s03_7ca": "7CA 'Nargun'",
         },
-    }))
+    })
+
+
+@pytest.fixture
+def table(tmp_path, monkeypatch):
+    path = tmp_path / "item_names.json"
+    path.write_text(_table_json())
     monkeypatch.setattr(item_names, "TABLE", path)
-    item_names._table.cache_clear()
-    yield
-    item_names._table.cache_clear()
+    monkeypatch.setattr(item_names, "_current", None)
+    yield path
 
 
 def test_the_guid_comes_first_then_the_class_name(table):
@@ -61,9 +66,54 @@ def test_an_unknown_item_gets_a_tidied_class_name_not_the_code(table):
 
 def test_without_a_table_the_names_are_tidied(tmp_path, monkeypatch):
     monkeypatch.setattr(item_names, "TABLE", tmp_path / "missing.json")
-    item_names._table.cache_clear()
+    monkeypatch.setattr(item_names, "_current", None)
     assert item_names.display_name("aaaa-1111", "food_burrito_01_a") == "Food Burrito 01 A"
-    item_names._table.cache_clear()
+    assert item_names.display_name(None, "SHLD_BEHR_S03_8CA_SCItem") == "SHLD BEHR S03 8CA"
+
+
+# ── staying current: the table is downloaded like the rules ──────────────
+
+
+def _source(tmp_path, answer):
+    source = item_names.ItemNamesSource(str(tmp_path / "cache"))
+
+    async def fetch():
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    source._fetch = fetch
+    return source
+
+
+def test_a_newer_table_from_github_replaces_the_running_one(table, tmp_path):
+    source = _source(tmp_path, (200, _table_json(2, shld_behr_s03_8ca="8CA 'Prowler'").encode(), '"e1"'))
+    assert item_names.lookup(None, "SHLD_BEHR_S03_8CA_SCItem") is None
+    assert asyncio.run(source.check()) is True
+    assert item_names.lookup(None, "SHLD_BEHR_S03_8CA_SCItem") == "8CA 'Prowler'"
+    # It is cached: the next start uses it rather than the older bundled table.
+    item_names.ItemNamesSource(str(tmp_path / "cache"))
+    assert item_names._active().revision == 2
+
+
+def test_an_older_broken_or_missing_table_changes_nothing(table, tmp_path):
+    for answer in (
+        (200, _table_json(1, x="Old").encode(), None),  # Not newer than the bundled one.
+        (200, b'{"format_version": 2}', None),
+        (200, b"<html>not json", None),
+        (404, b"", None),
+        OSError("offline"),
+    ):
+        assert asyncio.run(_source(tmp_path, answer).check()) is False
+        assert item_names.lookup(None, "SHLD_BEHR_S03_7CA_SCItem") == "7CA 'Nargun'"
+
+
+def test_suffixes_to_strip_come_with_the_table(table, tmp_path):
+    table.write_text(json.dumps({
+        "format_version": 1, "strip_suffixes": ["_NewSuffix"], "by_class": {"radr_chco_s00": "Radar"},
+    }))
+    item_names.ItemNamesSource(str(tmp_path / "cache"))
+    assert item_names.lookup(None, "RADR_CHCO_S00_NewSuffix") == "Radar"
 
 
 def test_a_confirmed_purchase_carries_the_name(reader, tmp_path, table):

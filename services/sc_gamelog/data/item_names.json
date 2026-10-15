@@ -1,10 +1,14 @@
 {
 "format_version":1,
+"revision":1,
 "game_build":"12913470",
 "generated":"2026-10-13",
 "sources":[
 "english/global.ini",
 "sc-bridge item records"
+],
+"strip_suffixes":[
+"_SCItem"
 ],
 "by_guid":{
 "00d16520-df84-4d78-9549-9f2056a2d5b2":"C1 Spirit 2954 Ship Showdown Poster",
