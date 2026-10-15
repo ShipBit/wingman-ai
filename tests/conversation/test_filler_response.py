@@ -107,7 +107,7 @@ def test_the_line_is_spoken_while_the_turn_runs():
     responder, _, spoken = _responder()
     line = _start(responder)
     _wait_until(lambda: line.finished)  # the turn is still running
-    assert FillerResponder.stop(line) is True
+    assert responder.stop(line) is True
     assert spoken == ["Moment, ich schau nach."]
 
 
@@ -120,13 +120,13 @@ def test_it_does_not_need_the_turns_event_loop():
     # This thread stands in for the turn's loop, blocked by a synchronous call.
     _wait_until(lambda: spoken)
     assert spoken == ["Moment, ich schau nach."]
-    assert FillerResponder.stop(line) is True
+    assert responder.stop(line) is True
 
 
 def test_a_fast_turn_drops_the_line_and_costs_no_call(monkeypatch):
     responder, local_ai, spoken = _responder(delay=1.0, monkeypatch=monkeypatch)
     line = _start(responder, immediate=False)
-    assert FillerResponder.stop(line) is False  # the answer is ready at once
+    assert responder.stop(line) is False  # the answer is ready at once
     time.sleep(0.05)
     assert spoken == []
     local_ai.support.assert_not_called()
@@ -137,7 +137,7 @@ def test_a_line_that_comes_after_the_answer_is_not_spoken():
     gate = threading.Event()
     local_ai.support.side_effect = lambda *a, **k: (gate.wait(), SimpleNamespace(text="Bin dran."))[1]
     line = _start(responder)
-    assert FillerResponder.stop(line) is False
+    assert responder.stop(line) is False
     gate.set()
     _wait_until(lambda: line.finished)
     assert spoken == []
@@ -147,7 +147,7 @@ def test_a_dropped_answer_is_not_spoken():
     responder, _, spoken = _responder(text="Soll ich nachsehen?")
     line = _start(responder)
     _wait_until(lambda: line.finished)
-    assert FillerResponder.stop(line) is False
+    assert responder.stop(line) is False
     assert spoken == []
 
 
@@ -156,12 +156,12 @@ def test_a_failing_support_call_is_silent():
     local_ai.support.side_effect = RuntimeError("support model down")
     line = _start(responder)
     _wait_until(lambda: line.finished)
-    assert FillerResponder.stop(line) is False
+    assert responder.stop(line) is False
     assert spoken == []
 
 
 def test_stop_without_a_line():
-    assert FillerResponder.stop(None) is False
+    assert _responder()[0].stop(None) is False
 
 
 def test_stop_waits_for_a_line_being_handed_out():
@@ -179,7 +179,7 @@ def test_stop_waits_for_a_line_being_handed_out():
     line = _start(responder)
     assert entered.wait(1)
     result = {}
-    stopper = threading.Thread(target=lambda: result.update(spoken=FillerResponder.stop(line)))
+    stopper = threading.Thread(target=lambda: result.update(spoken=responder.stop(line)))
     stopper.start()
     time.sleep(0.05)
     assert stopper.is_alive()
@@ -187,3 +187,43 @@ def test_stop_waits_for_a_line_being_handed_out():
     stopper.join(1)
     assert result["spoken"] is True
     assert spoken == ["Moment, ich schau nach."]
+
+
+
+def test_semicolon_cuts_off_the_second_clause():
+    assert clean_filler("Updating panels; Yadar spec only.", "x") == "Updating panels"
+
+
+def _turn(responder, rest_s, tool="execute_command"):
+    """One turn with this tool whose answer is ready after rest_s."""
+    line = responder.start(
+        request="Turn off engines", tool_names=[tool], immediate=False, name="KAT", backstory=""
+    )
+    time.sleep(rest_s)
+    responder.stop(line)
+    if line and not line.skipped:
+        _wait_until(lambda: line.finished)
+    return line
+
+
+def test_a_tool_whose_answer_always_beats_the_line_gets_none(monkeypatch):
+    """A keypress is followed by one short model call; the line was ready after
+    the answer in 8 of 9 such turns of a real session."""
+    responder, local_ai, _ = _responder(delay=0.0, monkeypatch=monkeypatch)
+    monkeypatch.setattr(filler_response, "SPEAK_MARGIN_S", 0.0)
+    slow = lambda *a, **k: (time.sleep(0.2), SimpleNamespace(text="Bin dran."))[1]
+    local_ai.support.side_effect = slow
+    for _ in range(2):
+        assert not _turn(responder, 0.01).skipped
+    calls = local_ai.support.call_count
+    assert _turn(responder, 0.01).skipped
+    assert local_ai.support.call_count == calls
+    # Another tool is not known yet and still gets its line.
+    assert not _turn(responder, 0.01, tool="uex_get_vehicle_information").skipped
+
+
+def test_a_slow_tool_keeps_its_line(monkeypatch):
+    responder, local_ai, _ = _responder(delay=0.0, monkeypatch=monkeypatch)
+    monkeypatch.setattr(filler_response, "SPEAK_MARGIN_S", 0.0)
+    for _ in range(3):
+        assert not _turn(responder, 0.1).skipped

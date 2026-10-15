@@ -61,6 +61,16 @@ MAX_WORDS = 7
 ready — it is never cut off, so every extra word delays the answer."""
 
 MAX_OUTPUT_TOKENS = 24
+
+LEARN_RATE = 0.3
+"""Weight of the newest turn in the running averages below."""
+
+MIN_SAMPLES = 2
+"""Turns seen before an average is trusted to skip the line."""
+
+SPEAK_MARGIN_S = 1.0
+"""How much earlier than the answer the line must be ready to be worth it.
+A line still playing when the answer is ready holds the answer back."""
 BACKSTORY_TOKENS = 300
 REQUEST_TOKENS = 200
 
@@ -116,7 +126,9 @@ def clean_filler(text: Optional[str], request: str) -> Optional[str]:
     lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
     if not lines:
         return None
-    line = lines[0].strip().strip("\"'“”„«»").strip()
+    # "Updating panels; Yadar spec only." A second clause is a second line.
+    line = re.split(r"[;:]", lines[0])[0]
+    line = line.strip().strip("\"'“”„«»").strip()
     if not line or "<think" in line or "?" in line or "¿" in line:
         return None
     if len(line.split()) > MAX_WORDS:
@@ -127,13 +139,35 @@ def clean_filler(text: Optional[str], request: str) -> Optional[str]:
 
 
 class FillerLine:
-    """One turn's filler line, shared between its thread and the turn."""
+    """One turn's filler line, shared between its thread and the turn.
 
-    def __init__(self):
+    A skipped line has no thread; it only times the turn, so the responder
+    keeps learning how long the rest of a turn with these tools takes."""
+
+    def __init__(self, tools: tuple[str, ...] = (), skipped: bool = False):
         self.lock = threading.Lock()
         self.stopped = threading.Event()
         self.spoken = False
-        self.finished = False
+        self.finished = skipped
+        self.tools = tools
+        self.skipped = skipped
+        self.started_at = time.perf_counter()
+
+
+class _Average:
+    def __init__(self):
+        self.value = 0.0
+        self.samples = 0
+
+    def add(self, seconds: float) -> None:
+        self.value = seconds if not self.samples else (
+            LEARN_RATE * seconds + (1 - LEARN_RATE) * self.value
+        )
+        self.samples += 1
+
+    @property
+    def known(self) -> bool:
+        return self.samples >= MIN_SAMPLES
 
 
 class FillerResponder:
@@ -156,6 +190,24 @@ class FillerResponder:
         self._settings = settings
         self._get_local_ai = get_local_ai
         self._speak = speak
+        # How long the rest of a turn takes after the model called this tool,
+        # and how long the support model takes for the line. In one evening's
+        # log the line took 2.3 s and was ready after the answer in 13 of 22
+        # turns: a keypress or a HUD panel is followed by one short model call.
+        self._rest: dict[str, _Average] = {}
+        self._latency = _Average()
+        self._lock = threading.Lock()
+
+    def _too_late(self, tool_names: list[str]) -> Optional[float]:
+        """The expected rest of the turn when the line would come after the
+        answer, else None. None as well while a tool is not known yet."""
+        with self._lock:
+            rests = [self._rest.get(name) for name in tool_names]
+            if not self._latency.known or not all(r and r.known for r in rests):
+                return None
+            expected = max(r.value for r in rests)
+            ready = FILLER_DELAY_S + self._latency.value + SPEAK_MARGIN_S
+        return expected if expected < ready else None
 
     def start(
         self,
@@ -175,6 +227,15 @@ class FillerResponder:
         if not local_ai or not local_ai.is_ready():
             printr.print("Filler: skipped, the support model is not ready.", server_only=True)
             return None
+        if not immediate:
+            expected = self._too_late(tool_names)
+            if expected is not None:
+                printr.print(
+                    f"Filler: skipped for {tool_label(tool_names)!r}, the answer"
+                    f" usually comes {expected:.1f} s after it.",
+                    server_only=True,
+                )
+                return FillerLine(tuple(tool_names), skipped=True)
         spoken_language = self._settings.spoken_language
         other = self._settings.other_language
         system_prompt = build_system_prompt(name, backstory, tool_names, spoken_language, other)
@@ -184,7 +245,7 @@ class FillerResponder:
             f" ({'now' if immediate else f'after {FILLER_DELAY_S:g} s'}).",
             server_only=True,
         )
-        line = FillerLine()
+        line = FillerLine(tuple(tool_names))
         threading.Thread(
             target=self._run,
             args=(line, local_ai, system_prompt, user_message, request, immediate),
@@ -207,6 +268,7 @@ class FillerResponder:
             if not immediate and line.stopped.wait(FILLER_DELAY_S):
                 return  # the answer came first; no call made
             try:
+                call_started = time.perf_counter()
                 result = local_ai.support(
                     user_message,
                     system_prompt,
@@ -214,6 +276,8 @@ class FillerResponder:
                     reasoning=False,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
                 )
+                with self._lock:
+                    self._latency.add(time.perf_counter() - call_started)
             except Exception:
                 printr.print(
                     f"Filler: support call failed:\n{traceback.format_exc()}",
@@ -252,14 +316,19 @@ class FillerResponder:
         finally:
             line.finished = True
 
-    @staticmethod
-    def stop(line: Optional[FillerLine]) -> bool:
+    def stop(self, line: Optional[FillerLine]) -> bool:
         """The answer is ready: drop the line if it is not out yet. True if it was spoken.
 
         Waits for a line that is being handed out right now, so it reaches the
         client before the answer does.
         """
         if line is None:
+            return False
+        rest = time.perf_counter() - line.started_at
+        with self._lock:
+            for name in line.tools:
+                self._rest.setdefault(name, _Average()).add(rest)
+        if line.skipped:
             return False
         with line.lock:
             if not line.spoken and not line.finished:
