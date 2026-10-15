@@ -1542,7 +1542,9 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.summary` | The condenser's running summary (`str`). |
 | `await .add_user(content)` | Append a user turn. |
 | `await .add_assistant(content)` | Append an assistant turn. |
-| `await .show(text, *, skill_name="")` | Show a line in the chat as said by this Wingman. Display only: pair it with `tts.speak` and `add_assistant` as needed. |
+| `await .show(text, *, skill_name="")` | Show a line in the chat as said by this Wingman. Display only: pair it with `tts.speak` and `add_note` as needed. |
+| `await .add_note(content)` | Put context into the history that is neither the user nor the Wingman talking, for lines your skill said on its own. Call it from `on_add_user_message`. Lines added with `add_assistant` instead come back appended to the Wingman's next answers. |
+| `.user_busy` | `True` while the user holds a push-to-talk key, was just heard, or any wingman is answering. Check it before your skill speaks up on its own. |
 | `await .summarize()` | Summarize the live conversation via the **free local** model (`""` if unavailable). |
 | `await .reset()` | Reset the conversation history. |
 
