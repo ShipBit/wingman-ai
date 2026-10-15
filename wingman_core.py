@@ -1662,6 +1662,18 @@ class WingmanCore(WebSocketUser):
         # Warm the PocketTTS voice cache for all voices used in this config.
         await self._preload_pocket_tts_voices()
 
+        # The startup step for the embedding model runs before the user is
+        # signed in, so there are no wingmen yet to say memory is on, and it
+        # never downloaded anything. A fresh install then had memory that
+        # announced "Memory stored" and kept nothing. Here the wingmen exist.
+        if (
+            self.settings_service.settings.llama_cpp.mode != LocalAiMode.SERVER
+            and not self.local_model_manager.embed_model_available()
+        ):
+            await self._ensure_embed_model()
+            if self.local_model_manager.embed_model_available():
+                await self.local_ai_service.initialize()
+
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
 

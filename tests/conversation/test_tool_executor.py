@@ -348,3 +348,50 @@ def test_one_broken_call_does_not_stop_the_calls_after_it():
     )
 
     assert updated == [("bad", "Error"), ("good", "ok")]
+
+
+# ── memory ──
+
+
+class FakeMemory:
+    def __init__(self, stored_id):
+        self.stored_id = stored_id
+
+    async def add_memory(self, entry_type, content):
+        return self.stored_id
+
+
+def test_remember_says_stored_only_when_it_was():
+    response, *_ = dispatch(
+        "memory_remember", {"text": "Logan flies a Centaurus."},
+        persistent_memory_service=FakeMemory(stored_id=7),
+    )
+    assert "remember" in response.lower()
+
+
+def test_remember_without_the_memory_model_says_nothing_was_kept():
+    """No embedding model: nothing is written, and the model must not tell the
+    user it was."""
+    response, *_ = dispatch(
+        "memory_remember", {"text": "Logan flies a Centaurus."},
+        persistent_memory_service=FakeMemory(stored_id=None),
+    )
+    assert "nothing was stored" in response
+
+
+def test_a_correction_removes_the_old_fact_first():
+    memory = FakeMemory(stored_id=8)
+    forgotten = []
+
+    async def forget_by_query(query):
+        forgotten.append(query)
+        return True
+
+    memory.forget_by_query = forget_by_query
+    dispatch(
+        "memory_remember",
+        {"text": "The radar was replaced, the power plants were not.",
+         "replaces": "power plant replaced"},
+        persistent_memory_service=memory,
+    )
+    assert forgotten == ["power plant replaced"]

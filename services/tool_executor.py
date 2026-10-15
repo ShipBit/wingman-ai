@@ -287,10 +287,32 @@ class ToolExecutor:
         ):
             if function_name == "memory_remember":
                 text = function_args.get("text", "")
-                if text:
-                    await persistent_memory_service.add_memory(
-                        entry_type="fact", content=text
+                replaces = (function_args.get("replaces") or "").strip()
+                if text and replaces:
+                    # A correction: the old version goes first, otherwise both
+                    # stay and the wrong one keeps coming back.
+                    if await persistent_memory_service.forget_by_query(replaces):
+                        await printr.print_async(
+                            f"Memory replaced: {replaces}",
+                            color=LogType.MEMORY,
+                            source_name=self._wingman_name,
+                        )
+                if text and await persistent_memory_service.add_memory(
+                    entry_type="fact", content=text
+                ) is None:
+                    # Nothing was written: no embedding model, or it failed.
+                    # Saying "stored" here told the user a lie for a whole
+                    # session.
+                    function_response = (
+                        "Memory is not available right now, nothing was stored. "
+                        "Tell the user you cannot keep this for later."
                     )
+                    await printr.print_async(
+                        f"Memory not stored, the memory model is not ready: {text}",
+                        color=LogType.WARNING,
+                        source_name=self._wingman_name,
+                    )
+                elif text:
                     function_response = f'I\'ll remember that: "{text}"'
                     await printr.print_async(
                         f"Memory stored: {text}",

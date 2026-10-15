@@ -812,11 +812,15 @@ class PersistentMemoryService:
                 "type": "function",
                 "function": {
                     "name": "memory_remember",
-                    "description": "Store something about the user that should still hold next month: how they want to be addressed, which language to answer in, a standing instruction, what they own, who they play with, what they like or dislike, a goal. Use it right away when the user says such a thing; do not wait to be asked twice. Not for where they are, what they are doing right now, a status, or a mood.",
+                    "description": "Store something about the user that should still hold next month: how they want to be addressed, which language to answer in, a standing instruction, what they own, who they play with, what they like or dislike, a goal. Use it right away when the user says such a thing; do not wait to be asked twice. Not for where they are, where they are going, what they are doing or plan to do today, a status, or a mood.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "text": {"type": "string", "description": "The fact, one short sentence in third person."},
+                            "replaces": {
+                                "type": "string",
+                                "description": "Only when this corrects or updates something you remembered earlier: that earlier fact in a few words. It is removed, so the wrong version does not stay next to the right one.",
+                            },
                         },
                         "required": ["text"],
                     },
