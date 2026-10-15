@@ -230,3 +230,27 @@ def test_never_talks_over_the_wingman(reader, tmp_path):
 
     asyncio.run(run())
     assert wingman.said == []
+
+
+def test_the_next_reaction_sees_the_last_ones(reader, tmp_path):
+    """Without its last lines the model makes the same joke on every event."""
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman, max_unanswered=0)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        _burst(log, 1, minute=20)
+        await until(lambda: len(wingman.said) == 1)
+        _burst(log, 1, minute=30)
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    (first_system, first_text), (second_system, second_text) = wingman.prompts
+    assert "Your last lines" not in first_text
+    assert "Your last lines:\n- Armistice, keep your weapons cold." in second_text
+    assert first_system != second_system  # A different angle each time.
