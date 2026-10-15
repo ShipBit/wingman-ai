@@ -94,7 +94,6 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
     - **No Man's Sky Game Data**: Game information and wiki data
     - **StarHead**: Star Citizen Game Data like ships, locations, and game mechanics
     - **VerseTime**: Star Citizen time
-    - **Galactapedia**: Star Citizen lore from RSI's Galactapedia
     - **Elite Dangerous**: Systems, stations and trade data
   - Developers can connect their own custom MCP servers (local or remote)
   - **Key difference**: Skills are built-in Python modules, MCP servers are external tools that can be developed in any language
@@ -241,7 +240,7 @@ Talking to a Wingman is like chatting with ChatGPT but with your voice. And it c
 
 The magic happens when you configure _commands_ or key bindings. The LLM will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `Request landing permission`).
 
-After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead, Galactapedia and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
+After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
 
 ### StarHead
 
@@ -373,12 +372,14 @@ We use them without changes, except for [keyboard](https://github.com/boppreh/ke
 - [onnx-asr](https://github.com/istupakov/onnx-asr) - MIT, © 2025 Ilya Stupakov
 - [ONNX Runtime](https://github.com/microsoft/onnxruntime) - MIT, © Microsoft Corporation
 - [openai](https://github.com/openai/openai-python) - Apache-2.0
+- [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
 - [pedalboard](https://github.com/spotify/pedalboard) - GPL-3.0, © 2021-2023 Spotify AB
 - [Pillow](https://github.com/python-pillow/Pillow) - MIT-CMU, © 1997-2011 Secret Labs AB, © 1995-2011 Fredrik Lundh and contributors
 - [platformdirs](https://github.com/platformdirs/platformdirs) - MIT, © 2010-202x plaformdirs developers
 - [pocket-tts](https://github.com/kyutai-labs/pocket-tts) - MIT
 - [pydantic](https://github.com/pydantic/pydantic) - MIT, © 2017 to present Pydantic Services Inc. and individual contributors
 - [pygame](https://github.com/pygame/pygame) - LGPL-2.1
+- [pydirectinput-rgx](https://github.com/ReggX/pydirectinput_rgx) - MIT, © 2022 dev@reggx.eu, 2020 Ben Johnson
 - [pyinstaller](https://github.com/pyinstaller/pyinstaller) - extended GPL 2.0, © 2010-2023 PyInstaller Development Team
 - [PyTorch](https://github.com/pytorch/pytorch) and torchaudio - BSD 3, © 2016- Facebook, Inc and contributors
 - [PyYAML](https://github.com/yaml/pyyaml) - MIT, © 2017-2021 Ingy döt Net, 2006-2016 Kirill Simonov
@@ -583,20 +584,3 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 - @lugia19 for developing and improving the amazing [elevenlabslib](https://github.com/lugia19/elevenlabslib).
 - [Knebel](https://www.youtube.com/@Knebel_DE) who helped us kickstart Wingman AI by showing it on stream and grants us access to the [StarHead API](https://star-head.de/) for Star Citizen.
 - @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api/documentation/).
-
-#### Commanders (Patreons)
-
-To our greatest Patreon supporters we say: `o7` Commanders!
-
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
-- [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
-
-#### Premium Donators (Patreons)
-
-- [The Announcer](https://www.youtube.com/TheAnnouncerLive)
-- [Weyland](https://robertsspaceindustries.com/orgs/corp)
-- Morthius
-- [Grobi](https://www.twitch.tv/grobitalks)
-- Paradox
-- Gopalfreak aka Rockhound
-- [Averus](https://robertsspaceindustries.com/citizens/Averus)
