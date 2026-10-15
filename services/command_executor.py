@@ -253,7 +253,16 @@ class CommandExecutor:
             "type": "function",
             "function": {
                 "name": "execute_command",
-                "description": "Executes a command",
+                # Measured 2026-10-15 on sentences from a real session ("we are
+                # headed back to MicroTech", "throw it in the loadout"): with
+                # the system prompt's ACTIONS rules the default model fired a
+                # command on 0 of 27 such sentences instead of 3, gpt-4.1-mini
+                # on 9 instead of 13, and every real order still went through.
+                "description": (
+                    "Presses the keys of one of the commands below. Only when the user "
+                    "asks for this action now, never for a plan, a destination or "
+                    "something already done."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
