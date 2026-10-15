@@ -193,7 +193,9 @@ class ScGameEvents(Skill):
         parts.append("Game log report:\n" + "\n".join(f"- {report}" for report in reports))
         # Repeating the language right before the answer keeps a small model
         # from falling back to English (measured for the filler lines).
-        text = "\n\n".join(parts) + f"\n\nYour sentence, in {language}:"
+        # The angle once more right before the answer: a long backstory with its
+        # own "always end with a jab" rules outweighs it in the system prompt.
+        text = "\n\n".join(parts) + f"\n\nThis time: {self._angle}\nYour sentence, in {language}:"
         if self.wingman.local_ai.available:
             line = await self.wingman.local_ai.generate(
                 text, system=system, preset=SamplingPreset.CREATIVE
