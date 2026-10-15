@@ -175,3 +175,17 @@ def test_preset_overrides_are_a_diff_against_the_bundle():
 def test_spoken_english_shorthand_is_not_a_name():
     # "kinda" is one letter from the Star Citizen name "Kinga".
     assert Vocabulary(["Kinga"]).correct("It's like kinda green.") == "It's like kinda green."
+
+
+def test_ship_talk_is_not_a_place():
+    vocabulary = Vocabulary(["Yadar", "Hurston"])
+    assert vocabulary.correct("we replaced the radar") == "we replaced the radar"
+    assert vocabulary.correct("fly to Hurstin") == "fly to Hurston"
+
+
+def test_a_word_of_a_longer_name_is_not_pulled_to_a_near_one():
+    # A skill adds "Centauri" and "RSI Constellation Centaurus"; the ship's
+    # own name, said alone, used to become the other one.
+    vocabulary = Vocabulary(["Centauri", "RSI Constellation Centaurus"])
+    assert vocabulary.correct("the Centaurus is parked") == "the Centaurus is parked"
+    assert vocabulary.correct("jump to Centaury") == "jump to Centauri"

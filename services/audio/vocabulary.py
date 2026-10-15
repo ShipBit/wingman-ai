@@ -103,6 +103,20 @@ class Vocabulary:
             if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
                 self._mappings[_normalise(heard)] = correct
         self.entries = sorted(seen.values(), key=lambda e: -len(e.split()))
+        # Every long word of a name with more than one word: "Centaurus" from
+        # "Constellation Centaurus". Heard on its own it is already spelled
+        # right and must not be pulled to a near single-word name — once a
+        # skill adds hundreds of names, "Centaurus" turned into "Centauri".
+        self._name_words: set[str] = {
+            word
+            for entry in self.entries
+            if len(entry.split()) > 1
+            for word in _normalise(entry).split()
+            if len(word) >= MIN_FUZZY_LENGTH
+        }
+        self._exact: dict[str, str] = {
+            _normalise(e).replace(" ", ""): e for e in self.entries
+        }
         # (entry without spaces, word count, entry) for the space-insensitive comparison
         self._joined: list[tuple[str, int, str]] = [
             (_normalise(e).replace(" ", ""), len(e.split()), e)
@@ -131,6 +145,10 @@ class Vocabulary:
             # them into a name; the fuzzy rule stays away.
             return None
         joined = key.replace(" ", "")
+        if len(words) == 1 and joined in self._name_words:
+            # Part of a known name, spelled right: the casing of a matching
+            # entry if there is one, otherwise leave it.
+            return self._exact.get(joined)
         best: tuple[int, str | None] = (10**6, None)
         for normalised, entry_words, entry in self._joined:
             if joined == normalised:
