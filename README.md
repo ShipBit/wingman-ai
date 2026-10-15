@@ -155,7 +155,7 @@ OpenAI charges by usage. That means: You don't pay a flat subscription fee, but 
 
 You don't have to use Elevenlabs as TTS provider, but their voices are great and you can generate instant sound effects with their API - fully integrated into Wingman AI. You can clone any voice with 3 minutes of clean audio, e.g. your friend, an actor or a recording of an NPC in your game.
 
-If you're interested in the service, please consider using our [referral link here](https://elevenlabs.io/pricing?from=partnerlewis2510). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
+If you're interested in the service, please consider using our [referral link here](https://try.elevenlabs.io/8hh1fha2h14r). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
 
 Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key. Enter that API key in Wingman AI when asked.
 
