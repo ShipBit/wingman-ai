@@ -471,3 +471,26 @@ def strip_edge_breaks(text: str) -> str:
     engine.
     """
     return _EDGE_BREAK_RE.sub("", text)
+
+
+_SPEECH_TAG_RE = re.compile(r"<(?:break\b[^<>]*|/?verbatim|/?[a-z]+)\s*/?>", re.IGNORECASE)
+# [sigh], [laughs softly]: a stage direction, unless it is a Markdown link.
+_STAGE_DIRECTION_RE = re.compile(r"\[[^\[\]\n]{1,30}\](?!\()")
+
+
+def display_text(text: str) -> str:
+    """The reply as it is read, without what only the voice needs.
+
+    Models write speech markup into replies for the TTS provider: pauses
+    (<break time="400ms" />), spelled-out names (<verbatim>L3</verbatim>) and
+    stage directions ([sigh], or <sigh> when they get it wrong). The client
+    renders those; the HUD showed them as typed. Links stay.
+    """
+    if not text:
+        return text
+    text = _SPEECH_TAG_RE.sub("", text)
+    text = _STAGE_DIRECTION_RE.sub("", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r" +([,.!?])", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()

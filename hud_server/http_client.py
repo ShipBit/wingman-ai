@@ -44,6 +44,8 @@ For available property types and values, see:
 import asyncio
 import threading
 import httpx
+
+from services.markdown import display_text
 from typing import Optional, Any, Union
 from urllib.parse import quote
 from api.enums import LogType
@@ -400,7 +402,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "title": title,
-            "content": content
+            "content": display_text(content)
         }
         if color:
             data["color"] = _resolve_enum(color)
@@ -819,7 +821,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "sender": sender,
-            "text": text
+            "text": display_text(text)
         }
         if color:
             data["color"] = _resolve_enum(color)
@@ -838,7 +840,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "message_id": message_id,
-            "text": text
+            "text": display_text(text)
         }
         return await self._request("PUT", PATH_CHAT_MESSAGE, data)
 
