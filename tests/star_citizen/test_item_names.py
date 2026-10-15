@@ -30,6 +30,7 @@ def table(tmp_path, monkeypatch):
             "food_burrito_01_beef_a": "Beef Burrito",
             "sasu_carryable_case": "Medical Case",
             "cds_armor_core_01": "ADP Core",
+            "shld_behr_s03_7ca": "7CA 'Nargun'",
         },
     }))
     monkeypatch.setattr(item_names, "TABLE", path)
@@ -46,6 +47,10 @@ def test_the_guid_comes_first_then_the_class_name(table):
 def test_a_key_with_a_manufacturer_prefix_and_a_colour_variant(table):
     assert item_names.lookup(None, "Carryable_case") == "Medical Case"
     assert item_names.lookup(None, "cds_armor_core_01_01_12") == "ADP Core"
+
+
+def test_a_ship_component_sold_with_its_item_suffix(table):
+    assert item_names.lookup(None, "SHLD_BEHR_S03_7CA_SCItem") == "7CA 'Nargun'"
 
 
 def test_an_unknown_item_gets_a_tidied_class_name_not_the_code(table):

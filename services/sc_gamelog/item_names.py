@@ -45,7 +45,8 @@ def lookup(guid: Optional[str], class_name: Optional[str]) -> Optional[str]:
         return by_guid[guid.lower()][:_MAX_NAME]
     if not isinstance(class_name, str) or not class_name:
         return None
-    cls = class_name.lower()
+    # Ship components are sold under their class with "_SCItem" appended.
+    cls = class_name.lower().removesuffix("_scitem")
     if cls in by_class:
         return by_class[cls][:_MAX_NAME]
     if len(prefixed.get(cls, ())) == 1:
