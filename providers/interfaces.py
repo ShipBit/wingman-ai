@@ -44,8 +44,11 @@ class LlmInterface(ABC):
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
+        tool_choice: str = "auto",
     ) -> "ChatCompletion | None":
-        """Send messages to the LLM and get a completion."""
+        """Send messages to the LLM and get a completion. ``tool_choice="none"``
+        sends the tools but lets the model call none: the request starts like
+        every other one, so the provider's prompt cache still covers it."""
         ...
 
 

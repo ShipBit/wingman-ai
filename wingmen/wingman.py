@@ -779,7 +779,7 @@ class Wingman:
 
     # ───────────────── LLM call ───────────────── #
 
-    async def actual_llm_call(self, messages, tools: list[dict] = None):
+    async def actual_llm_call(self, messages, tools: list[dict] = None, tool_choice: str = "auto"):
         if not self.llm:
             await printr.print_async(
                 f"No LLM provider configured for wingman '{self.name}'.",
@@ -790,7 +790,9 @@ class Wingman:
             return None
 
         try:
-            completion = await self.llm.ask(messages=messages, tools=tools)
+            completion = await self.llm.ask(
+                messages=messages, tools=tools, tool_choice=tool_choice
+            )
         except ContextOverflowError:
             raise  # _llm_call learns the window and retries
         except APIConnectionError as e:
@@ -822,7 +824,11 @@ class Wingman:
         thiscall = time.time()
         self.last_gpt_call = thiscall
 
-        tools = self.build_tools() if allow_tool_calls else None
+        # Without tool calls the tools still go along, with tool_choice
+        # "none": they come first in the request, and leaving them out made
+        # every answer after an instant command a full cache miss.
+        tools = self.build_tools()
+        tool_choice = "auto" if allow_tool_calls else "none"
 
         if self.settings.debug_mode:
             await printr.print_async(
@@ -835,7 +841,7 @@ class Wingman:
         messages = await self._fit_request(messages, tools)
 
         try:
-            completion = await self.actual_llm_call(messages, tools)
+            completion = await self.actual_llm_call(messages, tools, tool_choice)
         except ContextOverflowError as error:
             # The provider says the window is smaller than we assumed. Learn it
             # from the request that did not fit, shorten, and try once more.
@@ -853,7 +859,7 @@ class Wingman:
             await self.add_context(messages)
             messages = await self._fit_request(messages, tools)
             try:
-                completion = await self.actual_llm_call(messages, tools)
+                completion = await self.actual_llm_call(messages, tools, tool_choice)
             except ContextOverflowError as again:
                 await printr.print_async(
                     f"The model refused the shortened request too: {again}",

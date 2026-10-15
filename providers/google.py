@@ -101,6 +101,7 @@ class GoogleGenAI:
         model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        tool_choice: str = "auto",
     ):
         try:
             reasoning_params = self.get_minimal_reasoning_by_model(model)
@@ -117,7 +118,7 @@ class GoogleGenAI:
                     messages=messages,
                     model=model,
                     tools=tools,
-                    tool_choice="auto",
+                    tool_choice=tool_choice,
                     **reasoning_params,
                 )
             return completion
@@ -155,8 +156,8 @@ class GoogleLlm(LlmInterface):
         self._google = google_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._google.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.google.conversation_model,
         )

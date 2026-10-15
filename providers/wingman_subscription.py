@@ -167,6 +167,7 @@ class WingmanSubscription:
         deployment: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        tool_choice: str = "auto",
     ):
         serialized_messages = []
         for message in messages:
@@ -190,6 +191,8 @@ class WingmanSubscription:
             "tools": tools,
             **reasoning_params,
         }
+        if tools:
+            data["tool_choice"] = tool_choice
         response = requests.post(
             url=f"{self.settings.base_url}/api/v1/chat/completions",
             headers=self._get_headers(),
@@ -596,9 +599,9 @@ class WingmanSubscriptionLlm(LlmInterface):
         self._ws = ws_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._ws.ask(
             messages=messages,
             deployment=self._config.wingman_pro.conversation_deployment,
-            tools=tools,
+            tools=tools, tool_choice=tool_choice,
         )
