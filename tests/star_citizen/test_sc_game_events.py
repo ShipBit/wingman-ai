@@ -253,4 +253,6 @@ def test_the_next_reaction_sees_the_last_ones(reader, tmp_path):
     (first_system, first_text), (second_system, second_text) = wingman.prompts
     assert "Your last lines" not in first_text
     assert "Your last lines:\n- Armistice, keep your weapons cold." in second_text
-    assert first_system != second_system  # A different angle each time.
+    assert first_system == second_system  # The same every time, so it can be cached.
+    angle = lambda text: text.split("This time: ")[1].splitlines()[0]
+    assert angle(first_text) != angle(second_text)

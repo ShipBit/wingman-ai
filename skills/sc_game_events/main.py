@@ -177,7 +177,6 @@ class ScGameEvents(Skill):
             name=self.wingman.name,
             # Whole: the client already holds it to 2048 tokens.
             backstory=self.wingman.config.prompts.backstory or "",
-            angle=self._angle,
             language=language,
         )
         parts = []
@@ -193,8 +192,9 @@ class ScGameEvents(Skill):
         parts.append("Game log report:\n" + "\n".join(f"- {report}" for report in reports))
         # Repeating the language right before the answer keeps a small model
         # from falling back to English (measured for the filler lines).
-        # The angle once more right before the answer: a long backstory with its
-        # own "always end with a jab" rules outweighs it in the system prompt.
+        # The angle goes right before the answer, not into the system prompt: a
+        # long backstory with its own "always end with a jab" rules outweighs it
+        # there, and a system prompt that stays the same can be cached.
         text = "\n\n".join(parts) + f"\n\nThis time: {self._angle}\nYour sentence, in {language}:"
         if self.wingman.local_ai.available:
             line = await self.wingman.local_ai.generate(

@@ -9,7 +9,7 @@ Take only who you are and how you sound from the character. Its ALWAYS and NEVER
 Task:
 Something just happened to the pilot in Star Citizen. The game log reported it.
 React IN CHARACTER in ONE short sentence, the way you would over the ship's comms.
-This time: {angle}
+Take the angle given right before your sentence.
 
 Rules:
 - Use the EXACT names from the report and situation. Do NOT change or translate them.
