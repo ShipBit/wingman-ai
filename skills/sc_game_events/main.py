@@ -15,7 +15,9 @@ chat and the HUD, spoken and kept in the conversation.
 """
 
 import asyncio
+import random
 import time
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -35,8 +37,19 @@ if TYPE_CHECKING:
 CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 HUD_SKILL = "HUD"
-BACKSTORY_CHARS = 1200
 REACTION_CHARS = 300
+RECENT_LINES = 5
+LINK_ANGLE = "Link it to where the pilot is or what the pilot is flying."
+# Each line gets one of these. Without it the persona finds one move (the same
+# joke, the same opening) and makes it on every event.
+ANGLES = (
+    "Just report it, plainly, in your own words. No joke.",
+    "Give one short practical tip that fits this moment.",
+    "Say how you feel about it, in your own voice.",
+    LINK_ANGLE,
+    "Make a dry remark, if your character would.",
+    "Keep it very short, a few words over the comms.",
+)
 
 
 class ScGameEvents(Skill):
@@ -50,6 +63,8 @@ class ScGameEvents(Skill):
         self._reaction: asyncio.Task | None = None
         self._unanswered = 0
         """Reactions since the user last said something."""
+        self._recent_lines: deque[str] = deque(maxlen=RECENT_LINES)
+        self._angle = ""
 
     # --- settings, read fresh -------------------------------------------------
 
@@ -135,6 +150,7 @@ class ScGameEvents(Skill):
             line = await self._phrase(reports)
             if not line:
                 return
+            self._recent_lines.append(line)
             await self.wingman.conversation.show(
                 line, skill_name=self.config.display_name
             )
@@ -156,18 +172,30 @@ class ScGameEvents(Skill):
 
     async def _phrase(self, reports: list[str]) -> str:
         language = self.wingman.language.name
+        self._angle = random.choice([a for a in ANGLES if a != self._angle])
         system = PROMPT_FILE.read_text(encoding="utf-8").format(
             name=self.wingman.name,
-            backstory=(self.wingman.config.prompts.backstory or "")[:BACKSTORY_CHARS],
+            # Whole: the client already holds it to 2048 tokens.
+            backstory=self.wingman.config.prompts.backstory or "",
             language=language,
         )
+        parts = []
+        # Only for this angle: given every time, the place and the ship end up
+        # in every line.
+        state = self.wingman.sc_gamelog.state() if self._angle == LINK_ANGLE else None
+        if state:
+            parts.append("Situation:\n" + self._situation(state))
+        if self._recent_lines:
+            parts.append(
+                "Your last lines:\n" + "\n".join(f"- {line}" for line in self._recent_lines)
+            )
+        parts.append("Game log report:\n" + "\n".join(f"- {report}" for report in reports))
         # Repeating the language right before the answer keeps a small model
         # from falling back to English (measured for the filler lines).
-        text = (
-            "Game log report:\n"
-            + "\n".join(f"- {report}" for report in reports)
-            + f"\n\nYour sentence, in {language}:"
-        )
+        # The angle goes right before the answer, not into the system prompt: a
+        # long backstory with its own "always end with a jab" rules outweighs it
+        # there, and a system prompt that stays the same can be cached.
+        text = "\n\n".join(parts) + f"\n\nThis time: {self._angle}\nYour sentence, in {language}:"
         if self.wingman.local_ai.available:
             line = await self.wingman.local_ai.generate(
                 text, system=system, preset=SamplingPreset.CREATIVE
@@ -175,6 +203,13 @@ class ScGameEvents(Skill):
         else:
             line = await self.wingman.ai.generate(text, system=system)
         return line.strip().strip('"').strip()[:REACTION_CHARS]
+
+    @classmethod
+    def _situation(cls, state: dict) -> str:
+        """The overview without the timestamp and the mission count: where the
+        pilot is, the ship, zones, injuries."""
+        lines = cls._overview(state).splitlines()[1:]
+        return "\n".join(line for line in lines if not line.startswith("Active missions"))
 
     # --- answering questions ------------------------------------------------------
 
