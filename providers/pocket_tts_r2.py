@@ -28,6 +28,7 @@ import hashlib
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -159,18 +160,37 @@ def build_r2_config(model_id: str, cache_dir: str) -> str:
     out_dir = Path(cache_dir) / ".r2-configs"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{model_id}.yaml"
-    # Atomic write: a settings-change reload (daemon thread) may race the initial
-    # deferred load; never let the library read a half-written config.
-    tmp_path = out_dir / f".{model_id}.yaml.{os.getpid()}.tmp"
     config = yaml.safe_load(rewrite_config_text(src.read_text(encoding="utf-8")))
     # pocket_tts opens the config without an encoding, so on Windows it is read
     # as cp1252. The German config has typographic quotes, which failed to load
     # ("'charmap' codec can't decode byte 0x9d"). Dumped as ASCII, every other
     # character is a YAML escape and reads the same in any encoding.
-    tmp_path.write_text(
-        yaml.safe_dump(config, allow_unicode=False, sort_keys=False), encoding="ascii"
-    )
-    os.replace(tmp_path, out_path)
+    text = yaml.safe_dump(config, allow_unicode=False, sort_keys=False)
+    try:
+        if out_path.read_text(encoding="ascii") == text:
+            return str(out_path)
+    except (OSError, UnicodeDecodeError):
+        pass
+    # Atomic write: a settings-change reload (daemon thread) may race the initial
+    # deferred load; never let the library read a half-written config. Each
+    # writer has its own temp file: with one per process two threads collided
+    # on it ("Permission denied" on Windows).
+    fd, tmp_name = tempfile.mkstemp(dir=out_dir, prefix=f".{model_id}.yaml.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="ascii") as f:
+            f.write(text)
+        # Windows refuses the replace while another thread reads the target.
+        for attempt in range(5):
+            try:
+                os.replace(tmp_name, out_path)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
+    finally:
+        if os.path.exists(tmp_name):
+            os.remove(tmp_name)
     return str(out_path)
 
 

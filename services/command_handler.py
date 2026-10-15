@@ -42,6 +42,9 @@ class CommandHandler:
         self.timeout_task = None
         self.recorded_keys = []
         self.keyboard_hook_callback = None
+        # Recording twice must not hook twice, a stop from the client after
+        # the click already stopped must not unhook twice.
+        self._mouse_hooked = False
         self.is_joystick_recording = False
 
     async def dispatch(self, message, websocket: WebSocket):
@@ -162,7 +165,9 @@ class CommandHandler:
         )
 
         self.recorded_keys = []
-        mouse.hook(self.on_mouse)
+        if not self._mouse_hooked:
+            mouse.hook(self.on_mouse)
+            self._mouse_hooked = True
 
     async def handle_record_joystick_actions(
         self, command: RecordJoystickActionsCommand, websocket: WebSocket
@@ -221,7 +226,7 @@ class CommandHandler:
                 # let capslock, numlock or scrolllock through, as it changes following keypresses
                 keyboard.direct_event(
                     event.scan_code,
-                    (0 if event.event_type == "down" else 2) + int(event.is_extended),
+                    (0 if event.event_type == "down" else 2) + int(bool(event.is_extended)),
                 )
 
             self.recorded_keys.append(event)
@@ -246,8 +251,9 @@ class CommandHandler:
         if command.recording_device == RecordingDevice.JOYSTICK:
             self.is_joystick_recording = False
             self.core.cancel_joystick_recording()
-        if command.recording_device == RecordingDevice.MOUSE:
+        if command.recording_device == RecordingDevice.MOUSE and self._mouse_hooked:
             mouse.unhook(self.on_mouse)
+            self._mouse_hooked = False
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:

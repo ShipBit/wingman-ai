@@ -4406,6 +4406,9 @@ class WingmanCore(WebSocketUser):
 
     # PUT /memories/{entry_id}
     async def update_memory(self, entry_id: int, request: MemoryUpdateRequest):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4416,6 +4419,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{entry_id}
     def delete_memory(self, entry_id: int):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4426,6 +4432,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{wingman_name}/all
     def clear_memories(self, wingman_name: str):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         wingman = self.tower.get_wingman_by_name(wingman_name)
         if wingman and hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
             wingman.persistent_memory_service.clear_collection()
@@ -4438,7 +4447,8 @@ class WingmanCore(WebSocketUser):
         """Tidy a wingman's facts with one support-model pass: merge duplicates,
         drop moments that were stored as facts, keep the newer of two
         contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
         wingman.ensure_memory_initialized()
@@ -4475,7 +4485,8 @@ class WingmanCore(WebSocketUser):
 
         Returns the raw extraction result (facts + summary) without storing anything.
         """
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
 

@@ -52,7 +52,12 @@ class StreamToLogger:
             )
 
     def flush(self):
-        self.stream.flush()
+        # The console may be gone (closed or detached on Windows): there is
+        # nothing left to flush to.
+        try:
+            self.stream.flush()
+        except (OSError, ValueError):
+            pass
 
     def isatty(self):
         return False
