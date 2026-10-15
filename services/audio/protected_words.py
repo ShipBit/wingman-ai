@@ -112,36 +112,8 @@ monde mot travail
 """
 
 
-# What players say about their ship and the flight, in every other sentence
-# of a session. A game list has thousands of names, and these words are the
-# ones that land near them: "radar" is one letter from the outpost "Yadar"
-# and became it ten times in one evening.
-_GAME = """
-radar radars shield shields cooler coolers engine engines thruster thrusters
-weapon weapons gun guns cannon cannons laser lasers turret turrets missile
-missiles torpedo torpedoes rocket rockets ammo armor armour hull cargo fuel
-quantum drive drives jump jumps power plant plants gear landing hangar hangars
-pad pads dock docking docked station stations outpost outposts moon moons
-planet planets orbit target targets contact contacts scanner scan scanning
-ping beacon mission missions contract contracts bounty pilot crew captain
-medical medic bed beds tractor beam mining miner salvage refinery trade
-trading commodity terminal vehicle vehicles bike rover tank loadout upgrade
-upgrades component components module modules sensor sensors capacitor battery
-navigation combat mode modes cruise boost brake brakes throttle wing wings
-canopy door doors ramp elevator lights headlights helmet suit
-schild schilde kühler triebwerk triebwerke düse düsen waffe waffen kanone
-kanonen geschütz geschütze turm türme rakete raketen torpedos munition panzerung
-rumpf fracht treibstoff sprung antrieb energie kraftwerk fahrwerk landung
-landeplatz hangar station mond monde planet planeten umlaufbahn ziel ziele
-scanner mission missionen auftrag aufträge kopfgeld besatzung kapitän
-bergung handel ladung modus kampfmodus tür türen rampe lichter helm anzug
-"""
-
-
 def _words(block: str) -> frozenset[str]:
     return frozenset(w for w in block.split() if w)
 
 
-PROTECTED_WORDS: frozenset[str] = (
-    _words(_ENGLISH) | _words(_GERMAN) | _words(_SPANISH) | _words(_FRENCH) | _words(_GAME)
-)
+PROTECTED_WORDS: frozenset[str] = _words(_ENGLISH) | _words(_GERMAN) | _words(_SPANISH) | _words(_FRENCH)
