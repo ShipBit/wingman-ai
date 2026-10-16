@@ -155,6 +155,19 @@ def test_pressing_again_within_the_grace_keeps_holding():
     assert len(rec.utterances) == 1
 
 
+def test_a_repeated_key_up_is_one_release():
+    controller, rec, _ = make()
+    controller.ptt_down("f1", object())
+    speak(controller, speech_frames=6, silence_frames=0)
+    assert controller.ptt_up("f1")
+    controller.feed(SILENCE)
+    assert not controller.ptt_up("f1")
+    for _ in range(12):
+        controller.feed(SILENCE)
+    assert len(rec.utterances) == 1
+    assert controller.state != ListenState.HELD
+
+
 def test_second_source_cannot_take_the_gate():
     controller, _, _ = make()
     controller.ptt_down("f1", object())

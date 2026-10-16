@@ -1,7 +1,7 @@
 """Which game events are worth a word, and how often.
 
-Written by Mallachi for the SC Log Reader skill, kept as it was apart from the
-switch mapping of that skill's 60 checkboxes.
+Written by Mallachi for the SC Log Reader skill, kept as it was, with the
+mapping of its switches: one per type of event, under one master per category.
 
 Bounded, literal presentation of committed events; no delivery or state effects.
 
@@ -68,8 +68,8 @@ _DETAIL_FIELDS = {
     "reward_earned": ("mission_name",),
     "fined": (),
     "money_sent": ("recipient",),
-    "shop_buy": ("item_name",),
-    "shop_sell": ("item_name",),
+    "shop_buy": ("item_display_name", "item_name"),
+    "shop_sell": ("item_display_name", "item_name"),
 }
 # User-facing observations supported by the reader but omitted from the first
 # replacement notification panel. Wording never upgrades a request to success.
@@ -115,8 +115,55 @@ for _kind, (_category, _wording, _details) in _ADDITIONAL.items():
     _TEMPLATES[_kind] = (_category, _wording)
     _DETAIL_FIELDS[_kind] = _details
 
+# One checkbox for each notification type; opposite directions of the same
+# status share a checkbox. Raw inventory/channel observations stay silent.
+_GROUPS = {
+    "notify_armistice_zone": ("armistice_zone",),
+    "notify_ship_boarding": ("ship_entered", "ship_exited"),
+    "notify_location_updates": ("location_arrived", "location_departed", "location_change"),
+    "notify_monitored_space": ("entered_monitored_space", "exited_monitored_space"),
+    "notify_monitored_space_availability": ("monitored_space_down", "monitored_space_restored"),
+    "notify_mission_objective_new": ("mission_objective_new", "objective_new"),
+    "notify_party_membership": ("party_member_joined", "party_left"),
+}
+_GROUPED_EVENTS = frozenset(kind for kinds in _GROUPS.values() for kind in kinds)
+NOTIFICATION_OPTIONS = {
+    **{"notify_" + kind: (kind,) for kind in _TEMPLATES if kind not in _GROUPED_EVENTS},
+    **_GROUPS,
+}
+_LEGACY_OPTIONS = {
+    "notify_armistice_zone": ("notify_zone_entered_armistice", "notify_zone_left_armistice"),
+    "notify_ship_boarding": ("notify_ship_entered", "notify_ship_exited"),
+    "notify_location_updates": ("notify_location_arrived", "notify_location_departed"),
+    "notify_monitored_space": ("notify_entered_monitored_space", "notify_exited_monitored_space"),
+    "notify_monitored_space_availability": ("notify_monitored_space_down", "notify_monitored_space_restored"),
+    "notify_party_membership": ("notify_party_member_joined", "notify_party_left"),
+    "notify_hangar_ready": ("notify_hangar_access",),
+}
 _AMOUNT_EVENTS = frozenset(("reward_earned", "fined", "money_sent", "shop_buy", "shop_sell"))
 _CATEGORIES = frozenset(category for category, _ in _TEMPLATES.values())
+
+
+def enabled_notification_events(settings):
+    """Apply visible group masters and the individual notification switches.
+
+    When only old directional switches exist, any disabled direction keeps the
+    combined type off until the user explicitly chooses the new switch.
+    """
+    enabled = set()
+    for option, kinds in NOTIFICATION_OPTIONS.items():
+        category = _TEMPLATES[kinds[0]][0]
+        if not settings.get("notify_" + category, True):
+            continue
+        if option in settings:
+            selected = settings[option]
+        else:
+            selected = all(
+                settings.get(old, True) for old in _LEGACY_OPTIONS.get(option, ())
+            )
+        if selected:
+            enabled.update(kinds)
+    return frozenset(enabled)
 
 
 _KEY_FIELDS = (

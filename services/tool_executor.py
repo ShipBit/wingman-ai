@@ -297,18 +297,46 @@ class ToolExecutor:
         ):
             if function_name == "memory_remember":
                 text = function_args.get("text", "")
-                if text:
-                    await persistent_memory_service.add_memory(
-                        entry_type="fact", content=text
+                replaces = (function_args.get("replaces") or "").strip()
+                stored_id = (
+                    await persistent_memory_service.add_memory(entry_type="fact", content=text)
+                    if text
+                    else None
+                )
+                if not text:
+                    function_response = "Nothing to remember -- no text provided."
+                elif stored_id is None:
+                    # Nothing was written: no embedding model, or it failed.
+                    # Saying "stored" here told the user a lie for a whole
+                    # session. The old fact of a correction stays too.
+                    function_response = (
+                        "Memory is not available right now, nothing was stored. "
+                        "Tell the user you cannot keep this for later."
                     )
+                    await printr.print_async(
+                        f"Memory not stored, the memory model is not ready: {text}",
+                        color=LogType.MEMORY,
+                        source_name=self._wingman_name,
+                    )
+                else:
                     function_response = f'I\'ll remember that: "{text}"'
                     await printr.print_async(
                         f"Memory stored: {text}",
                         color=LogType.MEMORY,
                         source_name=self._wingman_name,
                     )
-                else:
-                    function_response = "Nothing to remember -- no text provided."
+                    # A correction: the old version goes, otherwise both stay
+                    # and the wrong one keeps coming back. Stored first, so a
+                    # failed store never costs the old fact; only facts, and
+                    # never the one just written.
+                    if replaces and await persistent_memory_service.forget_by_query(
+                        replaces, entry_type="fact", keep_id=stored_id
+                    ):
+                        await printr.print_async(
+                            f"Memory replaced: {replaces}",
+                            color=LogType.MEMORY,
+                            source_name=self._wingman_name,
+                        )
 
             elif function_name == "memory_recall":
                 query = function_args.get("query", "")

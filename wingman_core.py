@@ -132,6 +132,7 @@ from services.audio.vocabulary import apply_override, diff_override, list_preset
 from services.config_manager import ConfigManager
 from services import speech_text
 from services.printr import Printr
+from services.user_activity import user_activity
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
@@ -146,6 +147,10 @@ ECHO_RATIO = 0.6
 # Fewer words of the user's own than this, next to a mostly echoed sentence,
 # are misheard echo, not the user.
 MIN_OWN_WORDS = 3
+# Words the microphone picks up from the speakers come as a piece of the
+# wingman's sentence. A shorter run is the user using the same words:
+# "I meant landing" against an answer that said "meant landing" lost both.
+MIN_ECHO_RUN = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
@@ -1006,6 +1011,9 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.listen_while_speaking
         )
         self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
+        # Mid-sentence with voice activation counts as busy too: a game event
+        # spoken now would land in the user's own transcript.
+        user_activity.set_capture_probe(lambda: self.voice_gate.is_capturing)
 
         if self.settings_service.settings.audio:
             sd.default.device = [
@@ -1673,8 +1681,22 @@ class WingmanCore(WebSocketUser):
         # Warm the PocketTTS voice cache for all voices used in this config.
         await self._preload_pocket_tts_voices()
 
+        # The startup step for the embedding model runs before the user is
+        # signed in, so there are no wingmen yet to say memory is on, and it
+        # never downloaded anything. A fresh install then had memory that
+        # announced "Memory stored" and kept nothing. Here the wingmen exist.
+        # It runs in the background once Core is ready: 260 MB on a slow or
+        # broken connection held the whole start at "loading", and a failure
+        # message sent while the client was still switching pages was lost.
+        needs_embed_model = (
+            self.settings_service.settings.llama_cpp.mode != LocalAiMode.SERVER
+            and not self.local_model_manager.embed_model_available()
+        )
+
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
+        if needs_embed_model:
+            self._embed_download = asyncio.create_task(self._fetch_embed_model_in_background())
 
         self.printr.print(
             "Tower initializated.",
@@ -1899,6 +1921,7 @@ class WingmanCore(WebSocketUser):
         """From the listen controller, on the audio consumer thread. `wingman` is
         the one whose key was held; None means voice activation, the text picks.
         `during_playback` says a wingman was speaking when this was said."""
+        user_activity.heard()
         self.transcription_worker.submit_utterance(
             utterance,
             on_text=lambda text, benchmark: self._on_transcript(
@@ -1938,7 +1961,8 @@ class WingmanCore(WebSocketUser):
         # With speakers the microphone hears the wingman, so what the user
         # said while it spoke arrives mixed with the wingman's own words.
         # Those are taken out first; the decisions below are about the rest.
-        own = self._without_echo(words) if during_playback else words
+        hits = self._echo_hits(words) if during_playback else [False] * len(words)
+        own = [w for w, hit in zip(words, hits) if not hit]
         if self._is_stop(own) or (during_playback and self._has_stop_word(own)):
             # Over the wingman, a stop word anywhere in what the user said
             # is a stop; the rest of it was talking over an answer they did
@@ -1969,7 +1993,7 @@ class WingmanCore(WebSocketUser):
             )
             return
         if during_playback and len(own) < len(words):
-            stripped = " ".join(own)
+            stripped = self._text_without_echo(text, hits)
             self.printr.print(
                 f"Heard '{text}' over the wingman - taking '{stripped}'.",
                 server_only=True,
@@ -2035,27 +2059,73 @@ class WingmanCore(WebSocketUser):
         return any(word in on_its_own for word in words)
 
     def _echo_hits(self, words: list[str]) -> list[bool]:
-        """For each word, whether it is the wingman's own, said in this order.
+        """For each word, whether it is the wingman's own.
 
-        Counting them as a set drops sentences that only share vocabulary
-        with the answer: "is the gear on the target" against an answer about
-        the gear and the target. A user who repeats the wingman's own
-        sentence word for word is still taken for an echo - nothing in the
-        text tells those two apart.
+        A word counts only inside a run: at least MIN_ECHO_RUN words in a row
+        that the wingman said in a row, or the whole transcript when it is
+        that short. One misheard word inside a run does not break it. Single
+        words that also occur in the answer are the user's: people answer
+        with the words they just heard ("you meant landing").
+
+        A user who repeats the wingman's own sentence word for word is still
+        taken for an echo - nothing in the text tells those two apart.
         """
         spoken = _words(self.audio_player.speaking_text)
-        hits = []
-        at = 0
-        for word in words:
-            found = next((i for i in range(at, len(spoken)) if spoken[i] == word), None)
-            hits.append(found is not None)
-            if found is not None:
-                at = found + 1
+        hits = [False] * len(words)
+        i = 0
+        at = 0  # the echo moves forward through the answer
+        while i < len(words):
+            best_end, best_exact, best_next = i, 0, at
+            for j in range(at, len(spoken)):
+                if spoken[j] != words[i]:
+                    continue
+                k, m, exact = i, j, 0
+                while k < len(words) and m < len(spoken):
+                    if words[k] == spoken[m]:
+                        k, m, exact = k + 1, m + 1, exact + 1
+                    elif (
+                        k + 1 < len(words)
+                        and m + 1 < len(spoken)
+                        and words[k + 1] == spoken[m + 1]
+                    ):
+                        # One word misheard, the next one matches again.
+                        k, m = k + 2, m + 2
+                        exact += 1
+                    else:
+                        break
+                if exact > best_exact:
+                    best_end, best_exact, best_next = k, exact, m
+            whole = best_end - i == len(words) and best_exact >= min(2, len(words))
+            if best_exact >= MIN_ECHO_RUN or whole:
+                for k in range(i, best_end):
+                    hits[k] = True
+                i, at = best_end, best_next
+            else:
+                i += 1
         return hits
 
     def _without_echo(self, words: list[str]) -> list[str]:
         """The words that are not the wingman's: what the user said over it."""
         return [w for w, hit in zip(words, self._echo_hits(words)) if not hit]
+
+    @staticmethod
+    def _text_without_echo(text: str, hits: list[bool]) -> str:
+        """The transcript with the echoed words cut out, the user's own words
+        as they were written: capitals and punctuation stay, so "Yeah, I was
+        talking about" does not come out as "yeah was talking about"."""
+        matches = list(re.finditer(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower()))
+        out, last = [], 0
+        for match, hit in zip(matches, hits):
+            if hit:
+                out.append(text[last : match.start()])
+                last = match.end()
+        out.append(text[last:])
+        cleaned = "".join(out)
+        # What cutting leaves behind: doubled spaces, a comma with no word.
+        cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+        cleaned = re.sub(r"([,.;:!?])(?:\s*[,.;:!?])+", r"\1", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+        return cleaned.strip(" ,.;:-")
 
     def _is_echo(self, words: list[str]) -> bool:
         """Whether these words are what the wingman is saying right now. With
@@ -2066,15 +2136,15 @@ class WingmanCore(WebSocketUser):
         foreign words do not make it the user. Several do, and the user's
         words are then taken without the wingman's.
         """
-        meaningful = [w for w in words if len(w) >= 3]
+        meaningful = [(w, hit) for w, hit in zip(words, self._echo_hits(words)) if len(w) >= 3]
         if not meaningful:
             # "hm", "ah": nothing to act on either way
             return True
-        hits = self._echo_hits(meaningful)
-        own = [w for w, hit in zip(meaningful, hits) if not hit]
+        own = [w for w, hit in meaningful if not hit]
         if not own:
             return True
-        return sum(hits) / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
+        echoed = len(meaningful) - len(own)
+        return echoed / len(meaningful) >= ECHO_RATIO and len(own) < MIN_OWN_WORDS
 
     # GET /stt/vocabulary/presets
     async def get_stt_vocabulary_presets(self) -> list[VocabularyPreset]:
@@ -2296,6 +2366,7 @@ class WingmanCore(WebSocketUser):
         a held push-to-talk key or a wingman speaking must not flip it, and
         those are states of their own, so the state alone cannot say it.
         """
+        user_activity.set_holding(state == ListenState.HELD)
         self._run_on_main_loop(
             self._connection_manager.broadcast(
                 VoiceActivationMutedCommand(muted=self.listen_controller.user_muted)
@@ -3377,7 +3448,29 @@ class WingmanCore(WebSocketUser):
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
 
-    async def _ensure_embed_model(self):
+    async def _fetch_embed_model_in_background(self) -> None:
+        """Download the embedding model while the user already works with
+        Core, and switch memory on when it is there."""
+        if getattr(self, "_embed_downloading", False):
+            return
+        self._embed_downloading = True
+        try:
+            if not await self._ensure_embed_model(show_progress=False):
+                return
+            if self.local_model_manager.embed_model_available():
+                await self.local_ai_service.initialize()
+                await self.printr.print_async(
+                    "Memory model downloaded. Your Wingmen remember from now on.",
+                    color=LogType.MEMORY,
+                )
+        except Exception as error:
+            self.printr.print(
+                f"Memory model download failed: {error}", color=LogType.ERROR, server_only=True
+            )
+        finally:
+            self._embed_downloading = False
+
+    async def _ensure_embed_model(self, show_progress: bool = True) -> bool:
         """Fetch the embedding model if memory needs it and it is not here yet.
 
         Only the embedding model, and only when at least one wingman has
@@ -3385,11 +3478,11 @@ class WingmanCore(WebSocketUser):
         automatically — see the note at step 5 in ``startup``.
         """
         if self.local_model_manager.embed_model_available():
-            return
+            return True
 
         wingmen = self.tower.wingmen if self.tower else []
         if not any(getattr(w.config, "persistent_memory", False) for w in wingmen):
-            return
+            return False
 
         await self.printr.print_async(
             "Memory is on but the embedding model is missing — downloading it...",
@@ -3414,7 +3507,7 @@ class WingmanCore(WebSocketUser):
         )
 
         while not download_task.done():
-            if progress_state:
+            if show_progress and progress_state:
                 pct = progress_state.get("pct", 0)
                 dl_mb = progress_state.get("downloaded_mb", 0)
                 t_mb = progress_state.get("total_mb", 0)
@@ -3428,8 +3521,10 @@ class WingmanCore(WebSocketUser):
         if not await download_task:
             self.printr.toast_error(
                 "Could not download the memory model. Memory stays off until it "
-                "is downloaded — retry in Settings > Local AI."
+                "is downloaded. Try again in Settings > Local AI or restart Wingman AI."
             )
+            return False
+        return True
 
     # ── Local AI Endpoints ────────────────────────────────────────
 
@@ -4424,6 +4519,9 @@ class WingmanCore(WebSocketUser):
 
     # PUT /memories/{entry_id}
     async def update_memory(self, entry_id: int, request: MemoryUpdateRequest):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4434,6 +4532,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{entry_id}
     def delete_memory(self, entry_id: int):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         for wingman in self.tower.wingmen:
             if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
                 entries = wingman.persistent_memory_service.get_all()
@@ -4444,6 +4545,9 @@ class WingmanCore(WebSocketUser):
 
     # DELETE /memories/{wingman_name}/all
     def clear_memories(self, wingman_name: str):
+        # No Tower before sign-in, while the client may already show the page.
+        if not self.tower:
+            return False
         wingman = self.tower.get_wingman_by_name(wingman_name)
         if wingman and hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
             wingman.persistent_memory_service.clear_collection()
@@ -4456,7 +4560,8 @@ class WingmanCore(WebSocketUser):
         """Tidy a wingman's facts with one support-model pass: merge duplicates,
         drop moments that were stored as facts, keep the newer of two
         contradicting entries. Returns ``{"before": n, "after": m, "changed": bool}``."""
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
         wingman.ensure_memory_initialized()
@@ -4493,7 +4598,8 @@ class WingmanCore(WebSocketUser):
 
         Returns the raw extraction result (facts + summary) without storing anything.
         """
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        # No Tower before sign-in: no Wingman to find.
+        wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
         if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
             raise HTTPException(404, f"Wingman '{wingman_name}' not found")
 

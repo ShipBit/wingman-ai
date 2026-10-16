@@ -15,25 +15,15 @@ printr = Printr()
 
 class GoogleGenAI:
     def __init__(self, api_key: str):
-        self.client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(api_version="v1alpha"),
-        )
+        self._api_key = api_key
         self.openai_client = OpenAI(
             api_key=api_key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
 
     async def aclose(self):
-        """Close underlying HTTP clients to prevent 'Task was destroyed' warnings."""
-        try:
-            api_client = getattr(self.client, "_api_client", None)
-            if api_client and hasattr(api_client, "aclose"):
-                await api_client.aclose()
-            elif hasattr(self.client, "close"):
-                self.client.close()
-        except Exception:
-            pass
+        """Nothing to close: the genai client lives only inside
+        get_available_models. Kept for callers."""
 
     def _handle_key_error(self):
         printr.toast_error(
@@ -111,6 +101,7 @@ class GoogleGenAI:
         model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        tool_choice: str = "auto",
     ):
         try:
             reasoning_params = self.get_minimal_reasoning_by_model(model)
@@ -127,7 +118,7 @@ class GoogleGenAI:
                     messages=messages,
                     model=model,
                     tools=tools,
-                    tool_choice="auto",
+                    tool_choice=tool_choice,
                     **reasoning_params,
                 )
             return completion
@@ -139,12 +130,24 @@ class GoogleGenAI:
             return None
 
     def get_available_models(self):
-        models: list[types.Model] = []
-        for model in self.client.models.list():
-            for action in model.supported_actions:
-                if action == "generateContent":
-                    models.append(model)
-        return models
+        """Only the model list needs the genai client; conversations go
+        through the OpenAI-compatible endpoint. The client is made and closed
+        here: one kept on every Google wingman was garbage collected when the
+        Tower unloaded, and its __del__ left a pending aclose() task behind
+        ("Task was destroyed but it is pending")."""
+        client = genai.Client(
+            api_key=self._api_key,
+            http_options=types.HttpOptions(api_version="v1alpha"),
+        )
+        try:
+            models: list[types.Model] = []
+            for model in client.models.list():
+                for action in model.supported_actions:
+                    if action == "generateContent":
+                        models.append(model)
+            return models
+        finally:
+            client.close()
 
 
 @llm_provider(ConversationProvider.GOOGLE)
@@ -153,8 +156,8 @@ class GoogleLlm(LlmInterface):
         self._google = google_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._google.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.google.conversation_model,
         )

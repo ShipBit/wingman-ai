@@ -2,12 +2,16 @@
 
 from types import SimpleNamespace
 
+from api.enums import SpokenLanguage
+from services.audio.common_words import common_words
 from services.audio.vocabulary import (
     Vocabulary,
     format_entry,
+    load_preset,
     parse_entry,
     spoken_names,
 )
+from tests.support import REPO_ROOT
 
 SC = Vocabulary(["Hurston", "Crusader", "Port Olisar", "Gladius", "Aurora", "ArcCorp", "Computer"])
 
@@ -175,3 +179,50 @@ def test_preset_overrides_are_a_diff_against_the_bundle():
 def test_spoken_english_shorthand_is_not_a_name():
     # "kinda" is one letter from the Star Citizen name "Kinga".
     assert Vocabulary(["Kinga"]).correct("It's like kinda green.") == "It's like kinda green."
+
+
+def _with_common_words(entries, language=SpokenLanguage.EN):
+    return Vocabulary(entries, common_words=common_words(REPO_ROOT, language))
+
+
+def test_real_words_are_left_to_the_speech_model():
+    """It wrote a real word, so it decided on that word. Against the Star
+    Citizen list the fuzzy rule used to turn 134 everyday English words into
+    names, "radar" into the outpost "Yadar" among them."""
+    vocabulary = _with_common_words(load_preset(REPO_ROOT, "star_citizen"))
+    for text in ("we replaced the radar", "that is double the degree", "a complex accord"):
+        assert vocabulary.correct(text) == text
+
+
+def test_names_the_model_did_not_know_are_still_fixed():
+    vocabulary = _with_common_words(load_preset(REPO_ROOT, "star_citizen"))
+    assert vocabulary.correct("fly me to Hurstin please") == "fly me to Hurston please"
+    assert vocabulary.correct("land at lorvil") == "land at Lorville"
+    assert vocabulary.correct("dock at port olisa") == "dock at Port Olisar"
+    # Split into two everyday words, but exactly the name.
+    assert vocabulary.correct("back to micro tech") == "back to MicroTech"
+    # A name heard as a real word needs its pair in the list.
+    assert vocabulary.correct("fly to Houston") == "fly to Hurston"
+
+
+def test_the_users_own_language_is_protected_too():
+    """Every spoken language had 110 to 176 everyday words the Star Citizen
+    list turned into names; German "Ausland" became the outpost "Ashland"."""
+    entries = load_preset(REPO_ROOT, "star_citizen")
+    assert Vocabulary(entries).correct("im Ausland") == "im Ashland"
+    german = _with_common_words(entries, SpokenLanguage.DE)
+    assert german.correct("im Ausland") == "im Ausland"
+
+
+def test_a_word_of_a_longer_name_is_not_pulled_to_a_near_one():
+    # A skill adds "Centauri" and "RSI Constellation Centaurus"; the ship's
+    # own name, said alone, used to become the other one.
+    vocabulary = Vocabulary(["Centauri", "RSI Constellation Centaurus"])
+    assert vocabulary.correct("the Centaurus is parked") == "the Centaurus is parked"
+    assert vocabulary.correct("jump to Centaury") == "jump to Centauri"
+
+
+
+def test_a_name_that_is_also_part_of_a_longer_one_gets_its_spelling():
+    vocabulary = Vocabulary(["Hurston", "Hurston Dynamics", "Centauri"])
+    assert vocabulary.correct("land on hurston") == "land on Hurston"

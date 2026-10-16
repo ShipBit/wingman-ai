@@ -70,8 +70,10 @@ class SecretKeeper(WebSocketUser):
         try:
             with open(self.config_file, "w", encoding="UTF-8") as stream:
                 yaml.dump(self.secrets, stream)
-                await self.secret_events.publish("secrets_saved", self.secrets)
-                return True
+            # Published even when nothing changed: saving the same key again
+            # is how a user retries a wingman that failed to validate.
+            await self.secret_events.publish("secrets_saved", self.secrets)
+            return True
         except yaml.YAMLError as e:
             self.printr.toast_error(f"Could not write ({SECRETS_FILE})\n{str(e)}")
             return False

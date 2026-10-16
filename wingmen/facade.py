@@ -316,7 +316,23 @@ class SkillAi:
         return self._wingman.context_budget.tool_cap
 
     async def _call(self, messages: list):
-        from services.context_budget import ContextOverflowError
+        from api.enums import ConversationProvider
+        from services.context_budget import ContextOverflowError, SUBSCRIPTION_MAX_REQUEST_CHARS
+        from services.conversation_manager import ConversationManager
+
+        # Wingman Pro refuses a request over its size limit (images count with
+        # their full base64): no need to send it to hear that.
+        if (
+            self._wingman.config.features.conversation_provider
+            == ConversationProvider.WINGMAN_PRO
+        ):
+            size = sum(ConversationManager.message_chars(m) for m in messages)
+            if size > SUBSCRIPTION_MAX_REQUEST_CHARS:
+                raise FacadeError(
+                    f"Skill tried to send {size:,} characters to Wingman Pro, but the "
+                    f"limit is {SUBSCRIPTION_MAX_REQUEST_CHARS:,} per request. Send less "
+                    f"(a smaller image, or less data)."
+                )
 
         try:
             return await self._wingman.actual_llm_call(messages)
@@ -1110,6 +1126,30 @@ class SkillConversation:
 
     async def add_assistant(self, content: str) -> None:
         await self._wingman.conversation.add_assistant_message(content)
+
+    async def add_note(self, content: str) -> None:
+        """Put context into the history that is neither the user nor this
+        Wingman talking: what happened in the game meanwhile, what was said
+        on the Wingman's own initiative. It goes in as a bracketed note in a
+        user message, so the model reads it but has no line of its own to
+        copy — lines added with add_assistant came back appended to its next
+        answers. Add it right before the user's next message (the
+        on_add_user_message hook), not while a turn is running."""
+        from services.conversation_manager import NOTE_PREFIX
+
+        self._wingman.conversation.messages.append(
+            {"role": "user", "content": f"{NOTE_PREFIX}{content}]"}
+        )
+
+    @property
+    def user_busy(self) -> bool:
+        """True while the user holds a push-to-talk key, was heard a moment
+        ago, or any wingman is still answering. Something said on the
+        Wingman's own initiative must wait: over a held key it ends up in the
+        user's transcript, in a turn it lands between question and answer."""
+        from services.user_activity import user_activity
+
+        return user_activity.busy
 
     async def show(self, text: str, *, skill_name: str = "") -> None:
         """Show a line in the chat as said by this Wingman, like one of its

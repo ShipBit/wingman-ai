@@ -81,6 +81,7 @@ class AudioInput:
             # watchdog running, otherwise one bad start (device busy at boot)
             # kills the microphone for the rest of the session.
             self._ensure_consumer()
+            error = None
             try:
                 device = sounddevice.default.device[0]
                 info = sounddevice.query_devices(device, kind="input")
@@ -96,6 +97,10 @@ class AudioInput:
                 )
                 self._stream.start()
             except Exception as e:
+                error = e
+            if error:
+                # No device, or the system refused it: a setup problem. Told
+                # outside the except, so it is not reported as a bug.
                 self._stream = None
                 if not self._reported:
                     self._reported = True
@@ -103,7 +108,7 @@ class AudioInput:
                         "Unable to open the microphone. Please check your microphone, "
                         "anti-virus and privacy settings. Audio input will be disabled."
                     )
-                    self.printr.print(f"Microphone: {e}", color=LogType.ERROR, server_only=True)
+                    self.printr.print(f"Microphone: {error}", color=LogType.WARNING, server_only=True)
                 self.available = False
                 return False
             self.available = True

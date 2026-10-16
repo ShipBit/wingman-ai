@@ -208,6 +208,13 @@ class ATSTelemetry(Skill):
         try:
             truck_telemetry.init()
             return True
+        except FileNotFoundError:
+            # No shared memory: the game is not running or the plugin is not
+            # installed. Not a bug, so a warning.
+            self.log.warning(
+                "Truck sim not running or SCS telemetry plugin missing. Start the game, then try again."
+            )
+            return False
         except Exception:
             self.log.error("Initialize ATSTelemetry function failed.")
             return False
@@ -555,14 +562,17 @@ class ATSTelemetry(Skill):
                 )
 
             # Convert percentages
-            enhanced_data["currentFuelPercentage"] = (
-                str(round((data["fuel"] / data["fuelCapacity"]) * 100))
-                + " percent of fuel remaining."
-            )
-            enhanced_data["currentAdbluePercentage"] = (
-                str(round((data["adblue"] / data["adblueCapacity"]) * 100))
-                + " percent of adblue remaining."
-            )
+            # A capacity of 0 (no truck yet, or no AdBlue tank) has no percentage.
+            if data["fuelCapacity"]:
+                enhanced_data["currentFuelPercentage"] = (
+                    str(round((data["fuel"] / data["fuelCapacity"]) * 100))
+                    + " percent of fuel remaining."
+                )
+            if data["adblueCapacity"]:
+                enhanced_data["currentAdbluePercentage"] = (
+                    str(round((data["adblue"] / data["adblueCapacity"]) * 100))
+                    + " percent of adblue remaining."
+                )
             scs_truck_damage = await self.get_damage_percentage(data)
             enhanced_data["truckDamageRounded"] = (
                 str(math.floor(scs_truck_damage)) + " percent truck damage"

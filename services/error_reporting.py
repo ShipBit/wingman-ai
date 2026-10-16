@@ -1,11 +1,27 @@
 """Error reports to Sentry.
 
-What goes out: unhandled exceptions (main thread, worker threads, FastAPI
-routes) and every ``printr`` error that is logged inside an ``except`` block,
-with its stack trace. The last few non-conversation log lines ride along as
-breadcrumbs. What never goes out: conversation text (USER, POSITIVE, MEMORY,
-LOCALMODEL), request bodies, local variables, the hostname, the IP (turned off
-in the Sentry project), secrets and the user's home path.
+What goes out: unhandled exceptions (main thread, worker threads, asyncio
+tasks, FastAPI routes) and every ``printr`` error that is logged inside an
+``except`` block, with its stack trace. Each event carries the end of the
+current session log (``wingman-core.<timestamp>.log``, the last
+``LOG_TAIL_MAX_BYTES``) as the attachment ``wingman-core.log``. That log can
+contain what the user said to their Wingmen and what they answered; the client
+says so where the user turns reporting on. The last few log lines also ride
+along as breadcrumbs, but those leave out the conversation types (USER,
+POSITIVE, MEMORY, LOCALMODEL).
+
+What never goes out: API keys and other secrets (the stored secrets, Bearer
+tokens, ``sk-``/``AIza`` keys and ``?key=`` style parameters are replaced in
+the event and in the log), the user's home path and any user folder like
+``C:\\Users\\<name>`` or ``/home/<name>``, also in the doubled-backslash form of
+exception messages (replaced with ``~``, in the event and in the log), request
+bodies and headers, local variables, the hostname and the IP (turned off in
+the Sentry project).
+
+Not sent at all: problems on the user's side (wrong key, quota, no internet,
+provider down or a model the provider does not know), mistakes in a user's own
+skill code, and asyncio noise from CPython bugs on Windows. See the filters at
+the end of this module.
 
 The user decides in the client. The choice lives outside the versioned config
 folder, in ``WingmanAI/error_reporting.json``: Core reads it before the config
@@ -14,7 +30,11 @@ default. As long as the file holds no choice, nothing is sent.
 
 The free Sentry plan shares 5,000 errors a month between Core, client and
 backend. Each error is sent once per session, and a session sends at most
-``MAX_EVENTS_PER_SESSION``.
+``MAX_EVENTS_PER_SESSION`` (20). The plan has 1 GB of attachments a month: at
+512 KB a log, that is about 2,000 events with a full log, and a session can
+use at most 20 x 512 KB = 10 MB. Most session logs are much shorter than
+512 KB. Should the attachment quota run out, Sentry drops the attachments, not
+the events.
 """
 
 import json
@@ -34,6 +54,8 @@ SENTRY_DSN = "https://fc500b8581e7b6abd3a27e02b0718789@o4512134262030336.ingest.
 STATE_FILE = "error_reporting.json"
 MAX_EVENTS_PER_SESSION = 20
 BREADCRUMB_MAX_CHARS = 160
+LOG_TAIL_MAX_BYTES = 512 * 1024
+LOG_ATTACHMENT_NAME = "wingman-core.log"
 
 # Log types that may carry what the user said, what the AI answered, or what
 # it remembers about the user. They never become breadcrumbs.
@@ -62,7 +84,28 @@ _IGNORED_EXCEPTIONS = {
     "CancelledError",
     "KeyboardInterrupt",
     "WebSocketDisconnect",
+    # A skill wrote to the read-only Wingman config or used a removed API: a
+    # mistake in the skill's code, shown to its author (WINGMAN-CORE-N).
+    "FacadeError",
+    # The conversation no longer fits the model's context window. Core shows
+    # it to the user; it is a usage limit, not a bug.
+    "ContextOverflowError",
 }
+
+# HTTP status codes of the openai SDK that mean the user's own provider said
+# no: bad or missing key (401, 403), no credit (402), unknown model or path
+# (404), timeout (408), conflict (409), request too big (413), rate limit
+# (429). The openai SDK only talks to providers the user configured (Wingman
+# Pro goes through ``requests``), so this never hides a backend error. Other
+# 400s stay: they can be a payload Core built wrong.
+_IGNORED_OPENAI_STATUS = {401, 402, 403, 404, 408, 409, 413, 429}
+_MODEL_NOT_FOUND_HINTS = ("not found", "does not exist", "model_not_found")
+
+# Windows error codes the asyncio proactor raises for sockets that were closed
+# under it: WSAEINVAL (10022), WSAECONNRESET (10054) and
+# ERROR_OPERATION_ABORTED (995). CPython bugs, nothing Core can fix
+# (WINGMAN-CORE-3, WINGMAN-CORE-A).
+_IGNORED_WINERRORS = {10022, 10054, 995}
 
 _SECRET_PATTERNS = [
     re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
@@ -72,6 +115,21 @@ _SECRET_PATTERNS = [
         r'([?&][a-zA-Z_]*(?:key|token|secret|password|auth)[a-zA-Z_]*=)[^&\s"\']+',
         re.IGNORECASE,
     ),
+]
+
+# User folders in paths: the folder name is often the person's name. The home
+# of this machine is replaced first (_home_paths); these catch the rest, also
+# in the repr form Python puts in OSError messages, with doubled backslashes,
+# and doubled again when that text was escaped once more (JSON in a log line).
+_SEP = r"(?:\\{1,4}|/)"
+_USER_DIR_PATTERNS = [
+    re.compile(
+        r"\b[A-Za-z]:" + _SEP + r"(?:Users|Documents and Settings)" + _SEP
+        # Greedy up to the next separator or quote: names can have spaces.
+        + r"[^\\/:*?\"'<>|\r\n]+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(?<![\w.:/~])/(?:Users|home)/[^/\s'\"]+"),
 ]
 
 _lock = threading.Lock()
@@ -301,6 +359,59 @@ def _is_ignored(exc_type_names: list[str]) -> bool:
     return any(name in _IGNORED_EXCEPTIONS for name in exc_type_names)
 
 
+def _hint_exception(hint: dict) -> Optional[BaseException]:
+    exc_info = hint.get("exc_info")
+    if not exc_info or len(exc_info) < 2:
+        return None
+    exc = exc_info[1]
+    return exc if isinstance(exc, BaseException) else None
+
+
+def _is_openai_user_error(exc: BaseException) -> bool:
+    """The user's own provider refused the request (see _IGNORED_OPENAI_STATUS)."""
+    if not type(exc).__module__.startswith("openai"):
+        return False
+    status = getattr(exc, "status_code", None)
+    if status in _IGNORED_OPENAI_STATUS:
+        return True
+    if status == 400:
+        text = f"{getattr(exc, 'message', '') or ''} {exc}".lower()
+        return any(hint in text for hint in _MODEL_NOT_FOUND_HINTS)
+    return False
+
+
+def _last_frame_file(exc: BaseException) -> str:
+    tb = exc.__traceback__
+    if tb is None:
+        return ""
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    return tb.tb_frame.f_code.co_filename.replace("\\", "/").lower()
+
+
+def _is_windows_asyncio_noise(exc: BaseException) -> bool:
+    """CPython bugs in the Windows event loop (see _IGNORED_WINERRORS)."""
+    names = [cls.__name__ for cls in type(exc).__mro__]
+    if isinstance(exc, OSError) and getattr(exc, "winerror", None) in _IGNORED_WINERRORS:
+        filename = _last_frame_file(exc)
+        return "asyncio" in filename and (
+            "proactor_events" in filename or "windows_events" in filename
+        )
+    if "InvalidStateError" in names:
+        filename = _last_frame_file(exc)
+        return "asyncio" in filename and "windows_events" in filename
+    return False
+
+
+def _is_noise(exc: Optional[BaseException]) -> bool:
+    if exc is None:
+        return False
+    try:
+        return _is_openai_user_error(exc) or _is_windows_asyncio_noise(exc)
+    except Exception:
+        return False
+
+
 def _exception_type_names(hint: dict) -> list[str]:
     exc_info = hint.get("exc_info")
     if not exc_info or exc_info[0] is None:
@@ -337,7 +448,13 @@ def _home_paths() -> list[str]:
     home = path.expanduser("~")
     if not home or home == "~":
         return []
-    return sorted({home, home.replace("\\", "/"), home.replace("/", "\\")}, key=len, reverse=True)
+    variants = {
+        home,
+        home.replace("\\", "/"),
+        home.replace("/", "\\"),
+        home.replace("/", "\\").replace("\\", "\\\\"),
+    }
+    return sorted(variants, key=len, reverse=True)
 
 
 def _scrub_text(text: str, secrets: list[str], homes: list[str]) -> str:
@@ -347,7 +464,10 @@ def _scrub_text(text: str, secrets: list[str], homes: list[str]) -> str:
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub(lambda m: m.group(1) + "[redacted]", text)
     for home in homes:
-        text = text.replace(home, "~")
+        # Windows paths are not case sensitive (c:\\users\\Name).
+        text = re.sub(re.escape(home), "~", text, flags=re.IGNORECASE)
+    for pattern in _USER_DIR_PATTERNS:
+        text = pattern.sub("~", text)
     return text
 
 
@@ -359,6 +479,62 @@ def _scrub(obj: Any, secrets: list[str], homes: list[str]) -> Any:
     if isinstance(obj, list):
         return [_scrub(v, secrets, homes) for v in obj]
     return obj
+
+
+def _log_file_path() -> Optional[str]:
+    try:
+        from services.printr import Printr
+
+        return Printr.log_file_path
+    except Exception:
+        return None
+
+
+def _read_log_tail(file_path: Optional[str], max_bytes: int = LOG_TAIL_MAX_BYTES) -> Optional[str]:
+    """The last ``max_bytes`` of the log, starting at a whole line. None when
+    there is no log or it cannot be read."""
+    if not file_path:
+        return None
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            start = max(0, size - max_bytes)
+            f.seek(start)
+            data = f.read(max_bytes)
+    except OSError:
+        return None
+    text = data.decode("utf-8", errors="replace")
+    if start > 0:
+        # The first line is cut off (maybe in the middle of a character).
+        newline = text.find("\n")
+        text = text[newline + 1 :] if newline != -1 else ""
+    return text
+
+
+def _attach_log(hint: dict, secrets: list[str], homes: list[str]):
+    """Adds the scrubbed session log to the event. The SDK builds the envelope
+    from ``hint["attachments"]`` after before_send, so an attachment added here
+    goes out with this event only, read fresh when it is sent."""
+    try:
+        from sentry_sdk.attachments import Attachment
+
+        text = _read_log_tail(_log_file_path())
+        if not text:
+            return
+        attachments = hint.get("attachments")
+        if not isinstance(attachments, list):
+            return
+        attachments.append(
+            Attachment(
+                bytes=_scrub_text(text, secrets, homes).encode("utf-8"),
+                filename=LOG_ATTACHMENT_NAME,
+                content_type="text/plain",
+            )
+        )
+    except Exception:
+        # A log that cannot be attached must not stop the report.
+        pass
 
 
 def _before_breadcrumb(crumb: dict, hint: dict) -> Optional[dict]:
@@ -375,7 +551,7 @@ def _before_send(event: dict, hint: dict) -> Optional[dict]:
     global _sent_count
     if not _enabled:
         return None
-    if _is_ignored(_exception_type_names(hint)):
+    if _is_ignored(_exception_type_names(hint)) or _is_noise(_hint_exception(hint)):
         return None
 
     with _lock:
@@ -401,4 +577,6 @@ def _before_send(event: dict, hint: dict) -> Optional[dict]:
             "url": request.get("url"),
         }
 
-    return _scrub(event, _secret_values(), _home_paths())
+    secrets, homes = _secret_values(), _home_paths()
+    _attach_log(hint, secrets, homes)
+    return _scrub(event, secrets, homes)

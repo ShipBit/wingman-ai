@@ -47,6 +47,7 @@ datas = [
     ('templates/configs', 'templates/configs'),
     # Vocabulary presets for the speech correction, one text file per game.
     ('templates/vocabulary', 'templates/vocabulary'),
+    ('templates/common_words', 'templates/common_words'),
     ('templates/pronunciation', 'templates/pronunciation'),
     ('templates/pocket_tts', 'templates/pocket_tts'),
     # Azure voice of each shipped Wingman per spoken language.

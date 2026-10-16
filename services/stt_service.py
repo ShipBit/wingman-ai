@@ -17,6 +17,7 @@ from api.enums import LogType, SttProvider
 from services.audio.vocabulary import Vocabulary, apply_override, load_preset
 from services.jev_gate import JevGate
 from services.printr import Printr
+from services.audio.common_words import common_words
 from services.spoken_language import transcription_tag
 
 if TYPE_CHECKING:
@@ -87,11 +88,11 @@ class SttService:
         """The transcript with the misheard names put right.
 
         Without the gate this is the fuzzy matcher on its own, which decides
-        by letters and a blocklist of everyday words. Both of its mistakes
-        are silent: "radar" becomes the outpost "Yadar" because radar is not
-        on the blocklist, and "station" can never become "Stanton" because
-        it is. Whether a word is the name or the everyday word is in the
-        sentence around it, which is what the gate asks about.
+        by letters and never touches a real word of the user's language. Its
+        one silent mistake: a name the speech model heard as a real word
+        stays that word, "station" never becomes "Stanton". Whether a word is
+        the name or the everyday word is in the sentence around it, which is
+        what the gate asks about.
 
         Every way this can fail — gate off, no key, gateway down, Jev unsure
         — ends in the matcher's own answer, which is today's behaviour.
@@ -128,7 +129,10 @@ class SttService:
             words += apply_override(
                 self._preset_cache[preset_id], (stt.preset_overrides or {}).get(preset_id)
             )
-        return Vocabulary(words)
+        return Vocabulary(
+            words,
+            common_words=common_words(self.app_root_path, self.settings_service.settings.spoken_language),
+        )
 
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt

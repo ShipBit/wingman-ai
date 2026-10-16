@@ -31,6 +31,10 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+class _ValidationFailed(RuntimeError):
+    """An auto-activated skill did not pass its validation."""
+
+
 def _get_skill_folder_from_module(module: str) -> str:
     """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
     return module.replace(".main", "").replace(".", "/").split("/")[1]
@@ -263,7 +267,7 @@ class WingmanSkillManager:
             if skill.config.auto_activate:
                 success, message = await skill.ensure_activated()
                 if not success:
-                    raise RuntimeError(f"auto-activation failed: {message}")
+                    raise _ValidationFailed(f"auto-activation failed: {message}")
         except Exception as e:
             # Roll back any partial registration so no half-dead skill lingers.
             for tool_name in registered_tool_names:
@@ -281,11 +285,15 @@ class WingmanSkillManager:
             }
             if skill in self.skills:
                 self.skills.remove(skill)
+            # A failed validation is the skill's config ("HUD Server is not
+            # enabled"), shown to the user but not reported as a bug.
+            validation_failed = isinstance(e, _ValidationFailed)
             await printr.print_async(
                 f"Skill '{skill.name}' failed during prepare/activate and was removed: {e}",
-                color=LogType.ERROR,
+                color=LogType.WARNING if validation_failed else LogType.ERROR,
             )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            if not validation_failed:
+                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             from services.skill_catalog import SkillCatalog
             folder = _get_skill_folder_from_module(skill.config.module)
             SkillCatalog().record_runtime_failure(folder, str(e))

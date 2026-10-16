@@ -1847,6 +1847,19 @@ class BenchmarkResult(BaseModel):
 BenchmarkResult.model_rebuild()
 
 
+class RequestUsage(BaseModel):
+    """What one model request of a turn used, as the provider counted it."""
+
+    input_tokens: int
+    cached_tokens: int
+    output_tokens: int
+    tool_calls: list[str] = []
+    """The tools the model called in its answer to this request, in order.
+    Empty for the request that wrote the reply. It says what the request was
+    for: ``activate_capability`` loads a skill, which changes the tool list
+    and so starts the provider's prompt cache over."""
+
+
 class TokenUsage(BaseModel):
     """What one Wingman turn used, as the provider counted it.
 
@@ -1863,6 +1876,10 @@ class TokenUsage(BaseModel):
     0 when the provider does not report it."""
     output_tokens: int
     """Tokens the model wrote, summed over every request of the turn."""
+    requests: list[RequestUsage] = []
+    """Every request of the turn on its own, in order. The input of the last
+    one is how large the context is now; the sums above are what the turn
+    cost."""
 
 
 class AvatarPromptRequest(BaseModel):

@@ -10,6 +10,7 @@ import time
 import asyncio
 import traceback
 import threading
+import concurrent.futures
 from copy import deepcopy
 from typing import (
     Any,
@@ -49,6 +50,8 @@ from services.markdown import cleanup_text
 from services.secret_keeper import SecretKeeper
 from services import speech_text
 from services.printr import Printr
+from services.user_activity import user_activity
+from services.websocket_user import WebSocketUser
 from services.audio_library import AudioLibrary
 from services.context_budget import (
     SUBSCRIPTION_MAX_REQUEST_CHARS,
@@ -80,6 +83,16 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
+
+def tool_names(tool_calls) -> list[str]:
+    """The names of the tools a model answer calls, in order."""
+    names = []
+    for call in tool_calls or []:
+        function = getattr(call, "function", None)
+        name = getattr(function, "name", None)
+        if name:
+            names.append(name)
+    return names
 
 
 class Wingman:
@@ -194,7 +207,9 @@ class Wingman:
         # --- Local AI / persistent memory ---
         self.local_ai_service = None
         self.persistent_memory_service = None
-        self._background_tasks: set[asyncio.Task] = set()
+        # Tasks of the main loop, or futures of work handed to it from a
+        # turn's own loop.
+        self._background_tasks: set[asyncio.Task | concurrent.futures.Future] = set()
         # Memory checkpoints: what was said since the last one, how many user
         # turns that is, when it ran, and the idle timer that closes a session.
         self._memory_pending: list[dict] = []
@@ -338,10 +353,19 @@ class Wingman:
 
     async def unload(self):
         self._unloaded = True
-        # Wait for any background memory extraction tasks to finish
-        if self._background_tasks:
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
-            self._background_tasks.clear()
+        # Wait for any background memory extraction tasks to finish. A task
+        # of another loop cannot be awaited here; work handed to the main
+        # loop from a turn's loop is a concurrent future and can.
+        pending, self._background_tasks = list(self._background_tasks), set()
+        loop = asyncio.get_running_loop()
+        waits = []
+        for task in pending:
+            if isinstance(task, concurrent.futures.Future):
+                waits.append(asyncio.wrap_future(task))
+            elif task.get_loop() is loop:
+                waits.append(task)
+        if waits:
+            await asyncio.gather(*waits, return_exceptions=True)
 
         if self.persistent_memory_service:
             await self._memory_checkpoint(final=True)
@@ -387,7 +411,7 @@ class Wingman:
         and re-arm the idle timer that closes the session."""
         if self._unloaded or not self.persistent_memory_service:
             return
-        from services.persistent_memory import CHECKPOINT_SECONDS, CHECKPOINT_TURNS, IDLE_SECONDS
+        from services.persistent_memory import CHECKPOINT_SECONDS, CHECKPOINT_TURNS
 
         if response:
             self._memory_pending.append({"role": "assistant", "content": str(response)})
@@ -397,21 +421,54 @@ class Wingman:
             or time.time() - self._memory_last_checkpoint >= CHECKPOINT_SECONDS
         )
         if due:
-            task = asyncio.create_task(self._memory_checkpoint(final=False))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+            self._memory_in_background(self._memory_checkpoint(final=False))
 
-        loop = asyncio.get_running_loop()
+        main_loop = self._memory_loop()
+        if main_loop is asyncio.get_running_loop():
+            self._memory_arm_idle()
+        else:
+            main_loop.call_soon_threadsafe(self._memory_arm_idle)
+
+    @staticmethod
+    def _memory_loop() -> asyncio.AbstractEventLoop:
+        """The loop memory work runs on. A turn may run on a throwaway loop
+        in a worker thread that is closed once the answer is out; a
+        checkpoint or idle timer left there would be lost. So it is the main
+        loop whenever that runs."""
+        main_loop = WebSocketUser._main_loop
+        if main_loop is not None and main_loop.is_running():
+            return main_loop
+        return asyncio.get_running_loop()
+
+    def _memory_in_background(self, coro) -> None:
+        main_loop = self._memory_loop()
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if main_loop is running_loop:
+            task = main_loop.create_task(coro)
+        else:
+            task = asyncio.run_coroutine_threadsafe(coro, main_loop)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    def _memory_arm_idle(self) -> None:
+        """(Re-)start the idle timer, on the loop memory work runs on."""
+        from services.persistent_memory import IDLE_SECONDS
+
+        if self._unloaded:
+            return
         if self._memory_idle_handle:
             self._memory_idle_handle.cancel()
-        self._memory_idle_handle = loop.call_later(IDLE_SECONDS, self._memory_idle)
+        self._memory_idle_handle = asyncio.get_running_loop().call_later(
+            IDLE_SECONDS, self._memory_idle
+        )
 
     def _memory_idle(self) -> None:
         """No user turn for IDLE_SECONDS: the session is over."""
         self._memory_idle_handle = None
-        task = asyncio.create_task(self._memory_checkpoint(final=True))
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+        self._memory_in_background(self._memory_checkpoint(final=True))
 
     async def _memory_checkpoint(self, final: bool) -> None:
         """Hand what was said since the last checkpoint to memory.
@@ -482,6 +539,21 @@ class Wingman:
         images: list[tuple[str, str]] = None,
         transcription_benchmark: BenchmarkResult | None = None,
     ):
+        """Answer what the user said. While this runs the user counts as busy
+        (services/user_activity.py): nothing a wingman says on its own may
+        land between the question and the answer."""
+        user_activity.turn_started()
+        try:
+            await self._process(transcript, images, transcription_benchmark)
+        finally:
+            user_activity.turn_finished()
+
+    async def _process(
+        self,
+        transcript: str,
+        images: list[tuple[str, str]] = None,
+        transcription_benchmark: BenchmarkResult | None = None,
+    ):
         """Answer what the user said.
 
         ``transcript`` is text already: typed in the chat or transcribed by the
@@ -506,16 +578,21 @@ class Wingman:
                 )
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
+                answered = False
                 try:
                     process_result, instant_response, skill, interrupt = (
                         await self._get_response_for_transcript(
                             transcript=transcript, benchmark=benchmark_llm, images=images
                         )
                     )
+                    answered = bool(process_result or instant_response)
                 finally:
                     # The answer is ready: a filler line that is not out yet
                     # is dropped; one that was spoken must not be cut off.
-                    if self._stop_turn_filler():
+                    # Only a turn that ended in an answer teaches the filler
+                    # how long the wait is; an error or a cancelled call ends
+                    # early and would make a slow tool look fast.
+                    if self._stop_turn_filler(learn=answered):
                         interrupt = False
                 # Every path out of the turn passes here, including the ones
                 # that end early on a command. Skills add their own decisions
@@ -606,7 +683,7 @@ class Wingman:
             completion, instant_command_executed is False
         )
 
-        self.metrics.add_call_usage(usage)
+        self.metrics.add_call_usage(usage, tool_names(tool_calls))
         turn_prompt_tokens = usage.input_tokens
         turn_completion_tokens = usage.output_tokens
 
@@ -679,7 +756,7 @@ class Wingman:
                 response_message, tool_calls, usage = await self._process_completion(
                     completion
                 )
-                self.metrics.add_call_usage(usage)
+                self.metrics.add_call_usage(usage, tool_names(tool_calls))
                 turn_prompt_tokens = usage.input_tokens
                 turn_completion_tokens += usage.output_tokens
 
@@ -714,7 +791,7 @@ class Wingman:
 
     # ───────────────── LLM call ───────────────── #
 
-    async def actual_llm_call(self, messages, tools: list[dict] = None):
+    async def actual_llm_call(self, messages, tools: list[dict] = None, tool_choice: str = "auto"):
         if not self.llm:
             await printr.print_async(
                 f"No LLM provider configured for wingman '{self.name}'.",
@@ -725,7 +802,9 @@ class Wingman:
             return None
 
         try:
-            completion = await self.llm.ask(messages=messages, tools=tools)
+            completion = await self.llm.ask(
+                messages=messages, tools=tools, tool_choice=tool_choice
+            )
         except ContextOverflowError:
             raise  # _llm_call learns the window and retries
         except APIConnectionError as e:
@@ -757,7 +836,11 @@ class Wingman:
         thiscall = time.time()
         self.last_gpt_call = thiscall
 
-        tools = self.build_tools() if allow_tool_calls else None
+        # Without tool calls the tools still go along, with tool_choice
+        # "none": they come first in the request, and leaving them out made
+        # every answer after an instant command a full cache miss.
+        tools = self.build_tools()
+        tool_choice = "auto" if allow_tool_calls else "none"
 
         if self.settings.debug_mode:
             await printr.print_async(
@@ -770,7 +853,7 @@ class Wingman:
         messages = await self._fit_request(messages, tools)
 
         try:
-            completion = await self.actual_llm_call(messages, tools)
+            completion = await self.actual_llm_call(messages, tools, tool_choice)
         except ContextOverflowError as error:
             # The provider says the window is smaller than we assumed. Learn it
             # from the request that did not fit, shorten, and try once more.
@@ -788,7 +871,7 @@ class Wingman:
             await self.add_context(messages)
             messages = await self._fit_request(messages, tools)
             try:
-                completion = await self.actual_llm_call(messages, tools)
+                completion = await self.actual_llm_call(messages, tools, tool_choice)
             except ContextOverflowError as again:
                 await printr.print_async(
                     f"The model refused the shortened request too: {again}",
@@ -962,10 +1045,10 @@ class Wingman:
             backstory=self.config.prompts.backstory or "",
         )
 
-    def _stop_turn_filler(self) -> bool:
+    def _stop_turn_filler(self, learn: bool = True) -> bool:
         """Stop this turn's filler line. True if it was spoken."""
         line, self._turn_filler = self._turn_filler, None
-        return self.filler.stop(line)
+        return self.filler.stop(line, learn=learn)
 
     def _speak_filler(self, line: str) -> None:
         """Runs on the filler's thread: speech gets its own thread, the message

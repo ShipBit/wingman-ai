@@ -112,8 +112,15 @@ class CommandExecutor:
             for command in self.config.commands:
                 for phrase in command.instant_activation or []:
                     key = tuple(words_of(phrase))
-                    if key:
-                        commands_by_phrase.setdefault(key, []).append(command)
+                    if not key:
+                        continue
+                    # "Lower landing gear" and "lower landing gear." are one
+                    # phrase, and a command copied into the list twice is one
+                    # command. Both used to fire it twice, and a toggle fired
+                    # twice ends where it started.
+                    listed = commands_by_phrase.setdefault(key, [])
+                    if all(other.name != command.name for other in listed):
+                        listed.append(command)
 
             # Compared word by word: the speech model adds punctuation and
             # capitals, and with voice activation the sentence opens with the
@@ -246,7 +253,16 @@ class CommandExecutor:
             "type": "function",
             "function": {
                 "name": "execute_command",
-                "description": "Executes a command",
+                # Measured 2026-10-15 on sentences from a real session ("we are
+                # headed back to MicroTech", "throw it in the loadout"): with
+                # the system prompt's ACTIONS rules the default model fired a
+                # command on 0 of 27 such sentences instead of 3, gpt-4.1-mini
+                # on 9 instead of 13, and every real order still went through.
+                "description": (
+                    "Presses the keys of one of the commands below. Only when the user "
+                    "asks for this action now, never for a plan, a destination or "
+                    "something already done."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -324,24 +340,37 @@ class CommandExecutor:
                             )
 
                 if action.mouse:
-                    if action.mouse.move_to:
-                        x, y = action.mouse.move_to
-                        mouse.move(x, y)
+                    # On Linux the mouse library needs root: it raises
+                    # ImportError on first use. A setup problem, told to the
+                    # user outside the except so it is not reported as a bug.
+                    mouse_denied = False
+                    try:
+                        if action.mouse.move_to:
+                            x, y = action.mouse.move_to
+                            mouse.move(x, y)
 
-                    if action.mouse.move:
-                        x, y = action.mouse.move
-                        mouse.move(x, y, absolute=False, duration=0.5)
+                        if action.mouse.move:
+                            x, y = action.mouse.move
+                            mouse.move(x, y, absolute=False, duration=0.5)
 
-                    if action.mouse.scroll:
-                        mouse.wheel(action.mouse.scroll)
+                        if action.mouse.scroll:
+                            mouse.wheel(action.mouse.scroll)
 
-                    if action.mouse.button:
-                        if action.mouse.hold:
-                            mouse.press(button=action.mouse.button)
-                            time.sleep(action.mouse.hold)
-                            mouse.release(button=action.mouse.button)
-                        else:
-                            mouse.click(button=action.mouse.button)
+                        if action.mouse.button:
+                            if action.mouse.hold:
+                                mouse.press(button=action.mouse.button)
+                                time.sleep(action.mouse.hold)
+                                mouse.release(button=action.mouse.button)
+                            else:
+                                mouse.click(button=action.mouse.button)
+                    except ImportError:
+                        mouse_denied = True
+                    if mouse_denied:
+                        await printr.print_async(
+                            f"Command '{command.name}' of wingman '{self.wingman_name}' could not use the mouse: mouse actions on Linux need root or uinput access.",
+                            color=LogType.ERROR,
+                        )
+                        return collected
 
                 if action.write:
                     keyboard.write(action.write)

@@ -61,6 +61,9 @@ class ThinkingSound(Skill):
         """Retrieve fresh audio_config at runtime."""
         errors: list[WingmanInitializationError] = []
         audio_config = self.retrieve_custom_property_value("audio_config", errors)
+        # No file selected: nothing to play, every turn.
+        if audio_config and not audio_config.files:
+            return None
         if audio_config:
             # Copy so the config property itself is not mutated
             audio_config = copy.deepcopy(audio_config)

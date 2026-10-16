@@ -281,6 +281,8 @@ self.wingman.language.name / .code / .is_other          # "German" / "de" / Fals
 # CONVERSATION:
 self.wingman.conversation.history() / .summary          # read the live conversation
 await self.wingman.conversation.add_user(c) / .add_assistant(c) / .show(text) / .reset()
+await self.wingman.conversation.add_note(c)             # context, not a turn: what your skill said on its own (in on_add_user_message)
+self.wingman.conversation.user_busy                     # user holds PTT / a wingman is answering: don't speak up now
 await self.wingman.conversation.summarize()             # summarize the live convo (free, local)
 
 # SECRETS / MEMORY:

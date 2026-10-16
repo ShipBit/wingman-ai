@@ -1301,7 +1301,9 @@ class ConfigManager:
             if path.exists(avatar_path):
                 remove(avatar_path)
 
-            remove(config_path)
+            # Already gone (deleted twice, or by hand) counts as deleted.
+            if path.exists(config_path):
+                remove(config_path)
 
             # Prevent the template with this name from being recreated on next launch.
             if self.has_template_wingman(config_dir.name, wingman_file.name):

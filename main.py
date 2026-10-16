@@ -89,6 +89,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from starlette.websockets import WebSocketState
 from api.commands import McpOAuthStateChangedCommand, WebSocketCommandModel
 from api.interface import BenchmarkResult, CoreStatusResponse, MachineHash
 from api.enums import ENUM_TYPES, CoreState, LogType, WingmanInitializationErrorType
@@ -344,6 +345,12 @@ async def websocket_endpoint(websocket: WebSocket):
             message = await websocket.receive_text()
             await command_handler.dispatch(message, websocket)
     except WebSocketDisconnect:
+        await printr.print_async("Client disconnected", server_only=True)
+    except RuntimeError:
+        # The connection manager closed the socket (a failed send): the
+        # client is gone, the same as a disconnect.
+        if websocket.application_state == WebSocketState.CONNECTED:
+            raise
         await printr.print_async("Client disconnected", server_only=True)
     finally:
         await connection_manager.disconnect(websocket)

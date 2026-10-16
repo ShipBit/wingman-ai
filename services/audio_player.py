@@ -611,6 +611,10 @@ class AudioPlayer:
             # must track the raw-stream playback too, not just start_playback().
             self.wingman_name = wingman_name
             await self.notify_playback_started(wingman_name)
+            if self.raw_stream is not stream:
+                # Stopped while the start was announced; stop_playback()
+                # already reset state and notified listeners.
+                return
 
             if config.play_beep:
                 self.play_wav_sample("beep.wav", config.volume)
@@ -621,7 +625,7 @@ class AudioPlayer:
             if contains_high_end_radio:
                 self.play_wav_sample("Radio_Static_Beep.wav", config.volume)
 
-            self.raw_stream.start()
+            stream.start()
 
             sound_effects = get_sound_effects(
                 config=config, use_gain_boost=use_gain_boost

@@ -2,9 +2,14 @@
   "format_version": 1,
   "engine_version": 3,
   "package_id": "sc_log_reader_2",
-  "revision": 4,
-  "version": "0.3.0-evidence-state",
-  "release_notes": "Evidence timestamps and uncertain state; explicit contract withdrawal; observed refinery and emergency wording. Requires reader 0.3.0. Manual approval and next-startup activation. Build qualification remains incomplete.",
+  "revision": 10,
+  "version": "0.3.6",
+  "release_notes": "Item and armour kiosk purchases and sales (ShopUIProvider) are booked in aUEC: the game logs their client_price without a currency. Prison and merit shops stay without a currency. Requires reader 0.3.0.",
+  "maintainer": {
+    "name": "Mallachi",
+    "discord": "mallachi_of_the_north",
+    "url": "https://github.com/Diftic/wingman-ai"
+  },
   "verified_game_builds": [],
   "framing": {
     "record_start": "^<\\d{4}-\\d\\d-\\d\\dT",
@@ -87,6 +92,14 @@
       "universal_necksock_undersuit"
     ],
     "locations": {
+      "RR_P3_LEO": {
+        "name": "Orbituary",
+        "system": "Pyro"
+      },
+      "RR_P3_LEO_CLINIC": {
+        "name": "Orbituary Clinic",
+        "system": "Pyro"
+      },
       "RR_MIC_LEO": {
         "name": "Port Tressler",
         "system": "Stanton"
@@ -2602,6 +2615,34 @@
             },
             {
               "when": {
+                "all": [
+                  {
+                    "contains": "ShopUIProvider",
+                    "source": "record.text"
+                  },
+                  {
+                    "not": {
+                      "regex": "shopName\\[[^\\]]*(?:Klescher|Prison|Merit)",
+                      "source": "record.text",
+                      "flags": [
+                        "IGNORECASE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shop_ui",
+                    "currency_type": "aUEC"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
                 "contains": "ShopUIProvider",
                 "source": "record.text"
               },
@@ -2696,6 +2737,34 @@
                   "op": "constant",
                   "fields": {
                     "source_provider": "shopping"
+                  }
+                }
+              ]
+            },
+            {
+              "when": {
+                "all": [
+                  {
+                    "contains": "ShopUIProvider",
+                    "source": "record.text"
+                  },
+                  {
+                    "not": {
+                      "regex": "shopName\\[[^\\]]*(?:Klescher|Prison|Merit)",
+                      "source": "record.text",
+                      "flags": [
+                        "IGNORECASE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "steps": [
+                {
+                  "op": "constant",
+                  "fields": {
+                    "source_provider": "shop_ui",
+                    "currency_type": "aUEC"
                   }
                 }
               ]

@@ -110,6 +110,9 @@ class AudioLibrary:
                 return
 
         selected_file = self.__get_random_audio_file_from_config(audio_file)
+        if not selected_file:
+            printr.toast_warning("No audio file is selected for this sound, so nothing plays.")
+            return
         # skip if file does not exist
         if not path.exists(
             path.join(self.audio_library_path, selected_file.path, selected_file.name)
@@ -335,8 +338,10 @@ class AudioLibrary:
 
     def __get_random_audio_file_from_config(
         self, audio_file: AudioFileConfig
-    ) -> AudioFile:
-        size = len(audio_file.files)
+    ) -> AudioFile | None:
+        size = len(audio_file.files or [])
+        if size == 0:
+            return None
         if size > 1:
             index = randint(0, size - 1)
         else:
