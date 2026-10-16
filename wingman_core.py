@@ -1669,16 +1669,18 @@ class WingmanCore(WebSocketUser):
         # signed in, so there are no wingmen yet to say memory is on, and it
         # never downloaded anything. A fresh install then had memory that
         # announced "Memory stored" and kept nothing. Here the wingmen exist.
-        if (
+        # It runs in the background once Core is ready: 260 MB on a slow or
+        # broken connection held the whole start at "loading", and a failure
+        # message sent while the client was still switching pages was lost.
+        needs_embed_model = (
             self.settings_service.settings.llama_cpp.mode != LocalAiMode.SERVER
             and not self.local_model_manager.embed_model_available()
-        ):
-            await self._ensure_embed_model()
-            if self.local_model_manager.embed_model_available():
-                await self.local_ai_service.initialize()
+        )
 
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
+        if needs_embed_model:
+            self._embed_download = asyncio.create_task(self._fetch_embed_model_in_background())
 
         self.printr.print(
             "Tower initializated.",
@@ -3428,7 +3430,29 @@ class WingmanCore(WebSocketUser):
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
 
-    async def _ensure_embed_model(self):
+    async def _fetch_embed_model_in_background(self) -> None:
+        """Download the embedding model while the user already works with
+        Core, and switch memory on when it is there."""
+        if getattr(self, "_embed_downloading", False):
+            return
+        self._embed_downloading = True
+        try:
+            if not await self._ensure_embed_model(show_progress=False):
+                return
+            if self.local_model_manager.embed_model_available():
+                await self.local_ai_service.initialize()
+                await self.printr.print_async(
+                    "Memory model downloaded. Your Wingmen remember from now on.",
+                    color=LogType.MEMORY,
+                )
+        except Exception as error:
+            self.printr.print(
+                f"Memory model download failed: {error}", color=LogType.ERROR, server_only=True
+            )
+        finally:
+            self._embed_downloading = False
+
+    async def _ensure_embed_model(self, show_progress: bool = True) -> bool:
         """Fetch the embedding model if memory needs it and it is not here yet.
 
         Only the embedding model, and only when at least one wingman has
@@ -3436,11 +3460,11 @@ class WingmanCore(WebSocketUser):
         automatically — see the note at step 5 in ``startup``.
         """
         if self.local_model_manager.embed_model_available():
-            return
+            return True
 
         wingmen = self.tower.wingmen if self.tower else []
         if not any(getattr(w.config, "persistent_memory", False) for w in wingmen):
-            return
+            return False
 
         await self.printr.print_async(
             "Memory is on but the embedding model is missing — downloading it...",
@@ -3465,7 +3489,7 @@ class WingmanCore(WebSocketUser):
         )
 
         while not download_task.done():
-            if progress_state:
+            if show_progress and progress_state:
                 pct = progress_state.get("pct", 0)
                 dl_mb = progress_state.get("downloaded_mb", 0)
                 t_mb = progress_state.get("total_mb", 0)
@@ -3479,8 +3503,10 @@ class WingmanCore(WebSocketUser):
         if not await download_task:
             self.printr.toast_error(
                 "Could not download the memory model. Memory stays off until it "
-                "is downloaded — retry in Settings > Local AI."
+                "is downloaded. Try again in Settings > Local AI or restart Wingman AI."
             )
+            return False
+        return True
 
     # ── Local AI Endpoints ────────────────────────────────────────
 

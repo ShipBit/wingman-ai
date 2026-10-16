@@ -22,6 +22,9 @@ printr = Printr()
 # (blips, resets, mid-download aborts) must not leave the user without local AI.
 MAX_DOWNLOAD_ATTEMPTS = 3
 RETRY_BASE_DELAY_SECONDS = 2
+# A model download that makes progress may go on this often in one run: each
+# attempt continues where the last one broke off.
+MAX_RESUMED_ATTEMPTS = 20
 
 
 def _is_retryable_download_error(error: Exception) -> bool:
@@ -192,26 +195,53 @@ class LocalModelManager:
             server_only=True,
         )
 
+        # A broken connection keeps what came so far: the next attempt asks
+        # for the rest (HTTP Range) instead of starting over. Hugging Face
+        # cut a 261 MB download at 228 MB three times in a row in a real
+        # session, and starting at zero every time never got to the end.
+        # Attempts that bring new bytes do not count against the limit.
         delay = RETRY_BASE_DELAY_SECONDS
         last_error: Optional[Exception] = None
-        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+        failures_without_progress = 0
+        attempt = 0
+        while attempt < MAX_RESUMED_ATTEMPTS:
+            attempt += 1
+            have = os.path.getsize(temp_path) if path.exists(temp_path) else 0
             try:
-                response = requests.get(url, stream=True, timeout=30)
+                headers = {"Range": f"bytes={have}-"} if have else {}
+                response = requests.get(url, stream=True, timeout=30, headers=headers)
+                if have and response.status_code == 416:
+                    # Range not satisfiable: the part file is already whole
+                    # (or wrong). Start over cleanly.
+                    os.remove(temp_path)
+                    have = 0
+                    response = requests.get(url, stream=True, timeout=30)
                 response.raise_for_status()
+                resumed = have > 0 and response.status_code == 206
+                if not resumed:
+                    have = 0  # The server sent the whole file.
 
                 total_size = int(response.headers.get("content-length", 0))
-                downloaded = 0
+                if total_size:
+                    total_size += have
+                downloaded = have
                 last_logged_pct = -10
                 last_callback_pct = -2
                 total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
                 self._download_progress = {
                     "file": filename,
-                    "pct": 0,
-                    "downloaded_mb": 0,
+                    "pct": int(have / total_size * 100) if total_size else 0,
+                    "downloaded_mb": have // (1024 * 1024),
                     "total_mb": total_mb,
                 }
+                if resumed:
+                    printr.print(
+                        f"  {filename}: continuing at {have // (1024 * 1024)} MB",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
 
-                with open(temp_path, "wb") as f:
+                with open(temp_path, "ab" if resumed else "wb") as f:
                     for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -255,22 +285,26 @@ class LocalModelManager:
 
             except Exception as e:
                 last_error = e
-                # Clean up partial download
-                if path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except OSError:
-                        pass
-                if not _is_retryable_download_error(e) or attempt >= MAX_DOWNLOAD_ATTEMPTS:
+                now_have = os.path.getsize(temp_path) if path.exists(temp_path) else 0
+                if not _is_retryable_download_error(e):
+                    break
+                if now_have > have:
+                    failures_without_progress = 0
+                    delay = RETRY_BASE_DELAY_SECONDS
+                else:
+                    failures_without_progress += 1
+                if failures_without_progress >= MAX_DOWNLOAD_ATTEMPTS:
                     break
                 printr.print(
-                    f"Download of {filename} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    f"Download of {filename} interrupted at {now_have // (1024 * 1024)} MB "
+                    f"(attempt {attempt}): {e} — continuing in {delay}s...",
                     color=LogType.WARNING,
                     server_only=True,
                 )
                 time.sleep(delay)
                 delay *= 2
 
+        # The part file stays: the next start continues where this one ended.
         self._download_progress = {}
         printr.print(
             f"Failed to download {filename}: {last_error}",
