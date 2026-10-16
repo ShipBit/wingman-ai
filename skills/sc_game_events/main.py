@@ -47,9 +47,10 @@ SWITCHES = tuple(_CATEGORIES) + tuple(
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 REACTION_CHARS = 300
 RECENT_LINES = 5
-# Events that happen many times in every session: zones, arrivals, the
-# hangar, the login. Each group gets one spoken line per ROUTINE_GAP_S; one
-# hour of play had 20 lines about armistice zones and monitored space alone.
+# Events that happen many times in every session: zones, quantum steps, the
+# hangar, the login. Each group gets one spoken line per "routine_gap_minutes"
+# (2 to 20, default 5); one hour of play had 20 lines about armistice zones and
+# monitored space alone.
 # Entering and leaving alternate every few minutes, so REPEAT_SECONDS below,
 # which only stops the same report, lets them all through. Missions, money,
 # injuries and warnings are not in here and always count.
@@ -59,13 +60,13 @@ ROUTINE_GROUPS = {
     "entered_monitored_space": "zone",
     "exited_monitored_space": "zone",
     "jurisdiction_change": "zone",
-    "location_arrived": "travel",
-    "location_departed": "travel",
-    "location_change": "travel",
-    "qt_arrived": "travel",
-    "quantum_route_set": "travel",
-    "quantum_calibration_started": "travel",
-    "quantum_calibration_complete": "travel",
+    # Arriving at and leaving a place are not paced: a few per session, and
+    # the reason to have the skill on. Paced with the quantum steps, a trip
+    # (route, takeoff, jump, arrival) kept only its first line.
+    "qt_arrived": "quantum",
+    "quantum_route_set": "quantum",
+    "quantum_calibration_started": "quantum",
+    "quantum_calibration_complete": "quantum",
     "hangar_ready": "hangar",
     "hangar_queue": "hangar",
     "ship_entered": "hangar",
@@ -74,7 +75,8 @@ ROUTINE_GROUPS = {
     "session_start": "session",
     "join_pu": "session",
 }
-ROUTINE_GAP_S = 600.0
+ROUTINE_GAP_MINUTES = (2, 5, 20)
+"""Minimum, default and maximum of the "routine_gap_minutes" setting."""
 FOLD_SECONDS = 15.0
 """A report from while the Wingman was busy is still worth a word this long.
 Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
@@ -136,6 +138,15 @@ class ScGameEvents(Skill):
         except (TypeError, ValueError):
             return 10
 
+    def _routine_gap(self) -> float:
+        """Seconds between two lines about the same routine group."""
+        low, default, high = ROUTINE_GAP_MINUTES
+        try:
+            minutes = float(self.retrieve_custom_property_value("routine_gap_minutes", []))
+        except (TypeError, ValueError):
+            minutes = default
+        return 60 * min(high, max(low, minutes))
+
     def _remember(self) -> bool:
         return bool(self.retrieve_custom_property_value("remember_reactions", []))
 
@@ -178,7 +189,7 @@ class ScGameEvents(Skill):
         if not events:
             return
         group = ROUTINE_GROUPS.get(event.type)
-        if group and _now() - self._routine_spoken.get(group, float("-inf")) < ROUTINE_GAP_S:
+        if group and _now() - self._routine_spoken.get(group, float("-inf")) < self._routine_gap():
             return
         if self._policy is None or events != self._events:
             # The policy remembers what it said; a new selection starts fresh.

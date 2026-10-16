@@ -483,3 +483,32 @@ def test_a_line_finished_after_the_user_started_talking_is_dropped(monkeypatch):
         await skill.unload()
 
     asyncio.run(run())
+
+
+def test_a_trip_keeps_its_arrival(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+
+    async def run():
+        skill = _skill(wingman, react_location=True, max_unanswered=0)
+        skill._on_event(_event("quantum_route_set"))
+        await until(lambda: len(wingman.said) == 1)
+        clock[0] += 90  # The jump: its quantum steps stay paced.
+        skill._on_event(_event("quantum_calibration_complete"))
+        await asyncio.sleep(0.3)
+        assert len(wingman.said) == 1
+        clock[0] += 60  # Arriving minutes after the route was set is still said.
+        skill._on_event(ARRIVAL[2])
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert "Baijini Point" in wingman.prompts[1][1]
+
+
+def test_the_gap_between_routine_lines_is_a_setting_from_2_to_20_minutes():
+    wingman = FakeWingman()
+    assert _skill(wingman)._routine_gap() == 5 * 60
+    assert _skill(wingman, routine_gap_minutes=12)._routine_gap() == 12 * 60
+    assert _skill(wingman, routine_gap_minutes=0)._routine_gap() == 2 * 60
+    assert _skill(wingman, routine_gap_minutes=60)._routine_gap() == 20 * 60
