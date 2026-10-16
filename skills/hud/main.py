@@ -601,6 +601,10 @@ class HUD(Skill):
             validated = validate_hud_settings(hud_settings)
             base_url = f"http://{validated['host']}:{validated['port']}"
             self._client = HudHttpClient(base_url=base_url)
+        elif not self._client.connected:
+            # A client that was connected lost the server (a request failed).
+            # It may have restarted without this wingman's groups.
+            self._groups_ready = False
 
         if not self._client.connected:
             try:
@@ -625,9 +629,12 @@ class HUD(Skill):
                 )
                 msg_props = self._get_hud_props()
                 pers_props = self._get_persistent_props()
-                await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
-                await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
-                self._groups_ready = True
+                made = [
+                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props),
+                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props),
+                ]
+                # A failed request returns None; try again on the next call.
+                self._groups_ready = all(result is not None for result in made)
 
             # Start audio monitor if not running
             if not self._monitor_task or self._monitor_task.done():
@@ -765,7 +772,19 @@ class HUD(Skill):
                 server_only=True
             )
 
-        # Delete groups if client exists - wrap in try-except
+        # Delete groups if client exists - wrap in try-except. The clients
+        # belong to the loops that made them; unload may run on one that has
+        # none yet, and the groups must still go.
+        if self._client is None and self._clients:
+            hud_settings = getattr(self.settings, 'hud_server', None)
+            if hud_settings:
+                validated = validate_hud_settings(hud_settings)
+                client = HudHttpClient(base_url=f"http://{validated['host']}:{validated['port']}")
+                try:
+                    if await client.connect(timeout=3.0):
+                        self._client = client
+                except Exception:
+                    pass
         if self._client:
             try:
                 await self._client.delete_group(self._group_name, WindowType.MESSAGE)

@@ -1135,8 +1135,10 @@ class SkillConversation:
         copy — lines added with add_assistant came back appended to its next
         answers. Add it right before the user's next message (the
         on_add_user_message hook), not while a turn is running."""
+        from services.conversation_manager import NOTE_PREFIX
+
         self._wingman.conversation.messages.append(
-            {"role": "user", "content": f"[Note, not said by the user: {content}]"}
+            {"role": "user", "content": f"{NOTE_PREFIX}{content}]"}
         )
 
     @property

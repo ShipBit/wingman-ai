@@ -699,8 +699,20 @@ class PersistentMemoryService:
 
     # ── forget ─────────────────────────────────────────────────────
 
-    def _forget_by_query_impl(self, query_text: str) -> bool:
-        hits = self._search_impl(query_text, limit=1)
+    def _forget_by_query_impl(
+        self,
+        query_text: str,
+        entry_type: str | None = None,
+        keep_id: int | None = None,
+    ) -> bool:
+        """Delete the entry closest to the query, if it is close enough.
+        ``entry_type`` limits the search, ``keep_id`` is never deleted (a
+        correction must not remove the fact it just stored)."""
+        hits = [
+            hit
+            for hit in self._search_impl(query_text, limit=2, entry_type=entry_type)
+            if hit.id != keep_id
+        ]
         if not hits:
             return False
         embeddings = self.local_ai_service.embed([query_text])
@@ -736,8 +748,12 @@ class PersistentMemoryService:
         """Rewrite the fact list with no new messages: the memory tab's button."""
         return await asyncio.to_thread(self._checkpoint_impl, [], "", False, True)
 
-    async def forget_by_query(self, query_text: str) -> bool:
-        return await asyncio.to_thread(self._forget_by_query_impl, query_text)
+    async def forget_by_query(
+        self, query_text: str, entry_type: str | None = None, keep_id: int | None = None
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._forget_by_query_impl, query_text, entry_type, keep_id
+        )
 
     # ── sync public API ────────────────────────────────────────────
 

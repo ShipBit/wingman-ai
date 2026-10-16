@@ -123,7 +123,7 @@ def test_single_shared_words_stay_with_the_user():
 
 
 def test_a_short_command_keeps_its_small_words():
-    core = _core_with("Armistice zone entered, Logan - try not to start a diplomatic incident.")
+    core = _core_with("Armistice zone entered, Shackles - try not to start a diplomatic incident.")
     words = _words("Switch to Navigation mode.")
     assert core._without_echo(words) == words
 
@@ -134,7 +134,7 @@ def test_a_short_answer_heard_back_whole_is_an_echo():
 
 
 def test_the_users_words_keep_their_capitals_and_commas():
-    core = _core_with("Panel's on the glass. That's a proper day's work, Logan.")
+    core = _core_with("Panel's on the glass. That's a proper day's work, Shackles.")
     text = "Panels on the glass. No, change the full spec max to the Yadar."
     hits = core._echo_hits(_words(text))
     assert core._text_without_echo(text, hits) == "Panels. No, change the full spec max to the Yadar"

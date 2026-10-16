@@ -133,3 +133,12 @@ def test_display_text_drops_what_only_the_voice_needs():
     assert display_text(text) == (
         "Hurston L3, noted. Fine. See the [Cutlass page](https://example.org)."
     )
+
+
+
+def test_display_text_keeps_markdown_and_data():
+    from services.markdown import display_text
+
+    text = "- [x] Shields\n  - [ ] Coolers [1]\n    code line\nCargo [SCU]: 4, see [docs][ref]"
+    assert display_text(text) == text
+    assert display_text("[sigh] Fine.\n  <break time=\"1s\"/> Indented.") == "Fine.\n  Indented."

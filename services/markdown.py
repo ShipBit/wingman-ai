@@ -473,9 +473,16 @@ def strip_edge_breaks(text: str) -> str:
     return _EDGE_BREAK_RE.sub("", text)
 
 
-_SPEECH_TAG_RE = re.compile(r"<(?:break\b[^<>]*|/?verbatim|/?[a-z]+)\s*/?>", re.IGNORECASE)
-# [sigh], [laughs softly]: a stage direction, unless it is a Markdown link.
-_STAGE_DIRECTION_RE = re.compile(r"\[[^\[\]\n]{1,30}\](?!\()")
+# <break time="400ms" />, <verbatim>, </verbatim>, and <sigh> written wrongly.
+_SPEECH_TAG = r"<(?:break\b[^<>]*|/?[a-z]+)\s*/?>"
+# Wraps a word that stays: only the tag goes, the spaces around it stay.
+_VERBATIM_RE = re.compile(r"</?verbatim\s*>", re.IGNORECASE)
+# [sigh], [laughs softly]: lowercase words in brackets. Not a Markdown link
+# "[text](url)" or "[text][ref]", not "[x]" of a task list, not "[1]" or "[SCU]".
+_STAGE_DIRECTION = r"(?<!\])\[[a-z][a-z ]{2,28}\](?![(\[])"
+_SPEECH_MARKUP = f"(?:{_SPEECH_TAG}|{_STAGE_DIRECTION})"
+_MARKUP_AT_LINE_START_RE = re.compile(rf"(?m)^([ \t]*){_SPEECH_MARKUP}[ \t]*")
+_MARKUP_RE = re.compile(rf"[ \t]*{_SPEECH_MARKUP}")
 
 
 def display_text(text: str) -> str:
@@ -484,13 +491,14 @@ def display_text(text: str) -> str:
     Models write speech markup into replies for the TTS provider: pauses
     (<break time="400ms" />), spelled-out names (<verbatim>L3</verbatim>) and
     stage directions ([sigh], or <sigh> when they get it wrong). The client
-    renders those; the HUD showed them as typed. Links stay.
+    renders those; the HUD showed them as typed. Everything else stays as
+    written, indentation and Markdown included.
     """
     if not text:
         return text
-    text = _SPEECH_TAG_RE.sub("", text)
-    text = _STAGE_DIRECTION_RE.sub("", text)
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r" +([,.!?])", r"\1", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    # At the start of a line the space after the markup goes with it, the
+    # indentation before it stays; inside a line the space before it goes.
+    text = _VERBATIM_RE.sub("", text)
+    text = _MARKUP_AT_LINE_START_RE.sub(r"\1", text)
+    text = _MARKUP_RE.sub("", text)
     return text.strip()

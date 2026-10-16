@@ -149,9 +149,11 @@ class Vocabulary:
         words = key.split()
         joined = key.replace(" ", "")
         exact = self._exact.get(joined)
-        if exact is not None and len(words) <= MAX_PHRASE_WORDS:
-            # The name itself, only split or cased differently: "micro tech"
-            # is MicroTech even though both halves are everyday words.
+        if exact is not None and 1 < len(words) <= MAX_PHRASE_WORDS:
+            # The name itself, only split: "micro tech" is MicroTech even
+            # though both halves are everyday words. A single everyday word
+            # stays as written, so "a storm is coming" keeps its "storm" next
+            # to the ship called Storm.
             return exact
         if respect_protection and all(w in PROTECTED_WORDS or w in self._common for w in words):
             # Real words of the user's language: the speech model decided on

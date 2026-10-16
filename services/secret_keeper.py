@@ -46,8 +46,6 @@ class SecretKeeper(WebSocketUser):
                 get_writable_dir(CONFIGS_DIR), SECRETS_FILE
             )
             cls._instance.secrets = cls._instance.load() or {}
-            # What is on disk, to tell a real change from the same value sent again.
-            cls._instance._on_disk = dict(cls._instance.secrets)
             cls._instance.secret_events = PubSub()
 
         return cls._instance
@@ -70,15 +68,11 @@ class SecretKeeper(WebSocketUser):
             self.printr.toast_error("No config file path provided.")
             return False
         try:
-            changed = self.secrets != self._on_disk
             with open(self.config_file, "w", encoding="UTF-8") as stream:
                 yaml.dump(self.secrets, stream)
-            self._on_disk = dict(self.secrets)
-            # Every wingman validates itself again on this event. The client
-            # sends the same token more than once after a sign-in, and each
-            # of those used to revalidate every wingman for nothing.
-            if changed:
-                await self.secret_events.publish("secrets_saved", self.secrets)
+            # Published even when nothing changed: saving the same key again
+            # is how a user retries a wingman that failed to validate.
+            await self.secret_events.publish("secrets_saved", self.secrets)
             return True
         except yaml.YAMLError as e:
             self.printr.toast_error(f"Could not write ({SECRETS_FILE})\n{str(e)}")

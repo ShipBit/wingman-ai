@@ -34,6 +34,16 @@ _CLEARED_NOTE = (
 _CLEARED_NOTE_RE = re.compile(r"^\[Tool output removed from history \(~(\d+) tokens")
 
 
+# Context a skill put into the history (SkillConversation.add_note). It is a
+# user-role message, since every provider accepts that between turns, but it
+# is not the user talking.
+NOTE_PREFIX = "[Note, not said by the user: "
+
+
+def is_note(content) -> bool:
+    return isinstance(content, str) and content.startswith(NOTE_PREFIX)
+
+
 class ConversationManager:
     """Owns the conversation message list, tool-response bookkeeping, and
     history cleanup / trimming logic.
@@ -565,7 +575,9 @@ class ConversationManager:
             elif hasattr(msg, "content"):
                 content = self._extract_text_content(msg.content) or ""
 
-            if role == "user":
+            if role == "user" and is_note(content):
+                lines.append(f"Note: {content[len(NOTE_PREFIX):].rstrip(']')}")
+            elif role == "user":
                 lines.append(f"User: {content}")
             elif role == "assistant":
                 if content:

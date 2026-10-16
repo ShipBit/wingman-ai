@@ -127,7 +127,7 @@ def clean_filler(text: Optional[str], request: str) -> Optional[str]:
     if not lines:
         return None
     # "Updating panels; Yadar spec only." A second clause is a second line.
-    line = re.split(r"[;:]", lines[0])[0]
+    line = lines[0].split(";")[0]
     line = line.strip().strip("\"'“”„«»").strip()
     if not line or "<think" in line or "?" in line or "¿" in line:
         return None

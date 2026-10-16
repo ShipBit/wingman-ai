@@ -23,6 +23,7 @@ class FakeClient:
 
     async def create_group(self, *args, **kwargs):
         self.groups += 1
+        return {}
 
 
 def make_hud(monkeypatch):
@@ -82,3 +83,29 @@ def test_a_failed_connection_rebuilds_the_groups(monkeypatch):
     monkeypatch.setattr(hud_main, "HudHttpClient", FakeClient)
     assert run_on_new_loop(hud._ensure_connected)
     assert sum(client.groups for client in FakeClient.made) == 4
+
+
+def test_a_lost_server_gets_the_groups_again(monkeypatch):
+    """A failed request marks the client disconnected; the server may have
+    restarted without this wingman's groups."""
+    hud = make_hud(monkeypatch)
+
+    async def turn():
+        assert await hud._ensure_connected()
+        hud._client.connected = False  # The next request failed.
+        assert await hud._ensure_connected()
+
+    run_on_new_loop(turn)
+    assert sum(client.groups for client in FakeClient.made) == 4
+
+
+def test_groups_that_failed_to_be_made_are_tried_again(monkeypatch):
+    hud = make_hud(monkeypatch)
+
+    async def refused(self, *args, **kwargs):
+        self.groups += 1
+        return None
+
+    monkeypatch.setattr(FakeClient, "create_group", refused)
+    run_on_new_loop(hud._ensure_connected)
+    assert hud._groups_ready is False
