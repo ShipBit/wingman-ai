@@ -172,7 +172,11 @@ def test_the_maintainer_comes_from_the_rules(tmp_path, monkeypatch):
 
 
 def test_the_default_maintainer_without_one_in_the_rules(tmp_path, monkeypatch):
-    source = _source(tmp_path, monkeypatch, 304)
+    bundled = Instructions.load(bundled_bytes()).revision
+    data = json.loads(_rules_bytes(bundled + 1))
+    data.pop("maintainer", None)
+    source = _source(tmp_path, monkeypatch, 200, json.dumps(data).encode())
+    asyncio.run(source.check())
     assert source.status.maintainer == rules_module.DEFAULT_MAINTAINER
 
 
