@@ -42,9 +42,7 @@ from hud_server.models import (
     ChatMessageRequest,
     ChatMessageUpdateRequest,
     CreateChatWindowRequest,
-    StateRestoreRequest,
     HealthResponse,
-    GroupStateResponse,
     OperationResponse,
     ChatMessageResponse,
 )
@@ -309,22 +307,6 @@ class HudServer:
             """Get list of all group names."""
             return {"groups": self.manager.get_groups()}
 
-        # ─────────────────────────────── State ─────────────────────────────── #
-
-        @app.get("/state/{group_name}", response_model=GroupStateResponse, tags=["state"])
-        async def get_state(group_name: str):
-            """Get the current state of a group for persistence."""
-            state = self.manager.get_group_state(group_name)
-            if state is None:
-                raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
-            return GroupStateResponse(group_name=group_name, state=state)
-
-        @app.post("/state/restore", response_model=OperationResponse, tags=["state"])
-        async def restore_state(request: StateRestoreRequest):
-            """Restore a group's state from a previous snapshot."""
-            self.manager.restore_group_state(request.group_name, request.state)
-            return OperationResponse(status="ok", message=f"State restored for '{request.group_name}'")
-
         # ─────────────────────────────── Messages ─────────────────────────────── #
 
         @app.post("/message", response_model=OperationResponse, tags=["messages"])
@@ -480,7 +462,6 @@ class HudServer:
                 "max_messages": request.max_messages,
                 "sender_colors": request.sender_colors or {},
                 "fade_old_messages": request.fade_old_messages,
-                "is_chat_window": True,
             }
             # Remove None values
             props = {k: v for k, v in props.items() if v is not None}
@@ -509,7 +490,10 @@ class HudServer:
                 element=request.element.value,
                 sender=request.sender,
                 text=request.text,
-                color=request.color
+                color=request.color,
+                icon=request.icon,
+                own=request.own,
+                tools=request.tools,
             )
             if message_id is None:
                 raise HTTPException(status_code=404, detail=f"Chat window '{request.group_name}' not found")
@@ -962,23 +946,3 @@ class HudServer:
     def base_url(self) -> str:
         """Get the base URL for the server."""
         return f"http://{self._host}:{self._port}"
-
-
-# Standalone execution support
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="HUD Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=7862, help="Port to bind to")
-    args = parser.parse_args()
-
-    print(f"Starting HUD Server on http://{args.host}:{args.port}")
-    print("API docs available at /docs")
-
-    uvicorn.run(
-        "hud_server.server:HudServer().app",
-        host=args.host,
-        port=args.port,
-        reload=False
-    )

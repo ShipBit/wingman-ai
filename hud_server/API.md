@@ -20,7 +20,6 @@ Complete API reference for the Wingman AI HUD Server REST API.
 - [Persistent Items](#persistent-items)
 - [Progress & Timers](#progress--timers)
 - [Chat Windows](#chat-windows)
-- [State Management](#state-management)
 - [Error Responses](#error-responses)
 
 ---
@@ -346,6 +345,7 @@ Show or hide the loader animation.
 ```json
 {
   "group_name": "my_wingman",
+  "element": "message",
   "show": true,
   "color": "#00aaff"
 }
@@ -353,6 +353,7 @@ Show or hide the loader animation.
 
 **Fields**:
 - `group_name` (string, required): Target group name
+- `element` (string, required): `message`, or `chat` for the group's chat window
 - `show` (boolean, required): Show (true) or hide (false)
 - `color` (string, optional): Hex color for loader (#RRGGBB). Without it, the loader uses the group's `accent_color`.
 
@@ -592,24 +593,33 @@ Send a message to a chat window.
 
 ```json
 {
-  "window_name": "team_chat",
+  "group_name": "team_chat",
+  "element": "chat",
   "sender": "Alice",
   "text": "Hello everyone!",
-  "color": "#ff6b6b"
+  "color": "#ff6b6b",
+  "icon": "C:/avatars/alice.png"
 }
 ```
 
 **Fields**:
-- `window_name` (string, required): Target chat window name
+- `group_name` (string, required): The chat window's group. The window appears with its first message.
+- `element` (string, required): `chat`
 - `sender` (string, required): Sender name
-- `text` (string, required): Message text
+- `text` (string, required): Message text (Markdown)
 - `color` (string, optional): Sender color override (#RRGGBB)
+- `icon` (string, optional): Path of the sender's picture, shown round next to the message. Without one, a circle with the sender's initial.
+- `own` (boolean, optional): Written by the user: a bubble on the right, like in a messenger
+- `tools` (list, optional): Tool chips under the message, as for a message window
+
+A message from the same sender right after the last one is added to it.
 
 **Response**: `200 OK`
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "message_id": "6f1c..."
 }
 ```
 
@@ -670,59 +680,6 @@ Delete a chat window.
 ```json
 {
   "status": "ok"
-}
-```
-
----
-
-## State Management
-
-### GET /state/{group_name}
-
-Get the current state of a group for persistence.
-
-**URL Parameters**:
-- `group_name` (string): Target group name
-
-**Response**: `200 OK`
-
-```json
-{
-  "group_name": "my_wingman",
-  "state": {
-    "props": { ... },
-    "current_message": { ... },
-    "items": { ... },
-    "chat_messages": [ ... ],
-    "loader_visible": false,
-    "is_chat_window": false,
-    "visible": true
-  }
-}
-```
-
-### POST /state/restore
-
-Restore a group's state from a previous snapshot.
-
-**Request Body**:
-
-```json
-{
-  "group_name": "my_wingman",
-  "state": {
-    "props": { ... },
-    "items": { ... }
-  }
-}
-```
-
-**Response**: `200 OK`
-
-```json
-{
-  "status": "ok",
-  "message": "State restored for 'my_wingman'"
 }
 ```
 
@@ -805,7 +762,6 @@ Message content supports the following Markdown features:
 No rate limits are currently enforced, but avoid:
 - Sending more than 100 requests/second per group
 - Creating more than 1000 groups
-- Storing more than 10MB of state per group
 
 ---
 

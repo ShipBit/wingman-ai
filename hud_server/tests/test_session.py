@@ -413,17 +413,6 @@ class TestSession:
             return
         await self._client.hide_chat_window(group_name=name, element=WindowType.CHAT)
 
-    # =========================================================================
-    # State Management
-    # =========================================================================
-
-    async def get_state(self) -> Optional[dict]:
-        """Get the current state of this session's group."""
-        if not self._client:
-            return None
-        result = await self._client.get_state(self.group_name)
-        return result.get("state") if result else None
-
     async def health_check(self) -> bool:
         """Check if the server is healthy."""
         if not self._client:

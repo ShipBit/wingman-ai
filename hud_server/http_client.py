@@ -7,7 +7,7 @@ This replaces the WebSocket-based client for the integrated HUD server.
 
 Usage:
     from hud_server.http_client import HudHttpClient
-    from hud_server.types import Anchor, HudColor, FontFamily, message_props
+    from hud_server.types import Anchor, HudColor, FontFamily, WindowType, message_props
 
     # Async usage with type-safe props
     async with HudHttpClient() as client:
@@ -17,12 +17,13 @@ Usage:
             accent_color=HudColor.ACCENT_ORANGE,
             font_family=FontFamily.CONSOLAS
         )
-        await client.create_group("notifications", props=props)
-        await client.show_message("notifications", "Alert", "Something happened!")
+        await client.create_group("notifications", WindowType.MESSAGE, props=props)
+        await client.show_message("notifications", WindowType.MESSAGE, "Alert", "Something happened!")
 
         # Using enums directly (auto-converted to values)
         await client.create_chat_window(
             "chat",
+            WindowType.CHAT,
             anchor=Anchor.BOTTOM_LEFT,
             width=500
         )
@@ -30,7 +31,7 @@ Usage:
     # Sync usage
     client = HudHttpClientSync()
     client.connect()
-    client.show_message("group1", "Title", "Content", color=HudColor.SUCCESS)
+    client.show_message("group1", WindowType.MESSAGE, "Title", "Content", color=HudColor.SUCCESS)
     client.disconnect()
 
 For available property types and values, see:
@@ -49,7 +50,7 @@ from services.markdown import display_text
 from typing import Optional, Any, Union
 from urllib.parse import quote
 from api.enums import LogType
-from hud_server.constants import PATH_GROUPS, PATH_STATE, PATH_STATE_RESTORE, PATH_HEALTH, PATH_MESSAGE, \
+from hud_server.constants import PATH_GROUPS, PATH_HEALTH, PATH_MESSAGE, \
     PATH_MESSAGE_APPEND, PATH_MESSAGE_HIDE, PATH_LOADER, PATH_ITEMS, PATH_PROGRESS, PATH_TIMER, PATH_CHAT_WINDOW, \
     PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE, PATH_DEFAULTS, \
     PATH_PREVIEW
@@ -88,8 +89,6 @@ class HudHttpClient:
 
     # Timeout constants
     DEFAULT_CONNECT_TIMEOUT = hud_const.HTTP_CONNECT_TIMEOUT
-    DEFAULT_REQUEST_TIMEOUT = hud_const.HTTP_REQUEST_TIMEOUT
-    RECONNECT_ATTEMPTS = 1
     MAX_TIMEOUT_RETRIES = 3
 
     def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
@@ -388,20 +387,6 @@ class HudHttpClient:
 
     async def get_preview(self) -> Optional[dict]:
         return await self._request("GET", PATH_PREVIEW)
-
-    # ─────────────────────────────── State ─────────────────────────────── #
-
-    async def get_state(self, group_name: str) -> Optional[dict]:
-        """Get the current state of a group for persistence."""
-        encoded_group = quote(group_name, safe='')
-        return await self._request("GET", f"{PATH_STATE}/{encoded_group}")
-
-    async def restore_state(self, group_name: str, state: dict) -> Optional[dict]:
-        """Restore a group's state from a previous snapshot."""
-        return await self._request("POST", PATH_STATE_RESTORE, {
-            "group_name": group_name,
-            "state": state
-        })
 
     # ─────────────────────────────── Messages ─────────────────────────────── #
 
@@ -851,7 +836,10 @@ class HudHttpClient:
         element: WindowType,
         sender: str,
         text: str,
-        color: Optional[Union[str, HudColor]] = None
+        color: Optional[Union[str, HudColor]] = None,
+        icon: Optional[str] = None,
+        own: bool = False,
+        tools: Optional[list[dict]] = None,
     ) -> Optional[dict]:
         """Send a message to a chat window.
 
@@ -861,6 +849,9 @@ class HudHttpClient:
             sender: Sender name displayed with the message
             text: Message text content
             color: Optional sender color override (use HudColor enum or hex string)
+            icon: Path of the sender's picture, shown round next to the message
+            own: Written by the user: a bubble on the right, like in a messenger
+            tools: Tool chips under the message, as with show_message
 
         Returns:
             Server response dict with message_id or None if failed
@@ -882,6 +873,12 @@ class HudHttpClient:
         }
         if color:
             data["color"] = _resolve_enum(color)
+        if icon:
+            data["icon"] = icon
+        if own:
+            data["own"] = True
+        if tools:
+            data["tools"] = tools
 
         return await self._request("POST", PATH_CHAT_MESSAGE, data)
 
@@ -1117,12 +1114,6 @@ class HudHttpClientSync:
     def get_groups(self):
         return self._run_coro(self._client.get_groups()) if self._client else None
 
-    def get_state(self, group_name: str):
-        return self._run_coro(self._client.get_state(group_name)) if self._client else None
-
-    def restore_state(self, group_name: str, state: dict):
-        return self._run_coro(self._client.restore_state(group_name, state)) if self._client else None
-
     def show_message(
         self,
         group_name: str,
@@ -1287,11 +1278,14 @@ class HudHttpClientSync:
         element: WindowType,
         sender: str,
         text: str,
-        color: Optional[Union[str, HudColor]] = None
+        color: Optional[Union[str, HudColor]] = None,
+        icon: Optional[str] = None,
+        own: bool = False,
+        tools: Optional[list[dict]] = None,
     ):
         """Send chat message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.send_chat_message(
-            group_name, element, sender, text, color
+            group_name, element, sender, text, color, icon, own, tools
         )) if self._client else None
 
     def update_chat_message(self, group_name: str, element: WindowType, message_id: str, text: str):

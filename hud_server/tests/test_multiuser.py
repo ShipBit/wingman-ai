@@ -4,9 +4,7 @@ Test Multiuser - Multi-user HUD session tests with shared groups.
 Tests:
 - Multiple users each with their own HUD groups
 - Shared groups accessible by multiple users
-- Disconnect and reconnect scenarios:
-  - With state persistence (save/restore)
-  - Without state persistence (clean start)
+- Disconnecting and reconnecting with a clean start
 - HUDs with different configurations positioned across the screen
 
 This test simulates a realistic multi-user scenario like a gaming team
@@ -214,7 +212,6 @@ class UserClient:
     base_url: str = "http://127.0.0.1:7862"
     _client: Optional[HudHttpClient] = field(default=None, repr=False)
     connected: bool = False
-    saved_states: dict[str, dict] = field(default_factory=dict)
 
     @property
     def display_name(self) -> str:
@@ -298,43 +295,6 @@ class UserClient:
         await self._client.delete_group(self.private_persistent_group)
         print(f"[{self.display_name}] Cleaned up private groups")
 
-    # State persistence methods
-    async def save_state(self, group_name: str) -> bool:
-        """Save the current state of a group for later restore."""
-        if not self._client:
-            return False
-
-        result = await self._client.get_state(group_name)
-        if result and "state" in result:
-            self.saved_states[group_name] = result["state"]
-            print(f"[{self.display_name}] Saved state for '{group_name}'")
-            return True
-        return False
-
-    async def restore_state(self, group_name: str) -> bool:
-        """Restore a previously saved group state."""
-        if not self._client:
-            return False
-
-        if group_name not in self.saved_states:
-            print(f"[{self.display_name}] No saved state for '{group_name}'")
-            return False
-
-        result = await self._client.restore_state(
-            group_name,
-            self.saved_states[group_name]
-        )
-        if result:
-            print(f"[{self.display_name}] Restored state for '{group_name}'")
-            return True
-        return False
-
-    def clear_saved_states(self):
-        """Clear all saved states (simulating no persistence)."""
-        self.saved_states.clear()
-        print(f"[{self.display_name}] Cleared all saved states")
-
-    # Private HUD operations
     async def show_private_message(self, title: str, content: str,
                                    color: Optional[str] = None):
         """Show a message in the user's private HUD."""
@@ -624,73 +584,6 @@ async def test_multiuser_shared_interaction(users: dict[str, UserClient],
     print("Shared interaction test complete")
 
 
-async def test_disconnect_reconnect_with_save(users: dict[str, UserClient],
-                                              shared: SharedGroupManager,
-                                              delay: float = 2.0):
-    """Test disconnect and reconnect WITH state persistence."""
-    print("\n" + "="*60)
-    print("TEST: Disconnect/Reconnect WITH State Save")
-    print("="*60)
-
-    # Alice adds content to her private panels
-    await users["alice"].show_private_message(
-        "Important Data",
-        """This message should **persist** after reconnect!
-
-- Item 1: Saved
-- Item 2: Saved
-- State will be restored
-"""
-    )
-    await users["alice"].add_private_item("Saved Item 1", "This will persist")
-    await users["alice"].add_private_item("Saved Item 2", "This too!")
-    await asyncio.sleep(delay)
-
-    # Bob shows a progress bar
-    await users["bob"].show_private_progress("Download", 65, 100, "65% complete")
-    await users["bob"].add_private_item("Pinned", "Important bookmark")
-    await asyncio.sleep(delay)
-
-    # Save states before disconnect
-    print("\n--- Saving states before disconnect ---")
-    await users["alice"].save_state(users["alice"].private_hud_group)
-    await users["alice"].save_state(users["alice"].private_persistent_group)
-    await users["bob"].save_state(users["bob"].private_hud_group)
-    await users["bob"].save_state(users["bob"].private_persistent_group)
-
-    await asyncio.sleep(delay)
-
-    # Disconnect both users
-    print("\n--- Disconnecting users ---")
-    await users["alice"].disconnect()
-    await users["bob"].disconnect()
-    await asyncio.sleep(delay)
-
-    # Reconnect
-    print("\n--- Reconnecting users ---")
-    await users["alice"].connect()
-    await users["bob"].connect()
-    await asyncio.sleep(delay)
-
-    # Restore saved states
-    print("\n--- Restoring saved states ---")
-    await users["alice"].restore_state(users["alice"].private_hud_group)
-    await users["alice"].restore_state(users["alice"].private_persistent_group)
-    await users["bob"].restore_state(users["bob"].private_hud_group)
-    await users["bob"].restore_state(users["bob"].private_persistent_group)
-
-    await asyncio.sleep(delay)
-
-    # Verify restoration by showing confirmation
-    await users["alice"].show_private_message(
-        "State Restored!",
-        "Previous content should be visible above."
-    )
-
-    await asyncio.sleep(delay)
-    print("Disconnect/reconnect WITH save test complete")
-
-
 async def test_disconnect_reconnect_without_save(users: dict[str, UserClient],
                                                   delay: float = 2.0):
     """Test disconnect and reconnect WITHOUT state persistence."""
@@ -712,9 +605,6 @@ async def test_disconnect_reconnect_without_save(users: dict[str, UserClient],
     await users["charlie"].show_private_timer("Session Timer", 30.0, "Running...")
 
     await asyncio.sleep(delay)
-
-    # Clear any saved states to simulate no persistence
-    users["charlie"].clear_saved_states()
 
     # Disconnect
     print("\n--- Disconnecting Charlie (no state save) ---")
@@ -901,9 +791,6 @@ async def run_all_multiuser_tests(base_url: str = "http://127.0.0.1:7862",
         await asyncio.sleep(2)
 
         await test_multiuser_shared_interaction(users, shared, 1.0 * delay_multiplier)
-        await asyncio.sleep(2)
-
-        await test_disconnect_reconnect_with_save(users, shared, 2.0 * delay_multiplier)
         await asyncio.sleep(2)
 
         await test_disconnect_reconnect_without_save(users, 2.0 * delay_multiplier)

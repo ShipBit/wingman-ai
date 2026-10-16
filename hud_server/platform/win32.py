@@ -16,23 +16,16 @@ WS_EX_TRANSPARENT = 0x20
 WS_EX_TOPMOST = 0x00000008
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
-LWA_ALPHA = 0x00000002
-LWA_COLORKEY = 0x00000001
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_HIDEWINDOW = 0x0080
 SWP_SHOWWINDOW = 0x0040
 SWP_NOACTIVATE = 0x0010
-SWP_ASYNCWINDOWPOS = 0x4000
-SRCCOPY = 0x00CC0020
 DIB_RGB_COLORS = 0
 BI_RGB = 0
 
-# UpdateLayeredWindow - true per-pixel alpha compositing (vs. the binary
-# LWA_COLORKEY / uniform LWA_ALPHA supported by SetLayeredWindowAttributes)
-ULW_COLORKEY = 0x00000001
+# UpdateLayeredWindow: true per-pixel alpha compositing
 ULW_ALPHA = 0x00000002
-ULW_OPAQUE = 0x00000004
 AC_SRC_OVER = 0x00
 AC_SRC_ALPHA = 0x01
 
@@ -42,7 +35,6 @@ user32 = ctypes.WinDLL("user32.dll", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32.dll", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
 
-SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 HWND_TOPMOST = wintypes.HWND(-1)
 
@@ -92,15 +84,6 @@ class BITMAPINFOHEADER(ctypes.Structure):
     ]
 
 
-class RGBQUAD(ctypes.Structure):
-    _fields_ = [
-        ("rgbBlue", ctypes.c_byte),
-        ("rgbGreen", ctypes.c_byte),
-        ("rgbRed", ctypes.c_byte),
-        ("rgbReserved", ctypes.c_byte),
-    ]
-
-
 class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3)]
 
@@ -117,13 +100,6 @@ class BLENDFUNCTION(ctypes.Structure):
 # Setup Function Prototypes
 user32.DefWindowProcW.argtypes = [wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
 user32.DefWindowProcW.restype = LRESULT
-user32.SetLayeredWindowAttributes.argtypes = [
-    wintypes.HWND,
-    wintypes.COLORREF,
-    wintypes.BYTE,
-    wintypes.DWORD,
-]
-user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
 user32.UpdateLayeredWindow.argtypes = [
     wintypes.HWND,
     wintypes.HDC,
@@ -219,15 +195,6 @@ user32.MoveWindow.restype = wintypes.BOOL
 
 # Multi-monitor support - define types first
 MONITORINFOF_PRIMARY = 1
-
-
-class MONITORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.DWORD),
-        ("rcMonitor", wintypes.RECT),
-        ("rcWork", wintypes.RECT),
-        ("dwFlags", wintypes.DWORD),
-    ]
 
 
 class MONITORINFOEXW(ctypes.Structure):
@@ -403,8 +370,6 @@ user32.SetCapture.argtypes = [wintypes.HWND]
 user32.SetCapture.restype = wintypes.HWND
 user32.ReleaseCapture.argtypes = []
 user32.ReleaseCapture.restype = wintypes.BOOL
-user32.GetCapture.argtypes = []
-user32.GetCapture.restype = wintypes.HWND
 user32.LoadCursorW.argtypes = [wintypes.HINSTANCE, wintypes.LPVOID]
 user32.LoadCursorW.restype = wintypes.HANDLE
 user32.SetCursor.argtypes = [wintypes.HANDLE]

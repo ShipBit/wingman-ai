@@ -50,7 +50,14 @@ Where the containers are and how they look is a **HUD profile**, under
 - the look: font, size, colours, background and overall transparency, corner
   radius, padding, typewriter effect. Tables and the loader take their colour
   from the accent colour, and tables are as see-through as the background,
-- how long chat messages stay, and whether the chat shows tool names.
+- how long chat messages stay, whether the chat shows tool names, and the
+  name the chat calls you. Left empty, it is the name you are signed in to
+  Wingman AI with, or "User" when you are not signed in,
+- the **chat flow**: off, the chat shows only the newest message, with the
+  Wingman's picture and the tools it used. On, it shows the running
+  conversation like a messenger: each Wingman's message with its picture,
+  name and tools, your own as bubbles on the right, the newest at the bottom.
+  It hides the same way and comes back with the earlier messages.
 
 The HUD screen itself (which monitor) is a setting of the HUD server and the
 same for every profile.
@@ -72,7 +79,8 @@ profile.
 
 Switch a profile to **preview** and its two containers appear on the screen as
 preview panels: sample content in the profile's real look, always as large as
-the whole area. Only one profile is previewed at a time.
+the whole area; with the chat flow on, the chat panel shows a short
+conversation. Only one profile is previewed at a time.
 
 While the preview is on, you can use the mouse on the panels:
 

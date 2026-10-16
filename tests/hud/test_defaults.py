@@ -1,6 +1,7 @@
 """HUD server defaults: values a group's own calls leave out."""
 
 from hud_server.hud_manager import HudManager
+from tests.support import FakeHudBackend, make_overlay
 
 
 def _manager_with_overlay():
@@ -10,24 +11,34 @@ def _manager_with_overlay():
     return manager, commands
 
 
+def _overlay_behind_a_manager():
+    overlay = make_overlay(FakeHudBackend())
+    manager = HudManager()
+    manager.register_command_callback(overlay._handle_message)
+    return manager, overlay
+
+
 def test_a_group_inherits_the_defaults_for_what_it_does_not_set():
-    manager, _ = _manager_with_overlay()
+    manager, overlay = _overlay_behind_a_manager()
     manager.set_defaults(
         props={"font_size": 18, "accent_color": "#ff0000"},
         groups={"wingman_chat": {"x": 100, "width": 500}},
     )
     manager.create_group("wingman_chat", "message", {"accent_color": "#00ff00"})
 
-    resolved = manager.resolve_props("wingman_chat", "message")
+    props = overlay._resolve_window_props("message", "wingman_chat")
 
-    assert resolved == {"font_size": 18, "accent_color": "#00ff00", "x": 100, "width": 500}
+    assert (props["font_size"], props["accent_color"], props["x"], props["width"]) == (18, "#00ff00", 100, 500)
 
 
 def test_group_defaults_only_apply_to_their_own_group():
-    manager, _ = _manager_with_overlay()
+    manager, overlay = _overlay_behind_a_manager()
     manager.set_defaults(props={"font_size": 18}, groups={"wingman_chat": {"x": 100}})
 
-    assert manager.resolve_props("ATC_mic", "persistent") == {"font_size": 18}
+    props = overlay._resolve_window_props("persistent", "ATC_mic")
+
+    assert props["font_size"] == 18
+    assert props["x"] != 100
 
 
 def test_new_defaults_replace_the_old_ones_and_reach_the_overlay():

@@ -106,12 +106,14 @@ def new_profile(name: str, source: HudProfile) -> HudProfile:
 # ─────────────────────────────── HUD server props ─────────────────────────────── #
 
 
+def chat_user_name(profile: Optional[HudProfile], account_name: Optional[str]) -> str:
+    """The profile's name for the user, else the client's account name, else "User"."""
+    if profile and profile.user_name.strip():
+        return profile.user_name.strip()
+    return (account_name or "").strip() or "User"
+
+
 _HEX = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
-
-
-def is_hex_color(value: Any) -> bool:
-    """#RGB, #RRGGBB or #RRGGBBAA."""
-    return isinstance(value, str) and bool(_HEX.match(value))
 
 
 def merge_alpha(hex_color: str, opacity_percent: float) -> str:
@@ -165,10 +167,15 @@ def hud_defaults(profile: HudProfile) -> tuple[dict[str, Any], dict[str, dict[st
     }
 
 
-def preview_containers(profile: HudProfile) -> dict[str, dict[str, Any]]:
+def preview_containers(profile: HudProfile, user_name: str = "User") -> dict[str, dict[str, Any]]:
+    """What the preview shows: both containers in the profile's style, the
+    chat as the newest message or, with the chat flow, as a conversation."""
     style = style_props(profile)
     return {
-        "chat": {**style, **area_props(profile.chat)},
+        "chat": {
+            **style, **area_props(profile.chat),
+            "chat_flow": profile.chat_flow, "sample_user": user_name,
+        },
         "info": {**style, **area_props(profile.info)},
     }
 

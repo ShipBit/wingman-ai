@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 from typing import Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from api.enums import LogType
 from services.printr import Printr
@@ -65,6 +65,12 @@ class ChatMessage:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     color: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
+    icon: Optional[str] = None
+    """Path of the sender's picture, shown round next to the message."""
+    own: bool = False
+    """Written by the user: a bubble on the right, like in a messenger."""
+    tools: list = field(default_factory=list)
+    """Tool chips under the message, as with show_message."""
 
 
 @dataclass
@@ -74,118 +80,7 @@ class GroupState:
     current_message: Optional[HudMessage] = None
     items: dict[str, HudItem] = field(default_factory=dict)
     chat_messages: list[ChatMessage] = field(default_factory=list)
-    loader_visible: bool = False
-    loader_color: Optional[str] = None
-    is_chat_window: bool = False
-    visible: bool = True
-    # Element visibility: tracks which elements are manually hidden
-    # Keys: "message", "persistent", "chat"
-    # Values: True if hidden, False if visible
-    element_hidden: dict[str, bool] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert state to dictionary for persistence."""
-        return {
-            "props": self.props,
-            "current_message": {
-                "title": self.current_message.title,
-                "content": self.current_message.content,
-                "color": self.current_message.color,
-                "tools": self.current_message.tools,
-                "props": self.current_message.props,
-                "timestamp": self.current_message.timestamp,
-                "duration": self.current_message.duration,
-                "title_icon": self.current_message.title_icon,
-            } if self.current_message else None,
-            "items": {
-                title: {
-                    "title": item.title,
-                    "description": item.description,
-                    "color": item.color,
-                    "duration": item.duration,
-                    "added_at": item.added_at,
-                    "added_by": item.added_by,
-                    "is_progress": item.is_progress,
-                    "progress_current": item.progress_current,
-                    "progress_maximum": item.progress_maximum,
-                    "progress_color": item.progress_color,
-                    "is_timer": item.is_timer,
-                    "timer_duration": item.timer_duration,
-                    "timer_start": item.timer_start,
-                    "auto_close": item.auto_close,
-                }
-                for title, item in self.items.items()
-            },
-            "chat_messages": [
-                {
-                    "id": msg.id,
-                    "sender": msg.sender,
-                    "text": msg.text,
-                    "color": msg.color,
-                    "timestamp": msg.timestamp,
-                }
-                for msg in self.chat_messages
-            ],
-            "loader_visible": self.loader_visible,
-            "loader_color": self.loader_color,
-            "is_chat_window": self.is_chat_window,
-            "visible": self.visible,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GroupState":
-        """Create state from dictionary."""
-        state = cls()
-        state.props = data.get("props", {})
-        state.loader_visible = data.get("loader_visible", False)
-        state.loader_color = data.get("loader_color")
-        state.is_chat_window = data.get("is_chat_window", False)
-        state.visible = data.get("visible", True)
-
-        # Restore current message
-        msg_data = data.get("current_message")
-        if msg_data:
-            state.current_message = HudMessage(
-                title=msg_data.get("title", ""),
-                content=msg_data.get("content", ""),
-                color=msg_data.get("color"),
-                tools=msg_data.get("tools", []),
-                props=msg_data.get("props"),
-                timestamp=msg_data.get("timestamp", time.time()),
-                duration=msg_data.get("duration"),
-                title_icon=msg_data.get("title_icon"),
-            )
-
-        # Restore items
-        for title, item_data in data.get("items", {}).items():
-            state.items[title] = HudItem(
-                title=item_data.get("title", title),
-                description=item_data.get("description", ""),
-                color=item_data.get("color"),
-                duration=item_data.get("duration"),
-                added_at=item_data.get("added_at", time.time()),
-                added_by=item_data.get("added_by"),
-                is_progress=item_data.get("is_progress", False),
-                progress_current=item_data.get("progress_current", 0),
-                progress_maximum=item_data.get("progress_maximum", 100),
-                progress_color=item_data.get("progress_color"),
-                is_timer=item_data.get("is_timer", False),
-                timer_duration=item_data.get("timer_duration", 0),
-                timer_start=item_data.get("timer_start", 0),
-                auto_close=item_data.get("auto_close", True),
-            )
-
-        # Restore chat messages
-        for msg_data in data.get("chat_messages", []):
-            state.chat_messages.append(ChatMessage(
-                id=msg_data.get("id", str(uuid.uuid4())),
-                sender=msg_data.get("sender", ""),
-                text=msg_data.get("text", ""),
-                color=msg_data.get("color"),
-                timestamp=msg_data.get("timestamp", time.time()),
-            ))
-
-        return state
 
 
 class HudManager:
@@ -267,16 +162,6 @@ class HudManager:
                 "groups": {name: dict(p) for name, p in self._defaults["groups"].items()},
             }
 
-    def resolve_props(self, group_name: str, element: str) -> dict[str, Any]:
-        """Defaults plus the group's own props, without the overlay's built-ins."""
-        with self._lock:
-            resolved = dict(self._defaults["props"])
-            resolved.update(self._defaults["groups"].get(group_name, {}))
-            state = self._groups.get(self._make_key(group_name, element))
-            if state:
-                resolved.update(state.props)
-            return resolved
-
     # ─────────────────────────────── Preview ─────────────────────────────── #
 
     def set_preview(self, containers: dict[str, dict[str, Any]], interactive: bool = False) -> None:
@@ -332,8 +217,6 @@ class HudManager:
 
             if props:
                 self._groups[key].props.update(props)
-                if "is_chat_window" in props:
-                    self._groups[key].is_chat_window = bool(props["is_chat_window"])
 
             self._notify_callbacks({
                 "type": "create_group",
@@ -382,27 +265,6 @@ class HudManager:
         """Get list of all group names."""
         with self._lock:
             return list(self._groups.keys())
-
-    def get_group_state(self, group_name: str) -> Optional[dict[str, Any]]:
-        """Get the current state of a group for persistence."""
-        with self._lock:
-            if group_name in self._groups:
-                return self._groups[group_name].to_dict()
-            return None
-
-    def restore_group_state(self, group_name: str, state: dict[str, Any]) -> bool:
-        """Restore a group's state from a previous snapshot."""
-        with self._lock:
-            self._groups[group_name] = GroupState.from_dict(state)
-
-            # Notify overlay to restore visuals
-            self._notify_callbacks({
-                "type": "restore_state",
-                "group": group_name,
-                "state": state
-            })
-
-            return True
 
     # ─────────────────────────────── Messages ─────────────────────────────── #
 
@@ -510,13 +372,10 @@ class HudManager:
             if key not in self._groups:
                 self.create_group(group_name, element)
 
-            self._groups[key].loader_visible = show
-            if color:
-                self._groups[key].loader_color = color
-
             self._notify_callbacks({
                 "type": "set_loader",
                 "group": group_name,
+                "element": element,
                 "show": show,
                 "color": color
             })
@@ -640,7 +499,7 @@ class HudManager:
                 return []
             for title in [t for t, item in state.items.items() if self._gone(item, now)]:
                 del state.items[title]
-            items = list(state.to_dict()["items"].values())
+            items = [asdict(item) for item in state.items.values()]
         return sorted(items, key=lambda i: i["added_at"])
 
     def clear_items(self, group_name: str, element: str) -> bool:
@@ -769,7 +628,10 @@ class HudManager:
         element: str,
         sender: str,
         text: str,
-        color: Optional[str] = None
+        color: Optional[str] = None,
+        icon: Optional[str] = None,
+        own: bool = False,
+        tools: Optional[list] = None,
     ) -> Optional[str]:
         """Send a message to a chat window.
 
@@ -784,18 +646,23 @@ class HudManager:
 
             state = self._groups[key]
 
-            # Append to last message if same sender
-            if (
-                state.chat_messages
-                and state.chat_messages[-1].sender == sender
-            ):
-                state.chat_messages[-1].text += " " + text
-                message_id = state.chat_messages[-1].id
+            # Added to the last message if the same sender wrote it. Text never
+            # joins a message showing tool chips: it came after those tools ran
+            last = state.chat_messages[-1] if state.chat_messages else None
+            if last and last.sender == sender and last.own == own and not (text and last.tools):
+                if text:
+                    last.text = f"{last.text} {text}" if last.text else text
+                last.tools.extend(tools or [])
+                last.icon = icon or last.icon
+                message_id = last.id
             else:
                 msg = ChatMessage(
                     sender=sender,
                     text=text,
-                    color=color
+                    color=color,
+                    icon=icon,
+                    own=own,
+                    tools=list(tools or []),
                 )
                 state.chat_messages.append(msg)
                 message_id = msg.id
@@ -812,7 +679,10 @@ class HudManager:
                 "id": message_id,
                 "sender": sender,
                 "text": text,
-                "color": color
+                "color": color,
+                "icon": icon,
+                "own": own,
+                "tools": list(tools or []),
             })
 
             return message_id
@@ -874,8 +744,6 @@ class HudManager:
             if key not in self._groups:
                 return False
 
-            self._groups[key].visible = True
-
             self._notify_callbacks({
                 "type": "show_chat_window",
                 "group": group_name
@@ -889,8 +757,6 @@ class HudManager:
         with self._lock:
             if key not in self._groups:
                 return False
-
-            self._groups[key].visible = False
 
             self._notify_callbacks({
                 "type": "hide_chat_window",
@@ -916,11 +782,6 @@ class HudManager:
         with self._lock:
             if key not in self._groups:
                 return False
-
-            group = self._groups[key]
-            # Clear the hidden flag for this element
-            if element in group.element_hidden:
-                group.element_hidden[element] = False
 
             self._notify_callbacks({
                 "type": "show_element",
@@ -948,10 +809,6 @@ class HudManager:
             if key not in self._groups:
                 return False
 
-            group = self._groups[key]
-            # Set the hidden flag for this element
-            group.element_hidden[element] = True
-
             self._notify_callbacks({
                 "type": "hide_element",
                 "group": group_name,
@@ -959,16 +816,3 @@ class HudManager:
             })
 
             return True
-
-    def clear_all(self) -> None:
-        """
-        Clear all groups and reset state (fresh start).
-
-        Useful for resetting the HUD system without restarting the server.
-        """
-        with self._lock:
-            self._groups.clear()
-
-            self._notify_callbacks({
-                "type": "clear_all"
-            })

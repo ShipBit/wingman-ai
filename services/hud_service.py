@@ -7,7 +7,8 @@ what that is:
 - which HUD profile applies (the one naming the loaded config, otherwise the
   default) and hands its style and areas to the server as defaults,
 - the conversation in the shared chat container, hidden again after the
-  Wingman finished speaking,
+  Wingman finished speaking: the newest message, or with the profile's chat
+  flow the running conversation,
 - the shared info panel, kept across restarts when the profile says so,
 - the preview of a profile's containers, which the mouse can move and resize.
 
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
 
 MESSAGE = "message"
 PERSISTENT = "persistent"
+CHAT = "chat"
 
 # The chat container hides itself after this long even if no playback event
 # arrives (a crashed TTS, a missed event). Core hides it much earlier normally.
@@ -88,6 +90,8 @@ class HudService:
         self._chat_hide: Optional[asyncio.TimerHandle] = None
         self._chat_last: Optional[dict] = None
         self._chat_hidden_early = False
+        self._chat_flow_applied = False
+        """The container the conversation was last shown in: chat flow or message."""
 
         self.router = APIRouter()
         tags = ["hud"]
@@ -265,6 +269,7 @@ class HudService:
         manager = server.manager
         self._apply_active_profile()
         manager.create_group(GROUP_CHAT, MESSAGE)
+        manager.create_group(GROUP_CHAT, CHAT)
         manager.create_group(GROUP_INFO, PERSISTENT)
         profile = self.active_profile()
         if profile and profile.restore_info_items:
@@ -280,6 +285,7 @@ class HudService:
         self._server.remove_event_listener(self._on_overlay_event)
         self._preview_profile_id = None
         self._cancel_chat_hide()
+        self._chat_flow_applied = False
         self._server = None
         if self.broadcast_state:
             await self.broadcast_state(self.state())
@@ -291,6 +297,11 @@ class HudService:
             return
         props, groups = hud_profiles.hud_defaults(profile)
         manager.set_defaults(props, groups)
+        if profile.chat_flow != self._chat_flow_applied:
+            # The conversation moves to the other container; the old one goes
+            self._release_chat()
+            self._hide_chat_container(self._chat_flow_applied)
+            self._chat_flow_applied = profile.chat_flow
 
     # ─────────────────────────────── preview ─────────────────────────────── #
 
@@ -303,7 +314,10 @@ class HudService:
         except KeyError:
             self._stop_preview()
             return
-        manager.set_preview(hud_profiles.preview_containers(profile), interactive=True)
+        user_name = hud_profiles.chat_user_name(
+            profile, getattr(self.config_manager.settings_config, "user_name", None)
+        )
+        manager.set_preview(hud_profiles.preview_containers(profile, user_name), interactive=True)
 
     def _stop_preview(self) -> None:
         self._preview_profile_id = None
@@ -342,6 +356,23 @@ class HudService:
         hud = getattr(wingman.config, "hud", None)
         return self.available and bool(hud and hud.chat)
 
+    def _chat_flow(self) -> bool:
+        """The active profile shows the running conversation, not only the newest message."""
+        profile = self.active_profile()
+        return bool(profile and profile.chat_flow)
+
+    def _chat_element(self) -> str:
+        return CHAT if self._chat_flow() else MESSAGE
+
+    def _hide_chat_container(self, flow: bool) -> None:
+        manager = self._manager
+        if manager is None:
+            return
+        if flow:
+            manager.hide_chat_window(GROUP_CHAT, CHAT)
+        else:
+            manager.hide_message(GROUP_CHAT, MESSAGE)
+
     def _on_main_loop(self, fn: Callable, *args) -> None:
         """Run `fn` on Core's loop: skills add messages from their own threads."""
         loop = self._loop
@@ -376,10 +407,15 @@ class HudService:
         text = content if isinstance(content, str) else ""
         if not text:
             return
-        name = getattr(self.config_manager.settings_config, "user_name", None) or "User"
+        profile = self.active_profile()
+        name = hud_profiles.chat_user_name(
+            profile, getattr(self.config_manager.settings_config, "user_name", None)
+        )
         self._chat_owner = None
-        self._show_chat(name, text, icon=None, tools=[])
-        self._manager.set_loader(GROUP_CHAT, MESSAGE, True)
+        # In the chat flow the user's name has the text color, the Wingmen's the accent
+        color = profile.style.text_color if profile else None
+        self._show_chat(name, text, icon=None, tools=[], color=color, own=True)
+        self._manager.set_loader(GROUP_CHAT, self._chat_element(), True)
         self._schedule_chat_hide(USER_MESSAGE_SECONDS)
 
     def _show_assistant_message(self, wingman: "Wingman", content: Any, tool_calls: list) -> None:
@@ -387,7 +423,7 @@ class HudService:
         text = content if isinstance(content, str) else ""
         tools = self._tool_chips(wingman, tool_calls, bool(profile and profile.display_tool_names))
         manager = self._manager
-        manager.set_loader(GROUP_CHAT, MESSAGE, bool(tool_calls))
+        manager.set_loader(GROUP_CHAT, self._chat_element(), bool(tool_calls))
 
         if not text and not tools:
             self._hide_chat()
@@ -402,10 +438,21 @@ class HudService:
         else:
             self._schedule_chat_hide(USER_MESSAGE_SECONDS)
 
-    def _show_chat(self, title: str, text: str, icon: Optional[str], tools: list) -> None:
+    def _show_chat(
+        self, title: str, text: str, icon: Optional[str], tools: list,
+        color: Optional[str] = None, own: bool = False,
+    ) -> None:
         self._chat_token += 1
         self._chat_hidden_early = False
         self._chat_last = {"title": title, "text": text, "icon": icon, "tools": tools}
+        if self._chat_flow():
+            # Earlier messages stay; the user's own are bubbles on the right.
+            # Tool calls stay too, and the answer follows below them
+            if text or tools:
+                self._manager.send_chat_message(
+                    GROUP_CHAT, CHAT, title, text, color=color, icon=icon, own=own, tools=tools
+                )
+            return
         self._manager.show_message(
             GROUP_CHAT, MESSAGE, title, text, tools=tools,
             duration=CHAT_SAFETY_SECONDS, title_icon=icon,
@@ -414,8 +461,7 @@ class HudService:
     def _hide_chat(self) -> None:
         self._cancel_chat_hide()
         self._chat_waiting_for_audio = False
-        if self._manager is not None:
-            self._manager.hide_message(GROUP_CHAT, MESSAGE)
+        self._hide_chat_container(self._chat_flow())
 
     def _schedule_chat_hide(self, delay: float, early: bool = False) -> None:
         self._cancel_chat_hide()
@@ -426,8 +472,7 @@ class HudService:
                 return
             self._chat_hide = None
             self._chat_hidden_early = early
-            if self._manager is not None:
-                self._manager.hide_message(GROUP_CHAT, MESSAGE)
+            self._hide_chat_container(self._chat_flow())
 
         try:
             self._chat_hide = asyncio.get_running_loop().call_later(max(0.0, delay), hide)
@@ -471,8 +516,12 @@ class HudService:
         self._chat_waiting_for_audio = False
         if self._chat_hidden_early and self._chat_last:
             # Speech started after the wait ran out: bring the message back
-            last = self._chat_last
-            self._show_chat(last["title"], last["text"], last["icon"], last["tools"])
+            if self._chat_flow():
+                self._chat_hidden_early = False
+                self._manager.show_chat_window(GROUP_CHAT, CHAT)
+            else:
+                last = self._chat_last
+                self._show_chat(last["title"], last["text"], last["icon"], last["tools"])
 
     def _playback_finished(self, wingman_name: str) -> None:
         if not self._speaks_on_screen(wingman_name):
@@ -531,13 +580,22 @@ class HudService:
         if group == GROUP_CHAT:
             # A skill's line: it hides itself after `duration`, playback has no say
             self._on_main_loop(self._release_chat)
+            if self._chat_flow():
+                self._on_main_loop(self._schedule_chat_hide, duration)
+                return manager.send_chat_message(
+                    GROUP_CHAT, CHAT, title, text, color=color, icon=icon
+                ) is not None
         return manager.show_message(
             group, MESSAGE, title, text, color=color, duration=duration, title_icon=icon
         )
 
     def hide_message(self, group: str) -> bool:
         manager = self._manager
-        return bool(manager and manager.hide_message(group, MESSAGE))
+        if manager is None:
+            return False
+        if group == GROUP_CHAT and self._chat_flow():
+            return manager.hide_chat_window(GROUP_CHAT, CHAT)
+        return manager.hide_message(group, MESSAGE)
 
     def add_info(
         self, group: str, title: str, text: str = "", *, color: Optional[str] = None,

@@ -168,6 +168,8 @@ hud_profiles:
     max_display_time: 5
     audio_stop_delay: 1
     display_tool_names: false
+    user_name: ""
+    chat_flow: false
     restore_info_items: true
 # Core reads Star Citizen's Game.log live and hands the events to skills.
 # Switch it off if you do not play Star Citizen. On, it waits for a Game.log

@@ -54,7 +54,22 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **`overlay/overlay.py`**: PIL-based overlay renderer (any OS; draws through the platform backend)
 - **`layout/manager.py`**: Automatic positioning and stacking system
 - **`rendering/markdown.py`**: Sophisticated Markdown renderer
+- **`rendering/layers.py`**: Windows drawn as a stack of cached pieces (see [Rendering](#rendering))
 - **`platform/`**: The bridge to the operating system, one backend per OS (see [Platforms](#platforms))
+
+## Rendering
+
+Every window (message, info panel, chat) is a stack of pieces: a title, each
+Markdown block, each chat message, each info item. A piece is rendered once,
+at its full height, and kept while the window shows it. A frame lays out only
+the pieces that reach into the window, newest at the bottom, so:
+
+- content scrolled out of view is neither rendered nor kept; when there is
+  more above, the newest part shows and the top fades,
+- the typewriter redraws only the block it is typing,
+- a frame where only the loader moves draws only the loader; a running timer
+  redraws its own item once a second, a moving progress bar once a pixel,
+- images from the web download in the background and show once they arrived.
 
 ## Platforms
 
@@ -264,27 +279,22 @@ await client.update_chat_message(
 
 This works for both the most recent message and any past message still in the chat history.
 
-### State Management
-
-- `GET /state/{group_name}` - Get group state for persistence
-- `POST /state/restore` - Restore group state from snapshot
-
 ## Configuration
 
 ### Server Settings
 
-```python
-from hud_server.models import HudServerSettings
+Core keeps them in `settings.yaml` under `hud_server` (`HudServerSettings` in
+`api/interface.py`):
 
-settings = HudServerSettings(
-    enabled=True,              # Auto-start with Core
-    host="127.0.0.1",         # Local only
-    port=7862,                # Default port
-    framerate=60,             # Overlay FPS (1-240)
-    layout_margin=20,         # Screen edge margin
-    layout_spacing=15,        # Window spacing
-    screen=1                  # Monitor index (1=primary, 2+=additional monitors)
-)
+```yaml
+hud_server:
+  enabled: true          # Start with Core
+  host: 127.0.0.1        # Local only; 0.0.0.0 for the LAN
+  port: 7862
+  framerate: 60          # Overlay FPS
+  layout_margin: 20      # Screen edge margin
+  layout_spacing: 15     # Space between stacked windows
+  screen: 1              # Monitor (1 = primary, 2+ = more monitors)
 ```
 
 ### Dynamic Settings Update
@@ -559,22 +569,6 @@ Messages support rich Markdown formatting:
 - **Lists**: `- item` or `1. item`
 - **Blockquotes**: `> quote`
 - **Tables**: Standard Markdown table syntax
-
-## State Persistence
-
-Save and restore HUD state across sessions:
-
-```python
-# Get current state
-state = await client.get_state("my_wingman")
-
-# Store state in your database/file
-save_to_storage(state)
-
-# Later, restore it
-state = load_from_storage()
-await client.restore_state("my_wingman", state)
-```
 
 ## Error Handling
 

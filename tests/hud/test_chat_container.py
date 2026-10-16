@@ -158,3 +158,68 @@ def test_speech_does_not_hide_the_tool_chips_while_tools_run(service):
     asyncio.run(run())
 
     assert manager.hide_message.call_count == 0
+
+
+@pytest.mark.parametrize(
+    "profile_name, account_name, title",
+    [("Commander", "Jan", "Commander"), ("", "Jan", "Jan"), ("", None, "User")],
+)
+def test_the_chat_calls_the_user_by_the_profiles_name_else_the_account_name(
+    service, profile_name, account_name, title
+):
+    service.active_profile().user_name = profile_name
+    service.config_manager.settings_config.user_name = account_name
+
+    asyncio.run(service.on_conversation_message(_wingman(), "user", "Status?", None))
+
+    assert service._server.manager.show_message.call_args.args[2] == title
+
+
+def test_with_the_chat_flow_the_conversation_runs_in_the_chat_window(service):
+    service.active_profile().chat_flow = True
+    manager = service._server.manager
+
+    async def run():
+        wingman = _wingman()
+        await service.on_conversation_message(wingman, "user", "Status?", None)
+        await service.on_conversation_message(wingman, "assistant", "All green.", [])
+        service.playback_started("Computer")
+        service.playback_finished("Computer")
+        await asyncio.sleep(0.3)
+
+    asyncio.run(run())
+
+    sent = [(c.args[2], c.kwargs["own"], c.kwargs["icon"]) for c in manager.send_chat_message.call_args_list]
+    assert sent == [("Jan", True, None), ("Computer", False, "avatar.png")]
+    manager.show_message.assert_not_called()
+    manager.hide_message.assert_not_called()
+    manager.hide_chat_window.assert_called_once_with(GROUP_CHAT, "chat")
+
+
+def test_switching_the_chat_flow_hides_the_container_the_chat_leaves(service):
+    profile = service.active_profile()
+    manager = service._server.manager
+
+    profile.chat_flow = True
+    service._apply_active_profile()
+    manager.hide_message.assert_called_once_with(GROUP_CHAT, "message")
+
+    profile.chat_flow = False
+    service._apply_active_profile()
+    manager.hide_chat_window.assert_called_once_with(GROUP_CHAT, "chat")
+
+
+def test_in_the_chat_flow_tool_calls_stay_and_the_answer_follows(service):
+    service.active_profile().chat_flow = True
+    manager = service._server.manager
+
+    async def run():
+        wingman = _wingman()
+        await service.on_conversation_message(wingman, "user", "Status?", None)
+        await service.on_conversation_message(wingman, "assistant", "", [{"function": {"name": "get_fuel"}}])
+        await service.on_conversation_message(wingman, "assistant", "All green.", [])
+
+    asyncio.run(run())
+
+    sent = [(c.args[3], len(c.kwargs["tools"])) for c in manager.send_chat_message.call_args_list]
+    assert sent == [("Status?", 0), ("", 1), ("All green.", 0)]

@@ -84,7 +84,6 @@ class WindowInfo:
     margin_y: int = 20
     spacing: int = 10  # Spacing between stacked windows
     visible: bool = True
-    group: Optional[str] = None  # Reserved for future use
 
     # For manual/hybrid mode - user-specified offsets
     manual_x: Optional[int] = None
@@ -129,22 +128,6 @@ class LayoutManager:
         self._position_cache: Optional[Dict[str, Tuple[int, int]]] = None
         self._cache_valid = False
 
-    def set_screen_size(self, width: int, height: int):
-        """Update screen dimensions and invalidate cache."""
-        with self._lock:
-            if self._screen_width != width or self._screen_height != height:
-                self._screen_width = width
-                self._screen_height = height
-                self._invalidate_cache()
-
-    def set_screen_offset(self, offset_x: int, offset_y: int):
-        """Update screen offset and invalidate cache."""
-        with self._lock:
-            if self._screen_offset_x != offset_x or self._screen_offset_y != offset_y:
-                self._screen_offset_x = offset_x
-                self._screen_offset_y = offset_y
-                self._invalidate_cache()
-
     @property
     def screen_size(self) -> Tuple[int, int]:
         """Get current screen dimensions."""
@@ -166,7 +149,6 @@ class LayoutManager:
         margin_x: Optional[int] = None,
         margin_y: Optional[int] = None,
         spacing: Optional[int] = None,
-        group: Optional[str] = None,
         manual_x: Optional[int] = None,
         manual_y: Optional[int] = None,
         align: Align = Align.TOP,
@@ -185,7 +167,6 @@ class LayoutManager:
             margin_x: Horizontal margin from screen edge
             margin_y: Vertical margin from screen edge
             spacing: Vertical spacing between stacked windows
-            group: Optional group name for related windows
             manual_x: Manual x position (for manual/hybrid mode)
             manual_y: Manual y position (for manual/hybrid mode)
             align: Manual mode - stick to the top, the middle or the bottom of the area
@@ -205,7 +186,6 @@ class LayoutManager:
                 margin_x=margin_x if margin_x is not None else self._default_margin,
                 margin_y=margin_y if margin_y is not None else self._default_margin,
                 spacing=spacing if spacing is not None else self._default_spacing,
-                group=group,
                 manual_x=manual_x,
                 manual_y=manual_y,
                 align=align,
@@ -482,18 +462,6 @@ class LayoutManager:
         positions = self.compute_positions()
         return positions.get(name)
 
-    def get_all_windows(self) -> Dict[str, WindowInfo]:
-        """Get all registered windows."""
-        with self._lock:
-            return dict(self._windows)
-
-    def get_windows_at_anchor(self, anchor: Anchor) -> List[WindowInfo]:
-        """Get all windows at a specific anchor, sorted by priority."""
-        with self._lock:
-            windows = [w for w in self._windows.values() if w.anchor == anchor and w.visible]
-            windows.sort(key=lambda w: (-w.priority, w.name))
-            return windows
-
     def check_collision(self, name1: str, name2: str) -> bool:
         """Check if two windows overlap."""
         positions = self.compute_positions()
@@ -529,59 +497,3 @@ class LayoutManager:
                     collisions.append((name1, name2))
 
         return collisions
-
-    def to_dict(self) -> Dict[str, dict]:
-        """Export layout state to dictionary."""
-        with self._lock:
-            positions = self.compute_positions()
-            result = {}
-            for name, window in self._windows.items():
-                pos = positions.get(name, (0, 0))
-                result[name] = {
-                    "anchor": window.anchor.value,
-                    "mode": window.mode.value,
-                    "priority": window.priority,
-                    "width": window.width,
-                    "height": window.height,
-                    "visible": window.visible,
-                    "computed_x": pos[0],
-                    "computed_y": pos[1],
-                }
-            return result
-
-    @classmethod
-    def from_dict(
-        cls,
-        data: Dict[str, dict],
-        screen_width: int = 1920,
-        screen_height: int = 1080
-    ) -> "LayoutManager":
-        """Create layout manager from dictionary."""
-        manager = cls(screen_width=screen_width, screen_height=screen_height)
-        for name, window_data in data.items():
-            manager.register_window(
-                name=name,
-                anchor=Anchor(window_data.get("anchor", "top_left")),
-                mode=LayoutMode(window_data.get("mode", "auto")),
-                priority=window_data.get("priority", 0),
-                width=window_data.get("width", 400),
-                height=window_data.get("height", 100),
-            )
-        return manager
-
-    def debug_print(self):
-        """Print layout state for debugging."""
-        positions = self.compute_positions()
-        print(f"Layout Manager - Screen: {self._screen_width}x{self._screen_height}")
-        print("-" * 60)
-
-        for anchor in Anchor:
-            windows = self.get_windows_at_anchor(anchor)
-            if windows:
-                print(f"\n{anchor.value.upper()}:")
-                for w in windows:
-                    pos = positions.get(w.name, (0, 0))
-                    print(f"  {w.name}: ({pos[0]}, {pos[1]}) "
-                          f"size={w.width}x{w.height} "
-                          f"priority={w.priority} "
-                          f"visible={w.visible}")

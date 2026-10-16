@@ -65,6 +65,8 @@ class PreviewMixin:
             if props is None:
                 self._destroy_preview_window(container)
                 continue
+            if container == "chat" and props.get("chat_flow"):
+                window_type = self.WINDOW_TYPE_CHAT
             dragging = self._drag and self._drag["container"] == container
             if dragging:
                 # The rect being dragged is ours; only take the style
@@ -107,6 +109,10 @@ class PreviewMixin:
     def _ensure_preview_window(self, container: str, window_type: str, props: dict) -> None:
         name = f"preview_{container}"
         win = self._preview_windows.get(container)
+        if win is not None and win["type"] != window_type:
+            # The chat flow was switched while previewing: the other sample
+            self._destroy_preview_window(container)
+            win = None
         if win is None:
             win = self._create_window_state(window_type, f"__preview_{container}", self._preview_props(props))
             win["preview_container"] = container
@@ -142,6 +148,26 @@ class PreviewMixin:
         self._destroy_window(name)
 
     def _fill_sample(self, container: str, win: Dict) -> None:
+        if win["type"] == self.WINDOW_TYPE_CHAT:
+            win["messages"] = [
+                {
+                    "id": "sample-user", "sender": win["props"].get("sample_user") or "User",
+                    "text": "How does the chat flow look?", "own": True,
+                    "color": win["props"].get("text_color"), "icon": None, "tools": [],
+                },
+                {
+                    "id": "sample-reply", "sender": "Wingman",
+                    "text": (
+                        "Like a messenger: your messages on the right, ours with our picture.\n\n"
+                        "Drag the **middle** to move this container, an **edge** or "
+                        "**corner** to resize it."
+                    ),
+                    "own": False, "color": None, "icon": None,
+                    "tools": [{"name": "hud_set_info", "source": "Info Panel", "icon": None}],
+                },
+            ]
+            return
+
         if container == "chat":
             win["current_message"] = {
                 "title": "Wingman",
@@ -202,6 +228,8 @@ class PreviewMixin:
                 name = f"preview_{container}"
                 if win["type"] == self.WINDOW_TYPE_MESSAGE:
                     self._draw_message_window(name, win)
+                elif win["type"] == self.WINDOW_TYPE_CHAT:
+                    self._draw_chat_window(name, win)
                 else:
                     self._draw_persistent_window(name, win)
 

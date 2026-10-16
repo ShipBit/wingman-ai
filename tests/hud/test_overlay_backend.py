@@ -68,18 +68,6 @@ def test_a_window_the_os_failed_to_draw_is_drawn_on_the_next_frame():
     assert [e["context"] for e in overlay_errors(overlay)] == ["blit_window"]
 
 
-def test_moving_a_chat_window_puts_it_back_on_top():
-    backend = FakeHudBackend()
-    overlay = make_overlay(backend)
-    overlay._handle_message({"type": "create_chat_window", "name": "squad", "props": {"layout_mode": "manual"}})
-    window = backend.window("HeadsUpChat_squad")
-
-    overlay._handle_message({"type": "update_chat_window", "name": "squad", "props": {"x": 300, "y": 200}})
-
-    assert window.rect[:2] == (300, 200)
-    assert window.raised == 1
-
-
 def test_dragging_a_preview_container_reports_its_new_area():
     backend = FakeHudBackend()
     events = []
@@ -113,3 +101,112 @@ def test_the_overlay_does_not_start_where_the_os_has_no_backend():
     [report] = overlay_errors(overlay)
     assert report["context"] == "init"
     assert "Linux" in report["error"]
+
+
+def test_hovering_the_preview_leaves_its_picture_as_it_was():
+    backend = FakeHudBackend()
+    overlay = make_overlay(backend)
+    overlay._handle_message({
+        "type": "set_preview", "interactive": True,
+        "containers": {"chat": {"x": 100, "y": 100, "width": 400, "max_height": 300}},
+    })
+    run_frames(overlay, 3)
+    window = backend.window("HUD_preview_chat")
+    first = window.image.copy()
+
+    for i in range(6):
+        backend.pointer(window, Pointer.MOVE, 300 if i % 2 == 0 else 102, 250)
+        run_frames(overlay, 2)
+    backend.pointer(window, Pointer.MOVE, 300, 250)
+    run_frames(overlay, 2)
+
+    assert window.image.getpixel((200, 150)) == first.getpixel((200, 150))
+
+
+def test_with_the_chat_flow_the_preview_shows_a_conversation():
+    backend = FakeHudBackend()
+    overlay = make_overlay(backend)
+    chat = {"x": 0, "y": 0, "width": 400, "max_height": 300, "accent_color": "#00ff00",
+            "bg_color": "#000000", "opacity": 1.0}
+
+    def preview(flow):
+        overlay._handle_message({"type": "set_preview", "interactive": False,
+                                 "containers": {"chat": {**chat, "chat_flow": flow}}})
+        run_frames(overlay, 3)
+        image = backend.window("HUD_preview_chat").image
+        # The user's bubble: the accent's tint on the right half, inside the frame
+        return sum(1 for p in image.crop((200, 10, 388, 150)).getdata()
+                   if p[1] > 60 and p[0] < 40 and p[2] < 40)
+
+    assert preview(False) < 50
+    assert preview(True) > 300
+    assert preview(False) < 50
+    assert overlay_errors(overlay) == []
+
+
+class RecordingBackend(FakeHudBackend):
+    """Also remembers every opacity a window was drawn with, and what it
+    showed at the moment it was shown."""
+
+    def present(self, window, image, opacity):
+        super().present(window, image, opacity)
+        window.presented = getattr(window, "presented", []) + [opacity]
+
+    def show_window(self, window):
+        window.image_when_shown = window.image.copy() if window.image else None
+        super().show_window(window)
+
+
+def say(overlay, text, **props):
+    overlay._handle_message({
+        "type": "show_message", "group": "atc", "element": "message", "title": "ATC",
+        "content": text, "props": {"duration": 0, "typewriter_effect": False, **props},
+    })
+
+
+def test_a_message_fades_out_before_its_window_hides():
+    backend = RecordingBackend()
+    overlay = make_overlay(backend)
+
+    say(overlay, "Hold short")
+    run_frames(overlay, 30)
+
+    window = backend.window("HUD_message_atc")
+    fading = window.presented[window.presented.index(max(window.presented)):]
+    assert len(fading) > 2 and fading == sorted(fading, reverse=True)
+    assert not window.shown
+
+
+def test_a_window_shown_again_shows_its_new_picture_not_the_old_one():
+    backend = RecordingBackend()
+    overlay = make_overlay(backend)
+    say(overlay, "Hold short")
+    run_frames(overlay, 30)
+
+    say(overlay, "Cleared for takeoff, runway two seven")
+    run_frames(overlay, 3)
+
+    window = backend.window("HUD_message_atc")
+    assert window.shown
+    assert window.image_when_shown.tobytes() == window.image.tobytes()
+
+
+def test_the_info_panel_steps_aside_while_its_message_covers_it():
+    backend = FakeHudBackend()
+    overlay = make_overlay(backend)
+    area = {"layout_mode": "manual", "x": 50, "y": 50, "width": 400, "max_height": 400}
+    overlay._handle_message({"type": "create_group", "group": "atc", "props": area})
+    overlay._handle_message({"type": "add_item", "group": "atc", "element": "persistent",
+                             "title": "Pad", "description": "04"})
+    run_frames(overlay, 10)
+    panel = backend.window("HUD_persistent_atc")
+    assert panel.shown
+
+    say(overlay, "Hold short", duration=60, **area)
+    run_frames(overlay, 30)
+    assert not panel.shown
+
+    overlay._handle_message({"type": "hide_message", "group": "atc", "element": "message"})
+    run_frames(overlay, 30)
+    assert panel.shown
+
