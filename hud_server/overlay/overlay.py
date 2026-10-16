@@ -751,7 +751,7 @@ class HeadsUpOverlay(PreviewMixin):
 
     LOADER_SPACE = 30
 
-    def _window_renderer(self, props: Dict, text_color, accent, bg_alpha) -> MarkdownRenderer:
+    def _window_renderer(self, props: Dict, text_color, accent, bg_rgba) -> MarkdownRenderer:
         """The window's fonts and markdown renderer. One renderer per font, kept,
         so what it caches (downloaded images, wrapped lines) outlives a frame."""
         font_size = int(props.get("font_size", 16))
@@ -763,7 +763,7 @@ class HeadsUpOverlay(PreviewMixin):
         if renderer is None:
             renderer = MarkdownRenderer(fonts, {"text": text_color, "accent": accent}, color_emojis)
             self._md_renderers[key] = renderer
-        renderer.set_colors(text_color, accent, bg_alpha)
+        renderer.set_colors(text_color, accent, tuple(bg_rgba[:3]), bg_rgba[3])
         self.fonts = fonts
         self.md_renderer = renderer
         return renderer
@@ -973,19 +973,22 @@ class HeadsUpOverlay(PreviewMixin):
     def _tool_chips_piece(
         self, tools: list, x: int, right: int, style: tuple, text_color, accent, bg, alpha: float = 1.0
     ) -> Piece:
-        """The tools a reply used, one chip per skill or server."""
-        counts = {}
+        """The tools a reply used: one chip per text it shows (the tool's name,
+        or its skill's or server's), with the number of calls when more than one."""
+        chips: dict[str, list] = {}  # label -> [icon, calls]
         for t in tools:
-            key = (t.get("source", "System"), t.get("icon"))
-            counts[key] = counts.get(key, 0) + 1
-        key = ("tools", tuple(counts.items()), x, right, style)
+            label = str(t.get("source") or "System")
+            chip = chips.setdefault(label, [None, 0])
+            chip[0] = chip[0] or t.get("icon")
+            chip[1] += 1
+        key = ("tools", tuple((label, icon, calls) for label, (icon, calls) in chips.items()), x, right, style)
 
         def draw(d, image, _top):
             y = 10
             tx = x
             th = 30
             font = self.fonts.get("code", self.fonts.get("normal", self.fonts.get("regular")))
-            for (src, icon), cnt in counts.items():
+            for src, (icon, cnt) in chips.items():
                 has_icon = bool(icon and os.path.exists(str(icon)))
                 icon_w = 24 if has_icon else 0
                 badge_w = 26 if cnt > 1 else 0
@@ -1043,7 +1046,7 @@ class HeadsUpOverlay(PreviewMixin):
         accent = self._hex_to_rgb(props.get("accent_color", "#00aaff"))
         width = int(props.get("width", 400))
         padding = int(props.get("content_padding", 16))
-        renderer = self._window_renderer(props, text_color, accent, bg_rgba[3])
+        renderer = self._window_renderer(props, text_color, accent, bg_rgba)
         style = self._style_key(props)
 
         pieces = []
@@ -1203,7 +1206,7 @@ class HeadsUpOverlay(PreviewMixin):
         bg_rgba = self._parse_hex_color_with_alpha(props.get("bg_color", "#1e212b"))
         text_color = self._hex_to_rgb(props.get("text_color", "#f0f0f0"))
         accent = self._hex_to_rgb(props.get("accent_color", "#00aaff"))
-        self._window_renderer(props, text_color, accent, bg_rgba[3])
+        self._window_renderer(props, text_color, accent, bg_rgba)
         style = self._style_key(props)
         now = time.time()
         anims = win.get("progress_animations", {})
@@ -1344,7 +1347,8 @@ class HeadsUpOverlay(PreviewMixin):
                 return []
             radius = int(props.get("border_radius", 12))
             piece = self._own_message_piece(
-                {**message, "sender": sender}, padding, content_w, color, radius, style, alpha
+                {**message, "sender": "" if continues else sender},
+                padding, content_w, color, radius, style, alpha,
             )
             piece.gap = gap
             return [piece]
@@ -1385,7 +1389,7 @@ class HeadsUpOverlay(PreviewMixin):
         bg_rgba = self._parse_hex_color_with_alpha(props.get("bg_color", "#1e212b"))
         text_color = self._hex_to_rgb(props.get("text_color", "#f0f0f0"))
         accent = self._hex_to_rgb(props.get("accent_color", "#00aaff"))
-        self._window_renderer(props, text_color, accent, bg_rgba[3])
+        self._window_renderer(props, text_color, accent, bg_rgba)
         style = self._style_key(props)
         colors = (text_color, accent, bg_rgba[:3])
         spacing = int(props.get("message_spacing", 8))
@@ -1402,10 +1406,10 @@ class HeadsUpOverlay(PreviewMixin):
                 max_chars = None
                 if typing and typing["id"] == message.get("id") and not message.get("own"):
                     max_chars = int(typing["chars"])
-                # The answer after a Wingman's tool calls goes on under its name
+                # A sender's next entry goes on under its name, shown once
                 previous = messages[i - 1] if i > 0 else None
                 continues = bool(
-                    previous and not previous.get("own") and not message.get("own")
+                    previous and bool(previous.get("own")) == bool(message.get("own"))
                     and previous.get("sender") == message.get("sender")
                 )
                 yield from reversed(self._chat_message_pieces(
@@ -2272,7 +2276,9 @@ class HeadsUpOverlay(PreviewMixin):
                 if chat_name:
                     now = time.time()
                     win = self._ensure_window(self.WINDOW_TYPE_CHAT, chat_name)
-                    win["visible"] = True
+                    restored = bool(msg.get("restored", False))
+                    # History put back stays hidden until the next message shows it
+                    win["visible"] = win.get("fade_state", 0) in (1, 2) if restored else True
                     sender = msg.get("sender", "")
                     message_id = msg.get("id", "")
                     own = bool(msg.get("own", False))
@@ -2304,7 +2310,7 @@ class HeadsUpOverlay(PreviewMixin):
                         win["messages"].append(message)
 
                     # A reply types itself out, like the message window
-                    if not own and win["props"].get("typewriter_effect", True):
+                    if not own and not restored and win["props"].get("typewriter_effect", True):
                         typing = win.get("typing")
                         if not typing or typing["id"] != message["id"]:
                             win["typing"] = {"id": message["id"], "chars": float(typed_before), "last": now}
@@ -2317,7 +2323,7 @@ class HeadsUpOverlay(PreviewMixin):
                         win["messages"] = win["messages"][-max_messages:]
 
                     # Show window if auto-hide was triggered
-                    if win["fade_state"] == 0 or win["fade_state"] == 3:
+                    if not restored and (win["fade_state"] == 0 or win["fade_state"] == 3):
                         self._show_window_if_hidden(win)
                         win["fade_state"] = 1  # fade in
                         win["visible"] = True

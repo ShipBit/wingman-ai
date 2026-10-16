@@ -1,5 +1,7 @@
 """The overlay renders on any OS and draws through its platform backend."""
 
+import time
+
 from hud_server.platform import OsFamily, Pointer, create_backend
 from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
 
@@ -164,12 +166,21 @@ def say(overlay, text, **props):
     })
 
 
-def test_a_message_fades_out_before_its_window_hides():
+def frames_on_a_clock(overlay, clock, count):
+    """Frames 50 ms apart: the time a message stays is wall-clock time."""
+    for _ in range(count):
+        clock[0] += 0.05
+        run_frames(overlay, 1)
+
+
+def test_a_message_fades_out_before_its_window_hides(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
     backend = RecordingBackend()
     overlay = make_overlay(backend)
 
     say(overlay, "Hold short")
-    run_frames(overlay, 30)
+    frames_on_a_clock(overlay, clock, 30)
 
     window = backend.window("HUD_message_atc")
     fading = window.presented[window.presented.index(max(window.presented)):]
@@ -177,14 +188,16 @@ def test_a_message_fades_out_before_its_window_hides():
     assert not window.shown
 
 
-def test_a_window_shown_again_shows_its_new_picture_not_the_old_one():
+def test_a_window_shown_again_shows_its_new_picture_not_the_old_one(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
     backend = RecordingBackend()
     overlay = make_overlay(backend)
     say(overlay, "Hold short")
-    run_frames(overlay, 30)
+    frames_on_a_clock(overlay, clock, 30)
 
     say(overlay, "Cleared for takeoff, runway two seven")
-    run_frames(overlay, 3)
+    frames_on_a_clock(overlay, clock, 3)
 
     window = backend.window("HUD_message_atc")
     assert window.shown

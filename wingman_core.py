@@ -834,18 +834,20 @@ class WingmanCore(WebSocketUser):
         self.config_manager = config_manager
         self.config_manager.perform_hardware_scan(self.system_manager)
         self.config_service = ConfigService(config_manager=config_manager)
+
+        # HUD profiles and the shared HUD containers (_initialize_tower tells it
+        # which config's Wingmen load)
+        self.hud_service = HudService()
+        self.hud_service.configure(config_manager, self.config_service)
+        self.hud_service.broadcast_state = self._broadcast_hud_profiles
+        self.hud_service.run_on_main_loop = self._run_on_main_loop
+
         self.config_service.config_events.subscribe(
             "config_loaded", self.initialize_tower
         )
         self.config_service.config_events.subscribe(
             "wingman_config_saved", self.on_wingman_config_saved
         )
-
-        # HUD profiles and the shared HUD containers
-        self.hud_service = HudService()
-        self.hud_service.configure(config_manager, self.config_service)
-        self.hud_service.broadcast_state = self._broadcast_hud_profiles
-        self.hud_service.run_on_main_loop = self._run_on_main_loop
 
         self.secret_keeper: SecretKeeper = SecretKeeper()
 
@@ -1622,6 +1624,10 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
             return
+
+        # The HUD shows this config's profile from now on, before the Wingmen
+        # load (they can take a while, or fail). A load without them shows none.
+        await self.hud_service.channel_loaded(config_dir_info.config_dir.name)
 
         # Broadcast state change - wingmen are being initialized
         await self.set_core_state(CoreState.INITIALIZING_WINGMEN)

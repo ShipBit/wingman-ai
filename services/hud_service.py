@@ -92,6 +92,13 @@ class HudService:
         self._chat_hidden_early = False
         self._chat_flow_applied = False
         """The container the conversation was last shown in: chat flow or message."""
+        self._applied_profile_id: Optional[str] = None
+        self._active_config: Optional[str] = None
+        """The config whose Wingmen were loaded last. None until the first such
+        load: before it (on start, before the client signs in) no profile is
+        active and the HUD shows nothing."""
+        self._profile_content: dict[str, dict] = {}
+        """What the info panel and the chat flow held, per profile not on screen."""
 
         self.router = APIRouter()
         tags = ["hud"]
@@ -123,7 +130,6 @@ class HudService:
     def configure(self, config_manager: "ConfigManager", config_service: "ConfigService") -> None:
         self.config_manager = config_manager
         self.config_service = config_service
-        config_service.config_events.subscribe("config_loaded", self._on_config_loaded)
         config_service.config_events.subscribe("config_renamed", self._on_config_renamed)
         config_service.config_events.subscribe("config_deleted", self._on_config_deleted)
 
@@ -144,12 +150,11 @@ class HudService:
         return self.config_manager.settings_config.hud_profiles
 
     def _current_config_name(self) -> Optional[str]:
-        config_dir = getattr(self.config_service, "current_config_dir", None)
-        return getattr(config_dir, "name", None)
+        return self._active_config
 
     def active_profile(self) -> Optional[HudProfile]:
-        """The profile the loaded config uses."""
-        if self.config_manager is None:
+        """The profile the config with loaded Wingmen uses; None before any."""
+        if self.config_manager is None or self._active_config is None:
             return None
         return hud_profiles.active_profile(self._profiles, self._current_config_name())
 
@@ -208,7 +213,10 @@ class HudService:
             raise HTTPException(status_code=409, detail=str(e)) from e
         if self._preview_profile_id == profile_id:
             self._stop_preview()
-        return await self._changed()
+        self._profile_content.pop(profile_id, None)
+        state = await self._changed()
+        self._save_info_items()
+        return state
 
     # POST /hud/profiles/{profile_id}/default
     async def set_default_hud_profile(self, profile_id: str) -> HudProfilesState:
@@ -243,21 +251,40 @@ class HudService:
 
     # ─────────────────────────────── configs ─────────────────────────────── #
 
-    async def _on_config_loaded(self, _config_dir_info=None) -> None:
-        self._apply_active_profile()
-        if self.broadcast_state:
-            await self.broadcast_state(self.state())
+    # A HUD problem must not stop a config from loading, nor the Wingmen after it
+
+    async def channel_loaded(self, config_name: str) -> None:
+        """A config's Wingmen are loading (WingmanCore._initialize_tower): the
+        HUD shows the profile that names this config from now on. A config
+        loaded without Wingmen, as on start before the client signs in, does
+        not make a profile active."""
+        try:
+            self._active_config = config_name
+            self._apply_active_profile()
+            if self.broadcast_state:
+                await self.broadcast_state(self.state())
+        except Exception as e:
+            self._warn("Could not switch the HUD profile for the loaded config", e)
 
     async def _on_config_renamed(self, names: tuple[str, str]) -> None:
-        old, _new = names
-        if hud_profiles.rename_config(self._profiles, *names):
-            # The loaded config is reloaded under its new name right after; until
-            # then the old name finds no profile and would apply the default
-            await self._changed(apply=old != self._current_config_name())
+        old, new = names
+        try:
+            if self._active_config == old:
+                self._active_config = new
+            if hud_profiles.rename_config(self._profiles, old, new):
+                await self._changed()
+        except Exception as e:
+            self._warn("Could not rename the config in the HUD profiles", e)
 
     async def _on_config_deleted(self, name: str) -> None:
-        if hud_profiles.remove_config(self._profiles, name):
-            await self._changed()
+        try:
+            if hud_profiles.remove_config(self._profiles, name):
+                await self._changed()
+        except Exception as e:
+            self._warn("Could not remove the config from the HUD profiles", e)
+
+    def _warn(self, what: str, error: Exception) -> None:
+        self.printr.print(f"[HUD] {what}: {error}", color=LogType.WARNING, server_only=True)
 
     # ─────────────────────────────── HUD server ─────────────────────────────── #
 
@@ -266,14 +293,8 @@ class HudService:
         self._server = server
         self._loop = asyncio.get_running_loop()
         server.add_event_listener(self._on_overlay_event)
-        manager = server.manager
+        # Without a config's Wingmen loaded yet, both containers wait for them
         self._apply_active_profile()
-        manager.create_group(GROUP_CHAT, MESSAGE)
-        manager.create_group(GROUP_CHAT, CHAT)
-        manager.create_group(GROUP_INFO, PERSISTENT)
-        profile = self.active_profile()
-        if profile and profile.restore_info_items:
-            self._restore_info_items()
         if self.broadcast_state:
             await self.broadcast_state(self.state())
 
@@ -286,6 +307,8 @@ class HudService:
         self._preview_profile_id = None
         self._cancel_chat_hide()
         self._chat_flow_applied = False
+        self._applied_profile_id = None
+        self._profile_content = {}
         self._server = None
         if self.broadcast_state:
             await self.broadcast_state(self.state())
@@ -296,12 +319,63 @@ class HudService:
         if manager is None or profile is None:
             return
         props, groups = hud_profiles.hud_defaults(profile)
+        previous = self._applied_profile_id
+        switched = previous is not None and previous != profile.id
+        if switched:
+            self._put_away_content(previous)
         manager.set_defaults(props, groups)
-        if profile.chat_flow != self._chat_flow_applied:
+        if profile.id != previous:
+            self._applied_profile_id = profile.id
+            self.printr.print(
+                f"[HUD] Profile '{profile.name}' for config '{self._current_config_name() or '-'}'",
+                color=LogType.INFO,
+                server_only=True,
+            )
+        if previous is None:
+            # The first profile on screen: both containers, and its info panels back
+            self._create_containers()
+            self._chat_flow_applied = profile.chat_flow
+            self._restore_info_items()
+        elif switched:
+            self._bring_back_content(profile)
+        elif profile.chat_flow != self._chat_flow_applied:
             # The conversation moves to the other container; the old one goes
             self._release_chat()
             self._hide_chat_container(self._chat_flow_applied)
             self._chat_flow_applied = profile.chat_flow
+
+    def _create_containers(self) -> None:
+        manager = self._manager
+        manager.create_group(GROUP_CHAT, MESSAGE)
+        manager.create_group(GROUP_CHAT, CHAT)
+        manager.create_group(GROUP_INFO, PERSISTENT)
+
+    def _put_away_content(self, profile_id: str) -> None:
+        """The chat and the info panel belong to the profile they were filled
+        under: keep what this one held, and take both containers down."""
+        manager = self._manager
+        self._release_chat()
+        self._profile_content[profile_id] = {
+            "info": manager.get_items(GROUP_INFO, PERSISTENT),
+            "chat": manager.get_chat_messages(GROUP_CHAT, CHAT),
+        }
+        for group, element in ((GROUP_CHAT, MESSAGE), (GROUP_CHAT, CHAT), (GROUP_INFO, PERSISTENT)):
+            manager.delete_group(group, element)
+
+    def _bring_back_content(self, profile: HudProfile) -> None:
+        """Both containers made anew, in this profile's layout, with what it held."""
+        manager = self._manager
+        self._create_containers()
+        self._chat_flow_applied = profile.chat_flow
+        content = self._profile_content.pop(profile.id, None) or {}
+        self._put_info_items(content.get("info") or [])
+        for message in content.get("chat") or []:
+            manager.send_chat_message(
+                GROUP_CHAT, CHAT, message.get("sender", ""), message.get("text", ""),
+                color=message.get("color"), icon=message.get("icon"),
+                own=bool(message.get("own")), tools=message.get("tools") or [], restored=True,
+            )
+        self._save_info_items()
 
     # ─────────────────────────────── preview ─────────────────────────────── #
 
@@ -670,7 +744,8 @@ class HudService:
     # ─────────────────────────────── info panel across restarts ─────────────────────────────── #
 
     def _info_file(self) -> str:
-        """Next to the version folders, so an update keeps the panels."""
+        """Next to the version folders, so an update keeps the panels. Holds the
+        panels of every profile: {"profiles": {profile id: [items]}}."""
         folder = path.join(get_users_dir(), "hud")
         os.makedirs(folder, exist_ok=True)
         return path.join(folder, INFO_FILE)
@@ -681,26 +756,54 @@ class HudService:
 
     def _save_info_items(self) -> None:
         manager = self._manager
-        if manager is None:
+        if manager is None or self._applied_profile_id is None:
+            # Nothing on screen yet, so nothing read back yet: saving would lose it
             return
+        panels = {
+            profile_id: content["info"]
+            for profile_id, content in self._profile_content.items()
+            if content.get("info")
+        }
+        if self._applied_profile_id:
+            panels[self._applied_profile_id] = manager.get_items(GROUP_INFO, PERSISTENT)
         try:
             with open(self._info_file(), "w", encoding="utf-8") as f:
-                json.dump(manager.get_items(GROUP_INFO, PERSISTENT), f, indent=2)
+                json.dump({"profiles": panels}, f, indent=2)
         except Exception as e:
             self.printr.print(f"[HUD] Could not save the info panel: {e}", color=LogType.WARNING, server_only=True)
 
     def _restore_info_items(self) -> None:
-        manager = self._manager
+        """After a start: each profile that keeps its panels gets them back, the
+        one on screen right away, the others when they come on screen."""
         file = self._info_file()
-        if manager is None or not path.exists(file):
+        if self._manager is None or not path.exists(file):
             return
         try:
             with open(file, "r", encoding="utf-8") as f:
-                items = json.load(f)
+                saved = json.load(f)
         except Exception as e:
             self.printr.print(f"[HUD] Could not read the saved info panel: {e}", color=LogType.WARNING, server_only=True)
             return
+        if isinstance(saved, list):
+            # From before the panels were per profile: the one on screen's
+            saved = {"profiles": {self._applied_profile_id: saved}}
+        panels = saved.get("profiles") if isinstance(saved, dict) else None
+        for profile_id, items in (panels or {}).items():
+            try:
+                profile = hud_profiles.find_profile(self._profiles, profile_id)
+            except KeyError:
+                continue
+            if not profile.restore_info_items or not isinstance(items, list):
+                continue
+            if profile_id == self._applied_profile_id:
+                self._put_info_items(items)
+            else:
+                self._profile_content[profile_id] = {"info": items}
 
+    def _put_info_items(self, items: list) -> None:
+        """Items as get_items gave them back on the info panel, timers and
+        expiries counted on."""
+        manager = self._manager
         now = time.time()
         for item in sorted(items, key=lambda i: i.get("added_at", 0)):
             title = item.get("title")

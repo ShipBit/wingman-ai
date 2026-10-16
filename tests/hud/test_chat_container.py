@@ -14,7 +14,10 @@ from tests.support import TEMPLATES, template
 
 
 @pytest.fixture
-def service():
+def service(tmp_path, monkeypatch):
+    import services.hud_service as hud_service_module
+
+    monkeypatch.setattr(hud_service_module, "get_users_dir", lambda: str(tmp_path))
     HudService._instance = None
     profile = HudProfile(**template("settings.yaml")["hud_profiles"][0])
     profile.max_display_time = 0.05
@@ -27,6 +30,8 @@ def service():
     hud = HudService()
     hud.configure(config_manager, SimpleNamespace(current_config_dir=None, config_events=MagicMock()))
     hud._server = MagicMock(is_running=True)
+    asyncio.run(hud.channel_loaded("General"))
+    hud._server.manager.reset_mock()
     yield hud
     HudService._instance = None
 

@@ -131,9 +131,16 @@ class MarkdownRenderer:
         self._wrap_cache = {}
         self._max_wrap_cache_size = MAX_TEXT_WRAP_CACHE_SIZE
 
-    def set_colors(self, text: Tuple, accent: Tuple, bg_alpha: int = 255):
-        """Text and accent colour, and how opaque the panel's background is."""
-        self.colors = {'text': text, 'accent': accent, 'bg_alpha': bg_alpha}
+    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple, bg_alpha: int = 255):
+        """Text, accent and background colour, and how opaque the background is."""
+        self.colors = {'text': text, 'accent': accent, 'bg': bg, 'bg_alpha': bg_alpha}
+
+    def bg_shade(self, strength: float) -> Tuple[int, int, int, int]:
+        """The panel's background a little lighter (a dark one) or darker (a
+        light one), and as see-through as the background."""
+        r, g, b = self.colors.get('bg', (30, 33, 43))[:3]
+        shade = (255, 255, 255) if 0.2126 * r + 0.7152 * g + 0.0722 * b < 128 else (0, 0, 0)
+        return shade + (round(strength * self.colors.get('bg_alpha', 255)),)
 
     def accent_tint(self, strength: float) -> Tuple[int, int, int, int]:
         """The accent over the panel at `strength`, as see-through as the panel's background."""
@@ -1489,6 +1496,13 @@ class MarkdownRenderer:
         bold_font = self.fonts.get('bold', font)
         line_h = self.line_height - 4
 
+        # The text goes on a layer of its own, laid over the rows at the end:
+        # drawn straight onto a see-through row shade, its anti-aliased edges
+        # would mix with the shade instead of covering it and show as a halo
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_draw = ImageDraw.Draw(text_layer)
+
         # Parse rows (skip separator lines)
         rows = []
         row_line_indices = []  # Track which original line each row came from
@@ -1537,7 +1551,7 @@ class MarkdownRenderer:
             row_positions.append(pos)
             pos += len(line) + 1  # +1 for newline
 
-        border = self.accent_tint(0.25)
+        border = self.bg_shade(0.13)
 
         # Track visible rows for proper border drawing
         visible_rows = 0
@@ -1559,7 +1573,7 @@ class MarkdownRenderer:
             current_font = bold_font if is_header else font
             text_color = self.colors['accent'] if is_header else self.colors['text']
 
-            bg = self.accent_tint(0.18 if is_header else (0.05 if ri % 2 == 1 else 0.10))
+            bg = self.bg_shade(0.08 if is_header else (0.02 if ri % 2 == 1 else 0.045))
 
             # Draw row background
             if ri == 0:
@@ -1593,7 +1607,7 @@ class MarkdownRenderer:
 
                 # Render cell with typewriter effect
                 self._render_cell_content_with_pos(
-                    draw, cell_text, cell_x + cell_padding, current_y + 5,
+                    text_draw, cell_text, cell_x + cell_padding, current_y + 5,
                     content_w, line_h + 6, current_font, text_color,
                     cell_start_approx, typewriter_pos
                 )
@@ -1612,6 +1626,7 @@ class MarkdownRenderer:
         # Outer border (only around visible portion)
         if visible_rows > 0:
             draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=border, width=1)
+        canvas.alpha_composite(text_layer)
 
         return last_visible_y + 10 if visible_rows > 0 else y
 

@@ -36,6 +36,7 @@ def service():
     )
     hud = HudService()
     hud.configure(config_manager, config_service)
+    asyncio.run(hud.channel_loaded("Star Citizen"))
     yield hud
     HudService._instance = None
 
@@ -137,6 +138,7 @@ def test_renaming_the_loaded_config_keeps_its_profile_on_the_hud(service):
 
     _run(service._on_config_renamed(("Star Citizen", "SC 4.0")))
 
-    # Core reloads the config under its new name next; nothing is applied before
-    service._server.manager.set_defaults.assert_not_called()
-    assert service.state().profiles[-1].configs == ["SC 4.0"]
+    # Still the same profile on screen, under the config's new name
+    state = service.state()
+    assert state.profiles[-1].configs == ["SC 4.0"]
+    assert state.active_profile_id == sc.id

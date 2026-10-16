@@ -5,7 +5,7 @@ Tests the chat window HUD type with:
 - Natural conversation flow with realistic timing
 - Full markdown support in messages
 - Multiple participants with custom colors
-- Consecutive same-sender message merging
+- Every message its own entry, the same sender's name shown once
 - Auto-hide and manual show/hide
 - Message overflow with fade effect
 """
@@ -519,25 +519,23 @@ async def test_chat_message_update(session: TestSession):
     print(f"  Updated message 1 (past)")
     await asyncio.sleep(1.5)
 
-    # Test that merged messages return the existing ID
     msg3_id = await session.send_chat_message(chat_name, "Alice", "I'm adding to my updated message.")
-    # Bob was the last sender, so this creates a new message for Alice
     assert msg3_id is not None, "Expected a message ID back"
     print(f"  Message 3 ID: {msg3_id}")
     await asyncio.sleep(0.8)
 
-    # Now send another from Alice — should merge and return same ID
-    msg3_merged_id = await session.send_chat_message(chat_name, "Alice", "This should merge!")
-    assert msg3_merged_id == msg3_id, "Consecutive same-sender messages should return the same ID"
-    print(f"  Merged message ID matches: {msg3_merged_id == msg3_id}")
+    # Another from Alice right after: an entry of its own, under her name
+    msg4_id = await session.send_chat_message(chat_name, "Alice", "And one more line.")
+    assert msg4_id != msg3_id, "Every message should be an entry of its own"
+    print(f"  Message 4 ID: {msg4_id}")
     await asyncio.sleep(1.5)
 
-    # Update the merged message
+    # Update the earlier one of the two
     await session.update_chat_message(
         chat_name, msg3_id,
-        "Merged and then **updated** — all via the same ID!"
+        "Sent, then **updated**, all via its ID!"
     )
-    print(f"  Updated merged message")
+    print(f"  Updated message 3")
     await asyncio.sleep(2)
 
     await session.delete_chat_window(chat_name)

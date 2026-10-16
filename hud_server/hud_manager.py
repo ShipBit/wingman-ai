@@ -632,12 +632,16 @@ class HudManager:
         icon: Optional[str] = None,
         own: bool = False,
         tools: Optional[list] = None,
+        restored: bool = False,
     ) -> Optional[str]:
         """Send a message to a chat window.
 
         Returns the message ID if successful, None if the window was not found.
-        If the message is merged with the previous message from the same sender,
-        the existing message's ID is returned.
+        Every message is an entry of its own, except tool calls without text:
+        they join the sender's last entry, under what it said before calling
+        them, and that entry's ID is returned. A `restored` message (history put
+        back) is never merged, does not type itself out and leaves the window
+        hidden until the next message.
         """
         key = self._make_key(group_name, element)
         with self._lock:
@@ -646,13 +650,14 @@ class HudManager:
 
             state = self._groups[key]
 
-            # Added to the last message if the same sender wrote it. Text never
-            # joins a message showing tool chips: it came after those tools ran
+            # Tool calls without text join the sender's last entry; anything
+            # said is an entry of its own, the user's lines as much as a Wingman's
             last = state.chat_messages[-1] if state.chat_messages else None
-            if last and last.sender == sender and last.own == own and not (text and last.tools):
-                if text:
-                    last.text = f"{last.text} {text}" if last.text else text
-                last.tools.extend(tools or [])
+            if (
+                not restored and not text and tools and last
+                and last.sender == sender and last.own == own
+            ):
+                last.tools.extend(tools)
                 last.icon = icon or last.icon
                 message_id = last.id
             else:
@@ -683,9 +688,17 @@ class HudManager:
                 "icon": icon,
                 "own": own,
                 "tools": list(tools or []),
+                "restored": restored,
             })
 
             return message_id
+
+    def get_chat_messages(self, group_name: str, element: str) -> list[dict[str, Any]]:
+        """A chat window's messages, oldest first."""
+        key = self._make_key(group_name, element)
+        with self._lock:
+            state = self._groups.get(key)
+            return [asdict(message) for message in state.chat_messages] if state else []
 
     def update_chat_message(
         self,

@@ -34,8 +34,8 @@ and one Wingman must not wipe what another put there. Ask to remove a panel by
 its title instead. A title said differently ("the mining one") is matched by
 System One when you have it.
 
-Info panels come back after a restart when the profile's *Restore info panels*
-is on.
+Each profile's info panels come back after a restart when its *Restore info
+panels* is on.
 
 ## HUD profiles
 
@@ -48,8 +48,8 @@ Where the containers are and how they look is a **HUD profile**, under
   (the default), at the **top**, growing down, or at the **bottom**, growing
   up,
 - the look: font, size, colours, background and overall transparency, corner
-  radius, padding, typewriter effect. Tables and the loader take their colour
-  from the accent colour, and tables are as see-through as the background,
+  radius, padding, typewriter effect. The loader takes the accent colour;
+  tables a shade of the background, as see-through as the background,
 - how long chat messages stay, whether the chat shows tool names, and the
   name the chat calls you. Left empty, it is the name you are signed in to
   Wingman AI with, or "User" when you are not signed in,
@@ -74,6 +74,17 @@ same for every profile.
 
 Renaming a config keeps its profile; deleting a config removes it from its
 profile.
+
+A profile becomes active when a config's Wingmen load. Until then, as on
+start before Wingman AI is signed in, the HUD shows nothing and keeps the saved
+info panels for later.
+
+Each profile has its own chat and info panel. When loading a config switches
+the profile, the chat and the info panel are made anew in the new profile's
+layout and show what they held when that profile was last on screen: its info
+panels (timers count on meanwhile) and, with the chat flow, its conversation,
+out of sight until the next message. Nothing carries over from one profile to
+another.
 
 ### Preview
 
@@ -121,3 +132,6 @@ skill had saved are not carried over.
 
 Every Wingman gets the chat and the info panel switched on, and so does every
 Wingman you add later. Switch them off per Wingman in its settings.
+
+Commands that called the skill's actions (hide or show the HUD) do nothing
+now; the migration log names them, so you can edit or delete them.

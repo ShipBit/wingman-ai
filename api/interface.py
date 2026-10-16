@@ -1488,10 +1488,10 @@ class HudProfile(BaseModel):
     """Seconds a chat message stays after the Wingman stops speaking."""
     display_tool_names: bool
     """Show tool names instead of skill/server names on the chat message."""
-    user_name: str = ""
+    user_name: str
     """What the chat calls the user. Empty: the account name the client is
     signed in with, or "User" without one."""
-    chat_flow: bool = False
+    chat_flow: bool
     """Show the conversation as a running chat, earlier messages above the
     newest. Off: the chat shows only the newest message."""
     restore_info_items: bool

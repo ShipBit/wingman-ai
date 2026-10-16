@@ -612,7 +612,9 @@ Send a message to a chat window.
 - `own` (boolean, optional): Written by the user: a bubble on the right, like in a messenger
 - `tools` (list, optional): Tool chips under the message, as for a message window
 
-A message from the same sender right after the last one is added to it.
+Every message is an entry of its own. Only `tools` without `text` join the
+sender's last entry, shown under what it said before calling them; the
+response then carries that entry's ID.
 
 **Response**: `200 OK`
 

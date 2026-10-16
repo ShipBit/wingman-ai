@@ -83,3 +83,65 @@ def test_text_never_joins_a_message_that_shows_tool_chips():
     # Chips join the text before them; the answer comes after them, on its own
     assert said == called == called_again
     assert answered != called
+
+
+def test_every_line_the_user_says_is_a_bubble_of_its_own():
+    backend, overlay, manager = wired()
+
+    first = manager.send_chat_message(GROUP_CHAT, "chat", "Jan", "Hello, hello, hello.", own=True)
+    second = manager.send_chat_message(GROUP_CHAT, "chat", "Jan", "Hello, hello.", own=True)
+    run_frames(overlay)
+
+    assert first != second
+    own = [key[1] for key in overlay._windows[f"chat_{GROUP_CHAT}"]["pieces"]._images if key[1][0] == "own"]
+    # Two bubbles, the name over the first only
+    assert sorted(piece[1] for piece in own) == ["", "Jan"]
+
+
+def test_a_wingmans_next_reply_is_an_entry_of_its_own():
+    manager = HudManager()
+    manager.create_group(GROUP_CHAT, "chat")
+
+    first = manager.send_chat_message(GROUP_CHAT, "chat", "Computer", "Channels are clear.")
+    second = manager.send_chat_message(GROUP_CHAT, "chat", "Computer", "Quantum drive spooled.")
+
+    assert first != second
+    assert [m["text"] for m in manager.get_chat_messages(GROUP_CHAT, "chat")] == [
+        "Channels are clear.", "Quantum drive spooled.",
+    ]
+
+
+def chips(overlay) -> list:
+    """(label, calls) of every chip the chat shows."""
+    pieces = overlay._windows[f"chat_{GROUP_CHAT}"]["pieces"]
+    return [(label, calls) for key in pieces._images if key[1][0] == "tools" for label, _icon, calls in key[1][1]]
+
+
+def test_calls_that_show_the_same_text_share_one_chip_with_their_count():
+    backend, overlay, manager = wired()
+
+    # With tool names: the same tool three times, another once
+    manager.send_chat_message(GROUP_CHAT, "chat", "Computer", "", tools=[
+        {"name": "activate_capability", "source": "activate_capability", "icon": None},
+        {"name": "list_ships", "source": "list_ships", "icon": None},
+    ])
+    manager.send_chat_message(GROUP_CHAT, "chat", "Computer", "", tools=[
+        {"name": "activate_capability", "source": "activate_capability", "icon": "a.png"},
+        {"name": "activate_capability", "source": "activate_capability", "icon": None},
+    ])
+    run_frames(overlay)
+
+    assert sorted(chips(overlay)) == [("activate_capability", 3), ("list_ships", 1)]
+
+
+def test_without_tool_names_the_tools_of_one_skill_or_server_share_a_chip():
+    backend, overlay, manager = wired()
+
+    manager.send_chat_message(GROUP_CHAT, "chat", "Computer", "", tools=[
+        {"name": "list_ships", "source": "SC Tools", "icon": "sc.png"},
+        {"name": "list_tasks", "source": "SC Tools", "icon": None},
+        {"name": "recall", "source": "Memory", "icon": None},
+    ])
+    run_frames(overlay)
+
+    assert sorted(chips(overlay)) == [("Memory", 1), ("SC Tools", 2)]
