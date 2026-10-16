@@ -220,3 +220,9 @@ def test_a_word_of_a_longer_name_is_not_pulled_to_a_near_one():
     vocabulary = Vocabulary(["Centauri", "RSI Constellation Centaurus"])
     assert vocabulary.correct("the Centaurus is parked") == "the Centaurus is parked"
     assert vocabulary.correct("jump to Centaury") == "jump to Centauri"
+
+
+
+def test_a_name_that_is_also_part_of_a_longer_one_gets_its_spelling():
+    vocabulary = Vocabulary(["Hurston", "Hurston Dynamics", "Centauri"])
+    assert vocabulary.correct("land on hurston") == "land on Hurston"

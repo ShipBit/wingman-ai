@@ -95,6 +95,9 @@ class HudHttpClient:
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
+        # The groups the server had when this client connected, from its
+        # health answer. A server that restarted has lost them.
+        self.server_groups: set[str] = set()
 
     @property
     def connected(self) -> bool:
@@ -131,6 +134,10 @@ class HudHttpClient:
             response = await self._client.get(PATH_HEALTH)
             if response.status_code == 200:
                 self._connected = True
+                try:
+                    self.server_groups = set(response.json().get("groups") or [])
+                except Exception:
+                    self.server_groups = set()
                 return True
             return False
         except httpx.ConnectError:

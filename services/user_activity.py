@@ -23,10 +23,18 @@ class UserActivity:
         self._holding = False
         self._turns = 0
         self._heard_at = float("-inf")
+        # Whether the voice gate is inside an utterance right now. With voice
+        # activation that is the user talking before anything was heard.
+        self._capturing = lambda: False
 
     def set_holding(self, holding: bool) -> None:
         """A push-to-talk key is down (or its release grace is running)."""
         self._holding = holding
+
+    def set_capture_probe(self, probe) -> None:
+        """A function that says whether someone is speaking into the
+        microphone right now (the voice gate is capturing)."""
+        self._capturing = probe
 
     def heard(self) -> None:
         """An utterance just ended and goes to transcription."""
@@ -42,11 +50,14 @@ class UserActivity:
 
     @property
     def busy(self) -> bool:
-        return (
-            self._holding
-            or self._turns > 0
-            or time.monotonic() - self._heard_at < HEARD_GRACE_S
-        )
+        if self._holding or self._turns > 0:
+            return True
+        if time.monotonic() - self._heard_at < HEARD_GRACE_S:
+            return True
+        try:
+            return bool(self._capturing())
+        except Exception:
+            return False
 
 
 user_activity = UserActivity()

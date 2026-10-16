@@ -227,3 +227,13 @@ def test_a_slow_tool_keeps_its_line(monkeypatch):
     monkeypatch.setattr(filler_response, "SPEAK_MARGIN_S", 0.0)
     for _ in range(3):
         assert not _turn(responder, 0.1).skipped
+
+
+
+def test_a_turn_that_ended_without_an_answer_teaches_nothing(monkeypatch):
+    responder, _, _ = _responder(delay=0.0, monkeypatch=monkeypatch)
+    line = responder.start(
+        request="x", tool_names=["uex_get_vehicle_information"], immediate=False, name="L", backstory=""
+    )
+    responder.stop(line, learn=False)
+    assert "uex_get_vehicle_information" not in responder._rest

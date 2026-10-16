@@ -316,7 +316,7 @@ class FillerResponder:
         finally:
             line.finished = True
 
-    def stop(self, line: Optional[FillerLine]) -> bool:
+    def stop(self, line: Optional[FillerLine], learn: bool = True) -> bool:
         """The answer is ready: drop the line if it is not out yet. True if it was spoken.
 
         Waits for a line that is being handed out right now, so it reaches the
@@ -324,10 +324,13 @@ class FillerResponder:
         """
         if line is None:
             return False
-        rest = time.perf_counter() - line.started_at
-        with self._lock:
-            for name in line.tools:
-                self._rest.setdefault(name, _Average()).add(rest)
+        if learn:
+            # Until the user hears words: the answer, or what the model said
+            # on its own between two rounds of tools.
+            rest = time.perf_counter() - line.started_at
+            with self._lock:
+                for name in line.tools:
+                    self._rest.setdefault(name, _Average()).add(rest)
         if line.skipped:
             return False
         with line.lock:

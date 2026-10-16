@@ -305,7 +305,7 @@ class ToolExecutor:
                     )
                     await printr.print_async(
                         f"Memory not stored, the memory model is not ready: {text}",
-                        color=LogType.WARNING,
+                        color=LogType.MEMORY,
                         source_name=self._wingman_name,
                     )
                 else:

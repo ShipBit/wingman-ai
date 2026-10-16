@@ -40,6 +40,10 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def _window(element) -> str:
+    return getattr(element, "value", element)
+
+
 class HUD(Skill):
 
     # A panel list is short and the titles are the user's own words, said out
@@ -620,6 +624,12 @@ class HUD(Skill):
                 )
                 return False
             self.active = True
+            mine = {f"{_window(WindowType.MESSAGE)}_{self._group_name}", f"{_window(WindowType.PERSISTENT)}_{self._group_name}"}
+            known = getattr(self._client, "server_groups", None)
+            if known is not None and not mine <= known:
+                # The server restarted between two turns: a new client found
+                # it without this wingman's groups.
+                self._groups_ready = False
             if not self._groups_ready:
                 # First connection, or the server was gone in between.
                 await printr.print_async(
@@ -680,9 +690,11 @@ class HUD(Skill):
                 try:
                     msg_props = self._get_hud_props()
                     pers_props = self._get_persistent_props()
-                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
-                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
-                    self._groups_ready = True
+                    made = [
+                        await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props),
+                        await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props),
+                    ]
+                    self._groups_ready = all(result is not None for result in made)
                 except Exception:
                     pass
             else:
@@ -796,13 +808,22 @@ class HUD(Skill):
                     server_only=True
                 )
 
-        # Disconnect client
+        # Disconnect clients. One of another loop that still runs (the main
+        # loop, when unload runs on a turn's) is closed on its own loop; an
+        # httpx client cannot be closed from a different one.
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        for loop, client in list(self._clients.items()):
+            if loop is not current and loop.is_running():
+                asyncio.run_coroutine_threadsafe(client.disconnect(), loop)
         if self._client:
             try:
                 await self._client.disconnect()
             except Exception:
                 pass
-            self._client = None
+        self._client = None
 
         self.active = False
 

@@ -571,16 +571,21 @@ class Wingman:
                 )
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
+                answered = False
                 try:
                     process_result, instant_response, skill, interrupt = (
                         await self._get_response_for_transcript(
                             transcript=transcript, benchmark=benchmark_llm, images=images
                         )
                     )
+                    answered = bool(process_result or instant_response)
                 finally:
                     # The answer is ready: a filler line that is not out yet
                     # is dropped; one that was spoken must not be cut off.
-                    if self._stop_turn_filler():
+                    # Only a turn that ended in an answer teaches the filler
+                    # how long the wait is; an error or a cancelled call ends
+                    # early and would make a slow tool look fast.
+                    if self._stop_turn_filler(learn=answered):
                         interrupt = False
                 # Every path out of the turn passes here, including the ones
                 # that end early on a command. Skills add their own decisions
@@ -1033,10 +1038,10 @@ class Wingman:
             backstory=self.config.prompts.backstory or "",
         )
 
-    def _stop_turn_filler(self) -> bool:
+    def _stop_turn_filler(self, learn: bool = True) -> bool:
         """Stop this turn's filler line. True if it was spoken."""
         line, self._turn_filler = self._turn_filler, None
-        return self.filler.stop(line)
+        return self.filler.stop(line, learn=learn)
 
     def _speak_filler(self, line: str) -> None:
         """Runs on the filler's thread: speech gets its own thread, the message

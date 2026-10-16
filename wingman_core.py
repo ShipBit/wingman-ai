@@ -1002,6 +1002,9 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.listen_while_speaking
         )
         self.audio_input = AudioInput(on_frame=self.listen_controller.feed)
+        # Mid-sentence with voice activation counts as busy too: a game event
+        # spoken now would land in the user's own transcript.
+        user_activity.set_capture_probe(lambda: self.voice_gate.is_capturing)
 
         if self.settings_service.settings.audio:
             sd.default.device = [

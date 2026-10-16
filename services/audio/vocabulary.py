@@ -161,8 +161,9 @@ class Vocabulary:
             # stays away.
             return None
         if len(words) == 1 and joined in self._name_words:
-            # Part of a known longer name, spelled right: leave it.
-            return None
+            # Part of a known longer name, spelled right: the spelling of an
+            # entry that is exactly this word, otherwise leave it.
+            return self._exact.get(joined)
         best: tuple[int, str | None] = (10**6, None)
         for normalised, entry_words, entry in self._joined:
             if joined == normalised:

@@ -159,3 +159,14 @@ def test_tool_call_arguments_count_toward_the_size():
     msg = {"role": "assistant", "content": None, "tool_calls": [
         {"id": "c", "type": "function", "function": {"name": "hud_add_info", "arguments": "x" * 4000}}]}
     assert len(ConversationManager.message_text(msg)) >= 4000
+
+
+def test_a_note_is_not_a_turn_of_its_own():
+    """A skill's note sits right before the user's message; counted as a turn
+    it would halve how many real turns are kept."""
+    from services.conversation_manager import NOTE_PREFIX, ConversationManager
+
+    manager = ConversationManager.__new__(ConversationManager)
+    note = {"role": "user", "content": f"{NOTE_PREFIX}zone entered]"}
+    assert manager.turn_role(note) == "note"
+    assert manager.turn_role({"role": "user", "content": "Shields up."}) == "user"

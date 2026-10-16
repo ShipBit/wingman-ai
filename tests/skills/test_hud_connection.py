@@ -17,8 +17,12 @@ class FakeClient:
         self.groups = 0
         FakeClient.made.append(self)
 
+    server_groups = None  # set per test; None means "has them all"
+
     async def connect(self, timeout=None):
         self.connected = True
+        if FakeClient.server_groups is not None:
+            self.server_groups = set(FakeClient.server_groups)
         return True
 
     async def create_group(self, *args, **kwargs):
@@ -28,6 +32,7 @@ class FakeClient:
 
 def make_hud(monkeypatch):
     FakeClient.made = []
+    FakeClient.server_groups = None
     monkeypatch.setattr(hud_main, "HudHttpClient", FakeClient)
     hud = HUD.__new__(HUD)
     hud._unloading = False
@@ -109,3 +114,13 @@ def test_groups_that_failed_to_be_made_are_tried_again(monkeypatch):
     monkeypatch.setattr(FakeClient, "create_group", refused)
     run_on_new_loop(hud._ensure_connected)
     assert hud._groups_ready is False
+
+
+def test_a_server_restarted_between_turns_gets_the_groups_again(monkeypatch):
+    """The next turn's client is new and connects fine; only the server's own
+    list of groups shows they are gone."""
+    hud = make_hud(monkeypatch)
+    run_on_new_loop(hud._ensure_connected)
+    FakeClient.server_groups = set()  # Restarted, empty.
+    run_on_new_loop(hud._ensure_connected)
+    assert sum(client.groups for client in FakeClient.made) == 4
