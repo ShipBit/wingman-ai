@@ -35,7 +35,6 @@ try:
         MAX_TEXT_WRAP_CACHE_SIZE,
         MAX_TEXT_SIZE_CACHE_SIZE,
         MAX_BASE64_IMAGE_BYTES,
-        DEFAULT_BORDER_COLOR,
     )
 except ImportError:
     # Fallback defaults for standalone testing
@@ -44,7 +43,6 @@ except ImportError:
     MAX_TEXT_WRAP_CACHE_SIZE = 200
     MAX_TEXT_SIZE_CACHE_SIZE = 2000
     MAX_BASE64_IMAGE_BYTES = 8 * 1024 * 1024
-    DEFAULT_BORDER_COLOR = (55, 62, 74)
 
 # data:image/<type>;base64,<data> URIs
 _DATA_URI_RE = re.compile(r'^data:image/[a-zA-Z0-9.+-]+;base64,(.+)$', re.DOTALL)
@@ -105,8 +103,12 @@ class MarkdownRenderer:
         for key in self._cache_stats:
             self._cache_stats[key] = 0
 
-    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple):
-        self.colors = {'text': text, 'accent': accent, 'bg': bg}
+    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple, bg_alpha: int = 255):
+        self.colors = {'text': text, 'accent': accent, 'bg': bg, 'bg_alpha': bg_alpha}
+
+    def _accent_tint(self, strength: float) -> Tuple[int, int, int, int]:
+        """The accent over the panel at `strength`, as see-through as the panel's background."""
+        return tuple(self.colors['accent'][:3]) + (round(strength * self.colors.get('bg_alpha', 255)),)
 
     def _load_image(self, url: str, max_width: int) -> Image.Image:
         """Load an image from a local path, URL, or base64 source, resize to fit max_width
@@ -1565,6 +1567,8 @@ class MarkdownRenderer:
             row_positions.append(pos)
             pos += len(line) + 1  # +1 for newline
 
+        border = self._accent_tint(0.25)
+
         # Track visible rows for proper border drawing
         visible_rows = 0
         last_visible_y = y
@@ -1585,8 +1589,7 @@ class MarkdownRenderer:
             current_font = bold_font if is_header else font
             text_color = self.colors['accent'] if is_header else self.colors['text']
 
-            # Row background
-            bg = (45, 52, 64) if is_header else ((32, 38, 48) if ri % 2 == 1 else (38, 44, 54))
+            bg = self._accent_tint(0.18 if is_header else (0.05 if ri % 2 == 1 else 0.10))
 
             # Draw row background
             if ri == 0:
@@ -1629,7 +1632,7 @@ class MarkdownRenderer:
                 if ci < num_cols - 1:
                     sep_x = cell_x + cell_w
                     draw.line([(sep_x, current_y + 4), (sep_x, current_y + row_h - 4)],
-                             fill=DEFAULT_BORDER_COLOR, width=1)
+                             fill=border, width=1)
 
                 cell_x += cell_w
 
@@ -1638,7 +1641,7 @@ class MarkdownRenderer:
 
         # Outer border (only around visible portion)
         if visible_rows > 0:
-            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=DEFAULT_BORDER_COLOR, width=1)
+            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=border, width=1)
 
         return last_visible_y + 10 if visible_rows > 0 else y
 

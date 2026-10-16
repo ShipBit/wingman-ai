@@ -390,7 +390,7 @@ class HeadsUpOverlay(PreviewMixin):
                 {
                     "current_message": None,
                     "is_loading": False,
-                    "loading_color": (0, 170, 255),
+                    "loading_color": None,  # None: the accent color
                     "typewriter_active": False,
                     "typewriter_char_count": 0,
                     "last_typewriter_update": 0,
@@ -852,6 +852,7 @@ class HeadsUpOverlay(PreviewMixin):
                 radius,
                 padding,
                 bg,
+                bg_alpha,
                 text_color,
                 accent,
                 props.get("opacity", 0.85),
@@ -879,7 +880,7 @@ class HeadsUpOverlay(PreviewMixin):
         )
 
         # Update renderer colors
-        self.md_renderer.set_colors(text_color, accent, bg)
+        self.md_renderer.set_colors(text_color, accent, bg, bg_alpha)
 
         # Create temp canvas
         temp_h = max_height + 500
@@ -1047,7 +1048,7 @@ class HeadsUpOverlay(PreviewMixin):
         # Loading animation
         if win.get("is_loading"):
             y += 6
-            loading_color = win.get("loading_color", (0, 170, 255))
+            loading_color = win.get("loading_color") or accent
             self._draw_loading(
                 draw, temp, padding, y, width - padding * 2, loading_color
             )
@@ -1236,7 +1237,7 @@ class HeadsUpOverlay(PreviewMixin):
             window_fonts, colors, props.get("color_emojis", True)
         )
 
-        self.md_renderer.set_colors(text_color, accent, bg)
+        self.md_renderer.set_colors(text_color, accent, bg, bg_alpha)
 
         # Create temp canvas
         temp = Image.new("RGBA", (width, 2000), (0, 0, 0, 0))

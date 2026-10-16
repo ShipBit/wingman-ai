@@ -354,7 +354,7 @@ Show or hide the loader animation.
 **Fields**:
 - `group_name` (string, required): Target group name
 - `show` (boolean, required): Show (true) or hide (false)
-- `color` (string, optional): Hex color for loader (#RRGGBB)
+- `color` (string, optional): Hex color for loader (#RRGGBB). Without it, the loader uses the group's `accent_color`.
 
 **Response**: `200 OK`
 

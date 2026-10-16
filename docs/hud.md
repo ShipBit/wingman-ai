@@ -48,7 +48,8 @@ Where the containers are and how they look is a **HUD profile**, under
   (the default), at the **top**, growing down, or at the **bottom**, growing
   up,
 - the look: font, size, colours, background and overall transparency, corner
-  radius, padding, typewriter effect,
+  radius, padding, typewriter effect. Tables and the loader take their colour
+  from the accent colour, and tables are as see-through as the background,
 - how long chat messages stay, and whether the chat shows tool names.
 
 The HUD screen itself (which monitor) is a setting of the HUD server and the
