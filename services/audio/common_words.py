@@ -31,6 +31,7 @@ def _load(app_root_path: str, language: str) -> frozenset[str]:
         return frozenset(line.strip().lower() for line in f if line.strip())
 
 
+@lru_cache(maxsize=8)
 def common_words(app_root_path: str, spoken_language: SpokenLanguage) -> frozenset[str]:
     """The everyday words of the spoken language, and English: players say
     "shields" and "radar" in every language. OTHER has no list of its own."""

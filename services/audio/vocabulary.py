@@ -94,7 +94,10 @@ class Vocabulary:
         """``common_words``: the everyday words of the user's language
         (services/audio/common_words.py). The fuzzy rule never touches them;
         without them only the short built-in list is protected."""
-        self._protected = PROTECTED_WORDS | frozenset(common_words)
+        # Kept as it is, not merged with the built-in list: the vocabulary is
+        # built for every utterance, and merging 50,000 words each time cost
+        # more than the whole correction.
+        self._common = common_words if isinstance(common_words, frozenset) else frozenset(common_words)
         # Longer phrases first so "Port Olisar" wins over "Port".
         seen: dict[str, str] = {}
         # heard (normalised) -> correct, for the exact replacements
@@ -150,7 +153,7 @@ class Vocabulary:
             # The name itself, only split or cased differently: "micro tech"
             # is MicroTech even though both halves are everyday words.
             return exact
-        if respect_protection and all(w in self._protected for w in words):
+        if respect_protection and all(w in PROTECTED_WORDS or w in self._common for w in words):
             # Real words of the user's language: the speech model decided on
             # them. Only a pair may turn them into a name; the fuzzy rule
             # stays away.
