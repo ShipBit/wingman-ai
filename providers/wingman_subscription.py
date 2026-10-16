@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from typing import TYPE_CHECKING, Optional
 import openai
 import requests
@@ -168,6 +169,7 @@ class WingmanSubscription:
         stream: bool = False,
         tools: list[dict[str, any]] = None,
         tool_choice: str = "auto",
+        session: Optional[str] = None,
     ):
         serialized_messages = []
         for message in messages:
@@ -193,9 +195,14 @@ class WingmanSubscription:
         }
         if tools:
             data["tool_choice"] = tool_choice
+        headers = self._get_headers()
+        # Keeps this Wingman on the provider that holds its prompt cache. The
+        # backend hashes it with the account, so it carries nothing else.
+        if session:
+            headers["x-wingman-session"] = session
         response = requests.post(
             url=f"{self.settings.base_url}/api/v1/chat/completions",
-            headers=self._get_headers(),
+            headers=headers,
             json=data,
             timeout=self.timeout,
         )
@@ -229,7 +236,29 @@ class WingmanSubscription:
 
         json_response = response.json()
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
+        self._log_request(completion, response.headers.get("x-wingman-model", deployment))
         return completion
+
+    def _log_request(self, completion, model: str):
+        """One log line per request with the gateway's generation id. With
+        it the request can be found again at the gateway: which provider
+        answered, how long it took, what came from the cache. The turn line
+        only has the sum of all requests."""
+        usage = completion.usage
+        if usage:
+            details = usage.prompt_tokens_details
+            cached = (details.cached_tokens if details else 0) or 0
+            tokens = (
+                f": {usage.prompt_tokens} in ({cached} cached)"
+                f" / {usage.completion_tokens} out"
+            )
+        else:
+            tokens = ""
+        self.printr.print(
+            f"Gateway request {completion.id} ({model}){tokens}",
+            server_only=True,
+            source_name=self.wingman_name,
+        )
 
     async def generate_inworld_speech(
         self,
@@ -598,10 +627,21 @@ class WingmanSubscriptionLlm(LlmInterface):
     def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
         self._ws = ws_instance
         self._config = config
+        # One per Wingman, not per conversation: the prompt cache sits on the
+        # system prompt and the tools, and those outlive a conversation reset.
+        self._session = uuid.uuid4().hex
+        # Logged so a user's log shows which turns share a session, and that a
+        # config reload started a new one (its first turn has no cache).
+        Printr().print(
+            f"Gateway session {self._session}",
+            server_only=True,
+            source_name=ws_instance.wingman_name,
+        )
 
     async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._ws.ask(
             messages=messages,
             deployment=self._config.wingman_pro.conversation_deployment,
             tools=tools, tool_choice=tool_choice,
+            session=self._session,
         )
