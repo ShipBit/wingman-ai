@@ -41,7 +41,7 @@ class FakeWingman:
         async def show(text, skill_name=""):
             self.shown.append(text)
 
-        async def add_assistant(text):
+        async def add_note(text):
             self.history.append(text)
 
         async def show_message(title, text, duration=10.0, color=None):
@@ -54,7 +54,7 @@ class FakeWingman:
         self.ai = SimpleNamespace(generate=generate)
         self.tts = SimpleNamespace(speak=speak)
         self.audio = SimpleNamespace(is_playing=False)
-        self.conversation = SimpleNamespace(show=show, add_assistant=add_assistant)
+        self.conversation = SimpleNamespace(show=show, add_note=add_note, user_busy=False)
 
 
 def _skill(wingman, **values):
@@ -87,7 +87,7 @@ def test_reacts_to_live_events_only(reader, tmp_path):
 
     asyncio.run(run())
     assert wingman.said == ["Armistice, keep your weapons cold."]
-    assert wingman.shown == wingman.said == wingman.history == wingman.on_hud
+    assert wingman.shown == wingman.said == wingman.on_hud
     system, text = wingman.prompts[0]
     assert "German" in system and "A calm ship AI." in system
     assert "armistice" in text.lower() and text.endswith("in German:")
@@ -232,9 +232,10 @@ def test_the_tool_answers_in_short_lines(reader, tmp_path):
     assert all(len(answer) < 600 for answer in answers.values())
 
 
-def test_the_hud_skill_shows_it_so_the_line_is_not_shown_twice(reader, tmp_path):
+def test_the_lines_go_into_the_history_as_a_note_before_the_user_speaks(reader, tmp_path):
+    """As the Wingman's own messages they came back appended to its answers."""
     log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman(loaded_skills=("HUD",))
+    wingman = FakeWingman()
 
     async def run():
         await reader.start(str(tmp_path / "game"))
@@ -244,12 +245,15 @@ def test_the_hud_skill_shows_it_so_the_line_is_not_shown_twice(reader, tmp_path)
         with log.open("a") as stream:
             stream.write(ARMISTICE)
         await until(lambda: wingman.said)
+        assert wingman.history == []
+        await skill.on_add_user_message("land us")
+        await skill.on_add_user_message("and now?")
         await skill.unload()
         await reader.stop()
 
     asyncio.run(run())
-    assert wingman.history == wingman.said  # The HUD skill picks it up from there.
-    assert wingman.on_hud == []
+    assert len(wingman.history) == 1
+    assert "Armistice, keep your weapons cold." in wingman.history[0]
 
 
 def _burst(log, count, minute=20):
@@ -326,6 +330,25 @@ def test_the_next_reaction_sees_the_last_ones(reader, tmp_path):
     assert angle(first_text) != angle(second_text)
 
 
+def test_quiet_while_the_user_talks_to_a_wingman(reader, tmp_path):
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+    wingman.conversation.user_busy = True  # A push-to-talk key is down.
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman, max_unanswered=0)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        _burst(log, 2, minute=20)
+        await asyncio.sleep(0.5)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert wingman.said == []
+
+
 # ── what comes while the Wingman is busy, and what comes again ─────────────
 
 
@@ -389,6 +412,34 @@ def test_what_is_stale_by_then_is_dropped(monkeypatch):
     assert wingman.said == []
 
 
+def test_zone_changes_get_one_line_per_while(reader, tmp_path):
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman, max_unanswered=0)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        with log.open("a") as stream:
+            stream.write(ARMISTICE)
+        await until(lambda: len(wingman.said) == 1)
+        with log.open("a") as stream:
+            # Leaving: another event than entering, the policy lets it through.
+            stream.write(
+                ARMISTICE.replace("10:00:02", "10:07:00").replace("Entering", "Leaving")
+            )
+        await asyncio.sleep(0.5)
+        assert len(wingman.said) == 1
+        _burst(log, 1, minute=30)  # A mission still counts.
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert len(wingman.said) == 2
+
+
 def test_a_flickering_zone_is_said_once_and_does_not_use_up_the_limit(monkeypatch):
     clock = _clocked(monkeypatch)
     wingman = FakeWingman()
@@ -402,8 +453,33 @@ def test_a_flickering_zone_is_said_once_and_does_not_use_up_the_limit(monkeypatc
             skill._on_event(ARRIVAL[0])
             await asyncio.sleep(0.2)
         assert len(wingman.said) == 1 and skill._unanswered == 1
-        skill._on_event(ARRIVAL[1])  # Something new is still said.
+        # Something new is still said. A mission: a second zone report would
+        # wait for the zone group's gap.
+        skill._on_event(_event("mission_accepted", mission_name="Big Delivery", mission_id="m-1"))
         await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+
+    asyncio.run(run())
+
+
+def test_a_line_finished_after_the_user_started_talking_is_dropped(monkeypatch):
+    """Spoken late, it lands in the user's transcript or after their answer."""
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    original = wingman.local_ai.generate
+
+    async def slow_generate(text, system="", preset=None):
+        wingman.conversation.user_busy = True  # Push-to-talk went down meanwhile.
+        return await original(text, system=system, preset=preset)
+
+    wingman.local_ai.generate = slow_generate
+
+    async def run():
+        skill = _skill(wingman, max_unanswered=1)
+        skill._on_event(_event("mission_accepted", mission_name="Big Delivery", mission_id="m-1"))
+        await until(lambda: wingman.prompts)
+        await asyncio.sleep(0.2)
+        assert wingman.said == [] and skill._unanswered == 0
         await skill.unload()
 
     asyncio.run(run())

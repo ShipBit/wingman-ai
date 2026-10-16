@@ -40,6 +40,10 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def _window(element) -> str:
+    return getattr(element, "value", element)
+
+
 class HUD(Skill):
 
     # A panel list is short and the titles are the user's own words, said out
@@ -115,13 +119,35 @@ class HUD(Skill):
             f"persistent_info_{self.wingman.name}.json"
         )
 
-        # HTTP client
-        self._client: Optional[HudHttpClient] = None
+        # HTTP clients, one per event loop. An httpx client belongs to the
+        # loop it was made on, and this skill is called from two: the main
+        # loop (audio monitor, events) and the short-lived loop of each turn.
+        # One shared client used to be torn down and rebuilt, groups and all,
+        # every time the caller switched loops: twice per turn.
+        self._clients: dict[asyncio.AbstractEventLoop, HudHttpClient] = {}
+        # Whether this wingman's groups exist on the HUD server. Cleared when
+        # a connection fails, since the server may have restarted without them.
+        self._groups_ready = False
         self._monitor_task: Optional[asyncio.Task] = None
-        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Group name for HUD (just wingman identifier, element passed separately)
         self._group_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
+
+    @property
+    def _client(self) -> Optional[HudHttpClient]:
+        """The client of the running event loop, if it has one."""
+        try:
+            return self._clients.get(asyncio.get_running_loop())
+        except RuntimeError:
+            return None
+
+    @_client.setter
+    def _client(self, client: Optional[HudHttpClient]) -> None:
+        """A client for the running loop; None forgets every client."""
+        if client is None:
+            self._clients = {}
+            return
+        self._clients[asyncio.get_running_loop()] = client
 
     # ─────────────────────────────── Helpers ─────────────────────────────── #
 
@@ -570,66 +596,60 @@ class HUD(Skill):
         if not hud_settings or not hud_settings.enabled:
             return False
 
-        # Check if we're in a different event loop than when the client was created
-        # If so, we need to create a new client
-        try:
-            current_loop = asyncio.get_running_loop()
-            if self._main_loop is not None and self._main_loop != current_loop:
-                # Event loop changed - need to recreate client
-                if self._client:
-                    try:
-                        await self._client.disconnect()
-                    except Exception:
-                        pass
-                    self._client = None
-                self._main_loop = current_loop
-        except RuntimeError:
-            pass
+        # Clients of turns that are over: their loop is closed.
+        self._clients = {
+            loop: client for loop, client in self._clients.items() if not loop.is_closed()
+        }
 
-        # Create client if it doesn't exist (e.g., after skill reactivation or loop change)
-        if not self._client:
+        if self._client is None:
             validated = validate_hud_settings(hud_settings)
             base_url = f"http://{validated['host']}:{validated['port']}"
             self._client = HudHttpClient(base_url=base_url)
-
-            # Store current loop reference
-            try:
-                self._main_loop = asyncio.get_running_loop()
-            except RuntimeError:
-                pass
+        elif not self._client.connected:
+            # A client that was connected lost the server (a request failed).
+            # It may have restarted without this wingman's groups.
+            self._groups_ready = False
 
         if not self._client.connected:
-            # Try to connect/reconnect
             try:
-                if await self._client.connect(timeout=3.0):
-                    await printr.print_async(
-                        "[HUD] Connected to HUD server",
-                        color=LogType.INFO,
-                        server_only=True
-                    )
-                    self.active = True
-
-                    # Create/update groups after connect
-                    msg_props = self._get_hud_props()
-                    pers_props = self._get_persistent_props()
-                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
-                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
-
-                    # Start audio monitor if not running
-                    if not self._monitor_task or self._monitor_task.done():
-                        self.stop_event.clear()
-                        self._monitor_task = asyncio.create_task(self._audio_monitor_loop())
-
-                    return True
-                else:
+                if not await self._client.connect(timeout=3.0):
+                    self._groups_ready = False
                     return False
             except Exception as e:
+                self._groups_ready = False
                 await printr.print_async(
                     f"[HUD] Connection failed: {e}",
                     color=LogType.WARNING,
                     server_only=True
                 )
                 return False
+            self.active = True
+            mine = {f"{_window(WindowType.MESSAGE)}_{self._group_name}", f"{_window(WindowType.PERSISTENT)}_{self._group_name}"}
+            known = getattr(self._client, "server_groups", None)
+            if known is not None and not mine <= known:
+                # The server restarted between two turns: a new client found
+                # it without this wingman's groups.
+                self._groups_ready = False
+            if not self._groups_ready:
+                # First connection, or the server was gone in between.
+                await printr.print_async(
+                    "[HUD] Connected to HUD server",
+                    color=LogType.INFO,
+                    server_only=True
+                )
+                msg_props = self._get_hud_props()
+                pers_props = self._get_persistent_props()
+                made = [
+                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props),
+                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props),
+                ]
+                # A failed request returns None; try again on the next call.
+                self._groups_ready = all(result is not None for result in made)
+
+            # Start audio monitor if not running
+            if not self._monitor_task or self._monitor_task.done():
+                self.stop_event.clear()
+                self._monitor_task = asyncio.create_task(self._audio_monitor_loop())
         return True
 
     # ─────────────────────────────── Lifecycle ─────────────────────────────── #
@@ -655,13 +675,8 @@ class HUD(Skill):
         validated = validate_hud_settings(hud_settings)
         base_url = f"http://{validated['host']}:{validated['port']}"
         self._client = HudHttpClient(base_url=base_url)
+        self._groups_ready = False
 
-        # store the loop where the client was created
-        try:
-            self._main_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            pass
-        
         try:
             if await self._client.connect(timeout=3.0):
                 await printr.print_async(
@@ -675,8 +690,11 @@ class HUD(Skill):
                 try:
                     msg_props = self._get_hud_props()
                     pers_props = self._get_persistent_props()
-                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
-                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
+                    made = [
+                        await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props),
+                        await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props),
+                    ]
+                    self._groups_ready = all(result is not None for result in made)
                 except Exception:
                     pass
             else:
@@ -766,7 +784,19 @@ class HUD(Skill):
                 server_only=True
             )
 
-        # Delete groups if client exists - wrap in try-except
+        # Delete groups if client exists - wrap in try-except. The clients
+        # belong to the loops that made them; unload may run on one that has
+        # none yet, and the groups must still go.
+        if self._client is None and self._clients:
+            hud_settings = getattr(self.settings, 'hud_server', None)
+            if hud_settings:
+                validated = validate_hud_settings(hud_settings)
+                client = HudHttpClient(base_url=f"http://{validated['host']}:{validated['port']}")
+                try:
+                    if await client.connect(timeout=3.0):
+                        self._client = client
+                except Exception:
+                    pass
         if self._client:
             try:
                 await self._client.delete_group(self._group_name, WindowType.MESSAGE)
@@ -778,13 +808,22 @@ class HUD(Skill):
                     server_only=True
                 )
 
-        # Disconnect client
+        # Disconnect clients. One of another loop that still runs (the main
+        # loop, when unload runs on a turn's) is closed on its own loop; an
+        # httpx client cannot be closed from a different one.
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        for loop, client in list(self._clients.items()):
+            if loop is not current and loop.is_running():
+                asyncio.run_coroutine_threadsafe(client.disconnect(), loop)
         if self._client:
             try:
                 await self._client.disconnect()
             except Exception:
                 pass
-            self._client = None
+        self._client = None
 
         self.active = False
 

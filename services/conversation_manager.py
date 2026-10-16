@@ -34,6 +34,16 @@ _CLEARED_NOTE = (
 _CLEARED_NOTE_RE = re.compile(r"^\[Tool output removed from history \(~(\d+) tokens")
 
 
+# Context a skill put into the history (SkillConversation.add_note). It is a
+# user-role message, since every provider accepts that between turns, but it
+# is not the user talking.
+NOTE_PREFIX = "[Note, not said by the user: "
+
+
+def is_note(content) -> bool:
+    return isinstance(content, str) and content.startswith(NOTE_PREFIX)
+
+
 class ConversationManager:
     """Owns the conversation message list, tool-response bookkeeping, and
     history cleanup / trimming logic.
@@ -211,7 +221,7 @@ class ConversationManager:
             return 0
         size_of = size_of or self.message_chars
         user_indices = [
-            i for i, m in enumerate(self.messages) if self.get_message_role(m) == "user"
+            i for i, m in enumerate(self.messages) if self.turn_role(m) == "user"
         ]
         if len(user_indices) < 2:
             return 0
@@ -565,7 +575,9 @@ class ConversationManager:
             elif hasattr(msg, "content"):
                 content = self._extract_text_content(msg.content) or ""
 
-            if role == "user":
+            if role == "user" and is_note(content):
+                lines.append(f"Note: {content[len(NOTE_PREFIX):].rstrip(']')}")
+            elif role == "user":
                 lines.append(f"User: {content}")
             elif role == "assistant":
                 if content:
@@ -600,6 +612,17 @@ class ConversationManager:
     # ------------------------------------------------------------------
     # Role helper
     # ------------------------------------------------------------------
+
+    def turn_role(self, message) -> str:
+        """The role for counting turns: a note is not the user starting one.
+        It stays with the turn before it, so it is cut, dropped or summarised
+        along with that turn and never counts as a turn of its own."""
+        role = self.get_message_role(message)
+        if role == "user":
+            content = message.get("content") if isinstance(message, Mapping) else getattr(message, "content", None)
+            if is_note(content):
+                return "note"
+        return role
 
     def get_message_role(self, message) -> str:
         """Helper method to get the role of the message regardless of its type."""

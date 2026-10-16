@@ -44,6 +44,8 @@ For available property types and values, see:
 import asyncio
 import threading
 import httpx
+
+from services.markdown import display_text
 from typing import Optional, Any, Union
 from urllib.parse import quote
 from api.enums import LogType
@@ -93,6 +95,9 @@ class HudHttpClient:
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
+        # The groups the server had when this client connected, from its
+        # health answer. A server that restarted has lost them.
+        self.server_groups: set[str] = set()
 
     @property
     def connected(self) -> bool:
@@ -129,6 +134,10 @@ class HudHttpClient:
             response = await self._client.get(PATH_HEALTH)
             if response.status_code == 200:
                 self._connected = True
+                try:
+                    self.server_groups = set(response.json().get("groups") or [])
+                except Exception:
+                    self.server_groups = set()
                 return True
             return False
         except httpx.ConnectError:
@@ -400,7 +409,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "title": title,
-            "content": content
+            "content": display_text(content)
         }
         if color:
             data["color"] = _resolve_enum(color)
@@ -819,7 +828,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "sender": sender,
-            "text": text
+            "text": display_text(text)
         }
         if color:
             data["color"] = _resolve_enum(color)
@@ -838,7 +847,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "message_id": message_id,
-            "text": text
+            "text": display_text(text)
         }
         return await self._request("PUT", PATH_CHAT_MESSAGE, data)
 

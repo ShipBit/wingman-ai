@@ -381,7 +381,7 @@ class LocalAiService:
             )
         if not self.provider.model_manager.embed_model_available():
             printr.print(
-                "[Local AI] Embedding model not downloaded — memory stays off.",
+                "[Local AI] Embedding model not downloaded yet; it is fetched once a wingman with memory is loaded.",
                 color=LogType.WARNING,
                 server_only=True,
             )

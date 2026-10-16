@@ -108,6 +108,7 @@ class BaseOpenAi(ABC):
         stream: bool,
         tools: list[dict[str, any]],
         model: str = None,
+        tool_choice: str = "auto",
     ):
         try:
             # Get minimal reasoning effort for the model to reduce latency
@@ -128,7 +129,7 @@ class BaseOpenAi(ABC):
                     messages=messages,
                     model=model,
                     tools=tools,
-                    tool_choice="auto",
+                    tool_choice=tool_choice,
                     **reasoning_params,
                 )
             return completion
@@ -183,6 +184,7 @@ class OpenAi(BaseOpenAi):
         model: str = None,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        tool_choice: str = "auto",
     ):
         return self._perform_ask(
             client=self.client,
@@ -190,6 +192,7 @@ class OpenAi(BaseOpenAi):
             model=model,
             stream=stream,
             tools=tools,
+            tool_choice=tool_choice,
         )
 
     async def play_audio(
@@ -482,10 +485,10 @@ class OpenAiLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._openai.ask(
             messages=messages,
-            tools=tools,
+            tools=tools, tool_choice=tool_choice,
             model=self._config.openai.conversation_model,
         )
 
@@ -496,9 +499,9 @@ class MistralLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._openai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.mistral.conversation_model,
         )
 
@@ -509,9 +512,9 @@ class GroqLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._openai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.groq.conversation_model,
         )
 
@@ -522,9 +525,9 @@ class CerebrasLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._openai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.cerebras.conversation_model,
         )
 
@@ -540,10 +543,10 @@ class OpenRouterLlm(LlmInterface):
         """The smallest window among the model's endpoints, from OpenRouter;
         the wingman sizes its budget from it (services/context_budget.py)."""
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         effective_tools = tools if self.supports_tools else None
         return self._openai.ask(
-            messages=messages, tools=effective_tools,
+            messages=messages, tools=effective_tools, tool_choice=tool_choice,
             model=self._config.openrouter.conversation_model,
         )
 
@@ -554,7 +557,7 @@ class LocalLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         if not self._openai:
             raise RuntimeError(
                 f"Local LLM provider is not initialized. "
@@ -562,7 +565,7 @@ class LocalLlm(LlmInterface):
                 f"({self._config.local_llm.endpoint})."
             )
         return self._openai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.local_llm.conversation_model,
         )
 
@@ -573,9 +576,9 @@ class PerplexityLlm(LlmInterface):
         self._openai = openai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._openai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.perplexity.conversation_model.value,
         )
 

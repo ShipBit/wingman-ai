@@ -45,9 +45,36 @@ SWITCHES = tuple(_CATEGORIES) + tuple(
     option.removeprefix("notify_") for option in NOTIFICATION_OPTIONS
 )
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
-HUD_SKILL = "HUD"
 REACTION_CHARS = 300
 RECENT_LINES = 5
+# Events that happen many times in every session: zones, arrivals, the
+# hangar, the login. Each group gets one spoken line per ROUTINE_GAP_S; one
+# hour of play had 20 lines about armistice zones and monitored space alone.
+# Entering and leaving alternate every few minutes, so REPEAT_SECONDS below,
+# which only stops the same report, lets them all through. Missions, money,
+# injuries and warnings are not in here and always count.
+ROUTINE_GROUPS = {
+    "armistice_zone": "zone",
+    "restricted_area": "zone",
+    "entered_monitored_space": "zone",
+    "exited_monitored_space": "zone",
+    "jurisdiction_change": "zone",
+    "location_arrived": "travel",
+    "location_departed": "travel",
+    "location_change": "travel",
+    "qt_arrived": "travel",
+    "quantum_route_set": "travel",
+    "quantum_calibration_started": "travel",
+    "quantum_calibration_complete": "travel",
+    "hangar_ready": "hangar",
+    "hangar_queue": "hangar",
+    "ship_entered": "hangar",
+    "ship_exited": "hangar",
+    "user_login": "session",
+    "session_start": "session",
+    "join_pu": "session",
+}
+ROUTINE_GAP_S = 600.0
 FOLD_SECONDS = 15.0
 """A report from while the Wingman was busy is still worth a word this long.
 Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
@@ -82,9 +109,14 @@ class ScGameEvents(Skill):
         """Reactions since the user last said something."""
         self._recent_lines: deque[str] = deque(maxlen=RECENT_LINES)
         self._angle = ""
-        self._waiting: list[tuple[float, str]] = []
-        """Reports not said yet, with the time they came."""
+        self._waiting: list[tuple[float, str, str | None]] = []
+        """Reports not said yet, with the time they came and their routine group."""
         self._said_at: dict[str, float] = {}
+        self._routine_spoken: dict[str, float] = {}
+        """When each routine group was last spoken about."""
+        self._unnoted: list[str] = []
+        """Said since the user last spoke; goes into the history as a note
+        right before the user's next message."""
 
     # --- settings, read fresh -------------------------------------------------
 
@@ -126,6 +158,16 @@ class ScGameEvents(Skill):
 
     async def on_add_user_message(self, message: str) -> None:
         self._unanswered = 0
+        # Called before the user's message is added, so the note lands in
+        # front of it. Kept out of the history as the Wingman's own lines:
+        # the model then appended event lines to its next answers, once word
+        # for word.
+        lines, self._unnoted = self._unnoted, []
+        if lines and self._remember():
+            await self.wingman.conversation.add_note(
+                "while the user was quiet you said this about the game on your own, "
+                "do not say it again: " + " / ".join(lines)
+            )
 
     # --- reacting ---------------------------------------------------------------
 
@@ -134,6 +176,9 @@ class ScGameEvents(Skill):
             return  # React once, to the confirmed trade with its name and amount.
         events = self._enabled_events()
         if not events:
+            return
+        group = ROUTINE_GROUPS.get(event.type)
+        if group and _now() - self._routine_spoken.get(group, float("-inf")) < ROUTINE_GAP_S:
             return
         if self._policy is None or events != self._events:
             # The policy remembers what it said; a new selection starts fresh.
@@ -162,7 +207,7 @@ class ScGameEvents(Skill):
                 reports.append(message["text"])
         if not reports:
             return
-        self._waiting = (self._waiting + [(now, r) for r in reports])[-MAX_WAITING:]
+        self._waiting = (self._waiting + [(now, r, group) for r in reports])[-MAX_WAITING:]
         # One reaction at a time and never over the Wingman's voice. What comes
         # meanwhile waits and goes into the next line while it is still fresh:
         # an arrival logs zone, jurisdiction and place within seconds.
@@ -170,55 +215,68 @@ class ScGameEvents(Skill):
             return
         self._reaction = asyncio.create_task(self._react_to_waiting())
 
-    def _take_fresh(self) -> list[str]:
+    def _take_fresh(self) -> tuple[list[str], set[str]]:
+        """The reports still worth a word, and the routine groups among them."""
         now = _now()
-        fresh = [r for t, r in self._waiting if now - t < FOLD_SECONDS]
+        fresh = [(r, g) for t, r, g in self._waiting if now - t < FOLD_SECONDS]
         self._waiting.clear()
-        return list(dict.fromkeys(fresh))[:MAX_REPORTS]
+        reports = list(dict.fromkeys(r for r, _ in fresh))[:MAX_REPORTS]
+        groups = {g for r, g in fresh if g and r in reports}
+        return reports, groups
+
+    def _should_wait(self) -> bool:
+        """A voice is playing, or the user is talking to a wingman: holding a
+        push-to-talk key, just heard, or a turn runs. A line over a held key
+        ends up in the user's own transcript."""
+        return self.wingman.audio.is_playing or self.wingman.conversation.user_busy
 
     async def _react_to_waiting(self) -> None:
         while self._waiting:
-            while self.wingman.audio.is_playing and any(
-                _now() - t < FOLD_SECONDS for t, _ in self._waiting
+            while self._should_wait() and any(
+                _now() - t < FOLD_SECONDS for t, _, _ in self._waiting
             ):
                 await asyncio.sleep(0.25)
-            reports = self._take_fresh()
+            reports, groups = self._take_fresh()
             if not reports:
                 return
             limit = self._max_unanswered()
             if limit and self._unanswered >= limit:
                 return
-            # Only what is said counts, and is not said again soon.
-            self._unanswered += 1
-            now = _now()
-            for report in reports:
-                self._said_at[report] = now
-            await self._react(reports)
+            await self._react(reports, groups)
 
-    async def _react(self, reports: list[str]) -> None:
+    async def _react(self, reports: list[str], groups: set[str] = frozenset()) -> bool:
+        """Say one line about the reports. True when it was said."""
         try:
             line = await self._phrase(reports)
             if not line:
-                return
+                return False
+            if self._should_wait():
+                # The user started talking, or a wingman did, while the line
+                # was written. Said afterwards it would be late and in the way.
+                return False
+            # Only what is said counts, and is not said again soon.
+            now = _now()
+            self._unanswered += 1
+            for report in reports:
+                self._said_at[report] = now
+            for group in groups:
+                self._routine_spoken[group] = now
             self._recent_lines.append(line)
+            self._unnoted = (self._unnoted + [line])[-RECENT_LINES:]
             await self.wingman.conversation.show(
                 line, skill_name=self.config.display_name
             )
-            if self._remember():
-                await self.wingman.conversation.add_assistant(line)
-            # The HUD skill already shows every line that goes into the history
-            # (unless its own "show chat messages" switch is off, which a skill
-            # cannot read; then only this line is missing on the HUD).
-            hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
-            if self._show_in_hud() and not hud_skill_shows_it:
+            if self._show_in_hud():
                 await self.wingman.hud.show_message(
                     self.wingman.name, line, duration=15
                 )
             await self.wingman.tts.speak(line, interrupt=False)
+            return True
         except asyncio.CancelledError:
             raise
         except Exception as error:  # The model may be down; the game goes on.
             self.log.warning(f"No reaction: {error}", server_only=True)
+            return False
 
     async def _phrase(self, reports: list[str]) -> str:
         language = self.wingman.language.name

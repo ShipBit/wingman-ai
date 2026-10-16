@@ -20,8 +20,8 @@ discovery_keywords:
   - where am i
 custom_properties:
   - id: react_mission
-    name: Missions - Master
-    hint: Enable this group; choose individual types below.
+    name: All missions
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: true
@@ -71,8 +71,8 @@ custom_properties:
     required: false
     value: true
   - id: react_safety
-    name: Zones and Safety - Master
-    hint: Enable this group; choose individual types below.
+    name: All zones and safety
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: true
@@ -109,8 +109,8 @@ custom_properties:
     required: false
     value: true
   - id: react_health
-    name: Health - Master
-    hint: Enable this group; choose individual types below.
+    name: All health
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: true
@@ -140,8 +140,8 @@ custom_properties:
     required: false
     value: true
   - id: react_ship
-    name: Ship and Hangar - Master
-    hint: Enable this group; choose individual types below.
+    name: All ship and hangar
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: true
@@ -187,8 +187,8 @@ custom_properties:
     required: false
     value: true
   - id: react_money
-    name: Trade and Rewards - Master
-    hint: Enable this group; choose individual types below.
+    name: All trade and rewards
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: true
@@ -253,8 +253,8 @@ custom_properties:
     required: false
     value: true
   - id: react_location
-    name: Location and Quantum Travel - Master
-    hint: Enable this group; choose individual types below. Can be frequent.
+    name: All location and quantum travel
+    hint: Turns the whole group on or off. Pick single types below. These come often.
     property_type: boolean
     required: false
     value: false
@@ -290,8 +290,8 @@ custom_properties:
     required: false
     value: true
   - id: react_session
-    name: Session and Social - Master
-    hint: Enable this group; choose individual types below.
+    name: All session and social
+    hint: Turns the whole group on or off. Pick single types below.
     property_type: boolean
     required: false
     value: false

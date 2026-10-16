@@ -699,8 +699,20 @@ class PersistentMemoryService:
 
     # ── forget ─────────────────────────────────────────────────────
 
-    def _forget_by_query_impl(self, query_text: str) -> bool:
-        hits = self._search_impl(query_text, limit=1)
+    def _forget_by_query_impl(
+        self,
+        query_text: str,
+        entry_type: str | None = None,
+        keep_id: int | None = None,
+    ) -> bool:
+        """Delete the entry closest to the query, if it is close enough.
+        ``entry_type`` limits the search, ``keep_id`` is never deleted (a
+        correction must not remove the fact it just stored)."""
+        hits = [
+            hit
+            for hit in self._search_impl(query_text, limit=2, entry_type=entry_type)
+            if hit.id != keep_id
+        ]
         if not hits:
             return False
         embeddings = self.local_ai_service.embed([query_text])
@@ -736,8 +748,12 @@ class PersistentMemoryService:
         """Rewrite the fact list with no new messages: the memory tab's button."""
         return await asyncio.to_thread(self._checkpoint_impl, [], "", False, True)
 
-    async def forget_by_query(self, query_text: str) -> bool:
-        return await asyncio.to_thread(self._forget_by_query_impl, query_text)
+    async def forget_by_query(
+        self, query_text: str, entry_type: str | None = None, keep_id: int | None = None
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._forget_by_query_impl, query_text, entry_type, keep_id
+        )
 
     # ── sync public API ────────────────────────────────────────────
 
@@ -812,11 +828,15 @@ class PersistentMemoryService:
                 "type": "function",
                 "function": {
                     "name": "memory_remember",
-                    "description": "Store something about the user that should still hold next month: how they want to be addressed, which language to answer in, a standing instruction, what they own, who they play with, what they like or dislike, a goal. Use it right away when the user says such a thing; do not wait to be asked twice. Not for where they are, what they are doing right now, a status, or a mood.",
+                    "description": "Store something about the user that should still hold next month: how they want to be addressed, which language to answer in, a standing instruction, what they own, who they play with, what they like or dislike, a goal. Use it right away when the user says such a thing; do not wait to be asked twice. Not for where they are, where they are going, what they are doing or plan to do today, a status, or a mood.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "text": {"type": "string", "description": "The fact, one short sentence in third person."},
+                            "replaces": {
+                                "type": "string",
+                                "description": "Only when this corrects or updates something you remembered earlier: that earlier fact in a few words. It is removed, so the wrong version does not stay next to the right one.",
+                            },
                         },
                         "required": ["text"],
                     },

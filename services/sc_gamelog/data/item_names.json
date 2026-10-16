@@ -1,8 +1,8 @@
 {
 "format_version":1,
-"revision":1,
+"revision":2,
 "game_build":"12913470",
-"generated":"2026-10-13",
+"generated":"2026-10-15",
 "sources":[
 "english/global.ini",
 "sc-bridge item records"

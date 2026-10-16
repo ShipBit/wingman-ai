@@ -48,6 +48,7 @@ from services.markdown import cleanup_text
 from services.secret_keeper import SecretKeeper
 from services import speech_text
 from services.printr import Printr
+from services.user_activity import user_activity
 from services.websocket_user import WebSocketUser
 from services.audio_library import AudioLibrary
 from services.context_budget import (
@@ -531,6 +532,21 @@ class Wingman:
         images: list[tuple[str, str]] = None,
         transcription_benchmark: BenchmarkResult | None = None,
     ):
+        """Answer what the user said. While this runs the user counts as busy
+        (services/user_activity.py): nothing a wingman says on its own may
+        land between the question and the answer."""
+        user_activity.turn_started()
+        try:
+            await self._process(transcript, images, transcription_benchmark)
+        finally:
+            user_activity.turn_finished()
+
+    async def _process(
+        self,
+        transcript: str,
+        images: list[tuple[str, str]] = None,
+        transcription_benchmark: BenchmarkResult | None = None,
+    ):
         """Answer what the user said.
 
         ``transcript`` is text already: typed in the chat or transcribed by the
@@ -555,16 +571,21 @@ class Wingman:
                 )
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
+                answered = False
                 try:
                     process_result, instant_response, skill, interrupt = (
                         await self._get_response_for_transcript(
                             transcript=transcript, benchmark=benchmark_llm, images=images
                         )
                     )
+                    answered = bool(process_result or instant_response)
                 finally:
                     # The answer is ready: a filler line that is not out yet
                     # is dropped; one that was spoken must not be cut off.
-                    if self._stop_turn_filler():
+                    # Only a turn that ended in an answer teaches the filler
+                    # how long the wait is; an error or a cancelled call ends
+                    # early and would make a slow tool look fast.
+                    if self._stop_turn_filler(learn=answered):
                         interrupt = False
                 # Every path out of the turn passes here, including the ones
                 # that end early on a command. Skills add their own decisions
@@ -763,7 +784,7 @@ class Wingman:
 
     # ───────────────── LLM call ───────────────── #
 
-    async def actual_llm_call(self, messages, tools: list[dict] = None):
+    async def actual_llm_call(self, messages, tools: list[dict] = None, tool_choice: str = "auto"):
         if not self.llm:
             await printr.print_async(
                 f"No LLM provider configured for wingman '{self.name}'.",
@@ -774,7 +795,9 @@ class Wingman:
             return None
 
         try:
-            completion = await self.llm.ask(messages=messages, tools=tools)
+            completion = await self.llm.ask(
+                messages=messages, tools=tools, tool_choice=tool_choice
+            )
         except ContextOverflowError:
             raise  # _llm_call learns the window and retries
         except APIConnectionError as e:
@@ -806,7 +829,11 @@ class Wingman:
         thiscall = time.time()
         self.last_gpt_call = thiscall
 
-        tools = self.build_tools() if allow_tool_calls else None
+        # Without tool calls the tools still go along, with tool_choice
+        # "none": they come first in the request, and leaving them out made
+        # every answer after an instant command a full cache miss.
+        tools = self.build_tools()
+        tool_choice = "auto" if allow_tool_calls else "none"
 
         if self.settings.debug_mode:
             await printr.print_async(
@@ -819,7 +846,7 @@ class Wingman:
         messages = await self._fit_request(messages, tools)
 
         try:
-            completion = await self.actual_llm_call(messages, tools)
+            completion = await self.actual_llm_call(messages, tools, tool_choice)
         except ContextOverflowError as error:
             # The provider says the window is smaller than we assumed. Learn it
             # from the request that did not fit, shorten, and try once more.
@@ -837,7 +864,7 @@ class Wingman:
             await self.add_context(messages)
             messages = await self._fit_request(messages, tools)
             try:
-                completion = await self.actual_llm_call(messages, tools)
+                completion = await self.actual_llm_call(messages, tools, tool_choice)
             except ContextOverflowError as again:
                 await printr.print_async(
                     f"The model refused the shortened request too: {again}",
@@ -1011,10 +1038,10 @@ class Wingman:
             backstory=self.config.prompts.backstory or "",
         )
 
-    def _stop_turn_filler(self) -> bool:
+    def _stop_turn_filler(self, learn: bool = True) -> bool:
         """Stop this turn's filler line. True if it was spoken."""
         line, self._turn_filler = self._turn_filler, None
-        return self.filler.stop(line)
+        return self.filler.stop(line, learn=learn)
 
     def _speak_filler(self, line: str) -> None:
         """Runs on the filler's thread: speech gets its own thread, the message

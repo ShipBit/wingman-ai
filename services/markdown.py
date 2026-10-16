@@ -471,3 +471,34 @@ def strip_edge_breaks(text: str) -> str:
     engine.
     """
     return _EDGE_BREAK_RE.sub("", text)
+
+
+# <break time="400ms" />, <verbatim>, </verbatim>, and <sigh> written wrongly.
+_SPEECH_TAG = r"<(?:break\b[^<>]*|/?[a-z]+)\s*/?>"
+# Wraps a word that stays: only the tag goes, the spaces around it stay.
+_VERBATIM_RE = re.compile(r"</?verbatim\s*>", re.IGNORECASE)
+# [sigh], [laughs softly]: lowercase words in brackets. Not a Markdown link
+# "[text](url)" or "[text][ref]", not "[x]" of a task list, not "[1]" or "[SCU]".
+_STAGE_DIRECTION = r"(?<!\])\[[a-z][a-z ]{2,28}\](?![(\[])"
+_SPEECH_MARKUP = f"(?:{_SPEECH_TAG}|{_STAGE_DIRECTION})"
+_MARKUP_AT_LINE_START_RE = re.compile(rf"(?m)^([ \t]*){_SPEECH_MARKUP}[ \t]*")
+_MARKUP_RE = re.compile(rf"[ \t]*{_SPEECH_MARKUP}")
+
+
+def display_text(text: str) -> str:
+    """The reply as it is read, without what only the voice needs.
+
+    Models write speech markup into replies for the TTS provider: pauses
+    (<break time="400ms" />), spelled-out names (<verbatim>L3</verbatim>) and
+    stage directions ([sigh], or <sigh> when they get it wrong). The client
+    renders those; the HUD showed them as typed. Everything else stays as
+    written, indentation and Markdown included.
+    """
+    if not text:
+        return text
+    # At the start of a line the space after the markup goes with it, the
+    # indentation before it stays; inside a line the space before it goes.
+    text = _VERBATIM_RE.sub("", text)
+    text = _MARKUP_AT_LINE_START_RE.sub(r"\1", text)
+    text = _MARKUP_RE.sub("", text)
+    return text.strip()

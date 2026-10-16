@@ -16,6 +16,7 @@ class XAi(OpenAi):
         stream: bool,
         tools: list[dict[str, any]],
         model: str = None,
+        tool_choice: str = "auto",
     ):
         try:
             if not tools:
@@ -30,7 +31,7 @@ class XAi(OpenAi):
                     messages=messages,
                     model=model,
                     tools=self._fix_tools(tools),
-                    tool_choice="auto",
+                    tool_choice=tool_choice,
                 )
             return completion
         except APIStatusError as e:
@@ -62,8 +63,8 @@ class XAiLlm(LlmInterface):
         self._xai = xai_instance
         self._config = config
 
-    async def ask(self, messages, tools=None):
+    async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._xai.ask(
-            messages=messages, tools=tools,
+            messages=messages, tools=tools, tool_choice=tool_choice,
             model=self._config.xai.conversation_model,
         )

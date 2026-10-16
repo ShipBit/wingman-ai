@@ -90,7 +90,14 @@ def _normalise(word: str) -> str:
 
 
 class Vocabulary:
-    def __init__(self, entries: Iterable[str]):
+    def __init__(self, entries: Iterable[str], common_words: Iterable[str] = ()):
+        """``common_words``: the everyday words of the user's language
+        (services/audio/common_words.py). The fuzzy rule never touches them;
+        without them only the short built-in list is protected."""
+        # Kept as it is, not merged with the built-in list: the vocabulary is
+        # built for every utterance, and merging 50,000 words each time cost
+        # more than the whole correction.
+        self._common = common_words if isinstance(common_words, frozenset) else frozenset(common_words)
         # Longer phrases first so "Port Olisar" wins over "Port".
         seen: dict[str, str] = {}
         # heard (normalised) -> correct, for the exact replacements
@@ -103,6 +110,20 @@ class Vocabulary:
             if heard and len(heard.split()) <= MAX_PHRASE_WORDS:
                 self._mappings[_normalise(heard)] = correct
         self.entries = sorted(seen.values(), key=lambda e: -len(e.split()))
+        # Every long word of a name with more than one word: "Centaurus" from
+        # "Constellation Centaurus". Heard on its own it is already spelled
+        # right and must not be pulled to a near single-word name — once a
+        # skill adds hundreds of names, "Centaurus" turned into "Centauri".
+        self._name_words: set[str] = {
+            word
+            for entry in self.entries
+            if len(entry.split()) > 1
+            for word in _normalise(entry).split()
+            if len(word) >= MIN_FUZZY_LENGTH
+        }
+        self._exact: dict[str, str] = {
+            _normalise(e).replace(" ", ""): e for e in self.entries
+        }
         # (entry without spaces, word count, entry) for the space-insensitive comparison
         self._joined: list[tuple[str, int, str]] = [
             (_normalise(e).replace(" ", ""), len(e.split()), e)
@@ -126,11 +147,23 @@ class Vocabulary:
         if mapped is not None:
             return mapped
         words = key.split()
-        if respect_protection and all(w in PROTECTED_WORDS for w in words):
-            # Ordinary words of one of our languages. Only a pair may turn
-            # them into a name; the fuzzy rule stays away.
-            return None
         joined = key.replace(" ", "")
+        exact = self._exact.get(joined)
+        if exact is not None and 1 < len(words) <= MAX_PHRASE_WORDS:
+            # The name itself, only split: "micro tech" is MicroTech even
+            # though both halves are everyday words. A single everyday word
+            # stays as written, so "a storm is coming" keeps its "storm" next
+            # to the ship called Storm.
+            return exact
+        if respect_protection and all(w in PROTECTED_WORDS or w in self._common for w in words):
+            # Real words of the user's language: the speech model decided on
+            # them. Only a pair may turn them into a name; the fuzzy rule
+            # stays away.
+            return None
+        if len(words) == 1 and joined in self._name_words:
+            # Part of a known longer name, spelled right: the spelling of an
+            # entry that is exactly this word, otherwise leave it.
+            return self._exact.get(joined)
         best: tuple[int, str | None] = (10**6, None)
         for normalised, entry_words, entry in self._joined:
             if joined == normalised:
@@ -164,10 +197,10 @@ class Vocabulary:
     def correct(self, text: str, respect_protection: bool = True) -> str:
         """The text with every recognisable misspelling replaced.
 
-        ``respect_protection=False`` drops the everyday-word blocklist and
+        ``respect_protection=False`` drops the everyday-word protection and
         replaces whatever the letters allow. On its own that is far too
         eager — it turns "radar" into the outpost "Yadar" — so it exists for
-        one caller: ``proposals()``, which needs to see what the blocklist
+        one caller: ``proposals()``, which needs to see what the protection
         vetoed in order to ask about it.
         """
         if not self or not text:
@@ -205,7 +238,7 @@ class Vocabulary:
     def proposals(self, text: str) -> list[tuple[str, str, bool]]:
         """Every replacement the letters allow: ``(heard, entry, blocked)``.
 
-        ``blocked`` marks the ones the everyday-word blocklist vetoes today.
+        ``blocked`` marks the ones the everyday-word protection vetoes today.
         Those are not mistakes to be undone — "station" really is two edits
         from Stanton and must not be rewritten on a whim — they are the ones
         no list can decide, because only the sentence around them says which

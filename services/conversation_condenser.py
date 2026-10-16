@@ -188,7 +188,7 @@ class ConversationCondenser:
         cutoff = find_cutoff(
             self._conversation.messages,
             budget.keep_tokens,
-            self._conversation.get_message_role,
+            self._conversation.turn_role,
             self._tokens_of,
             min_turns=KEEP_TURNS,
         )
@@ -341,7 +341,7 @@ class ConversationCondenser:
             cutoff_index = find_cutoff(
                 self._conversation.messages,
                 keep_tokens,
-                self._conversation.get_message_role,
+                self._conversation.turn_role,
                 self._tokens_of,
                 min_turns=1 if force else KEEP_TURNS,
             )

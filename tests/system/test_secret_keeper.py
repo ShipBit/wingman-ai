@@ -198,3 +198,19 @@ def test_the_model_list_before_sign_in_is_empty_without_an_error_toast(secrets_d
 
     assert asyncio.run(WingmanCore.get_wingman_pro_models(core)) == []
     core.printr.toast_error.assert_not_called()
+
+
+
+def test_saving_the_same_value_again_still_tells_the_wingmen(secrets_dir):
+    """Saving the same key again is how a user retries a wingman that failed
+    to validate, say while the provider was down."""
+    keeper = SecretKeeper()
+    published = []
+
+    async def listener(secrets):
+        published.append(dict(secrets))
+
+    keeper.secret_events.subscribe("secrets_saved", listener)
+    asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
+    asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
+    assert len(published) == 2
