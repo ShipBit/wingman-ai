@@ -19,6 +19,7 @@ def _subscription(monkeypatch, sent: list):
     ws.settings = SimpleNamespace(base_url="http://backend")
     ws.secret_keeper = SimpleNamespace(secrets={})
     ws.timeout = 1
+    ws.wingman_name = "Computer"
     ws.send_server_error = lambda response: None
     return ws
 
@@ -47,3 +48,47 @@ def test_a_call_without_a_session_sends_no_header(monkeypatch):
     ws = _subscription(monkeypatch, sent)
     ws.ask(messages=[], deployment="fast")
     assert "x-wingman-session" not in sent[0]
+
+
+def test_each_answered_request_logs_its_generation_id(monkeypatch):
+    answer = {
+        "id": "gen_01TEST",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "test/model",
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": "ok"},
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 9214,
+            "completion_tokens": 64,
+            "total_tokens": 9278,
+            "prompt_tokens_details": {"cached_tokens": 9000},
+        },
+    }
+    logged = []
+    ws = _subscription(monkeypatch, [])
+    monkeypatch.setattr(
+        subscription_module.requests,
+        "post",
+        lambda url, headers, json, timeout: SimpleNamespace(
+            status_code=200,
+            headers={"x-wingman-model": "test/served"},
+            json=lambda: answer,
+            raise_for_status=lambda: None,
+        ),
+    )
+    ws.printr = SimpleNamespace(print=lambda text, **kwargs: logged.append((text, kwargs)))
+
+    ws.ask(messages=[], deployment="fast")
+
+    assert logged == [
+        (
+            "Gateway request gen_01TEST (test/served): 9214 in (9000 cached) / 64 out",
+            {"server_only": True, "source_name": "Computer"},
+        )
+    ]
