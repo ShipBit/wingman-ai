@@ -34,6 +34,11 @@ def _is_retryable_download_error(error: Exception) -> bool:
         return False
     return True
 
+MODELS_R2_BASE = "https://release.wingman-ai.com/models"
+"""Our Cloudflare R2 mirror for model files, the same `models/` prefix the
+PocketTTS weights use (`providers/pocket_tts_r2.py`). Not touched by the
+release-cleanup job, which only prunes version folders."""
+
 # Available support models — keyed by GGUF filename.
 #
 # The 4B is the default since the memory rewrite prompt (2026-09-17): on the
@@ -63,6 +68,12 @@ EMBED_MODELS: dict[str, dict] = {
         "filename": "nomic-embed-text-v1.5.f16.gguf",
         "expected_size_mb": 250,
         "label": "Nomic Embed Text v1.5 (recommended)",
+        # Our mirror comes first: it is the file users download on first
+        # start, and Hugging Face broke the connection near the end of it
+        # three times in a row in a real session. The mirror holds the
+        # unmodified file next to its Apache 2.0 LICENSE and NOTICE
+        # (`scripts/mirror_embed_model_r2.py`).
+        "url": f"{MODELS_R2_BASE}/nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.f16.gguf",
     },
 }
 
@@ -186,15 +197,41 @@ class LocalModelManager:
                 )
                 return True
 
-        url = f"https://huggingface.co/{repo}/resolve/main/{filename}"
+        # Our mirror first, Hugging Face second: the mirror is where users
+        # download from, HF is the source of truth and the fallback while a
+        # new file is not mirrored yet. Both serve the same bytes, so a part
+        # file from one is continued from the other.
+        urls = [u for u in (model_def.get("url"), f"https://huggingface.co/{repo}/resolve/main/{filename}") if u]
         temp_path = target_path + ".part"
 
         printr.print(
-            f"Downloading {filename} from {repo}...",
+            f"Downloading {filename}...",
             color=LogType.INFO,
             server_only=True,
         )
 
+        for url in urls:
+            if self._download_model_from(url, filename, temp_path, target_path, on_progress):
+                return True
+
+        # The part file stays: the next start continues where this one ended.
+        self._download_progress = {}
+        printr.print(
+            f"Failed to download {filename} from every source.",
+            color=LogType.ERROR,
+            server_only=True,
+        )
+        return False
+
+    def _download_model_from(
+        self,
+        url: str,
+        filename: str,
+        temp_path: str,
+        target_path: str,
+        on_progress: callable = None,
+    ) -> bool:
+        """One source, continuing a part file. False means try the next source."""
         # A broken connection keeps what came so far: the next attempt asks
         # for the rest (HTTP Range) instead of starting over. Hugging Face
         # cut a 261 MB download at 228 MB three times in a row in a real
@@ -304,11 +341,9 @@ class LocalModelManager:
                 time.sleep(delay)
                 delay *= 2
 
-        # The part file stays: the next start continues where this one ended.
-        self._download_progress = {}
         printr.print(
-            f"Failed to download {filename}: {last_error}",
-            color=LogType.ERROR,
+            f"Download of {filename} from {url} failed: {last_error}",
+            color=LogType.WARNING,
             server_only=True,
         )
         return False

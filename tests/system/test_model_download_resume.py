@@ -79,3 +79,28 @@ def test_the_next_start_continues_the_part_file(manager, monkeypatch, tmp_path):
     assert manager._download_model(MODEL)
     assert server.ranges == ["bytes=5000-"]
     assert (tmp_path / "embed.gguf").read_bytes() == BODY
+
+
+MIRRORED = {"repo": "test/repo", "filename": "embed.gguf", "url": "https://mirror.example/embed.gguf"}
+
+
+def test_the_mirror_comes_first_and_hugging_face_takes_over(manager, monkeypatch, tmp_path):
+    """The mirror breaks after 4000 bytes and then answers nothing; Hugging
+    Face sends the rest of the same file."""
+    mirror = FlakyServer(cut=4000, breaks=1)
+    dead_mirror_calls = []
+    hf = FlakyServer(cut=0, breaks=0)
+
+    def get(url, stream=True, timeout=None, headers=None):
+        if url.startswith("https://mirror.example"):
+            if mirror.ranges:  # Down after the first break.
+                dead_mirror_calls.append(url)
+                raise requests.exceptions.ConnectionError("mirror down")
+            return mirror.get(url, stream, timeout, headers)
+        return hf.get(url, stream, timeout, headers)
+
+    monkeypatch.setattr(lmm.requests, "get", get)
+    assert manager._download_model(MIRRORED)
+    assert (tmp_path / "embed.gguf").read_bytes() == BODY
+    assert mirror.ranges == [None]
+    assert hf.ranges == ["bytes=4000-"]
