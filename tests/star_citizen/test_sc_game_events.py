@@ -139,6 +139,74 @@ def test_switched_off_categories_stay_quiet(reader, tmp_path):
     assert wingman.said == []
 
 
+def test_a_switched_off_type_stays_quiet_while_its_group_reacts(reader, tmp_path):
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman, react_armistice_zone=False)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        with log.open("a") as stream:
+            stream.write(ARMISTICE)
+        await asyncio.sleep(0.3)
+        assert wingman.said == []
+
+        with log.open("a") as stream:  # The same group, another type.
+            stream.write(
+                ARMISTICE.replace("Entering Armistice Zone", "Entered Monitored Space")
+                .replace("10:00:02", "10:06:00")
+            )
+        await until(lambda: wingman.said)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    assert "monitored space" in wingman.prompts[0][1].lower()
+
+
+def test_a_purchase_gets_one_reaction_once_it_is_confirmed(reader, tmp_path):
+    from tests.star_citizen.test_item_names import BUY, DONE
+
+    log = write_game_log(tmp_path, FIRST, LOGIN)
+    wingman = FakeWingman()
+
+    async def run():
+        await reader.start(str(tmp_path / "game"))
+        skill = _skill(wingman)
+        await skill.prepare()
+        await until(lambda: reader.state() is not None)
+        with log.open("a") as stream:
+            stream.write(BUY)
+        await asyncio.sleep(0.3)
+        assert wingman.said == []  # Only requested so far.
+        with log.open("a") as stream:
+            stream.write(DONE)
+        await until(lambda: wingman.said)
+        await asyncio.sleep(0.2)
+        await skill.unload()
+        await reader.stop()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    report = wingman.prompts[0][1]
+    assert "confirmed" in report and "-17" in report
+    assert "Food_burrito_01_a" not in report  # The in-game name, not the class.
+
+
+def test_every_type_of_event_has_a_switch():
+    from skills.sc_game_events.main import SWITCHES
+    from skills.sc_game_events.notifications import _TEMPLATES, NOTIFICATION_OPTIONS
+
+    raw = yaml.safe_load(open(CONFIG, encoding="utf-8"))
+    ids = {prop["id"] for prop in raw["custom_properties"]}
+    assert {f"react_{switch}" for switch in SWITCHES} <= ids
+    covered = {kind for kinds in NOTIFICATION_OPTIONS.values() for kind in kinds}
+    assert covered == set(_TEMPLATES)
+
+
 def test_the_tool_answers_in_short_lines(reader, tmp_path):
     write_game_log(tmp_path, FIRST, LOGIN, ARMISTICE, CONTRACT)
     wingman = FakeWingman()
@@ -281,6 +349,69 @@ def test_quiet_while_the_user_talks_to_a_wingman(reader, tmp_path):
     assert wingman.said == []
 
 
+# ── what comes while the Wingman is busy, and what comes again ─────────────
+
+
+def _event(kind, **data):
+    return SimpleNamespace(type=kind, status="observed", data=data, environment="LIVE", catching_up=False)
+
+
+ARRIVAL = (
+    _event("armistice_zone", action="entered"),
+    _event("jurisdiction_change", jurisdiction="UEE"),
+    _event("location_arrived", location_name="Baijini Point"),
+)
+
+
+def _clocked(monkeypatch):
+    from skills.sc_game_events import main
+
+    clock = [1000.0]
+    monkeypatch.setattr(main, "_now", lambda: clock[0])
+    return clock
+
+
+def test_what_comes_while_the_wingman_speaks_goes_into_the_next_line(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+    wingman.audio.is_playing = True  # Still answering the pilot.
+
+    async def run():
+        skill = _skill(wingman, react_location=True, max_unanswered=0)
+        for event in ARRIVAL:  # An arrival logs all three within seconds.
+            skill._on_event(event)
+            clock[0] += 1
+        await asyncio.sleep(0.3)
+        assert wingman.said == []  # Never over the Wingman's voice.
+        wingman.audio.is_playing = False
+        await until(lambda: wingman.said)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert len(wingman.prompts) == 1
+    report = wingman.prompts[0][1]
+    assert "armistice" in report.lower() and "UEE" in report and "Baijini Point" in report
+
+
+def test_what_is_stale_by_then_is_dropped(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+    wingman.audio.is_playing = True
+
+    async def run():
+        skill = _skill(wingman, react_location=True, max_unanswered=0)
+        skill._on_event(ARRIVAL[2])
+        await asyncio.sleep(0.3)
+        clock[0] += 60  # The pilot talked for a minute.
+        await asyncio.sleep(0.4)
+        wingman.audio.is_playing = False
+        await asyncio.sleep(0.4)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert wingman.said == []
+
+
 def test_zone_changes_get_one_line_per_while(reader, tmp_path):
     log = write_game_log(tmp_path, FIRST, LOGIN)
     wingman = FakeWingman()
@@ -309,10 +440,46 @@ def test_zone_changes_get_one_line_per_while(reader, tmp_path):
     assert len(wingman.said) == 2
 
 
-def test_item_classes_are_read_as_names():
-    from skills.sc_game_events.main import readable_item_name
+def test_a_flickering_zone_is_said_once_and_does_not_use_up_the_limit(monkeypatch):
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
 
-    assert readable_item_name("COOL_WCPR_S02_Aufeis_SCItem") == "Aufeis"
-    assert readable_item_name("KLWE_LaserRepeater_S3") == "Laser Repeater"
-    assert readable_item_name("Medpen") == "Medpen"
-    assert readable_item_name("GRIN_PTV") == "GRIN_PTV"
+    async def run():
+        skill = _skill(wingman, max_unanswered=2)
+        skill._on_event(ARRIVAL[0])
+        await until(lambda: len(wingman.said) == 1)
+        for _ in range(3):  # The game logs it again and again.
+            clock[0] += 40
+            skill._on_event(ARRIVAL[0])
+            await asyncio.sleep(0.2)
+        assert len(wingman.said) == 1 and skill._unanswered == 1
+        # Something new is still said. A mission: a second zone report would
+        # wait for the zone group's gap.
+        skill._on_event(_event("mission_accepted", mission_name="Big Delivery", mission_id="m-1"))
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+
+    asyncio.run(run())
+
+
+def test_a_line_finished_after_the_user_started_talking_is_dropped(monkeypatch):
+    """Spoken late, it lands in the user's transcript or after their answer."""
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    original = wingman.local_ai.generate
+
+    async def slow_generate(text, system="", preset=None):
+        wingman.conversation.user_busy = True  # Push-to-talk went down meanwhile.
+        return await original(text, system=system, preset=preset)
+
+    wingman.local_ai.generate = slow_generate
+
+    async def run():
+        skill = _skill(wingman, max_unanswered=1)
+        skill._on_event(_event("mission_accepted", mission_name="Big Delivery", mission_id="m-1"))
+        await until(lambda: wingman.prompts)
+        await asyncio.sleep(0.2)
+        assert wingman.said == [] and skill._unanswered == 0
+        await skill.unload()
+
+    asyncio.run(run())

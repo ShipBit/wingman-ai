@@ -9,13 +9,13 @@ events through `self.wingman.sc_gamelog`:
     self._subscription.unsubscribe()    # in unload()
 
 Which events are worth a word, and how often, decides the policy Mallachi wrote
-for the SC Log Reader skill (notifications.py). The line itself comes from the
+for the SC Log Reader skill (notifications.py), with its settings: one switch
+per type of event, under one master per category. The line itself comes from the
 support model, in character and in the user's language, and is shown in the
 chat and the HUD, spoken and kept in the conversation.
 """
 
 import asyncio
-import re
 import random
 import time
 from collections import deque
@@ -25,24 +25,34 @@ from typing import TYPE_CHECKING, Literal
 from api.interface import SettingsConfig, SkillConfig
 from services.skill_local_ai import SamplingPreset
 from skills.sc_game_events.notifications import (
+    _CATEGORIES,
     _DETAIL_FIELDS,
     _TEMPLATES,
+    NOTIFICATION_OPTIONS,
     NotificationPolicy,
     _literal,
+    enabled_notification_events,
 )
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
-CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
+# The masters are `react_<category>`, as the 3.2.5 migration saved them, and the
+# switches per type `react_<type>`. The policy calls both `notify_...`, the
+# names they had in SC Log Reader.
+SWITCHES = tuple(_CATEGORIES) + tuple(
+    option.removeprefix("notify_") for option in NOTIFICATION_OPTIONS
+)
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 REACTION_CHARS = 300
 RECENT_LINES = 5
 # Events that happen many times in every session: zones, arrivals, the
 # hangar, the login. Each group gets one spoken line per ROUTINE_GAP_S; one
 # hour of play had 20 lines about armistice zones and monitored space alone.
-# Missions, money, injuries and warnings are not in here and always count.
+# Entering and leaving alternate every few minutes, so REPEAT_SECONDS below,
+# which only stops the same report, lets them all through. Missions, money,
+# injuries and warnings are not in here and always count.
 ROUTINE_GROUPS = {
     "armistice_zone": "zone",
     "restricted_area": "zone",
@@ -65,6 +75,14 @@ ROUTINE_GROUPS = {
     "join_pu": "session",
 }
 ROUTINE_GAP_S = 600.0
+FOLD_SECONDS = 15.0
+"""A report from while the Wingman was busy is still worth a word this long.
+Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
+REPEAT_SECONDS = 90.0
+"""The same report is not said again this soon: zones flicker in and out."""
+MAX_REPORTS = 4
+MAX_WAITING = 16
+_now = time.monotonic  # The skill's clock; tests replace it, never asyncio's.
 LINK_ANGLE = "Link it to where the pilot is or what the pilot is flying."
 # Each line gets one of these. Without it the persona finds one move (the same
 # joke, the same opening) and makes it on every event.
@@ -78,24 +96,6 @@ ANGLES = (
 )
 
 
-_ITEM_CODE = re.compile(r"^(?:[A-Z0-9]{2,5}|S\d{1,2})$")
-
-
-def readable_item_name(raw) -> str:
-    """The name in a game item's class: "COOL_WCPR_S02_Aufeis_SCItem" is
-    "Aufeis", "KLWE_LaserRepeater_S3" is "Laser Repeater". The log only has
-    the class, and read out as it is the class sounds like a serial number.
-    Type and maker codes are short capitals, sizes are S and a number; what
-    is left is the name. A name that is all codes stays as it was."""
-    if not isinstance(raw, str) or "_" not in raw:
-        return raw
-    parts = [p for p in raw.split("_") if p and p.lower() != "scitem"]
-    words = [p for p in parts if not _ITEM_CODE.match(p)]
-    if not words:
-        return raw
-    return " ".join(re.sub(r"(?<=[a-z])(?=[A-Z])", " ", word) for word in words)
-
-
 class ScGameEvents(Skill):
     def __init__(
         self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
@@ -103,26 +103,30 @@ class ScGameEvents(Skill):
         super().__init__(config=config, settings=settings, wingman=wingman)
         self._subscription = None
         self._policy: NotificationPolicy | None = None
-        self._categories: frozenset[str] = frozenset()
+        self._events: frozenset[str] = frozenset()
         self._reaction: asyncio.Task | None = None
         self._unanswered = 0
         """Reactions since the user last said something."""
         self._recent_lines: deque[str] = deque(maxlen=RECENT_LINES)
         self._angle = ""
-        # When each routine group was last spoken about, monotonic.
+        self._waiting: list[tuple[float, str, str | None]] = []
+        """Reports not said yet, with the time they came and their routine group."""
+        self._said_at: dict[str, float] = {}
         self._routine_spoken: dict[str, float] = {}
-        # Said since the user last spoke; goes into the history as a note
-        # right before the user's next message.
+        """When each routine group was last spoken about."""
         self._unnoted: list[str] = []
+        """Said since the user last spoke; goes into the history as a note
+        right before the user's next message."""
 
     # --- settings, read fresh -------------------------------------------------
 
-    def _enabled_categories(self) -> frozenset[str]:
-        return frozenset(
-            category
-            for category in CATEGORIES
-            if self.retrieve_custom_property_value(f"react_{category}", [])
-        )
+    def _enabled_events(self) -> frozenset[str]:
+        settings = {}
+        for switch in SWITCHES:
+            value = self.retrieve_custom_property_value(f"react_{switch}", [])
+            if value is not None:  # A missing switch counts as on.
+                settings[f"notify_{switch}"] = bool(value)
+        return enabled_notification_events(settings)
 
     def _max_unanswered(self) -> int:
         """0 means no limit."""
@@ -168,19 +172,24 @@ class ScGameEvents(Skill):
     # --- reacting ---------------------------------------------------------------
 
     def _on_event(self, event) -> None:
-        categories = self._enabled_categories()
-        if not categories:
+        if event.type in ("shop_buy", "shop_sell") and event.status == "requested":
+            return  # React once, to the confirmed trade with its name and amount.
+        events = self._enabled_events()
+        if not events:
             return
-        if self._policy is None or categories != self._categories:
+        group = ROUTINE_GROUPS.get(event.type)
+        if group and _now() - self._routine_spoken.get(group, float("-inf")) < ROUTINE_GAP_S:
+            return
+        if self._policy is None or events != self._events:
             # The policy remembers what it said; a new selection starts fresh.
-            self._policy = NotificationPolicy(enabled_categories=categories)
-            self._categories = categories
-        now = time.monotonic()
+            self._policy = NotificationPolicy(enabled_events=events)
+            self._events = events
+        now = _now()
         self._policy.offer(
             {
                 "event_type": event.type,
                 "status": event.status,
-                "data": self._readable(event.data),
+                "data": dict(event.data),
                 "amount_auec": event.data.get("amount_auec"),
                 "environment": event.environment,
                 "generation": event.environment,
@@ -188,51 +197,72 @@ class ScGameEvents(Skill):
             now=now,
             catching_up=event.catching_up,
         )
-        reports = [message["text"] for message in self._policy.flush(now=now)]
+        self._said_at = {r: t for r, t in self._said_at.items() if now - t < REPEAT_SECONDS}
+        reports = []
+        for message in self._policy.flush(now=now):
+            if message["text"] in self._said_at:
+                # Still flickering: stays quiet until it settles for a while.
+                self._said_at[message["text"]] = now
+            else:
+                reports.append(message["text"])
         if not reports:
             return
-        # One reaction at a time, never over a voice and never while the user
-        # talks to a wingman. What happens meanwhile is not queued: by the
-        # time the Wingman is free it would be old news. The policy above
-        # already thins out bursts.
+        self._waiting = (self._waiting + [(now, r, group) for r in reports])[-MAX_WAITING:]
+        # One reaction at a time and never over the Wingman's voice. What comes
+        # meanwhile waits and goes into the next line while it is still fresh:
+        # an arrival logs zone, jurisdiction and place within seconds.
         if self._reaction and not self._reaction.done():
             return
-        if self._should_wait():
-            return
-        group = ROUTINE_GROUPS.get(event.type)
-        if group and now - self._routine_spoken.get(group, float("-inf")) < ROUTINE_GAP_S:
-            return
-        limit = self._max_unanswered()
-        if limit and self._unanswered >= limit:
-            return
-        self._unanswered += 1
-        self._reaction = asyncio.create_task(self._react(reports[:3], group))
+        self._reaction = asyncio.create_task(self._react_to_waiting())
 
-    @staticmethod
-    def _readable(data) -> dict:
-        data = dict(data)
-        if "item_name" in data:
-            data["item_name"] = readable_item_name(data["item_name"])
-        return data
+    def _take_fresh(self) -> tuple[list[str], set[str]]:
+        """The reports still worth a word, and the routine groups among them."""
+        now = _now()
+        fresh = [(r, g) for t, r, g in self._waiting if now - t < FOLD_SECONDS]
+        self._waiting.clear()
+        reports = list(dict.fromkeys(r for r, _ in fresh))[:MAX_REPORTS]
+        groups = {g for r, g in fresh if g and r in reports}
+        return reports, groups
 
     def _should_wait(self) -> bool:
+        """A voice is playing, or the user is talking to a wingman: holding a
+        push-to-talk key, just heard, or a turn runs. A line over a held key
+        ends up in the user's own transcript."""
         return self.wingman.audio.is_playing or self.wingman.conversation.user_busy
 
-    async def _react(self, reports: list[str], group: str | None = None) -> None:
+    async def _react_to_waiting(self) -> None:
+        while self._waiting:
+            while self._should_wait() and any(
+                _now() - t < FOLD_SECONDS for t, _, _ in self._waiting
+            ):
+                await asyncio.sleep(0.25)
+            reports, groups = self._take_fresh()
+            if not reports:
+                return
+            limit = self._max_unanswered()
+            if limit and self._unanswered >= limit:
+                return
+            await self._react(reports, groups)
+
+    async def _react(self, reports: list[str], groups: set[str] = frozenset()) -> bool:
+        """Say one line about the reports. True when it was said."""
         try:
             line = await self._phrase(reports)
             if not line:
-                return
+                return False
             if self._should_wait():
-                # The user started talking, or another wingman did, while the
-                # line was written. Said afterwards it would be late and in
-                # the way.
-                return
-            if group:
-                self._routine_spoken[group] = time.monotonic()
+                # The user started talking, or a wingman did, while the line
+                # was written. Said afterwards it would be late and in the way.
+                return False
+            # Only what is said counts, and is not said again soon.
+            now = _now()
+            self._unanswered += 1
+            for report in reports:
+                self._said_at[report] = now
+            for group in groups:
+                self._routine_spoken[group] = now
             self._recent_lines.append(line)
-            self._unnoted.append(line)
-            del self._unnoted[:-RECENT_LINES]
+            self._unnoted = (self._unnoted + [line])[-RECENT_LINES:]
             await self.wingman.conversation.show(
                 line, skill_name=self.config.display_name
             )
@@ -241,10 +271,12 @@ class ScGameEvents(Skill):
                     self.wingman.name, line, duration=15
                 )
             await self.wingman.tts.speak(line, interrupt=False)
+            return True
         except asyncio.CancelledError:
             raise
         except Exception as error:  # The model may be down; the game goes on.
             self.log.warning(f"No reaction: {error}", server_only=True)
+            return False
 
     async def _phrase(self, reports: list[str]) -> str:
         language = self.wingman.language.name
@@ -357,11 +389,15 @@ class ScGameEvents(Skill):
         missions = list((state.get("active_missions") or {}).values())
         if not missions:
             return "No active missions in the log. The log only knows missions accepted this session."
-        lines = [
-            f"- {_literal(mission.get('name')) or 'Unnamed'}"
-            + (f": {_literal(mission['objective'])}" if mission.get("objective") else "")
-            for mission in missions[:10]
-        ]
+        lines = []
+        for mission in missions[:10]:
+            objectives = mission.get("objectives") or (
+                [mission["objective"]] if mission.get("objective") else []
+            )
+            shown = "; ".join(_literal(o) for o in objectives[:6])
+            if len(objectives) > 6:
+                shown += f"; (and {len(objectives) - 6} more)"
+            lines.append(f"- {_literal(mission.get('name')) or 'Unnamed'}" + (f": {shown}" if shown else ""))
         more = f"\n(and {len(missions) - 10} more)" if len(missions) > 10 else ""
         return "Active missions:\n" + "\n".join(lines) + more
 
@@ -373,11 +409,7 @@ class ScGameEvents(Skill):
         for event in events:
             wording = _TEMPLATES[event.type][1]
             detail = next(
-                (
-                    value
-                    for field in _DETAIL_FIELDS[event.type]
-                    if (value := _literal(self._readable(event.data).get(field)))
-                ),
+                (value for field in _DETAIL_FIELDS[event.type] if (value := _literal(event.data.get(field)))),
                 "",
             )
             when = event.time.strftime("%H:%M") if event.time else "?"
