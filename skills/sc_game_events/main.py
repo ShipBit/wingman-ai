@@ -9,7 +9,8 @@ events through `self.wingman.sc_gamelog`:
     self._subscription.unsubscribe()    # in unload()
 
 Which events are worth a word, and how often, decides the policy Mallachi wrote
-for the SC Log Reader skill (notifications.py). The line itself comes from the
+for the SC Log Reader skill (notifications.py), with its settings: one switch
+per type of event, under one master per category. The line itself comes from the
 support model, in character and in the user's language, and is shown in the
 chat and the HUD, spoken and kept in the conversation.
 """
@@ -24,21 +25,37 @@ from typing import TYPE_CHECKING, Literal
 from api.interface import SettingsConfig, SkillConfig
 from services.skill_local_ai import SamplingPreset
 from skills.sc_game_events.notifications import (
+    _CATEGORIES,
     _DETAIL_FIELDS,
     _TEMPLATES,
+    NOTIFICATION_OPTIONS,
     NotificationPolicy,
     _literal,
+    enabled_notification_events,
 )
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
-CATEGORIES = ("session", "mission", "safety", "health", "location", "ship", "money")
+# The masters are `react_<category>`, as the 3.2.5 migration saved them, and the
+# switches per type `react_<type>`. The policy calls both `notify_...`, the
+# names they had in SC Log Reader.
+SWITCHES = tuple(_CATEGORIES) + tuple(
+    option.removeprefix("notify_") for option in NOTIFICATION_OPTIONS
+)
 PROMPT_FILE = Path(__file__).parent / "reaction_prompt.md"
 HUD_SKILL = "HUD"
 REACTION_CHARS = 300
 RECENT_LINES = 5
+FOLD_SECONDS = 15.0
+"""A report from while the Wingman was busy is still worth a word this long.
+Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
+REPEAT_SECONDS = 90.0
+"""The same report is not said again this soon: zones flicker in and out."""
+MAX_REPORTS = 4
+MAX_WAITING = 16
+_now = time.monotonic  # The skill's clock; tests replace it, never asyncio's.
 LINK_ANGLE = "Link it to where the pilot is or what the pilot is flying."
 # Each line gets one of these. Without it the persona finds one move (the same
 # joke, the same opening) and makes it on every event.
@@ -59,21 +76,25 @@ class ScGameEvents(Skill):
         super().__init__(config=config, settings=settings, wingman=wingman)
         self._subscription = None
         self._policy: NotificationPolicy | None = None
-        self._categories: frozenset[str] = frozenset()
+        self._events: frozenset[str] = frozenset()
         self._reaction: asyncio.Task | None = None
         self._unanswered = 0
         """Reactions since the user last said something."""
         self._recent_lines: deque[str] = deque(maxlen=RECENT_LINES)
         self._angle = ""
+        self._waiting: list[tuple[float, str]] = []
+        """Reports not said yet, with the time they came."""
+        self._said_at: dict[str, float] = {}
 
     # --- settings, read fresh -------------------------------------------------
 
-    def _enabled_categories(self) -> frozenset[str]:
-        return frozenset(
-            category
-            for category in CATEGORIES
-            if self.retrieve_custom_property_value(f"react_{category}", [])
-        )
+    def _enabled_events(self) -> frozenset[str]:
+        settings = {}
+        for switch in SWITCHES:
+            value = self.retrieve_custom_property_value(f"react_{switch}", [])
+            if value is not None:  # A missing switch counts as on.
+                settings[f"notify_{switch}"] = bool(value)
+        return enabled_notification_events(settings)
 
     def _max_unanswered(self) -> int:
         """0 means no limit."""
@@ -109,14 +130,16 @@ class ScGameEvents(Skill):
     # --- reacting ---------------------------------------------------------------
 
     def _on_event(self, event) -> None:
-        categories = self._enabled_categories()
-        if not categories:
+        if event.type in ("shop_buy", "shop_sell") and event.status == "requested":
+            return  # React once, to the confirmed trade with its name and amount.
+        events = self._enabled_events()
+        if not events:
             return
-        if self._policy is None or categories != self._categories:
+        if self._policy is None or events != self._events:
             # The policy remembers what it said; a new selection starts fresh.
-            self._policy = NotificationPolicy(enabled_categories=categories)
-            self._categories = categories
-        now = time.monotonic()
+            self._policy = NotificationPolicy(enabled_events=events)
+            self._events = events
+        now = _now()
         self._policy.offer(
             {
                 "event_type": event.type,
@@ -129,21 +152,48 @@ class ScGameEvents(Skill):
             now=now,
             catching_up=event.catching_up,
         )
-        reports = [message["text"] for message in self._policy.flush(now=now)]
+        self._said_at = {r: t for r, t in self._said_at.items() if now - t < REPEAT_SECONDS}
+        reports = []
+        for message in self._policy.flush(now=now):
+            if message["text"] in self._said_at:
+                # Still flickering: stays quiet until it settles for a while.
+                self._said_at[message["text"]] = now
+            else:
+                reports.append(message["text"])
         if not reports:
             return
-        # One reaction at a time and never over the Wingman's voice. What
-        # happens meanwhile is not queued: by the time the Wingman is free it
-        # would be old news. The policy above already thins out bursts.
+        self._waiting = (self._waiting + [(now, r) for r in reports])[-MAX_WAITING:]
+        # One reaction at a time and never over the Wingman's voice. What comes
+        # meanwhile waits and goes into the next line while it is still fresh:
+        # an arrival logs zone, jurisdiction and place within seconds.
         if self._reaction and not self._reaction.done():
             return
-        if self.wingman.audio.is_playing:
-            return
-        limit = self._max_unanswered()
-        if limit and self._unanswered >= limit:
-            return
-        self._unanswered += 1
-        self._reaction = asyncio.create_task(self._react(reports[:3]))
+        self._reaction = asyncio.create_task(self._react_to_waiting())
+
+    def _take_fresh(self) -> list[str]:
+        now = _now()
+        fresh = [r for t, r in self._waiting if now - t < FOLD_SECONDS]
+        self._waiting.clear()
+        return list(dict.fromkeys(fresh))[:MAX_REPORTS]
+
+    async def _react_to_waiting(self) -> None:
+        while self._waiting:
+            while self.wingman.audio.is_playing and any(
+                _now() - t < FOLD_SECONDS for t, _ in self._waiting
+            ):
+                await asyncio.sleep(0.25)
+            reports = self._take_fresh()
+            if not reports:
+                return
+            limit = self._max_unanswered()
+            if limit and self._unanswered >= limit:
+                return
+            # Only what is said counts, and is not said again soon.
+            self._unanswered += 1
+            now = _now()
+            for report in reports:
+                self._said_at[report] = now
+            await self._react(reports)
 
     async def _react(self, reports: list[str]) -> None:
         try:
@@ -281,11 +331,15 @@ class ScGameEvents(Skill):
         missions = list((state.get("active_missions") or {}).values())
         if not missions:
             return "No active missions in the log. The log only knows missions accepted this session."
-        lines = [
-            f"- {_literal(mission.get('name')) or 'Unnamed'}"
-            + (f": {_literal(mission['objective'])}" if mission.get("objective") else "")
-            for mission in missions[:10]
-        ]
+        lines = []
+        for mission in missions[:10]:
+            objectives = mission.get("objectives") or (
+                [mission["objective"]] if mission.get("objective") else []
+            )
+            shown = "; ".join(_literal(o) for o in objectives[:6])
+            if len(objectives) > 6:
+                shown += f"; (and {len(objectives) - 6} more)"
+            lines.append(f"- {_literal(mission.get('name')) or 'Unnamed'}" + (f": {shown}" if shown else ""))
         more = f"\n(and {len(missions) - 10} more)" if len(missions) > 10 else ""
         return "Active missions:\n" + "\n".join(lines) + more
 
