@@ -457,6 +457,14 @@ class HudService:
 
     def playback_started(self, wingman_name: str) -> None:
         """The message stays while its Wingman speaks."""
+        self._on_main_loop(self._playback_started, wingman_name)
+
+    def playback_finished(self, wingman_name: str) -> None:
+        # Streaming TTS reports from the speaking thread's own loop, which closes
+        # right after: a hide timer scheduled there never fires
+        self._on_main_loop(self._playback_finished, wingman_name)
+
+    def _playback_started(self, wingman_name: str) -> None:
         if not self._speaks_on_screen(wingman_name):
             return
         self._cancel_chat_hide()
@@ -466,7 +474,7 @@ class HudService:
             last = self._chat_last
             self._show_chat(last["title"], last["text"], last["icon"], last["tools"])
 
-    def playback_finished(self, wingman_name: str) -> None:
+    def _playback_finished(self, wingman_name: str) -> None:
         if not self._speaks_on_screen(wingman_name):
             return
         if self._chat_waiting_for_audio:

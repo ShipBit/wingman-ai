@@ -121,6 +121,30 @@ def test_a_message_from_a_skills_thread_is_hidden_on_cores_loop(service):
     manager.hide_message.assert_called_once_with(GROUP_CHAT, "message")
 
 
+def test_speech_reported_from_a_speaking_threads_loop_still_hides_the_answer(service):
+    import threading
+
+    manager = service._server.manager
+    service.active_profile().audio_stop_delay = 0.1
+
+    async def speak():
+        service.playback_started("Computer")
+        service.playback_finished("Computer")
+
+    async def run():
+        service._loop = asyncio.get_running_loop()
+        await service.on_conversation_message(_wingman(), "assistant", "All green.", [])
+        # Streaming TTS: the events come from play_to_user's own loop, closed right after
+        thread = threading.Thread(target=lambda: asyncio.run(speak()))
+        thread.start()
+        thread.join()
+        await asyncio.sleep(0.3)
+
+    asyncio.run(run())
+
+    manager.hide_message.assert_called_once_with(GROUP_CHAT, "message")
+
+
 def test_speech_does_not_hide_the_tool_chips_while_tools_run(service):
     manager = service._server.manager
     tool_call = {"function": {"name": "get_weather"}}
