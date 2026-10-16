@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from typing import TYPE_CHECKING, Optional
 import openai
 import requests
@@ -168,6 +169,7 @@ class WingmanSubscription:
         stream: bool = False,
         tools: list[dict[str, any]] = None,
         tool_choice: str = "auto",
+        session: Optional[str] = None,
     ):
         serialized_messages = []
         for message in messages:
@@ -193,9 +195,14 @@ class WingmanSubscription:
         }
         if tools:
             data["tool_choice"] = tool_choice
+        headers = self._get_headers()
+        # Keeps this Wingman on the provider that holds its prompt cache. The
+        # backend hashes it with the account, so it carries nothing else.
+        if session:
+            headers["x-wingman-session"] = session
         response = requests.post(
             url=f"{self.settings.base_url}/api/v1/chat/completions",
-            headers=self._get_headers(),
+            headers=headers,
             json=data,
             timeout=self.timeout,
         )
@@ -598,10 +605,14 @@ class WingmanSubscriptionLlm(LlmInterface):
     def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
         self._ws = ws_instance
         self._config = config
+        # One per Wingman, not per conversation: the prompt cache sits on the
+        # system prompt and the tools, and those outlive a conversation reset.
+        self._session = uuid.uuid4().hex
 
     async def ask(self, messages, tools=None, tool_choice="auto"):
         return self._ws.ask(
             messages=messages,
             deployment=self._config.wingman_pro.conversation_deployment,
             tools=tools, tool_choice=tool_choice,
+            session=self._session,
         )
