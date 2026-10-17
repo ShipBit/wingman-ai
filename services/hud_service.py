@@ -202,8 +202,12 @@ class HudService:
         keep = {"id": stored.id, "is_default": stored.is_default}
         if self._preview_profile_id == stored.id:
             # While the preview runs the mouse places the containers: a save
-            # sent with the areas from before a drag must not undo it
-            keep.update(chat=stored.chat, info=stored.info)
+            # sent with the areas from before a drag must not undo it. The
+            # alignment is not dragged, so it comes from the page
+            keep.update(
+                chat=stored.chat.model_copy(update={"align": profile.chat.align}),
+                info=stored.info.model_copy(update={"align": profile.info.align}),
+            )
         updated = profile.model_copy(update=keep)
         self._profiles[index] = updated
         hud_profiles.assign_configs(self._profiles, stored.id, updated.configs)
