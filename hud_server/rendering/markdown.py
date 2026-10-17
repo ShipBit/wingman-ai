@@ -1352,24 +1352,19 @@ class MarkdownRenderer:
             if max_chars <= 0:
                 return y - 4  # Nothing visible yet
 
-        # First, estimate the height by doing a dry run
-        # We'll use a simple line-based estimate
-        font = self.fonts.get('italic', self.fonts['normal'])
-        lines = self._wrap_text(text, font, content_w)
-        line_h = self.line_height
-
-        # Calculate how much text is visible
-        if max_chars is not None:
-            chars_shown = 0
-            visible_lines = 0
-            for line in lines:
-                if chars_shown >= max_chars:
-                    break
-                visible_lines += 1
-                chars_shown += len(line) + 1
-            visible_h = max(1, visible_lines) * line_h + 12
-        else:
-            visible_h = len(lines) * line_h + 12
+        # The text goes on a layer of its own first: its real height sizes the box. An estimate from
+        # wrapped lines was off with bold (wider) or short text (a box a line too tall).
+        quote_color = (180, 186, 196)
+        text_y = y + 6
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_end = self._render_tokens(
+            ImageDraw.Draw(text_layer), tokens, content_x, text_y, content_w,
+            override_color=quote_color,
+            max_chars=max_chars,
+            quote=True,
+        ) - 10  # _render_tokens adds a 10 px margin after the last line
+        visible_h = text_end - y + 8
 
         # Draw accent border on left
         accent = self.colors['accent']
@@ -1379,17 +1374,7 @@ class MarkdownRenderer:
         bg = (40, 46, 56, 180)
         draw.rounded_rectangle([x + border_w, y, x + width, y + visible_h], radius=6, fill=bg)
 
-        # Render the blockquote content with full markdown support
-        quote_color = (180, 186, 196)
-        text_y = y + 6
-
-        # Use _render_tokens for proper markdown/emoji rendering
-        self._render_tokens(
-            draw, tokens, content_x, text_y, content_w,
-            override_color=quote_color,
-            override_font=font,
-            max_chars=max_chars
-        )
+        canvas.alpha_composite(text_layer)
 
         return y + visible_h + 10
 
@@ -1521,13 +1506,10 @@ class MarkdownRenderer:
         if num_cols == 0:
             return y
 
-        # Calculate column widths - table uses full width like code blocks
+        # Column widths follow their content - table uses full width like code blocks
         cell_padding = 6
         table_w = width  # Match code block width
-        col_width = max(40, table_w // num_cols)
-        col_widths = [col_width] * num_cols
-        # Adjust last column to fill remaining space
-        col_widths[-1] = table_w - sum(col_widths[:-1])
+        col_widths = self._table_column_widths(rows, num_cols, font, bold_font, table_w, cell_padding)
 
         # Calculate row heights (need to pre-calculate for proper backgrounds)
         row_heights = []
@@ -1612,6 +1594,44 @@ class MarkdownRenderer:
         canvas.alpha_composite(text_layer)
 
         return last_visible_y + 10 if visible_rows > 0 else y
+
+    TABLE_MIN_COLUMN = 40
+
+    def _table_column_widths(self, rows: List[List[str]], num_cols: int, font, bold_font,
+                             table_w: int, cell_padding: int) -> List[int]:
+        """Widths that follow the content, summing to table_w: a short column ('SCU') stays narrow and
+        a long one ('Recycled Material Composite') gets the room, instead of equal thirds where the long
+        one wraps. Space left over is shared by content width; when the content is too wide, columns
+        that fit their fair share keep their width and the others share the rest equally."""
+        natural = []
+        for ci in range(num_cols):
+            widest = 0
+            for ri, row in enumerate(rows):
+                cell = re.sub(r"\*\*|__|~~|`", "", row[ci].strip()) if ci < len(row) else ''
+                widest = max(widest, self._get_text_size(cell, bold_font if ri == 0 else font)[0])
+            natural.append(max(self.TABLE_MIN_COLUMN, widest + cell_padding * 2 + 4))
+
+        if sum(natural) <= table_w:
+            extra = table_w - sum(natural)
+            widths = [n + extra * n // sum(natural) for n in natural]
+        else:
+            widths = [0] * num_cols
+            open_columns = list(range(num_cols))
+            remaining = table_w
+            while open_columns:
+                share = remaining / len(open_columns)
+                fitting = [ci for ci in open_columns if natural[ci] <= share]
+                if not fitting:
+                    for ci in open_columns:
+                        widths[ci] = max(self.TABLE_MIN_COLUMN, int(share))
+                    break
+                for ci in fitting:
+                    widths[ci] = natural[ci]
+                    remaining -= natural[ci]
+                    open_columns.remove(ci)
+        # Rounding: the last column takes what is left, so the table is exactly table_w wide
+        widths[-1] = max(self.TABLE_MIN_COLUMN, table_w - sum(widths[:-1]))
+        return widths
 
     def _render_cell_content_with_pos(self, draw, text: str, x: int, y: int, max_width: int,
                                       line_h: int, base_font, base_color: Tuple,
@@ -1808,9 +1828,14 @@ class MarkdownRenderer:
                 else:
                     draw.text((render_x, render_y), word, fill=tcolor, font=tfont)
 
-                # Strikethrough
+                # Strikethrough: through the middle of the drawn letters. word_h is only their height;
+                # the font puts them bbox[1] below render_y, so word_h // 2 alone hit their top.
                 if is_strike:
-                    sy = render_y + word_h // 2
+                    try:
+                        top, bottom = tfont.getbbox(word)[1], tfont.getbbox(word)[3]
+                    except Exception:
+                        top, bottom = 0, word_h
+                    sy = render_y + (top + bottom) // 2
                     draw.line([(render_x, sy), (render_x + word_w, sy)], fill=tcolor, width=1)
 
                 render_x += word_w
@@ -1899,10 +1924,12 @@ class MarkdownRenderer:
             indent_px = indent * 20
             bullet = bullets[min(indent, len(bullets) - 1)]
             bullet_x = x + indent_px
-            text_x = bullet_x + 16
+            # A task item's checkbox is its marker: no bullet in front of it
+            is_task = text.lstrip()[:3] in ('[ ]', '[x]', '[X]')
+            text_x = bullet_x if is_task else bullet_x + 16
 
             # Only draw bullet if typewriter has reached at least the marker
-            if typewriter_pos == float('inf') or typewriter_pos > item_start:
+            if not is_task and (typewriter_pos == float('inf') or typewriter_pos > item_start):
                 bullet_font = self.fonts.get('bold', self.fonts['normal'])
                 draw.text((bullet_x, current_y), bullet, fill=self.colors['accent'], font=bullet_font)
 
@@ -1986,7 +2013,7 @@ class MarkdownRenderer:
 
     def _render_tokens(self, draw, tokens: List[Dict], x: int, y: int, width: int,
                        override_color: Tuple = None, override_font = None, max_chars: int = None,
-                       header_level: int = None) -> int:
+                       header_level: int = None, quote: bool = False) -> int:
         """Render inline tokens with word wrapping and styling.
 
         The typewriter effect uses 'remaining_chars' as a position in the ORIGINAL text.
@@ -1997,12 +2024,16 @@ class MarkdownRenderer:
         Args:
             max_chars: If provided, limits the number of visible characters (overrides remaining_chars)
             header_level: If provided (1-6), uses appropriately sized emoji font for headers
+            quote: Blockquote text: italic, but bold stays bold (bold italic) and code stays code
         """
         current_x = x
         current_y = y
 
         # Get actual line height from font metrics
-        base_font = override_font if override_font else self.fonts['normal']
+        if quote:
+            base_font = self.fonts.get('italic', self.fonts['normal'])
+        else:
+            base_font = override_font if override_font else self.fonts['normal']
         _, base_h = self._get_text_size('Ay', base_font)  # Use 'Ay' to get proper ascender/descender height
         line_h = base_h
 
@@ -2034,6 +2065,9 @@ class MarkdownRenderer:
                     font = self.fonts.get(emoji_font_key, self.fonts.get('emoji', self.fonts['normal']))
                 else:
                     font = self.fonts.get('emoji', self.fonts['normal'])
+            elif quote:
+                style = 'code' if ttype == 'code' else 'bold_italic' if ttype in ('bold', 'bold_italic') else 'italic'
+                font = self.fonts.get(style, self.fonts['normal'])
             elif override_font:
                 font = override_font
             elif ttype == 'bold':

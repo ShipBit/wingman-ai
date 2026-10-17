@@ -5,7 +5,7 @@ import threading
 import time
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 import hud_server.rendering.markdown as markdown
 from hud_server.constants import GROUP_CHAT
@@ -364,3 +364,105 @@ def test_a_window_without_height_draws_without_errors():
     run_frames(overlay)
 
     assert overlay_errors(overlay) == []
+
+
+# Every style its own size, so a test can tell from the font which style drew a word (on any OS)
+STYLE_SIZES = {"normal": 16, "bold": 17, "italic": 18, "bold_italic": 19, "code": 15}
+
+
+def sized_renderer():
+    fonts = {style: ImageFont.load_default(size=size) for style, size in STYLE_SIZES.items()}
+    for level in range(1, 7):
+        fonts[f"h{level}"] = fonts["bold"]
+    fonts.update(header=fonts["bold"], emoji=fonts["normal"], _font_size=16)
+    return MarkdownRenderer(fonts, {"text": (220, 220, 220), "accent": (0, 170, 255)}, color_emojis=False)
+
+
+def styles_drawn(renderer, monkeypatch, text: str) -> dict:
+    """Which style drew each word of `text`."""
+    sizes = {size: style for style, size in STYLE_SIZES.items()}
+    drawn = {}
+
+    def record(draw, pos, word, fill, font, embedded_color=False):
+        drawn[word.strip()] = sizes.get(font.size)
+
+    monkeypatch.setattr(renderer, "_draw_text_with_spacing", record)
+    image = Image.new("RGBA", (400, 300))
+    renderer.render(ImageDraw.Draw(image), image, text, 0, 0, 380)
+    return drawn
+
+
+def test_bold_keeps_its_weight_in_a_blockquote(monkeypatch):
+    drawn = styles_drawn(sized_renderer(), monkeypatch, "> plain **strong** words")
+
+    assert (drawn["plain"], drawn["strong"], drawn["words"]) == ("italic", "bold_italic", "italic")
+
+
+def test_a_task_item_has_its_checkbox_and_no_bullet(monkeypatch):
+    bullets = []
+    original = ImageDraw.ImageDraw.text
+
+    def text(self, xy, content, *args, **kwargs):
+        if content == "•":
+            bullets.append(xy)
+        return original(self, xy, content, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", text)
+    image = Image.new("RGBA", (400, 200))
+    sized_renderer().render(ImageDraw.Draw(image), image, "- [ ] buy cargo\n- [x] sell cargo\n- plain item", 0, 0, 380)
+
+    assert len(bullets) == 1  # only the plain item
+
+
+def test_a_blockquote_box_fits_its_text():
+    renderer = sized_renderer()
+
+    def height(text):
+        image = Image.new("RGBA", (400, 300))
+        return renderer.render(ImageDraw.Draw(image), image, text, 0, 0, 380)
+
+    one_line = height("> **Taranite**: 22 SCU, only 22 in stock here.")
+    two_lines = height("> " + "word " * 40)
+    # Used to be estimated in the widest font: a short bold line got a box a line too tall
+    assert one_line < renderer.line_height * 2
+    assert two_lines - one_line >= renderer.line_height * 0.5
+
+
+def test_strikethrough_in_a_table_cell_crosses_the_word(monkeypatch):
+    renderer = sized_renderer()
+    words, lines = {}, []
+    original_text, original_line = ImageDraw.ImageDraw.text, ImageDraw.ImageDraw.line
+
+    def text(self, xy, content, *args, **kwargs):
+        words[content] = (xy, kwargs.get("font"))
+        return original_text(self, xy, content, *args, **kwargs)
+
+    def line(self, points, *args, **kwargs):
+        lines.append(points)
+        return original_line(self, points, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", text)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "line", line)
+    image = Image.new("RGBA", (400, 200))
+    renderer.render(ImageDraw.Draw(image), image, "| Sell | SCU |\n|---|---|\n| ~~Astatine~~ | 618 |", 0, 0, 380)
+
+    (x, y), font = words["Astatine"]
+    left, top, right, bottom = font.getbbox("Astatine")
+    strike_y = [points[0][1] for points in lines if points[0][0] == x]
+    # Through the letters, not along their top (it used to ignore the font's offset to the ink)
+    assert strike_y and y + top < strike_y[0] < y + bottom
+
+
+def test_table_columns_follow_their_content():
+    renderer = sized_renderer()
+    normal, bold = renderer.fonts["normal"], renderer.fonts["bold"]
+    rows = [["Commodity", "SCU", "aUEC"], ["Recycled Material Composite", "640", "5,696,000"]]
+
+    widths = renderer._table_column_widths(rows, 3, normal, bold, 400, 6)
+    assert sum(widths) == 400
+    assert widths[0] > widths[1]  # the long name gets the room, the short column stays narrow
+    assert widths[0] >= renderer._get_text_size("Recycled Material Composite", normal)[0] + 12  # no wrap
+
+    # Too narrow for the content: still exactly the table's width, no column below the minimum
+    tight = renderer._table_column_widths(rows, 3, normal, bold, 160, 6)
+    assert sum(tight) == 160 and min(tight) >= renderer.TABLE_MIN_COLUMN
