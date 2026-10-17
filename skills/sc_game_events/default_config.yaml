@@ -338,7 +338,7 @@ custom_properties:
     value: 10
   - id: routine_gap_minutes
     name: Minutes between routine lines
-    hint: Zones, quantum travel, the hangar and the login are said at most once in this many minutes, per group. Arrivals, departures, missions, money and injuries are always said.
+    hint: Zones, quantum travel, the hangar and the login are said at most once in this many minutes, per group. Arrivals, departures, missions, money and injuries are not held back by this.
     property_type: slider
     options:
       - label: "min"

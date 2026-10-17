@@ -76,7 +76,9 @@ ROUTINE_GROUPS = {
     "join_pu": "session",
 }
 ROUTINE_GAP_MINUTES = (2, 5, 20)
-"""Minimum, default and maximum of the "routine_gap_minutes" setting."""
+"""Minimum, default and maximum of the "routine_gap_minutes" setting. Keep
+them in step with its slider in default_config.yaml; these only catch a value
+saved outside the slider's range."""
 FOLD_SECONDS = 15.0
 """A report from while the Wingman was busy is still worth a word this long.
 Arriving somewhere logs zone, jurisdiction and arrival within seconds."""
