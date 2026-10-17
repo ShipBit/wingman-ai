@@ -336,6 +336,19 @@ custom_properties:
     property_type: number
     required: false
     value: 10
+  - id: routine_gap_minutes
+    name: Minutes between routine lines
+    hint: Zones, quantum travel, the hangar and the login are said at most once in this many minutes, per group. Arrivals, departures, missions, money and injuries are not held back by this.
+    property_type: slider
+    options:
+      - label: "min"
+        value: 2
+      - label: "max"
+        value: 20
+      - label: "step"
+        value: 1
+    required: false
+    value: 5
   - id: show_in_hud
     name: Show reactions in the HUD
     hint: Also show what the Wingman says about the game in the HUD overlay, if the HUD is switched on in the settings.
