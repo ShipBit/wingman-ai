@@ -393,6 +393,11 @@ class Migration328To329(BaseMigration):
                         + ", ".join(f"{n} ({c})" for c, n, _ in dropped)
                     )
             # Without anyone on the HUD skill the template's profile comes in at the end
+        # The HUD is on for everyone now: each Wingman decides what it shows there
+        hud_server = old.get("hud_server")
+        if isinstance(hud_server, dict) and not hud_server.get("enabled"):
+            hud_server["enabled"] = True
+            self.log("- switched the HUD on, it is on for everyone now")
         self._delete_custom_copy()
         return old
 

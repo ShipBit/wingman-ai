@@ -325,6 +325,12 @@ def test_new_wingmen_get_the_chat_and_info_panel_too():
     NestedConfig(**defaults)
 
 
+def test_the_hud_is_switched_on_for_everyone(screen):
+    settings = migration().migrate_settings({"hud_server": {"enabled": False, "port": 7862}})
+
+    assert settings["hud_server"] == {"enabled": True, "port": 7862}
+
+
 def test_a_custom_copy_of_the_skill_moves_out_of_custom_skills(users_dir, screen):
     custom = os.path.join(users_dir, "custom_skills", "hud")
     os.makedirs(custom)

@@ -2,8 +2,8 @@
 
 Wingman AI draws a transparent overlay on top of your game: the conversation
 with your Wingmen, and an info panel they and their skills pin things to. It
-runs on Windows; macOS and Linux are not supported yet. Switch it on under
-**Settings → HUD server**.
+runs on Windows; macOS and Linux are not supported yet. It is on from the start;
+switch it off under **Settings → HUD Overlay**.
 
 ## Two containers for all Wingmen
 

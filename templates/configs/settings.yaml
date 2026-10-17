@@ -128,7 +128,7 @@ system_one:
 spoken_language: en
 other_language: null
 hud_server:
-  enabled: false
+  enabled: true
   host: "127.0.0.1"
   port: 7862
   framerate: 60
