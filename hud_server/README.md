@@ -11,7 +11,7 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **Persistent Items**: Progress bars, timers, and status indicators
 - **Chat Windows**: Multi-user chat overlays with auto-hide and message history
 - **State Management**: Persist and restore HUD state across sessions
-- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows for now, see [Platforms](#platforms))
+- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows and macOS, see [Platforms](#platforms))
 
 ## Architecture
 
@@ -106,7 +106,9 @@ for the preview, lists the monitors and finds the font files.
 | `base.py` | `HudBackend`, the interface every backend implements, and its types (`Monitor`, `FontSet`, `Cursor`, `Pointer`). |
 | `windows.py` | The Windows backend: layered Win32 windows with per-pixel alpha. |
 | `win32.py` | The ctypes bindings `windows.py` uses. |
-| `linux.py`, `macos.py` | Registered, not written yet: they report the HUD as unsupported and say why. |
+| `macos.py` | The macOS backend. AppKit works on the main thread only, and Core's serves the API, so the windows live in a small process of their own, `macos_host.py`: borderless panels above full-screen apps, fed over a pipe. Monitors and the cursor come from Quartz. The HUD draws in points. |
+| `macos_host.py` | That process: an AppKit event loop, one panel per HUD window, the mouse sent back for the preview. A build starts it as `WingmanAiCore --hud-host` (main.py). |
+| `linux.py` | Registered, not written yet: it reports the HUD as unsupported and says why. |
 
 Core starts the HUD server only where `hud_supported()` is true. Elsewhere it
 logs the reason, and skills see `self.wingman.hud.available == False`.
@@ -680,7 +682,7 @@ server.start(port=7863)
 ### Overlay not showing
 
 1. Check PIL is installed: `pip install Pillow`
-2. Only Windows has a platform backend so far; on macOS/Linux the log says `[HUD] The HUD does not run on ... yet.`
+2. Windows and macOS have a platform backend; on Linux the log says `[HUD] The HUD does not run on Linux yet.`
 3. Check logs for overlay errors
 
 ### Connection failures

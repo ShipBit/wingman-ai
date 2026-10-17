@@ -30,16 +30,22 @@ def test_the_os_is_recognised(monkeypatch, system, expected):
     assert current_os() == expected
 
 
-@pytest.mark.parametrize("os_family", [OsFamily.LINUX, OsFamily.MACOS])
-def test_linux_and_macos_have_a_backend_that_keeps_the_hud_off(os_family):
-    backend = create_backend(os_family)
+def test_linux_has_a_backend_that_keeps_the_hud_off():
+    backend = create_backend(OsFamily.LINUX)
 
     assert not backend.supported
-    assert backend.os == os_family
+    assert backend.os == OsFamily.LINUX
     assert backend.unsupported_reason
     assert backend.create_window("HUD", 0, 0, 100, 100) is None
     with pytest.raises(HudPlatformError):
         backend.start()
+
+
+def test_the_macos_backend_runs_only_on_macos():
+    backend = create_backend(OsFamily.MACOS)
+
+    assert backend.os == OsFamily.MACOS
+    assert backend.supported == (sys.platform == "darwin")
 
 
 def test_an_unknown_os_has_no_hud(monkeypatch):

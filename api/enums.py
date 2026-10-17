@@ -217,7 +217,7 @@ class SkillRequirement(Enum):
     """
 
     HUD_SERVER = "hud_server"
-    """The HUD (settings.hud_server). Runs on Windows only."""
+    """The HUD (settings.hud_server). Runs on Windows and macOS."""
     SC_GAMELOG = "sc_gamelog"
     """The Star Citizen log reader (settings.sc_gamelog)."""
 

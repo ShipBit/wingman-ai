@@ -19,6 +19,13 @@ from typing import Any, Literal, get_args, get_origin
 # with -c flags. Without this, argparse sees those flags and crashes.
 multiprocessing.freeze_support()
 
+# The macOS HUD keeps its windows in a process of its own, started from this
+# binary (hud_server/platform/macos.py). It needs none of Core.
+if len(sys.argv) > 1 and sys.argv[1] == "--hud-host":
+    from hud_server.platform.macos_host import main as _hud_host
+
+    sys.exit(_hud_host())
+
 # Diagnostics: dump a Python + all-thread traceback to stderr if the process
 # dies on a native fault (SIGSEGV/SIGABRT/SIGBUS/SIGFPE) from a C extension
 # (llama.cpp/Metal, onnxruntime, torch, PortAudio, SDL). Without this, such a
