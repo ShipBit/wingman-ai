@@ -25,7 +25,8 @@ profiles in the settings (services/hud_service.py, docs/hud.md):
 - Every Wingman gets the shared chat and the info panel switched on, and so
   does defaults.yaml for Wingmen made later.
 - The skill's entry, its name in `discoverable_skills` and its tools in
-  `disabled_skill_tools` go, and a custom copy in custom_skills is deleted.
+  `disabled_skill_tools` go, and a custom copy in custom_skills moves to
+  retired_skills next to it, where it no longer loads.
   Info panels the skill saved are not carried over; they lived in a folder of
   the old version.
 """
@@ -544,7 +545,16 @@ class Migration328To329(BaseMigration):
                     )
 
     def _delete_custom_copy(self) -> None:
+        """Moves the copy out of custom_skills: it no longer loads, and the
+        user's own changes to it are still there to look at."""
         folder = path.join(get_custom_skills_dir(), "hud")
-        if path.isdir(folder):
-            shutil.rmtree(folder, ignore_errors=True)
-            self.log("- removed the custom HUD skill, Core draws the HUD now")
+        if not path.isdir(folder):
+            return
+        retired = path.join(path.dirname(get_custom_skills_dir()), "retired_skills")
+        target, n = path.join(retired, "hud"), 1
+        while path.exists(target):
+            n += 1
+            target = path.join(retired, f"hud_{n}")
+        os.makedirs(retired, exist_ok=True)
+        shutil.move(folder, target)
+        self.log(f"- moved the custom HUD skill to {target}, Core draws the HUD now")

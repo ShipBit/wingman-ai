@@ -325,10 +325,13 @@ def test_new_wingmen_get_the_chat_and_info_panel_too():
     NestedConfig(**defaults)
 
 
-def test_a_custom_copy_of_the_skill_is_deleted(users_dir, screen):
+def test_a_custom_copy_of_the_skill_moves_out_of_custom_skills(users_dir, screen):
     custom = os.path.join(users_dir, "custom_skills", "hud")
     os.makedirs(custom)
+    with open(os.path.join(custom, "main.py"), "w") as f:
+        f.write("# the user's changes")
 
     migration().migrate_settings({})
 
     assert not os.path.exists(custom)
+    assert os.path.isfile(os.path.join(users_dir, "retired_skills", "hud", "main.py"))
