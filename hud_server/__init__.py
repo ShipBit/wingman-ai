@@ -11,7 +11,7 @@ Included modules:
 - types.py: Type definitions (enums, property classes) for HUD elements
 - overlay/overlay.py: PIL-based overlay renderer (any OS)
 - rendering/markdown.py: Markdown rendering
-- platform/: the bridge to the OS, one window backend per OS (Windows for now)
+- platform/: the bridge to the OS, one window backend per OS (Windows and macOS)
 
 Type-Safe Usage:
     from hud_server import HudHttpClient, Anchor, HudColor, FontFamily, WindowType

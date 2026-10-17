@@ -1508,7 +1508,7 @@ class HudProfilesState(BaseModel):
     preview_profile_id: Optional[str]
     """The profile shown as preview panels, None when no preview runs."""
     hud_available: bool
-    """The HUD server runs (switched on, Windows only)."""
+    """The HUD server runs (switched on, Windows or macOS)."""
 
 
 class CreateHudProfileRequest(BaseModel):
