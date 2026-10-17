@@ -60,10 +60,14 @@ _ON_EVERY_SPACE = (1 << 0) | (1 << 4) | (1 << 6) | (1 << 8)
 _TRACKING = 0x01 | 0x02 | 0x80 | 0x200
 """mouseEnteredAndExited, mouseMoved, activeAlways, inVisibleRect."""
 
-_out = sys.stdout.buffer
+# The channels to Core are the process's own stdin and stdout, taken by file
+# descriptor: in a build this module comes with the hud_server package, whose
+# logging has already put a logger in place of sys.stdout. Whatever else writes
+# to stdout from here on goes to stderr, so it cannot break a message.
+_out = os.fdopen(os.dup(1), "wb")
+_in = os.fdopen(os.dup(0), "rb")
+os.dup2(2, 1)
 _out_lock = threading.Lock()
-# Nothing else may write to the channel to Core
-sys.stdout = sys.stderr
 
 _windows: dict[int, "NSPanel"] = {}
 _color_space = CGColorSpaceCreateDeviceRGB()
@@ -244,7 +248,7 @@ def _read_exact(stream, n: int) -> bytes:
 
 def _read_commands() -> None:
     """Off the main thread: every command goes to the main thread in order."""
-    stream = sys.stdin.buffer
+    stream = _in
     try:
         while True:
             (length,) = struct.unpack(">I", _read_exact(stream, 4))
