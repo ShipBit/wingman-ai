@@ -312,6 +312,8 @@ await self.wingman.hud.show_progress(title, current, maximum) / .show_timer(titl
 #   Returns False when the HUD is off (Windows only) or this Wingman's hud switch is off.
 icon = self.wingman.hud.group("mic", anchor="top_right", width=72)   # a group of your own
 await icon.add_info(" ", "![](icon.png)") / icon.update(x=40) / icon.delete()
+#   also icon.info_items() / .clear() / .hide() / .show() / .set_loader(True) / .append_message(t);
+#   self.wingman.hud.info_items() reads the shared info panel
 #   Props you leave out come from the HUD profile; Core deletes the group when the skill unloads.
 
 # STAR CITIZEN — Core reads the Game.log live (the user can switch it off):

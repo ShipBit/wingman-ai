@@ -726,6 +726,30 @@ class HudService:
         self._info_changed(group)
         return True
 
+    def clear_info(self, group: str) -> bool:
+        """Empties a skill's own group. The shared info panel has no such call:
+        one Wingman must not wipe what another put there."""
+        manager = self._manager
+        if manager is None or group == GROUP_INFO:
+            return False
+        return manager.clear_items(group, PERSISTENT)
+
+    def append_message(self, group: str, text: str) -> bool:
+        manager = self._manager
+        return bool(manager and group != GROUP_CHAT and manager.append_message(group, MESSAGE, text))
+
+    def set_loader(self, group: str, element: str, show: bool, color: Optional[str] = None) -> bool:
+        manager = self._manager
+        return bool(manager and group != GROUP_CHAT and manager.set_loader(group, element, show, color))
+
+    def set_group_visible(self, group: str, element: str, visible: bool) -> bool:
+        manager = self._manager
+        if manager is None or group in (GROUP_CHAT, GROUP_INFO):
+            return False
+        if visible:
+            return manager.show_element(group, element)
+        return manager.hide_element(group, element)
+
     def info_items(self, group: str = GROUP_INFO) -> list[dict]:
         """What the panel shows right now, oldest first."""
         manager = self._manager

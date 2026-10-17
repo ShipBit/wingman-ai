@@ -1408,6 +1408,13 @@ class SkillHud:
             added_by=self._added_by,
         )
 
+    def info_items(self) -> list[dict]:
+        """What the shared info panel shows right now, oldest first, also what
+        other Wingmen and skills put there: `title`, `text` and `added_by`."""
+        if not self.available:
+            return []
+        return _panels(self._service().info_items())
+
     def group(self, name: str, element: str = "persistent", **props) -> "SkillHudGroup":
         """A group of this skill's own, e.g. a status icon in a corner.
 
@@ -1434,6 +1441,13 @@ class SkillHud:
         for handle in self._groups.values():
             self._service().delete_group(handle.name, handle.element)
         self._groups.clear()
+
+
+def _panels(items: list[dict]) -> list[dict]:
+    return [
+        {"title": i.get("title", ""), "text": i.get("description", ""), "added_by": i.get("added_by")}
+        for i in items
+    ]
 
 
 class SkillHudGroup:
@@ -1501,6 +1515,36 @@ class SkillHudGroup:
         return bool(hud and hud.show_timer(
             self.name, title, seconds, text=text, color=color, auto_close=auto_close
         ))
+
+    async def append_message(self, text: str) -> bool:
+        """Add text to the message on screen, e.g. while it streams in."""
+        hud = self._service()
+        return bool(hud and hud.append_message(self.name, text))
+
+    async def info_items(self) -> list[dict]:
+        """The group's items, oldest first: `title`, `text` and `added_by`."""
+        hud = self._service()
+        return _panels(hud.info_items(self.name)) if hud else []
+
+    async def clear(self) -> bool:
+        """Removes every item of the group."""
+        hud = self._service()
+        return bool(hud and hud.clear_info(self.name))
+
+    async def set_loader(self, show: bool, *, color: Optional[str] = None) -> bool:
+        """The small loading animation, e.g. while the skill fetches something."""
+        hud = self._service()
+        return bool(hud and hud.set_loader(self.name, self.element, show, color))
+
+    async def show(self) -> bool:
+        """Shows the group again after hide(); it kept every update meanwhile."""
+        hud = self._service()
+        return bool(hud and hud.set_group_visible(self.name, self.element, True))
+
+    async def hide(self) -> bool:
+        """Hides the group without losing what it holds."""
+        hud = self._service()
+        return bool(hud and hud.set_group_visible(self.name, self.element, False))
 
     async def delete(self) -> bool:
         from services.hud_service import HudService

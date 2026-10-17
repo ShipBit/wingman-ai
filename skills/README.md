@@ -1599,6 +1599,7 @@ not. The shared containers also follow the Wingman's own HUD switches.
 | `await .remove_info(title)` | Take a panel off the info panel. |
 | `await .show_progress(title, current, maximum=100, *, text="", color=None, auto_close=False)` | A progress bar on the info panel; the same title updates it. |
 | `await .show_timer(title, seconds, *, text="", color=None, auto_close=True)` | A countdown on the info panel. |
+| `.info_items()` | What the shared info panel shows now, oldest first: dicts with `title`, `text` and `added_by`. `[]` when the HUD is off. |
 | `.group(name, element="persistent", **props)` | A group of the skill's own, e.g. a status icon in a corner (see below). |
 
 The info panel belongs to every Wingman: only remove panels your skill put
@@ -1616,8 +1617,12 @@ Wingmen running your skill get one each. `props` are HUD server props:
 `anchor`/`priority` to stack at a screen edge, or `layout_mode="manual"` with
 `x`/`y` (and `align`) for a free spot; colours, `opacity`, `content_padding`...
 Anything you leave out comes from the user's HUD profile. The handle has
-`show_message`, `hide_message`, `add_info`, `remove_info`, `show_progress`,
-`show_timer`, `update(**props)` (windows follow right away) and `delete()`.
+`show_message`, `hide_message`, `append_message` (text added to the message
+on screen, for streaming), `add_info`, `remove_info`, `show_progress`,
+`show_timer`, `info_items()`, `clear()`, `set_loader(show)`, `hide()` and
+`show()` (a hidden group keeps every update), `update(**props)` (windows
+follow right away) and `delete()`. The shared chat and info panel have no
+`clear` or `hide`: they belong to every Wingman.
 Core deletes the group when the skill unloads, and makes it again with its
 props if the HUD server restarts. See `skills/mic_status`.
 
