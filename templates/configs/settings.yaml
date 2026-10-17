@@ -171,9 +171,6 @@ hud_profiles:
     user_name: ""
     chat_flow: false
     restore_info_items: true
-# Core reads Star Citizen's Game.log live and hands the events to skills.
-# Switch it off if you do not play Star Citizen. On, it waits for a Game.log
-# at almost no cost. game_path is the folder that holds LIVE, PTU and so on.
 # Star Citizen for every feature that needs the game. plays is the answer
 # from the setup after the first start, null until the user gave it.
 # game_path is the folder that holds LIVE, PTU and so on.
