@@ -1,8 +1,9 @@
 """
 Preview of the shared HUD containers (chat and info panel).
 
-Each container is drawn with sample content in its real style, always filling
-its whole area. In interactive mode the preview windows take the mouse: drag
+Each container is drawn with sample content in its real style and height,
+inside a frame of its whole area: at the frame's top, middle or bottom, as the
+container's alignment puts a short message. In interactive mode the preview windows take the mouse: drag
 the middle to move a container, an edge or corner to resize it. Every change
 is reported through the overlay's event callback as a `preview_changed` event.
 
@@ -99,12 +100,13 @@ class PreviewMixin:
         preview = {
             **props,
             "layout_mode": "manual",
+            # The window covers the whole area from its top; the content sits
+            # in it where the alignment puts it (_decorate_preview)
             "align": "top",
             "typewriter_effect": False,
         }
-        # Always as tall as the area; a style-only update keeps the height it has
-        if "max_height" in props:
-            preview["height"] = int(props["max_height"])
+        if "align" in props:
+            preview["preview_align"] = props["align"]
         return preview
 
     def _ensure_preview_window(self, container: str, window_type: str, props: dict) -> None:
@@ -251,15 +253,22 @@ class PreviewMixin:
         # The area is the window's body; its shadow's room lies around it
         left, top = SHADOW.left, SHADOW.top
         w = canvas.width - SHADOW.left - SHADOW.right
-        h = win.get("body_height") or canvas.height - SHADOW.top - SHADOW.bottom
+        body = win.get("body_height") or canvas.height - SHADOW.top - SHADOW.bottom
+        h = max(body, int(props.get("max_height", body)))
+
+        # The content at its own height, where the alignment puts it in the area
+        align = props.get("preview_align", "top")
+        offset = {"center": (h - body) // 2, "bottom": h - body}.get(align, 0)
+        framed = Image.new("RGBA", (canvas.width, SHADOW.top + h + SHADOW.bottom), (0, 0, 0, 0))
+        framed.paste(canvas, (0, offset))
 
         # Bake the profile's opacity into the pixels (the window itself stays opaque)
         opacity = max(0.0, min(1.0, float(props.get("opacity", 0.85))))
-        r, g, b, a = canvas.split()
+        r, g, b, a = framed.split()
         a = a.point(lambda v: int(v * opacity))
         content = Image.merge("RGBA", (r, g, b, a))
 
-        base = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        base = Image.new("RGBA", framed.size, (0, 0, 0, 0))
         base.paste((0, 0, 0, BASE_ALPHA), (left, top, left + w, top + h))
         decorated = Image.alpha_composite(base, content)
 
@@ -283,7 +292,11 @@ class PreviewMixin:
             draw.rounded_rectangle([lx - 6, ly - 3, lx + tw + 6, ly + th + 5], radius=6, fill=accent + (220,))
             draw.text((lx, ly), label, fill=(20, 22, 28, 255), font=font)
 
-        canvas.paste(decorated, (0, 0))
+        # The window grows to the whole area
+        win["canvas"] = decorated
+        position = self._layout_manager.get_position(f"preview_{container}")
+        if position is not None:
+            self._place(win, *position)
 
     @staticmethod
     def _dashed_rect(draw, left, top, w, h, color, solid=False, dash=10, gap=6, width=2):
