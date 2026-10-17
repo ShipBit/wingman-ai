@@ -2,8 +2,8 @@
 
 The overlay renders on every OS; only a backend touches the OS's windows.
 `create_backend()` loads the backend for the OS Core runs on, and
-`hud_supported()` tells whether that OS has one. Windows and macOS have
-one; Linux is registered but not written yet (see linux.py).
+`hud_supported()` tells whether that OS has one: Windows, macOS, and Linux
+with an X display (linux.py says why when there is none).
 
 Adding an OS: implement HudBackend (base.py) in its module and set
 `supported = True`. Nothing else in the HUD changes.

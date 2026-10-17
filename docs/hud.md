@@ -2,7 +2,8 @@
 
 Wingman AI draws a transparent overlay on top of your game: the conversation
 with your Wingmen, and an info panel they and their skills pin things to. It
-runs on Windows and macOS; Linux is not supported yet. It is on from the start;
+runs on Windows, macOS and Linux (X11, or XWayland in a Wayland session). It is on
+from the start;
 switch it off under **Settings → HUD Overlay**.
 
 ## Two containers for all Wingmen
@@ -106,8 +107,15 @@ back when you switch it off.
 
 With Windows display scaling the areas count in scaled pixels: a 3840×2160
 monitor at 125 % is 3072×1728 for the HUD. On macOS they count in points, as
-macOS lays out windows: a 5K display at default scaling is 2560×1440. Dragging
-always matches what you see.
+macOS lays out windows: a 5K display at default scaling is 2560×1440. On Linux
+they count in screen pixels; desktop scaling does not apply to the HUD, so on a
+scaled display it looks smaller. Dragging always matches what you see.
+
+On Linux the HUD needs an X display, which a Wayland session provides through
+XWayland, and a compositor for its transparent windows (every desktop has one).
+Games under Proton and most native games run on XWayland too, so the HUD sits
+above them. A native Wayland game in fullscreen can cover it, and the Steam
+Deck's game mode does not show it.
 
 ## Skills on the HUD
 

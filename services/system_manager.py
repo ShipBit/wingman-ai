@@ -148,6 +148,9 @@ class SystemManager:
 
     # GET /system-info
     def get_system_info(self):
+        # Here, not at the top: hud_server imports services that import this module
+        from hud_server.platform import hud_supported
+
         return SystemInfo(
             os=platform.system(),
             core=SystemCore(
@@ -155,5 +158,6 @@ class SystemManager:
                 cuda_available=self.is_cuda_available(),
                 gpu_name=self.get_gpu_name(),
                 is_dev=not getattr(sys, "frozen", False),
+                hud_supported=hud_supported(),
             ),
         )

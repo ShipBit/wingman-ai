@@ -1297,7 +1297,7 @@ class SkillHud:
     profile's look for everything it does not set itself.
 
     The HUD runs only when the user switched it on, on an OS the HUD supports
-    (Windows and macOS). Every call checks that: when the HUD is off, nothing
+    (Windows, macOS, Linux with X11). Every call checks that: when the HUD is off, nothing
     happens and the call returns False. The shared containers also respect this Wingman's own
     switches (`chat_enabled`, `info_enabled`).
     """

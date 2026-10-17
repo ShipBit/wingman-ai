@@ -11,7 +11,7 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **Persistent Items**: Progress bars, timers, and status indicators
 - **Chat Windows**: Multi-user chat overlays with auto-hide and message history
 - **State Management**: Persist and restore HUD state across sessions
-- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows and macOS, see [Platforms](#platforms))
+- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows, macOS and Linux, see [Platforms](#platforms))
 
 ## Architecture
 
@@ -108,7 +108,8 @@ for the preview, lists the monitors and finds the font files.
 | `win32.py` | The ctypes bindings `windows.py` uses. |
 | `macos.py` | The macOS backend. AppKit works on the main thread only, and Core's serves the API, so the windows live in a small process of their own, `macos_host.py`: borderless panels above full-screen apps, fed over a pipe. Monitors and the cursor come from Quartz. The HUD draws in points. |
 | `macos_host.py` | That process: an AppKit event loop, one panel per HUD window, the mouse sent back for the preview. A build starts it as `WingmanAiCore --hud-host` (main.py). |
-| `linux.py` | Registered, not written yet: it reports the HUD as unsupported and says why. |
+| `linux.py` | The Linux backend: override-redirect X11 windows on a 32-bit ARGB visual, click-through by an empty input shape (XShape), monitors from XRandR, fonts from fontconfig. Wayland sessions run it through XWayland. Needs DISPLAY and a compositor; without either it says why and the HUD stays off. |
+| `x11.py` | The ctypes bindings `linux.py` uses (libX11, libXext, libXrandr). |
 
 Core starts the HUD server only where `hud_supported()` is true. Elsewhere it
 logs the reason, and skills see `self.wingman.hud.available == False`.
@@ -682,7 +683,7 @@ server.start(port=7863)
 ### Overlay not showing
 
 1. Check PIL is installed: `pip install Pillow`
-2. Windows and macOS have a platform backend; on Linux the log says `[HUD] The HUD does not run on Linux yet.`
+2. On Linux the HUD needs an X display (X11 or XWayland) and a compositor; without one the log says why.
 3. Check logs for overlay errors
 
 ### Connection failures
