@@ -52,7 +52,7 @@ from urllib.parse import quote
 from api.enums import LogType
 from hud_server.constants import PATH_GROUPS, PATH_HEALTH, PATH_MESSAGE, \
     PATH_MESSAGE_APPEND, PATH_MESSAGE_HIDE, PATH_LOADER, PATH_ITEMS, PATH_PROGRESS, PATH_TIMER, PATH_CHAT_WINDOW, \
-    PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE, PATH_DEFAULTS, \
+    PATH_CHAT_MESSAGE, PATH_CHAT_MESSAGES, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE, PATH_DEFAULTS, \
     PATH_PREVIEW
 from services.printr import Printr
 from hud_server import constants as hud_const
@@ -91,8 +91,15 @@ class HudHttpClient:
     DEFAULT_CONNECT_TIMEOUT = hud_const.HTTP_CONNECT_TIMEOUT
     MAX_TIMEOUT_RETRIES = 3
 
-    def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
+    def __init__(
+        self,
+        base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}",
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+    ):
         self.base_url = base_url.rstrip("/")
+        # None: the network. httpx.ASGITransport(app=server.app) talks to a
+        # server in this process without a port (the headless demos do)
+        self._transport = transport
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
         # The groups the server had when this client connected, from its
@@ -125,6 +132,7 @@ class HudHttpClient:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=timeout,
+                transport=self._transport,
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     "Accept": "application/json; charset=utf-8"
@@ -901,7 +909,7 @@ class HudHttpClient:
     async def clear_chat_window(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Clear all messages from a chat window."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("DELETE", f"{PATH_CHAT_MESSAGE}/{encoded_group}/{_resolve_enum(element)}")
+        return await self._request("DELETE", f"{PATH_CHAT_MESSAGES}/{encoded_group}/{_resolve_enum(element)}")
 
     async def show_chat_window(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Show a hidden chat window."""

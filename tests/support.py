@@ -241,6 +241,16 @@ def run_frames(overlay, count=10):
         overlay._update_all_windows()
 
 
+def bottom_edge(backend, overlay, window: str) -> tuple:
+    """The pixel in the middle of a HUD window's bottom edge, where the
+    loader glows. `window` is the overlay's name for it, as "message_atc"."""
+    from hud_server.rendering.glass import SHADOW
+
+    image = backend.window(f"HUD_{window}").image
+    width = image.width - SHADOW.left - SHADOW.right
+    return image.getpixel((SHADOW.left + width // 2, SHADOW.top + overlay._windows[window]["body_height"] - 1))
+
+
 def overlay_errors(overlay) -> list:
     """The errors the overlay reported so far (heartbeats left out)."""
     reports = []

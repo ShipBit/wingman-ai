@@ -22,15 +22,9 @@ SYNC_OPERATION_TIMEOUT = 10.0
 # Cache Limits
 MAX_IMAGE_CACHE_SIZE = 20
 MAX_BASE64_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB decoded
-MAX_PROGRESS_TRACK_CACHE_SIZE = 20
-MAX_PROGRESS_GRADIENT_CACHE_SIZE = 20
-MAX_LOADING_BAR_CACHE_SIZE = 10
 MAX_INLINE_TOKEN_CACHE_SIZE = 100
 MAX_TEXT_WRAP_CACHE_SIZE = 200
 MAX_TEXT_SIZE_CACHE_SIZE = 2000
-
-# Content-layer border/outline as an RGB tuple (alpha applied at draw time).
-DEFAULT_BORDER_COLOR = (55, 62, 74)
 
 # Thread Names
 THREAD_NAME_SERVER = "HUDServerThread"
@@ -49,6 +43,7 @@ PATH_PROGRESS = "/progress"
 PATH_TIMER = "/timer"
 PATH_CHAT_WINDOW = "/chat/window"
 PATH_CHAT_MESSAGE = "/chat/message"
+PATH_CHAT_MESSAGES = "/chat/messages"
 PATH_CHAT_SHOW = "/chat/show"
 PATH_CHAT_HIDE = "/chat/hide"
 PATH_ELEMENT_SHOW = "/element/show"

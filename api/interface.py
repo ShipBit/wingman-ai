@@ -1503,7 +1503,8 @@ class HudProfilesState(BaseModel):
 
     profiles: list[HudProfile]
     active_profile_id: Optional[str]
-    """The profile the loaded config uses."""
+    """The profile the config whose Wingmen are loaded uses. None until a
+    config's Wingmen load (on start, before the client signs in)."""
     preview_profile_id: Optional[str]
     """The profile shown as preview panels, None when no preview runs."""
     hud_available: bool

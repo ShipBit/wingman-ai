@@ -10,6 +10,7 @@ from PIL import Image
 import hud_server.rendering.markdown as markdown
 from hud_server.constants import GROUP_CHAT
 from hud_server.hud_manager import HudManager
+from hud_server.rendering.glass import SHADOW
 from hud_server.rendering.layers import MAX_PIECE_HEIGHT, render_piece
 from hud_server.rendering.markdown import MarkdownRenderer
 from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
@@ -70,8 +71,8 @@ def test_a_message_longer_than_its_window_shows_its_end():
     run_frames(overlay)
 
     image = backend.window("HUD_message_atc").image
-    assert image.height == 400
-    assert light_pixels(image, (0, 200, 400, 400)) > 100
+    assert image.height == SHADOW.top + 400 + SHADOW.bottom
+    assert light_pixels(image, (SHADOW.left, SHADOW.top + 200, SHADOW.left + 400, SHADOW.top + 400)) > 100
     assert overlay_errors(overlay) == []
 
 

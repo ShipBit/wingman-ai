@@ -48,8 +48,10 @@ Where the containers are and how they look is a **HUD profile**, under
   (the default), at the **top**, growing down, or at the **bottom**, growing
   up,
 - the look: font, size, colours, background and overall transparency, corner
-  radius, padding, typewriter effect. The loader takes the accent colour;
+  radius, padding, typewriter effect. While a Wingman works, the bottom edge
+  of its window glows softly in the accent colour;
   tables a shade of the background, as see-through as the background,
+
 - how long chat messages stay, whether the chat shows tool names, and the
   name the chat calls you. Left empty, it is the name you are signed in to
   Wingman AI with, or "User" when you are not signed in,

@@ -204,6 +204,25 @@ def _star_citizen(game_path: str):
     return facade.SkillStarCitizen(SimpleNamespace(settings=settings))
 
 
+def test_a_tool_shows_the_logo_of_a_skill_loaded_from_its_file(tmp_path):
+    # As custom skills (and every skill in the release) are loaded: from the
+    # file, without being registered as a module
+    import importlib.util
+
+    from PIL import Image
+
+    folder = tmp_path / "uexcorp_beta"
+    folder.mkdir()
+    (folder / "main.py").write_text("class UEXCorpBeta:\n    def lookup(self):\n        return 1\n")
+    Image.new("RGB", (8, 8)).save(folder / "logo.png")
+    spec = importlib.util.spec_from_file_location("UEXCorpBeta", folder / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    wingman = SimpleNamespace(tool_skills={"uex_lookup": module.UEXCorpBeta()})
+
+    assert facade.SkillTools(wingman).icon("uex_lookup") == str(folder / "logo.png")
+
+
 def test_star_citizen_gives_skills_the_environment_folder(tmp_path):
     (tmp_path / "LIVE").mkdir()
     star_citizen = _star_citizen(str(tmp_path))

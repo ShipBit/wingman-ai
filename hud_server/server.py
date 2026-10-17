@@ -77,7 +77,10 @@ class HudServer:
     STARTUP_TIMEOUT_SECONDS = hud_const.SERVER_STARTUP_TIMEOUT
     STARTUP_CHECK_INTERVAL = hud_const.SERVER_STARTUP_CHECK_INTERVAL
 
-    def __init__(self):
+    def __init__(self, backend=None):
+        # The OS's windows; None picks the backend for this OS. The headless
+        # demos pass one that draws nothing on screen
+        self._backend = backend
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._server: Optional[Server] = None
@@ -511,7 +514,7 @@ class HudServer:
                 raise HTTPException(status_code=404, detail=f"Message '{request.message_id}' not found in window '{request.group_name}'")
             return OperationResponse(status="ok")
 
-        @app.delete("/chat/messages/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        @app.delete(hud_const.PATH_CHAT_MESSAGES + "/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
         async def clear_chat_messages(group_name: str, element: str):
             """Clear all messages from a chat window."""
             try:
@@ -615,7 +618,7 @@ class HudServer:
             )
             return
 
-        backend = create_backend()
+        backend = self._backend or create_backend()
         if not backend.supported:
             printr.print(
                 hud_const.LOG_OVERLAY_UNSUPPORTED.format(backend.unsupported_reason),
@@ -727,9 +730,10 @@ class HudServer:
             )
 
     def add_event_listener(self, listener) -> None:
-        """Call `listener(event)` for overlay events such as `preview_changed`.
+        """Call `listener(event)` for overlay events such as `preview_changed`,
+        and `overlay_error` (`context`, `error`) when the overlay hits one.
 
-        Runs on the overlay thread: hand the work to your own loop quickly.
+        Runs on an overlay thread: hand the work to your own loop quickly.
         """
         if listener not in self._event_listeners:
             self._event_listeners.append(listener)
@@ -743,6 +747,9 @@ class HudServer:
             self.manager.preview_moved(
                 event["container"], event["x1"], event["y1"], event["x2"], event["y2"]
             )
+        self._notify(event)
+
+    def _notify(self, event: dict[str, Any]) -> None:
         for listener in list(self._event_listeners):
             try:
                 listener(event)
@@ -773,6 +780,7 @@ class HudServer:
                 color=LogType.ERROR,
                 server_only=True,
             )
+            self._notify({"type": "overlay_error", "context": report.get("context"), "error": report.get("error")})
 
     def _send_to_overlay(self, command: dict[str, Any]):
         """Send a command to the overlay renderer."""

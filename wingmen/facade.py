@@ -569,6 +569,22 @@ class SkillMemory:
         return await self._la.forget_memory_by_id(entry_id)
 
 
+def _defined_in(cls: type) -> Optional[str]:
+    """The file a class was written in. A custom skill (and every skill in the
+    release) is loaded from its file without being registered as a module,
+    so inspect.getfile cannot find it: its own functions still know."""
+    import sys
+
+    module = sys.modules.get(cls.__module__)
+    if getattr(module, "__file__", None):
+        return module.__file__
+    for value in vars(cls).values():
+        code = getattr(getattr(value, "__func__", value), "__code__", None)
+        if code is not None:
+            return code.co_filename
+    return None
+
+
 class SkillTools:
     """Discover and invoke the wingman's callable functions (skill @tools, MCP tools,
     commands) by name. Scoped to enumerable tools — not arbitrary attribute access."""
@@ -630,12 +646,13 @@ class SkillTools:
         skill = (self._wingman.tool_skills or {}).get(name)
         if skill is None:
             return None
-        import inspect
         import os
 
         try:
-            skill_dir = os.path.dirname(inspect.getfile(skill.__class__))
-            logo_path = os.path.join(skill_dir, "logo.png")
+            skill_file = _defined_in(type(skill))
+            if not skill_file:
+                return None
+            logo_path = os.path.join(os.path.dirname(skill_file), "logo.png")
             return logo_path if os.path.exists(logo_path) else None
         except Exception:
             return None

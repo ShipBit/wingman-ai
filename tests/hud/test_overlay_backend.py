@@ -3,6 +3,7 @@
 import time
 
 from hud_server.platform import OsFamily, Pointer, create_backend
+from hud_server.rendering.glass import SHADOW
 from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
 
 
@@ -18,7 +19,7 @@ def test_a_message_is_drawn_into_a_backend_window():
 
     window = backend.window("HUD_message_atc")
     assert window.shown
-    assert window.image is not None and window.image.size[0] == 360
+    assert window.image is not None and window.image.size[0] == SHADOW.left + 360 + SHADOW.right
     assert window.opacity > 0
     assert overlay_errors(overlay) == []
 
@@ -137,7 +138,8 @@ def test_with_the_chat_flow_the_preview_shows_a_conversation():
         run_frames(overlay, 3)
         image = backend.window("HUD_preview_chat").image
         # The user's bubble: the accent's tint on the right half, inside the frame
-        return sum(1 for p in image.crop((200, 10, 388, 150)).getdata()
+        box = (SHADOW.left + 200, SHADOW.top + 10, SHADOW.left + 388, SHADOW.top + 150)
+        return sum(1 for p in image.crop(box).getdata()
                    if p[1] > 60 and p[0] < 40 and p[2] < 40)
 
     assert preview(False) < 50

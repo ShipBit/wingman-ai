@@ -10,7 +10,6 @@ This implementation uses ONLY:
 import os
 import time
 import queue
-import math
 import re
 from typing import Tuple, Dict, Optional
 import traceback
@@ -28,18 +27,14 @@ except ImportError:
     ImageChops = None
     ImageOps = None
 
+from services.markdown import display_text
+from hud_server.rendering import glass
 from hud_server.rendering.markdown import MarkdownRenderer
 from hud_server.rendering.layers import Piece, PieceCache, compose, lay_out, render_piece
 
 from hud_server.platform import HudBackend, create_backend
 from hud_server.layout import LayoutManager, Anchor, LayoutMode, Align
 from hud_server.overlay.preview import PreviewMixin
-from hud_server.constants import (
-    MAX_PROGRESS_TRACK_CACHE_SIZE,
-    MAX_PROGRESS_GRADIENT_CACHE_SIZE,
-    MAX_LOADING_BAR_CACHE_SIZE,
-    DEFAULT_BORDER_COLOR,
-)
 
 
 def round_avatar(image: "Image.Image", size: int) -> "Image.Image":
@@ -181,30 +176,8 @@ class HeadsUpOverlay(PreviewMixin):
         # Font cache: stores font sets by (family, size) to avoid reloading
         # Key: (family, size) -> {font_dict with font objects}
         self._font_cache: Dict[tuple, Dict] = {}
-
-        # =====================================================================
-        # RENDER CACHING SYSTEM
-        # =====================================================================
-        # Cache for pre-rendered components to reduce CPU load
-        # Each cache entry contains: {'image': PIL.Image, 'params': tuple}
-        #
-        # Progress bar track cache: stores empty progress bar backgrounds
-        # Key: (width, height, bg_color) -> cached track image
-        self._progress_track_cache: Dict[tuple, Image.Image] = {}
-        # Max cache entries for progress tracks
-        self._max_progress_track_cache = MAX_PROGRESS_TRACK_CACHE_SIZE
-
-        # Progress bar fill gradient cache: stores gradient overlays
-        # Key: (width, height, fill_color) -> cached gradient overlay
-        self._progress_gradient_cache: Dict[tuple, Image.Image] = {}
-        # Max cache entries for gradients
-        self._max_progress_gradient_cache = MAX_PROGRESS_GRADIENT_CACHE_SIZE
-
-        # Loading bar element cache: stores pre-rendered loading bar elements
-        # Key: (bar_width, max_height, color) -> cached bar surface
-        self._loading_bar_cache: Dict[tuple, Image.Image] = {}
-        # Max cache entries for loading bars
-        self._max_loading_bar_cache = MAX_LOADING_BAR_CACHE_SIZE
+        # The window's smaller font: names above bubbles, tool chips
+        self.small_fonts = {}
 
         # =====================================================================
         # LAYOUT MANAGER
@@ -513,41 +486,36 @@ class HeadsUpOverlay(PreviewMixin):
         positions = self._layout_manager.compute_positions(force=True)
 
         for name, win in self._windows.items():
-            handle = win.get("handle")
-            if handle is None:
+            if win.get("handle") is None or win.get("hidden", False):
                 continue
-
-            # Skip windows that are manually hidden
-            if win.get("hidden", False):
-                continue
-
             # Skip windows that are completely hidden (fade_state 0 AND opacity 0)
-            fade_state = win.get("fade_state", 0)
-            opacity = win.get("opacity", 0)
-            if fade_state == 0 and opacity == 0:
+            if win.get("fade_state", 0) == 0 and win.get("opacity", 0) == 0:
                 continue
-
-            canvas = win.get("canvas")
-            if not canvas:
-                continue
-
-            # Get position from layout - windows should be repositioned even when fading out
-            # so that layout updates are immediate when other windows change size
+            # Repositioned even while fading out, so the layout follows other windows at once
             pos = positions.get(name)
-            if pos:
-                x, y = pos
-                w, h = canvas.size
+            if pos and self._place(win, *pos):
+                win["canvas_dirty"] = True  # Force reblit after move
 
-                # Check if position actually changed
-                old_x = win.get("_last_x", -1)
-                old_y = win.get("_last_y", -1)
+    SLIDE = 8
+    """How far a window rises into place while it fades in."""
 
-                if x != old_x or y != old_y:
-                    # Position changed - move window and mark for reblit
-                    self._backend.move_window(handle, x, y, w, h)
-                    win["_last_x"] = x
-                    win["_last_y"] = y
-                    win["canvas_dirty"] = True  # Force reblit after move
+    def _place(self, win: Dict, x: int, y: int) -> bool:
+        """Put the window's body at (x, y): its picture starts the shadow's
+        room further up and left, and it rises into place while it fades in.
+        Returns whether the OS window moved."""
+        canvas, handle = win.get("canvas"), win.get("handle")
+        if canvas is None or handle is None:
+            return False
+        lift = 0
+        target = win.get("target_opacity", 0)
+        if win.get("fade_state") == 1 and target > 0:
+            lift = round(self.SLIDE * (1 - min(1.0, win.get("opacity", 0) / target)) ** 2)
+        rect = (x - glass.SHADOW.left, y - glass.SHADOW.top + lift, canvas.width, canvas.height)
+        if rect == win.get("_rect"):
+            return False
+        self._backend.move_window(handle, *rect)
+        win["_rect"] = rect
+        return True
 
     def _update_message_window(self, name: str, win: Dict):
         """Update message window state (typewriter, fade, etc.)."""
@@ -749,7 +717,8 @@ class HeadsUpOverlay(PreviewMixin):
     # DRAWING: every window is a stack of cached pieces (rendering/layers.py)
     # =========================================================================
 
-    LOADER_SPACE = 30
+    LOADER_FPS = 30
+    """A frame in which only the loader moves comes this often, not at the HUD's frame rate."""
 
     def _window_renderer(self, props: Dict, text_color, accent, bg_rgba) -> MarkdownRenderer:
         """The window's fonts and markdown renderer. One renderer per font, kept,
@@ -765,8 +734,46 @@ class HeadsUpOverlay(PreviewMixin):
             self._md_renderers[key] = renderer
         renderer.set_colors(text_color, accent, tuple(bg_rgba[:3]), bg_rgba[3])
         self.fonts = fonts
+        self.small_fonts = self._load_fonts_for_size_and_family(max(9, round(font_size * 0.8)), font_family)
         self.md_renderer = renderer
         return renderer
+
+    def _muted(self, color) -> Tuple[int, int, int]:
+        """A colour pulled towards the panel: for names and labels next to the text."""
+        return glass.mix(color, self.md_renderer.colors["bg"], 0.35)
+
+    GLOW_FADE = 0.4
+    """Seconds the loader's glow takes to come and to go."""
+
+    def _glow_level(self, win: Dict, loading: bool) -> float:
+        """How far the loader's glow has come in (1) or gone (0): it eases
+        in when the loader starts and out when it stops, frame by frame."""
+        level = win.get("glow_level", 0.0)
+        step = max(0.0, self.dt) / self.GLOW_FADE
+        level = min(1.0, level + step) if loading else max(0.0, level - step)
+        win["glow_level"] = level
+        return level
+
+    @staticmethod
+    def _glow_under(width: int, height: int, radius: int, color, strength: float) -> Image.Image:
+        """The light rising into the window from its bottom edge, at `strength`."""
+        image = glass.bleed(width, min(glass.GLOW_HEIGHT, height), radius, tuple(color[:3]))
+        if strength < 1:
+            image = image.copy()
+            image.putalpha(glass.scaled(image.getchannel("A"), round(255 * strength)))
+        return image
+
+    @staticmethod
+    def _draw_glow_line(canvas: Image.Image, width: int, height: int, radius: int, color,
+                        strength: float, spread: float):
+        """The glowing line on the window's bottom edge, `spread` of its length,
+        from the middle; its halo reaches into the shadow's room below."""
+        length = max(2, width - 2 * radius)
+        shown = max(2, round(length * spread))
+        line = glass.edge_line(length, tuple(color[:3])).resize((shown, 1 + 2 * glass.LINE_PAD), Image.Resampling.BILINEAR)
+        line.putalpha(glass.scaled(line.getchannel("A"), round(255 * strength)))
+        x = glass.SHADOW.left + radius + (length - shown) // 2
+        glass.put(canvas, line, (x, glass.SHADOW.top + height - 1 - glass.LINE_PAD))
 
     def _style_key(self, props: Dict) -> tuple:
         """Everything of a window's look that a piece's pixels depend on."""
@@ -791,6 +798,8 @@ class HeadsUpOverlay(PreviewMixin):
         win.pop("pieces", None)
         win.pop("static_canvas", None)
         win.pop("static_signature", None)
+        win.pop("glow_level", None)
+        win.pop("glow_shown", None)
 
     def _draw_stack(
         self,
@@ -802,12 +811,13 @@ class HeadsUpOverlay(PreviewMixin):
         loading: bool = False,
         loader_color: Tuple = (0, 170, 255),
     ):
-        """Lay out the pieces in view, put the window together when that
-        changed, and draw the loader, the one thing that moves every frame."""
+        """Lay out the pieces in view and put the window together when that
+        changed. The loader is a glow on the window's bottom edge, breathing:
+        while it shows, the window is put together again for every breath."""
         bg_rgba = self._parse_hex_color_with_alpha(props.get("bg_color", "#1e212b"))
         width = max(1, int(props.get("width", 400)))
         padding = int(props.get("content_padding", 16))
-        radius = int(props.get("border_radius", 12))
+        radius = max(0, int(props.get("border_radius", 12)))
         fade_height = int(props.get("scroll_fade_height", 40))
         fixed_height = props.get("height")
         if fixed_height is not None:
@@ -823,47 +833,52 @@ class HeadsUpOverlay(PreviewMixin):
             max(1, int(props.get("max_height", 600))),
             top=padding,
             bottom=padding - 4,
-            tail=self.LOADER_SPACE if loading else 0,
             min_height=60,
             fixed_height=fixed_height,
         )
         cache.end_frame()
 
         signature = (layout.signature, width, tuple(bg_rgba), radius, fade_height)
-        changed = win.get("static_signature") != signature or win.get("static_canvas") is None
-        if changed:
-            win["static_canvas"] = compose(
-                layout, width, tuple(bg_rgba), (*DEFAULT_BORDER_COLOR, bg_rgba[3]),
-                radius, fade_height,
+        presented = win.get("canvas") is not None and win.get("last_render_state") == signature
+        level = self._glow_level(win, loading)
+        if level > 0:
+            # Breathing: at LOADER_FPS, but every frame while it fades in or out.
+            # Slack: at 60 Hz, two frames are 1/30 s apart give or take a rounding
+            if presented and level >= 1 and time.time() - win.get("loader_drawn", 0) < 1 / self.LOADER_FPS - 0.004:
+                return
+            now = time.time()
+            win["loader_drawn"] = now
+            brightness, spread = glass.breath(now)
+            fit = max(0, min(radius, layout.height // 2, width // 2))
+            canvas = compose(
+                layout, width, tuple(bg_rgba), radius, fade_height,
+                under=self._glow_under(width, layout.height, fit, loader_color, brightness * level),
             )
-            win["static_signature"] = signature
-        elif not loading and win.get("canvas") is not None and win.get("last_render_state") == signature:
-            return
-
-        # A copy: whoever gets the picture may draw on it (the preview does)
-        canvas = win["static_canvas"].copy()
-        if loading:
-            self._draw_loading(
-                ImageDraw.Draw(canvas), canvas, padding, layout.tail_y + 6,
-                width - padding * 2, loader_color,
-            )
+            self._draw_glow_line(canvas, width, layout.height, fit, loader_color, brightness * level, spread)
+            win["glow_shown"] = True
+        else:
+            if win.get("static_signature") != signature or win.get("static_canvas") is None:
+                win["static_canvas"] = compose(layout, width, tuple(bg_rgba), radius, fade_height)
+                win["static_signature"] = signature
+            elif presented and not win.get("glow_shown"):
+                return
+            win["glow_shown"] = False
+            # A copy: whoever gets the picture may draw on it (the preview does)
+            canvas = win["static_canvas"].copy()
         win["last_render_state"] = signature
-        self._present(name, win, canvas)
+        self._present(name, win, canvas, layout.height)
 
-    def _present(self, name: str, win: Dict, canvas: Image.Image):
+    def _present(self, name: str, win: Dict, canvas: Image.Image, body_height: int):
         """Hand the new picture to the window and fit the window to it."""
         win["canvas"] = canvas
+        win["body_height"] = body_height
         win["canvas_dirty"] = True
-        self._layout_manager.update_window_height(name, canvas.height)
+        self._layout_manager.update_window_height(name, body_height)
         pos = self._layout_manager.get_position(name)
-        handle = win.get("handle")
-        if handle is not None:
+        if pos is None:
             props = win.get("props", {})
-            if pos:
-                x, y = pos
-            else:
-                x, y = int(props.get("x", 20)), int(props.get("y", 20))
-            self._backend.move_window(handle, x, y, canvas.width, canvas.height)
+            pos = (int(props.get("x", 20)), int(props.get("y", 20)))
+        self._place(win, *pos)
 
     def _markdown_pieces(
         self, text: str, blocks: list, x: int, width: int, max_chars, style: tuple, alpha: float = 1.0
@@ -892,8 +907,8 @@ class HeadsUpOverlay(PreviewMixin):
         return pieces
 
     def _avatar(self, icon: Optional[str], name: str, size: int, color: Tuple, initial: bool):
-        """The picture as a circle. Without one, a circle with the name's
-        initial when `initial`, else None."""
+        """The picture as a circle. Without one, a disc in a dark shade of
+        `color` with the name's initial when `initial`, else None."""
         if icon and os.path.isfile(icon):
             key = (icon, size)
             avatar = self.image_cache.get(key)
@@ -909,34 +924,43 @@ class HeadsUpOverlay(PreviewMixin):
         if not initial:
             return None
         letter = next((c for c in name if c.isalnum()), "?").upper()
-        key = ("initial", letter, size, tuple(color))
+        colors = self.md_renderer.colors
+        text_color, bg = tuple(colors["text"][:3]), tuple(colors["bg"][:3])
+        key = ("initial", letter, size, tuple(color), text_color, bg)
         avatar = self.image_cache.get(key)
         if avatar is None:
-            avatar = round_avatar(Image.new("RGBA", (size, size), tuple(color) + (70,)), size)
+            avatar = glass.initial_disc(size, tuple(color[:3]), bg).copy()
             font = self.fonts.get("bold", self.fonts.get("normal"))
             if font:
                 try:
                     ImageDraw.Draw(avatar).text(
-                        (size / 2, size / 2), letter, fill=tuple(color) + (255,), font=font, anchor="mm"
+                        (size / 2, size / 2), letter, fill=glass.lighter(text_color, 0.2) + (255,),
+                        font=font, anchor="mm",
                     )
                 except Exception:
                     pass
             self.image_cache[key] = avatar
         return avatar
 
+    AVATAR_HALO = 4
+    """Room around a round picture for its ring and glow."""
+
     def _sender_piece(
         self, name: str, icon: Optional[str], x: int, color: Tuple, size: int,
-        style: tuple, initial: bool = False, alpha: float = 1.0,
+        style: tuple, initial: bool = False, alpha: float = 1.0, rule: bool = False,
     ) -> Piece:
-        """A sender's round picture with the name beside it, centred on it."""
-        key = ("sender", name, icon, x, tuple(color), size, initial, style)
+        """A sender's round picture, ringed in their colour, with the name
+        beside it. With `rule`, a fine line in their colour fades out below."""
+        key = ("sender", name, icon, x, tuple(color), size, initial, style, rule)
 
         def draw(d, image, _top):
+            halo = self.AVATAR_HALO
             avatar = self._avatar(icon, name, size, color, initial)
             text_x, height = x, 0
             if avatar is not None:
-                image.alpha_composite(avatar, (x, 0))
-                text_x, height = x + size + 10, size
+                image.alpha_composite(glass.avatar_halo(size, tuple(color[:3]), halo), (x - halo, 0))
+                image.alpha_composite(avatar, (x, halo))
+                text_x, height = x + size + 10, size + 2 * halo
             font = self.fonts.get("bold", self.fonts.get("normal", self.fonts.get("regular")))
             shown = self._fit_text(name, font, image.width - text_x - x) if font else ""
             if shown and font:
@@ -950,8 +974,12 @@ class HeadsUpOverlay(PreviewMixin):
                     d, shown, text_x, y, tuple(color) + (255,), font, emoji_y_offset=3
                 )
                 if avatar is None:
-                    return text_h + 12
-            return height + 4
+                    height = text_h + 8
+            if rule:
+                line = glass.hairline(image.width - 2 * x, tuple(color[:3]) + (120,), peak=0.0, fade_in=False)
+                glass.put(image, line, (x, height + 8))
+                return height + 19
+            return height + 2
 
         return Piece(key, draw, alpha=alpha)
 
@@ -982,55 +1010,72 @@ class HeadsUpOverlay(PreviewMixin):
             chip[0] = chip[0] or t.get("icon")
             chip[1] += 1
         key = ("tools", tuple((label, icon, calls) for label, (icon, calls) in chips.items()), x, right, style)
+        renderer = self.md_renderer
 
         def draw(d, image, _top):
-            y = 10
-            tx = x
-            th = 30
-            font = self.fonts.get("code", self.fonts.get("normal", self.fonts.get("regular")))
+            font = self.small_fonts.get("normal") or self.fonts.get("normal", self.fonts.get("regular"))
+            bold = self.small_fonts.get("bold") or font
+            size = int(self.fonts.get("_font_size", 16))
+            th = max(20, round(size * 1.55))
+            mark = max(5, round(th * 0.24))
+            pad = round(th * 0.4)
+            y, tx = 8, x
+            # Text laid over the chips at the end: drawn onto their see-through
+            # tint, its anti-aliased edges would mix with it and show a rim
+            labels = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            ld = ImageDraw.Draw(labels)
             for src, (icon, cnt) in chips.items():
-                has_icon = bool(icon and os.path.exists(str(icon)))
-                icon_w = 24 if has_icon else 0
-                badge_w = 26 if cnt > 1 else 0
+                chip_icon = self._chip_icon(icon, th - 10)
+                lead = chip_icon.width if chip_icon else mark
+                count = str(cnt) if cnt > 1 else ""
+                badge_w = max(th - 8, self._get_text_size(count, bold)[0] + 10) if count else 0
+                fixed = pad + lead + 6 + (6 + badge_w + 4 if count else pad)
                 # A chip never wider than the window
-                src = self._fit_text(src, font, right - x - icon_w - badge_w - 26) or "…"
-                sw, sh = self._get_text_size(src, font)
-                chip_w = sw + icon_w + badge_w + 26
+                src = self._fit_text(src, font, right - x - fixed) or "…"
+                chip_w = fixed + self._get_text_size(src, font)[0]
 
                 if tx + chip_w > right and tx > x:
                     tx = x
-                    y += th + 10
+                    y += th + 6
 
-                d.rounded_rectangle(
-                    [tx, y, tx + chip_w, y + th], radius=th // 2,
-                    fill=(42, 48, 60, 235), outline=accent,
-                )
-                ix = tx + 12
-                if has_icon:
-                    try:
-                        if icon not in self.image_cache:
-                            with Image.open(icon) as source:
-                                self.image_cache[icon] = source.convert("RGBA").resize(
-                                    (18, 18), Image.Resampling.LANCZOS
-                                )
-                        chip_icon = self.image_cache[icon]
-                        image.paste(chip_icon, (ix, y + 6), chip_icon)
-                        ix += 22
-                    except Exception:
-                        pass
-                d.text((ix, y + (th - sh) // 2), src, fill=text_color, font=font)
+                glass.paint(image, glass.rounded_mask(chip_w, th, th / 2), renderer.accent_tint(0.16), (tx, y))
+                glass.paint(image, glass.ring_mask(chip_w, th, th / 2), renderer.accent_tint(0.45), (tx, y))
+                if chip_icon:
+                    image.alpha_composite(chip_icon, (tx + pad, y + (th - chip_icon.height) // 2))
+                else:
+                    sprite = glass.disc(mark, tuple(accent[:3]))
+                    glass.put(image, sprite, (tx + pad + (mark - sprite.width) // 2, y + (th - sprite.height) // 2))
+                label_x = tx + pad + lead + 6
+                ld.text((label_x, y + th / 2), src, fill=tuple(text_color[:3]) + (255,), font=font, anchor="lm")
 
-                # Badge for multiple tool calls from the same source
-                if cnt > 1:
-                    bw, bh = self._get_text_size(str(cnt), font)
-                    bx = tx + chip_w - bw - 16
-                    d.ellipse([bx - 4, y + 5, bx + bw + 8, y + th - 5], fill=accent)
-                    d.text((bx + 2, y + 7), str(cnt), fill=bg, font=font)
+                # The number of calls, when more than one
+                if count:
+                    bx, bh = tx + chip_w - 4 - badge_w, th - 8
+                    glass.paint(image, glass.rounded_mask(badge_w, bh, bh / 2), tuple(accent[:3]) + (255,), (bx, y + 4))
+                    ink = (255, 255, 255) if glass.is_dark(accent) else (20, 22, 28)
+                    ld.text((bx + badge_w / 2, y + th / 2), count, fill=ink + (255,), font=bold, anchor="mm")
 
-                tx += chip_w + 10
-            return y + th + 10
+                tx += chip_w + 8
+            image.alpha_composite(labels)
+            return y + th + 6
 
         return Piece(key, draw, alpha=alpha)
+
+    def _chip_icon(self, icon: Optional[str], size: int) -> Optional[Image.Image]:
+        """A tool's icon at chip size, or None without a readable one."""
+        if not icon or not os.path.exists(str(icon)):
+            return None
+        key = ("chip", icon, size)
+        image = self.image_cache.get(key)
+        if image is None:
+            try:
+                with Image.open(icon) as source:
+                    image = source.convert("RGBA")
+                    image.thumbnail((size, size), Image.Resampling.LANCZOS)
+            except Exception:
+                return None
+            self.image_cache[key] = image
+        return image
 
     def _draw_message_window(self, name: str, win: Dict):
         """Draw content for a message window."""
@@ -1055,7 +1100,7 @@ class HeadsUpOverlay(PreviewMixin):
             icon = current_message.get("title_icon")
             if title or icon:
                 size = int(int(props.get("font_size", 16)) * 1.75)
-                pieces.append(self._sender_piece(title, icon, padding, accent, size, style))
+                pieces.append(self._sender_piece(title, icon, padding, accent, size, style, rule=True))
 
             message = current_message.get("message", "")
             if message:
@@ -1088,30 +1133,30 @@ class HeadsUpOverlay(PreviewMixin):
 
     @staticmethod
     def _format_remaining(seconds: float) -> str:
+        """Time left as a clock: 0:42, 12:05, 1:02:03, 2d 3:04:05."""
         r = int(seconds + 0.999)
         d, r = divmod(r, 86400)
         h, r = divmod(r, 3600)
         m, s = divmod(r, 60)
-        parts = []
-        if d > 0:
-            parts.append(f"{d}d")
-        if h > 0:
-            parts.append(f"{h}h")
-        if m > 0:
-            parts.append(f"{m}m")
-        parts.append(f"{s}s")
-        return " ".join(parts)
+        clock = f"{h}:{m:02d}:{s:02d}" if h or d else f"{m}:{s:02d}"
+        return f"{d}d {clock}" if d else clock
+
+    ITEM_SPACING = 14
+    """Space above and below the line between two info panel items."""
 
     def _info_item_piece(
         self, title: str, info: Dict, anim: Optional[Dict], now: float, props: Dict,
-        style: tuple, text_color, accent, bg,
+        style: tuple, text_color, accent, bg_rgba, separator: bool,
     ) -> Piece:
-        """One info panel item. Its key holds what is shown, not the time: a
-        running timer draws again once a second, a moving bar once a pixel."""
+        """One info panel item: an icon for its kind, the title, on the right
+        the time left or how far it got, a slim bar for progress, the details.
+        Its key holds what is shown, not the time: a running timer draws again
+        once a second, a moving bar once a pixel."""
         width = int(props.get("width", 300))
         padding = int(props.get("content_padding", 16))
         font_size = int(props.get("font_size", 16))
         renderer = self.md_renderer
+        bar_width = width - padding * 2
 
         timer_text = None
         if info.get("is_progress") and info.get("is_timer"):
@@ -1120,80 +1165,79 @@ class HeadsUpOverlay(PreviewMixin):
         elif info.get("expiry"):
             timer_text = self._format_remaining(max(0.0, info["expiry"] - now))
 
-        progress = None
+        filled = None
+        value = timer_text
         if info.get("is_progress"):
             progress_max = float(info.get("progress_maximum", 100))
             current = anim.get("current", 0) if anim else float(info.get("progress_current", 0))
             if progress_max <= 0:
                 progress_max = 100
             percentage = min(100, max(0, (current / progress_max) * 100))
-            bar_width = width - padding * 2
-            # What the bar shows: its filled pixels (2x supersampled) and the label
-            fill = int((bar_width * 2 - 4) * percentage / 100)
-            progress = (percentage, fill, f"{percentage:.0f}%")
+            filled = round(bar_width * percentage / 100)
+            if not info.get("is_timer"):
+                value = f"{percentage:.0f}%"
+        kind = "timer" if info.get("is_timer") else "progress" if info.get("is_progress") else "note"
 
         title_text = info.get("title", title)
         desc = self._strip_emotions(info.get("description", "") or "")
         progress_color = info.get("progress_color")
         images = renderer.image_version if "![" in desc else 0
         key = (
-            "info", title_text, desc, timer_text,
-            progress[1:] if progress else None, progress_color,
-            width, padding, style, images,
+            "info", title_text, desc, value, filled, progress_color,
+            width, padding, style, images, separator,
         )
 
         def draw(d, image, _top):
             y = 0
+            if separator:
+                line = glass.hairline(bar_width, glass.edge_color(bg_rgba) + (round(0.1 * max(bg_rgba[3], 160)),))
+                glass.put(image, line, (padding, 0))
+                y = self.ITEM_SPACING + 1
             font_bold = self.fonts.get("bold", self.fonts.get("normal", self.fonts.get("regular")))
             font_normal = self.fonts.get("normal", self.fonts.get("regular"))
+            color = self._hex_to_rgb(progress_color) if progress_color else tuple(accent[:3])
+            try:
+                _, line_top, _, line_bottom = font_bold.getbbox("Hg")
+            except Exception:
+                line_top, line_bottom = 0, font_size
+            icon_px = max(12, font_size)
+            # A blank title (a skill's own panel, like the mic's icon) gets
+            # no icon and no title row; a time or percentage keeps its row
+            titled = bool(title_text.strip())
+            if titled or value:
+                row_h = max(icon_px if titled else 0, line_bottom - line_top)
+                middle = y + row_h / 2
+                if titled:
+                    image.alpha_composite(glass.icon(kind, icon_px, color), (padding, round(middle - icon_px / 2)))
 
-            timer_w = 0
-            if timer_text and font_bold:
-                timer_w, _ = self._get_text_size(timer_text, font_bold)
-                d.text((width - padding - timer_w, y), timer_text, fill=text_color + (255,), font=font_bold)
-                timer_w += 10
+                right = width - padding
+                if value and font_bold:
+                    timed_note = kind == "note"
+                    value_font = font_normal if timed_note else font_bold
+                    ink = self._muted(text_color) if timed_note else color
+                    d.text((right, middle), value, fill=tuple(ink) + (255,), font=value_font, anchor="rm")
+                    right -= self._get_text_size(value, value_font)[0] + 10
 
-            if font_bold:
-                shown_title = self._fit_text(title_text, font_bold, width - padding * 2 - timer_w)
-                self._render_text_with_emoji(
-                    d, shown_title, padding, y, accent + (255,), font_bold, emoji_y_offset=3
-                )
-                try:
-                    bbox = font_bold.getbbox(shown_title or title_text)
-                    title_h = bbox[3] - bbox[1]
-                except Exception:
-                    title_h = font_size
-                y += title_h + max(10, int(title_h * 0.625))
-            else:
-                y += 22
-
-            if progress:
-                percentage, _fill, pct_text = progress
-                color = self._hex_to_rgb(progress_color) if progress_color else accent
-                bar_width = width - padding * 2
-                y += 4
-                y = self._draw_progress_bar(
-                    d, image, padding, y, bar_width, 16, percentage, bg, color, text_color
-                )
-                if font_normal:
-                    try:
-                        bbox = font_normal.getbbox(pct_text)
-                        pct_w = bbox[2] - bbox[0]
-                        pct_h = bbox[3] - bbox[1]
-                    except Exception:
-                        pct_w = len(pct_text) * 7
-                        pct_h = font_size
-                    d.text(
-                        (padding + (bar_width - pct_w) // 2, y), pct_text,
-                        fill=text_color + (200,), font=font_normal,
+                title_x = padding + icon_px + 8
+                if titled and font_bold:
+                    shown = self._fit_text(title_text, font_bold, right - title_x)
+                    self._render_text_with_emoji(
+                        d, shown, title_x, round(middle - (line_bottom - line_top) / 2) - line_top,
+                        tuple(text_color[:3]) + (255,), font_bold, emoji_y_offset=3,
                     )
-                    y += int(pct_h * 1.25) + 4
+                y += row_h
+
+            if filled is not None:
+                bar_h = max(4, round(font_size * 0.375))
+                track = glass.edge_color(bg_rgba) + (round(0.1 * max(bg_rgba[3], 160)),)
+                glass.put(image, glass.progress_bar(bar_width, bar_h, filled, color, track), (padding - 4, y + 6))
+                y += 10 + bar_h + 2
 
             if desc:
-                y = renderer.render(d, image, desc, padding, y, width - padding * 2)
-            return y
+                y = renderer.render(d, image, desc, padding, y + 8 if y else 0, bar_width)
+            return y + 2
 
-        return Piece(key, draw, gap=8)
+        return Piece(key, draw, gap=self.ITEM_SPACING)
 
     def _draw_persistent_window(self, name: str, win: Dict):
         """Draw content for a persistent window."""
@@ -1220,10 +1264,13 @@ class HeadsUpOverlay(PreviewMixin):
             self._clear_drawing(win)
             return
 
+        oldest = shown[0][0]
+
         def newest_first():
             for title, info in reversed(shown):
                 yield self._info_item_piece(
-                    title, info, anims.get(title), now, props, style, text_color, accent, bg_rgba[:3]
+                    title, info, anims.get(title), now, props, style, text_color, accent, bg_rgba,
+                    separator=title != oldest,
                 )
 
         self._draw_stack(name, win, newest_first(), props=props)
@@ -1264,7 +1311,7 @@ class HeadsUpOverlay(PreviewMixin):
         style: tuple, alpha: float = 1.0,
     ) -> Piece:
         """The user's own message: a bubble in the accent's tint on the right,
-        the name above it, like in a messenger."""
+        its tail corner at the bottom right, the name above it."""
         sender = message.get("sender", "")
         text = message.get("text", "")
         renderer = self.md_renderer
@@ -1274,23 +1321,24 @@ class HeadsUpOverlay(PreviewMixin):
         def draw(d, image, _top):
             right = x + width
             y = 0
-            font_bold = self.fonts.get("bold", self.fonts.get("normal", self.fonts.get("regular")))
-            name = self._fit_text(sender, font_bold, width) if font_bold else ""
+            # The name as a Wingman's: bold, full size, in the sender's colour
+            font = self.fonts.get("bold", self.fonts.get("normal", self.fonts.get("regular")))
+            name = self._fit_text(sender, font, width) if font else ""
             if name:
-                name_w, _ = self._get_text_size(name, font_bold)
+                name_w, _ = self._get_text_size(name, font)
                 try:
-                    _, top, _, bottom = font_bold.getbbox(name)
+                    _, top, _, bottom = font.getbbox("Hg")
                 except Exception:
                     top, bottom = 0, 20
                 self._render_text_with_emoji(
-                    d, name, right - name_w, 0, tuple(color) + (255,), font_bold, emoji_y_offset=3
+                    d, name, right - name_w - 2, -top, tuple(color) + (255,), font, emoji_y_offset=3
                 )
-                y = bottom - top + 10
+                y = bottom - top + 8
 
             # Drawn at the widest a bubble may be, then cut to what the text
             # covers: bold, emoji, links and line breaks all measure right
-            pad_x, pad_y = 12, 8
-            max_inner = max(40, int(width * 0.85) - 2 * pad_x)
+            pad_x, pad_y = 13, 8
+            max_inner = max(40, int(width * 0.8) - 2 * pad_x)
             inner = render_piece(
                 max_inner, lambda dd, im, top: renderer.render(dd, im, text, 0, -top, max_inner) + top
             )
@@ -1306,11 +1354,12 @@ class HeadsUpOverlay(PreviewMixin):
             bubble_w = inner.width + 2 * pad_x
             bubble_h = inner.height + 2 * pad_y
             bx = right - bubble_w
-            d.rounded_rectangle(
-                [bx, y, right - 1, y + bubble_h], radius=max(4, min(radius, 14)),
-                fill=renderer.accent_tint(0.4),
-                outline=renderer.accent_tint(0.7),
-            )
+            r = max(6, min(radius + 4, 16))
+            corners = (r, r, min(4, r), r)
+            fill = glass.vertical_gradient(bubble_w, bubble_h, renderer.accent_tint(0.34), renderer.accent_tint(0.2))
+            fill.putalpha(ImageChops.multiply(fill.getchannel("A"), glass.rounded_mask(bubble_w, bubble_h, r, corners)))
+            image.alpha_composite(fill, (bx, y))
+            glass.paint(image, glass.ring_mask(bubble_w, bubble_h, r, 1, corners), renderer.accent_tint(0.5), (bx, y))
             image.alpha_composite(inner, (bx + pad_x, y + pad_y))
             return y + bubble_h + 1
 
@@ -1392,7 +1441,7 @@ class HeadsUpOverlay(PreviewMixin):
         self._window_renderer(props, text_color, accent, bg_rgba)
         style = self._style_key(props)
         colors = (text_color, accent, bg_rgba[:3])
-        spacing = int(props.get("message_spacing", 8))
+        spacing = int(props.get("message_spacing", 14))
         fade_old = props.get("fade_old_messages", True)
         sender_colors = props.get("sender_colors", {})
         typing = win.get("typing")
@@ -1492,7 +1541,10 @@ class HeadsUpOverlay(PreviewMixin):
         return (components[0], components[1], components[2], components[3])
 
     def _strip_emotions(self, text: str) -> str:
-        """Remove emotion tags like [happy], [sad], [breathe] but preserve markdown links and checkboxes."""
+        """The text as it is read: without what only the voice needs (pauses,
+        <verbatim>, [sigh], however the text arrived) and without emotion tags
+        like [happy], [sad], [breathe]; markdown links and checkboxes stay."""
+        text = display_text(text or "")
         # First, temporarily protect markdown links
         link_pattern = r"\[([^]]+)]\(([^)]+)\)"
         links = []
@@ -1792,94 +1844,6 @@ class HeadsUpOverlay(PreviewMixin):
                     text_w, _ = self._get_text_size(text_segment, font)
                     current_x += text_w
 
-    def _get_cached_loading_bar(
-        self, bar_w: int, bar_h: int, color: Tuple
-    ) -> Image.Image:
-        """Get or create a cached loading bar element.
-
-        Caches pre-rendered loading bar pill shapes to avoid recreating
-        them every frame for each bar in the loading animation.
-
-        Note: bar_h is already guaranteed >= 1 by the caller.
-        """
-        # Ensure color is just RGB for cache key (ignore alpha variations)
-        color_key = color[:3]
-        cache_key = (bar_w, bar_h, color_key)
-
-        if cache_key in self._loading_bar_cache:
-            return self._loading_bar_cache[cache_key]
-
-
-        # Create the bar surface (bar_h >= 1 guaranteed by caller)
-        bar_surf = Image.new("RGBA", (bar_w, bar_h), (0, 0, 0, 0))
-        bar_draw = ImageDraw.Draw(bar_surf)
-
-        radius = min(bar_w // 2, bar_h // 2)
-        if radius < 1:
-            radius = 1
-
-        bar_color = color_key + (255,)
-        bar_draw.rounded_rectangle(
-            [0, 0, bar_w - 1, bar_h - 1], radius=radius, fill=bar_color
-        )
-
-        # Limit cache size
-        if len(self._loading_bar_cache) >= self._max_loading_bar_cache:
-            oldest_key = next(iter(self._loading_bar_cache))
-            del self._loading_bar_cache[oldest_key]
-
-        self._loading_bar_cache[cache_key] = bar_surf
-        return bar_surf
-
-    def _draw_loading(self, draw, canvas, x: int, y: int, width: int, color: Tuple):
-        """Modern animated loading bars with full width wave.
-
-        OPTIMIZED: Uses caching for bar element surfaces.
-        """
-        # Initialize loading phase if not exists
-        if not hasattr(self, "_loading_phase"):
-            self._loading_phase = 0.0
-
-        # Update phase based on time (approx 9.0 rad/s matches original 0.15/frame at 60fps)
-        self._loading_phase += 9.0 * self.dt
-
-        # Use full available width (padding already handled by caller)
-        available_w = width
-
-        bar_w = 4
-        spacing = 4
-        num_bars = int(available_w // (bar_w + spacing))
-
-        # Center the array of bars within the given area
-        total_bars_w = num_bars * (bar_w + spacing) - spacing
-        start_x = x + (width - total_bars_w) // 2
-
-        max_h = 14
-        min_h = 2
-
-        center_y = y + 15
-
-        for i in range(num_bars):
-            # Create a gentle wave using two sine waves for organic feel
-            wave1 = math.sin(self._loading_phase + (i * 0.2))
-            wave2 = math.sin((self._loading_phase * 0.5) - (i * 0.1))
-
-            normalized = (wave1 + wave2 + 2) / 4  # Normalize to 0-1
-
-            # Sharpen the peak
-            normalized = normalized**2
-
-            h = int(min_h + (normalized * (max_h - min_h)))
-            if h < 1:
-                h = 1
-
-            bar_x = start_x + i * (bar_w + spacing)
-            bar_y = int(center_y - (h / 2))
-
-            # Get cached bar surface (or create if height not cached)
-            bar_surf = self._get_cached_loading_bar(bar_w, h, color)
-            canvas.paste(bar_surf, (bar_x, bar_y), bar_surf)
-
     def _safe_report(self, payload):
         if not self.error_queue:
             return
@@ -1924,13 +1888,11 @@ class HeadsUpOverlay(PreviewMixin):
 
         msg_x, msg_y = msg_info.computed_x, msg_info.computed_y
         msg_w = msg_info.width
-        msg_canvas = msg_win.get("canvas")
-        msg_h = msg_canvas.height if msg_canvas else msg_info.height
+        msg_h = msg_win.get("body_height") or msg_info.height
 
         pers_x, pers_y = pers_info.computed_x, pers_info.computed_y
         pers_w = pers_info.width
-        pers_canvas = pers_win.get("canvas")
-        pers_h = pers_canvas.height if pers_canvas else pers_info.height
+        pers_h = pers_win.get("body_height") or pers_info.height
 
         # Check intersection (AABB test)
         return not (
@@ -2465,222 +2427,10 @@ class HeadsUpOverlay(PreviewMixin):
         """Re-register all windows with the layout manager after a screen or
         margin/spacing change, keeping manual placement."""
         for name, win in self._windows.items():
-            canvas = win.get("canvas")
-            height = canvas.size[1] if canvas else 200
-            self._register_layout(name, win, height)
+            self._register_layout(name, win, win.get("body_height") or 200)
             if win.get("fade_state", 0) == 0:
                 self._layout_manager.set_window_visible(name, False)
         self._reregister_preview_windows()
 
         # Force position recalculation and window repositioning
         self._update_all_window_positions()
-
-    def _get_cached_progress_track(
-        self, width: int, height: int, bg_color: Tuple[int, int, int], scale: int = 2
-    ) -> Image.Image:
-        """Get or create a cached progress bar background track.
-
-        Caches the empty progress bar background to avoid recreating it every frame.
-        The track includes the rounded rectangle with antialiasing.
-
-        Note: Returns a copy because callers modify the returned image (draw fill on it).
-        """
-        cache_key = (width, height, bg_color, scale)
-
-        if cache_key in self._progress_track_cache:
-            # Copy required: callers draw the progress fill onto this image
-            return self._progress_track_cache[cache_key].copy()
-
-
-        # Create the track at scaled resolution
-        scaled_width = width * scale
-        scaled_height = height * scale
-        radius = scaled_height // 2
-
-        track = Image.new("RGBA", (scaled_width, scaled_height), (0, 0, 0, 0))
-        track_draw = ImageDraw.Draw(track)
-
-        track_color = tuple(max(0, c - 30) for c in bg_color)
-        outline_color = tuple(max(0, c - 50) for c in bg_color) + (150,)
-        track_draw.rounded_rectangle(
-            [0, 0, scaled_width - 1, scaled_height - 1],
-            radius=radius,
-            fill=track_color + (255,),
-            outline=outline_color,
-        )
-
-        # Limit cache size using simple FIFO eviction
-        if len(self._progress_track_cache) >= self._max_progress_track_cache:
-            oldest_key = next(iter(self._progress_track_cache))
-            del self._progress_track_cache[oldest_key]
-
-        self._progress_track_cache[cache_key] = track
-        return track.copy()
-
-    def _get_cached_gradient_overlay(
-        self,
-        fill_width: int,
-        fill_height: int,
-        highlight_height: int,
-        shadow_height: int,
-    ) -> Image.Image:
-        """Get or create a cached gradient overlay for progress bar fills.
-
-        The gradient provides the depth effect (top highlight, bottom shadow).
-        Cached because the gradient pattern is the same for same dimensions.
-
-        Note: Returns a copy because gradient is pasted/composited onto other images.
-        """
-        cache_key = (fill_width, fill_height, highlight_height, shadow_height)
-
-        if cache_key in self._progress_gradient_cache:
-            # Copy required: gradient is composited onto the progress bar buffer
-            return self._progress_gradient_cache[cache_key].copy()
-
-
-        gradient = Image.new("RGBA", (fill_width + 1, fill_height + 1), (0, 0, 0, 0))
-        gradient_draw = ImageDraw.Draw(gradient)
-
-        # Top highlight (lighter)
-        for i in range(highlight_height):
-            alpha = int(60 * (1 - i / highlight_height))
-            gradient_draw.line([(0, i), (fill_width, i)], fill=(255, 255, 255, alpha))
-
-        # Bottom shadow (darker)
-        for i in range(shadow_height):
-            alpha = int(40 * (i / shadow_height))
-            gradient_draw.line(
-                [
-                    (0, fill_height - shadow_height + i),
-                    (fill_width, fill_height - shadow_height + i),
-                ],
-                fill=(0, 0, 0, alpha),
-            )
-
-        # Limit cache size
-        if len(self._progress_gradient_cache) >= self._max_progress_gradient_cache:
-            oldest_key = next(iter(self._progress_gradient_cache))
-            del self._progress_gradient_cache[oldest_key]
-
-        self._progress_gradient_cache[cache_key] = gradient
-        return gradient.copy()
-
-    def _draw_progress_bar(
-        self,
-        draw: ImageDraw.Draw,
-        img: Image.Image,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        percentage: float,
-        bg_color: Tuple[int, int, int],
-        fill_color: Tuple[int, int, int],
-        text_color: Tuple[int, int, int],
-    ) -> int:
-        """
-        Draw a modern, sleek progress bar with antialiasing via supersampling.
-
-        Uses 2x supersampling for smooth edges on rounded corners.
-        OPTIMIZED: Uses caching for track backgrounds and gradient overlays.
-
-        Args:
-            draw: ImageDraw object
-            img: The PIL Image to draw on (for advanced effects)
-            x: X position
-            y: Y position
-            width: Width of the progress bar
-            height: Height of the progress bar
-            percentage: Progress percentage (0-100)
-            bg_color: Background track color
-            fill_color: Progress fill color (accent color)
-            text_color: Text color for percentage
-
-        Returns:
-            The Y position after the progress bar (for layout)
-        """
-        percentage = max(0, min(100, percentage))
-
-        # Supersampling scale factor for antialiasing
-        scale = 2
-        scaled_height = height * scale
-        scaled_width = width * scale
-        radius = scaled_height // 2
-
-        # Get cached track background (or create if not cached)
-        bar_buffer = self._get_cached_progress_track(width, height, bg_color, scale)
-
-        # Calculate fill width at scaled size
-        fill_width = int((scaled_width - 2 * scale) * percentage / 100)
-
-        if fill_width > radius:  # Only draw if there's meaningful progress
-            bar_draw = ImageDraw.Draw(bar_buffer)
-            fill_x = scale
-            fill_y = scale
-            fill_h = scaled_height - 2 * scale
-            inner_radius = max(1, radius - scale)
-
-            # Draw the main fill
-            bar_draw.rounded_rectangle(
-                [fill_x, fill_y, fill_x + fill_width, fill_y + fill_h],
-                radius=inner_radius,
-                fill=fill_color + (255,),
-            )
-
-            # Get cached gradient overlay
-            highlight_height = fill_h // 3
-            shadow_height = fill_h // 4
-            gradient_overlay = self._get_cached_gradient_overlay(
-                fill_width, fill_h, highlight_height, shadow_height
-            )
-
-            # Create a mask from the fill shape to apply gradient only within the bar
-            mask = Image.new("L", (scaled_width, scaled_height), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            mask_draw.rounded_rectangle(
-                [fill_x, fill_y, fill_x + fill_width, fill_y + fill_h],
-                radius=inner_radius,
-                fill=255,
-            )
-
-            # Composite the gradient onto the bar buffer
-            gradient_full = Image.new(
-                "RGBA", (scaled_width, scaled_height), (0, 0, 0, 0)
-            )
-            gradient_full.paste(gradient_overlay, (fill_x, fill_y))
-            bar_buffer = Image.composite(
-                Image.alpha_composite(bar_buffer, gradient_full), bar_buffer, mask
-            )
-
-            # Add a subtle inner glow/shine at the top edge
-            shine_buffer = Image.new(
-                "RGBA", (scaled_width, scaled_height), (0, 0, 0, 0)
-            )
-            shine_draw = ImageDraw.Draw(shine_buffer)
-
-            # Draw a thin highlight line at the top of the fill
-            shine_y = fill_y + scale
-            shine_start = fill_x + inner_radius
-            shine_end = fill_x + fill_width - inner_radius
-            if shine_end > shine_start:
-                shine_color = tuple(min(255, c + 80) for c in fill_color) + (120,)
-                shine_draw.line(
-                    [(shine_start, shine_y), (shine_end, shine_y)],
-                    fill=shine_color,
-                    width=scale,
-                )
-                shine_draw.line(
-                    [(shine_start, shine_y + scale), (shine_end, shine_y + scale)],
-                    fill=tuple(min(255, c + 40) for c in fill_color) + (60,),
-                    width=scale,
-                )
-
-            bar_buffer = Image.alpha_composite(bar_buffer, shine_buffer)
-
-        # Downsample with high-quality resampling (antialiasing)
-        bar_final = bar_buffer.resize((width, height), Image.Resampling.LANCZOS)
-
-        # Paste the antialiased progress bar onto the main image
-        img.paste(bar_final, (x, y), bar_final)
-
-        return y + height + 2  # Return next Y position with minimal spacing

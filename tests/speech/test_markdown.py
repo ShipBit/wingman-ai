@@ -136,6 +136,13 @@ def test_display_text_drops_what_only_the_voice_needs():
 
 
 
+def test_display_text_keeps_code_as_written():
+    from services.markdown import display_text
+
+    text = 'Use `<div>` here. <break time="300ms" /> Done.\n```html\n<span>[sigh]</span>\n```'
+    assert display_text(text) == 'Use `<div>` here. Done.\n```html\n<span>[sigh]</span>\n```'
+
+
 def test_display_text_keeps_markdown_and_data():
     from services.markdown import display_text
 

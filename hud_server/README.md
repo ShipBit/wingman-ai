@@ -67,9 +67,29 @@ the pieces that reach into the window, newest at the bottom, so:
 - content scrolled out of view is neither rendered nor kept; when there is
   more above, the newest part shows and the top fades,
 - the typewriter redraws only the block it is typing,
-- a frame where only the loader moves draws only the loader; a running timer
-  redraws its own item once a second, a moving progress bar once a pixel,
+- the loader is a glow on the window's bottom edge, under the content: a
+  line with a soft halo and light rising about 64 px into the window,
+  breathing every 2.8 s. It takes no room, so a window does not grow or
+  shrink when it starts or stops, and it eases in and out. While it breathes
+  the window is put together from its kept pieces, at most 30 times a
+  second; a running timer redraws its own item once a second, a moving
+  progress bar once a pixel,
 - images from the web download in the background and show once they arrived.
+
+### The look
+
+`rendering/glass.py` draws the HUD's glass: a body lighter at the top, with a
+fine outline and a line of light along its top edge, on a soft shadow. Every
+rounded shape (window, bubbles, chips, bars, avatars, tables) is cut from a
+circle drawn four times larger and scaled down, so its edges are smooth. What
+does not depend on the content (body, edges, shadow) is made once per size.
+
+The shadow lies only around the body, never under it: a see-through panel
+keeps exactly its own colour. It needs room, so a window's picture is larger
+than its body by `glass.SHADOW` on each side, and the window sits that much
+further up and left. Layout, collisions and the preview work with the body
+(`body_height`), not the picture. While it fades in, a window rises 8 px into
+place.
 
 ## Platforms
 
@@ -602,25 +622,46 @@ printr.print("HUD Server started", color=LogType.INFO, server_only=True)
 
 ## Testing
 
-Run the test suite:
+The unit tests are in `tests/hud/` (pytest, every OS, no windows):
 
 ```powershell
-python -m hud_server.tests.run_tests
+python -m pytest tests/hud -q
 ```
 
-Individual tests:
+`hud_server/tests/` holds the **demos**: they drive the HUD server through
+its HTTP API and show every feature on screen, then list every request the
+server refused and every error the overlay reported:
+
 ```powershell
-python -m hud_server.tests.run_tests                    # Run quick integration test
-python -m hud_server.tests.run_tests --all              # Run all test suites
-python -m hud_server.tests.run_tests --messages         # Run message tests
-python -m hud_server.tests.run_tests --progress         # Run progress tests
-python -m hud_server.tests.run_tests --persistent       # Run persistent info tests
-python -m hud_server.tests.run_tests --chat             # Run chat tests
-python -m hud_server.tests.run_tests --unicode          # Run Unicode/emoji stress tests
-python -m hud_server.tests.run_tests --layout           # Run layout manager unit tests (no server needed)
-python -m hud_server.tests.run_tests --layout-visual    # Run visual layout tests with actual HUD windows
-python -m hud_server.tests.run_tests --snake            # You know this one ...
+python -m hud_server.tests.run_tests                 # quick check: each element once
+python -m hud_server.tests.run_tests chat info       # some suites
+python -m hud_server.tests.run_tests --all           # every suite
+python -m hud_server.tests.run_tests --list          # what there is
+python -m hud_server.tests.run_tests snake           # the Snake game (needs `keyboard`)
 ```
+
+| Suite | Shows |
+| --- | --- |
+| `messages` | The message window: Markdown, streaming, tool chips with counts, the loader, long answers, live restyling |
+| `chat` | The chat flow: bubbles, pictures, tool calls between question and answer, typing, edits, hide and clear |
+| `info` | The info panel: panels with tables, countdowns, progress, updates, expiry, a full panel |
+| `images` | Pictures from files, data URIs and the web, avatars and tool icons |
+| `layout` | Anchors, stacking, areas and their align, live moves, a message covering its panel, hidden elements |
+| `profiles` | Switching HUD profiles (the server defaults) live, group props outranking them |
+| `look` | The glass look: accents, background opacity, corners, fonts, a light theme |
+| `preview` | The profile preview, with the chat flow, restyled, dragged with the mouse |
+| `settings` | Frame rate, margin, spacing and monitor, changed while the server runs |
+| `multiuser` | Several clients at once, sharing one chat |
+| `unicode` | Emoji sequences, scripts, symbols, emotion tags |
+
+With Core running and its HUD on, the demos use Core's HUD server, in groups
+of their own (`demo_*`); afterwards its defaults are put back, and `settings`
+is skipped. Otherwise they start a server of their own.
+
+Options: `--headless` runs them in this process with no windows and no pauses,
+which checks that every request is accepted and nothing breaks the drawing
+(`tests/hud/test_demo_suites.py` runs every suite this way); `--speed X`
+makes the pauses X times shorter; `--port`, `--screen`, `--no-web`.
 
 ## Troubleshooting
 

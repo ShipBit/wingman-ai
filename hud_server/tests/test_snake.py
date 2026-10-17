@@ -18,21 +18,34 @@ Features:
 - 🎨 Animated border colors that change with score
 - 📊 Real-time stats with combo display
 
-Usage:
-    python -m hud_server.tests.test_snake
+Usage (needs the `keyboard` package and a screen):
+    python -m hud_server.tests.run_tests snake
 """
 
 import asyncio
 import time
 import random
 from enum import Enum
-from hud_server.tests.test_session import TestSession
+from hud_server.tests.harness import Demo
 from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps, WindowType
 
 try:
     import keyboard.keyboard as keyboard
 except ImportError:
-    import keyboard
+    try:
+        import keyboard
+    except Exception:  # not installed, or no keyboard access on this OS
+        keyboard = None
+
+TITLE = "Snake (a game)"
+
+
+class Player:
+    """What the game needs of a demo: its HUD client, and a name to print."""
+
+    def __init__(self, demo: Demo):
+        self._client = demo.client
+        self.name = "Snake"
 
 
 # =============================================================================
@@ -392,7 +405,7 @@ def get_border_positions(game: SnakeGame) -> list[tuple[int, int]]:
     return positions
 
 
-async def animate_border_color_change(session: TestSession, game: SnakeGame, new_color_index: int):
+async def animate_border_color_change(session: "Player", game: SnakeGame, new_color_index: int):
     """Animate the border color change by updating cells one by one in a wave."""
     global _current_border_color_index
 
@@ -425,7 +438,7 @@ async def animate_border_color_change(session: TestSession, game: SnakeGame, new
             await asyncio.sleep(delay_per_cell)
 
 
-async def show_cell(session: TestSession, x: int, y: int, cell_type: str, color_override: str = None, pulsate: bool = False):
+async def show_cell(session: "Player", x: int, y: int, cell_type: str, color_override: str = None, pulsate: bool = False):
     """Show or update a cell HUD. Creates it if it doesn't exist."""
     if not session._client:
         return
@@ -462,7 +475,7 @@ async def show_cell(session: TestSession, x: int, y: int, cell_type: str, color_
     _active_cell_huds.add((x, y))
 
 
-async def hide_cell(session: TestSession, x: int, y: int):
+async def hide_cell(session: "Player", x: int, y: int):
     """Hide/delete a cell HUD."""
     if not session._client:
         return
@@ -473,7 +486,7 @@ async def hide_cell(session: TestSession, x: int, y: int):
         _active_cell_huds.discard((x, y))
 
 
-async def cleanup_all_cells(session: TestSession):
+async def cleanup_all_cells(session: "Player"):
     """Remove all active cell HUDs."""
     if not session._client:
         return
@@ -488,7 +501,7 @@ async def cleanup_all_cells(session: TestSession):
     await session._client.delete_group("snake_stats", WindowType.MESSAGE)
 
 
-async def render_initial_state(session: TestSession, game: SnakeGame):
+async def render_initial_state(session: "Player", game: SnakeGame):
     """Render the initial game state - borders, snake and food."""
     # Show borders first
     await render_borders(session, game)
@@ -510,7 +523,7 @@ async def render_initial_state(session: TestSession, game: SnakeGame):
         await show_cell(session, game.golden_food[0], game.golden_food[1], CELL_GOLDEN_FOOD, pulsate=True)
 
 
-async def render_borders(session: TestSession, game: SnakeGame):
+async def render_borders(session: "Player", game: SnakeGame):
     """Render the border cells around the playable area."""
     # Top border (row -1)
     for x in range(-1, game.width + 1):
@@ -529,7 +542,7 @@ async def render_borders(session: TestSession, game: SnakeGame):
         await show_cell(session, game.width, y, CELL_BORDER)
 
 
-async def update_display(session: TestSession, game: SnakeGame, old_states: dict, new_states: dict):
+async def update_display(session: "Player", game: SnakeGame, old_states: dict, new_states: dict):
     """Update only the cells that changed."""
     all_positions = set(old_states.keys()) | set(new_states.keys())
 
@@ -581,7 +594,7 @@ def get_game_state(game: SnakeGame) -> dict:
 # Combo Display
 # =============================================================================
 
-async def show_combo_flash(session: TestSession, combo: int):
+async def show_combo_flash(session: "Player", combo: int):
     """Show a flashy combo notification in the center of the screen."""
     if not session._client or combo < 2:
         return
@@ -635,7 +648,7 @@ async def show_combo_flash(session: TestSession, combo: int):
 # Game Screens
 # =============================================================================
 
-async def show_start_screen(session: TestSession):
+async def show_start_screen(session: "Player"):
     """Display the game start screen as individual HUD elements."""
     if not session._client:
         return
@@ -709,7 +722,7 @@ async def show_start_screen(session: TestSession):
     )
 
 
-async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, speed: float, force: bool = False):
+async def show_stats(session: "Player", game: SnakeGame, elapsed: float, speed: float, force: bool = False):
     """Display stats overlay - only updates if changed."""
     if not session._client:
         return
@@ -738,7 +751,7 @@ async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, spee
     )
 
 
-async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: float):
+async def show_game_over_screen(session: "Player", game: SnakeGame, elapsed: float):
     """Display the game over screen as individual HUD elements."""
     if not session._client:
         return
@@ -830,7 +843,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
 # Main Game Loop
 # =============================================================================
 
-async def test_snake_game(session: TestSession):
+async def play(session: "Player"):
     """Run the interactive Snake game."""
     global _current_border_color_index, _border_positions, _active_cell_huds
 
@@ -1007,57 +1020,30 @@ async def test_snake_game(session: TestSession):
 # Main Entry Point
 # =============================================================================
 
-async def run_snake_test():
-    """Run the enhanced endless Snake game test with advanced features."""
-    from hud_server.tests.test_runner import TestContext
+async def run(demo: Demo) -> None:
+    """The endless Snake game: arrow keys steer, SPACE starts, ESC ends."""
+    if demo.headless:
+        print("\n-- Skipped: the game needs a screen and a keyboard.")
+        return
+    if keyboard is None:
+        print("\n-- Skipped: the game needs the keyboard package (pip install keyboard).")
+        return
 
     print("=" * 60)
     print("ENDLESS SNAKE GAME - ENHANCED EDITION")
     print("=" * 60)
     print("Features: Gradient Snake | Combos | Golden Apples | Animated Borders")
     print("=" * 60)
-
-    session_config = {
-        "name": "Snake",
-        "anchor": "top_left",
-        "priority": 50,
-        "persistent_anchor": "top_left",
-        "persistent_priority": 40,
-        "layout_mode": "auto",
-        "hud_width": 500,
-        "persistent_width": 500,
-        "hud_max_height": 900,
-        "bg_color": "#0a0e14",
-        "text_color": "#f0f0f0",
-        "accent_color": COLOR_GAME,
-        "user_color": "#4cd964",
-        "opacity": 0.95,
-        "border_radius": 16,
-        "font_size": 14,
-        "content_padding": 20,
-        "typewriter_effect": False,
-    }
-
-    async with TestContext(session_ids=[1]) as ctx:
-        session = ctx.sessions[0]
-        session.config = session_config
-        session.name = "Snake"
-
-        print("HUD Server started. Get ready for ENDLESS Snake! 🐍✨\n")
-        print("🌈 Gradient Snake | 🔥 Combos | 🌟 Golden Apples | 🎨 Animated Borders\n")
-
-        # Play again loop
-        while True:
-            play_again = await test_snake_game(session)
-            if not play_again:
-                print("Thanks for playing! 🐍✨")
-                break
-            else:
-                print("\n" + "=" * 60)
-                print("Starting new game...")
-                print("=" * 60 + "\n")
-                await asyncio.sleep(0.5)  # Small delay before restart
+    player = Player(demo)
+    while await play(player):
+        print("\n" + "=" * 60)
+        print("Starting new game...")
+        print("=" * 60 + "\n")
+        await asyncio.sleep(0.5)
+    print("Thanks for playing!")
 
 
 if __name__ == "__main__":
-    asyncio.run(run_snake_test())
+    from hud_server.tests.run_tests import main
+
+    main(["snake"])

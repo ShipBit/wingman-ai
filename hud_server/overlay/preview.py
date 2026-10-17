@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 
 from hud_server.constants import GROUP_CHAT, GROUP_INFO
 from hud_server.platform import Cursor, Pointer
+from hud_server.rendering.glass import SHADOW
 
 PREVIEW_CONTAINERS = {"chat": "message", "info": "persistent"}
 SHARED_GROUPS = (GROUP_CHAT, GROUP_INFO)
@@ -247,7 +248,10 @@ class PreviewMixin:
     def _decorate_preview(self, container: str, win: Dict) -> None:
         canvas = win["canvas"]
         props = win["props"]
-        w, h = canvas.size
+        # The area is the window's body; its shadow's room lies around it
+        left, top = SHADOW.left, SHADOW.top
+        w = canvas.width - SHADOW.left - SHADOW.right
+        h = win.get("body_height") or canvas.height - SHADOW.top - SHADOW.bottom
 
         # Bake the profile's opacity into the pixels (the window itself stays opaque)
         opacity = max(0.0, min(1.0, float(props.get("opacity", 0.85))))
@@ -255,7 +259,8 @@ class PreviewMixin:
         a = a.point(lambda v: int(v * opacity))
         content = Image.merge("RGBA", (r, g, b, a))
 
-        base = Image.new("RGBA", (w, h), (0, 0, 0, BASE_ALPHA))
+        base = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        base.paste((0, 0, 0, BASE_ALPHA), (left, top, left + w, top + h))
         decorated = Image.alpha_composite(base, content)
 
         accent = self._hex_to_rgb(props.get("accent_color", "#00aaff"))
@@ -263,34 +268,35 @@ class PreviewMixin:
             self._drag is not None and self._drag["container"] == container
         )
         draw = ImageDraw.Draw(decorated)
-        self._dashed_rect(draw, w, h, accent + (255 if active else 170,), solid=active)
+        self._dashed_rect(draw, left, top, w, h, accent + (255 if active else 170,), solid=active)
 
         if self._preview_interactive:
             for gx, gy in ((0, 0), (w // 2, 0), (w - 1, 0), (0, h // 2), (w - 1, h // 2),
                            (0, h - 1), (w // 2, h - 1), (w - 1, h - 1)):
-                draw.rectangle([gx - 4, gy - 4, gx + 4, gy + 4], fill=accent + (230,))
+                draw.rectangle([left + gx - 4, top + gy - 4, left + gx + 4, top + gy + 4], fill=accent + (230,))
 
         font = self.fonts.get("code", self.fonts.get("normal"))
         label = f"{_LABELS[container]}  {w}×{h}"
         if font:
             tw, th = self._get_text_size(label, font)
-            lx, ly = w - tw - 14, h - th - 12
+            lx, ly = left + w - tw - 14, top + h - th - 12
             draw.rounded_rectangle([lx - 6, ly - 3, lx + tw + 6, ly + th + 5], radius=6, fill=accent + (220,))
             draw.text((lx, ly), label, fill=(20, 22, 28, 255), font=font)
 
         canvas.paste(decorated, (0, 0))
 
     @staticmethod
-    def _dashed_rect(draw, w, h, color, solid=False, dash=10, gap=6, width=2):
+    def _dashed_rect(draw, left, top, w, h, color, solid=False, dash=10, gap=6, width=2):
+        right, bottom = left + w - 2, top + h - 2
         if solid:
-            draw.rectangle([1, 1, w - 2, h - 2], outline=color, width=width)
+            draw.rectangle([left + 1, top + 1, right, bottom], outline=color, width=width)
             return
-        for x in range(0, w, dash + gap):
-            draw.line([(x, 1), (min(x + dash, w - 1), 1)], fill=color, width=width)
-            draw.line([(x, h - 2), (min(x + dash, w - 1), h - 2)], fill=color, width=width)
-        for y in range(0, h, dash + gap):
-            draw.line([(1, y), (1, min(y + dash, h - 1))], fill=color, width=width)
-            draw.line([(w - 2, y), (w - 2, min(y + dash, h - 1))], fill=color, width=width)
+        for x in range(left, left + w, dash + gap):
+            draw.line([(x, top + 1), (min(x + dash, left + w - 1), top + 1)], fill=color, width=width)
+            draw.line([(x, bottom), (min(x + dash, left + w - 1), bottom)], fill=color, width=width)
+        for y in range(top, top + h, dash + gap):
+            draw.line([(left + 1, y), (left + 1, min(y + dash, top + h - 1))], fill=color, width=width)
+            draw.line([(right, y), (right, min(y + dash, top + h - 1))], fill=color, width=width)
 
     # ─────────────────────────────── mouse ─────────────────────────────── #
 

@@ -13,6 +13,8 @@ from typing import Callable, Hashable, Iterable, Optional
 
 from PIL import Image, ImageChops, ImageDraw
 
+from hud_server.rendering import glass
+
 MAX_PIECE_HEIGHT = 16384
 
 DrawPiece = Callable[[ImageDraw.ImageDraw, Image.Image, int], int]
@@ -167,17 +169,18 @@ def compose(
     layout: Layout,
     width: int,
     background: tuple,
-    border: tuple,
     radius: int,
     fade_height: int = 0,
+    under: Optional[Image.Image] = None,
 ) -> Image.Image:
-    """The window: its rounded background, the pieces in view, and a fade at
-    the top when there is more above."""
-    canvas = Image.new("RGBA", (width, layout.height), (0, 0, 0, 0))
-    radius = max(0, min(radius, (layout.height - 1) // 2, (width - 1) // 2))
-    ImageDraw.Draw(canvas).rounded_rectangle(
-        [0, 0, width - 1, layout.height - 1], radius=radius, fill=background, outline=border
-    )
+    """The window: its glass body with the pieces in view, a fade at the top
+    when there is more above, on its shadow (glass.SHADOW's room around it).
+    `under` (the loader's glow) lies on the body's bottom, below the pieces."""
+    radius = max(0, min(radius, layout.height // 2, width // 2))
+    body = glass.body(width, layout.height, radius, background)
+    canvas = body.fill.copy()
+    if under is not None:
+        glass.put(canvas, under, (0, layout.height - under.height))
     for image, y, alpha in layout.placed:
         top = max(0, -y)
         bottom = min(image.height, layout.height - y)
@@ -189,8 +192,9 @@ def compose(
             part.putalpha(faded)
         canvas.alpha_composite(part, (0, y + top))
     if layout.clipped and fade_height > 0:
-        fade_top(canvas, background[:3], fade_height)
-    return canvas
+        fade_top(canvas, body.top_color, fade_height)
+    canvas.alpha_composite(body.edges)
+    return glass.framed(canvas, radius, background[3] if len(background) > 3 else 255)
 
 
 def fade_top(canvas: Image.Image, background: tuple, fade_height: int) -> None:

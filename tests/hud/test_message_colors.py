@@ -1,9 +1,9 @@
-"""A message draws its loader in the profile's accent color, and its tables
-in a shade of the panel's background, as see-through as the background."""
+"""A message's loader glows in the profile's accent color, and its tables
+are a shade of the panel's background, as see-through as the background."""
 
 from PIL import Image
 
-from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
+from tests.support import FakeHudBackend, bottom_edge, make_overlay, overlay_errors, run_frames
 
 RED = "#ff0000"
 TABLE = "| Ship | Fuel |\n|---|---|\n| Cutlass | 80 % |\n| Prospector | 45 % |\n| Vulture | 12 % |"
@@ -51,26 +51,32 @@ def test_on_a_light_background_a_table_is_a_darker_shade():
     assert len(table_pixels(drawn(backend, overlay), (240, 240, 240), lighter=False)) > 10_000
 
 
-def test_the_loader_runs_in_the_accent_color():
+def test_the_loader_glows_on_the_bottom_edge_in_the_accent_color():
     backend = FakeHudBackend()
     overlay = make_overlay(backend)
-    show(overlay, "Checking the hangar", accent_color=RED)
+    show(overlay, "Checking the hangar", accent_color=RED, bg_color="#000000")
+    run_frames(overlay)
+    r, g, b, _ = bottom_edge(backend, overlay, "message_atc")
+    assert r < g + 10
 
     overlay._handle_message({"type": "set_loader", "group": "atc", "show": True})
+    run_frames(overlay)
 
-    assert (255, 0, 0, 255) in drawn(backend, overlay)
+    r, g, b, _ = bottom_edge(backend, overlay, "message_atc")
+    assert r > g + 40 and r > b + 40
+    assert overlay_errors(overlay) == []
 
 
 def test_a_loader_color_given_by_the_call_wins():
     backend = FakeHudBackend()
     overlay = make_overlay(backend)
-    show(overlay, "Checking the hangar", accent_color=RED)
+    show(overlay, "Checking the hangar", accent_color=RED, bg_color="#000000")
 
     overlay._handle_message({"type": "set_loader", "group": "atc", "show": True, "color": "#00ff00"})
+    run_frames(overlay)
 
-    pixels = drawn(backend, overlay)
-    assert (0, 255, 0, 255) in pixels
-    assert (255, 0, 0, 255) not in pixels
+    r, g, b, _ = bottom_edge(backend, overlay, "message_atc")
+    assert g > r + 40 and g > b + 40
 
 
 def test_the_table_text_has_no_light_rim_on_a_see_through_row():

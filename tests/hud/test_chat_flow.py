@@ -3,7 +3,8 @@ conversation, driven through the HUD server the way Core drives it."""
 
 from hud_server.constants import GROUP_CHAT
 from hud_server.hud_manager import HudManager
-from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
+from hud_server.rendering.glass import SHADOW
+from tests.support import FakeHudBackend, bottom_edge, make_overlay, overlay_errors, run_frames
 
 AREA = {"layout_mode": "manual", "x": 300, "y": 200, "width": 500, "max_height": 400, "align": "top"}
 
@@ -27,7 +28,9 @@ def test_the_conversation_shows_in_the_chat_area():
 
     window = backend.window(f"HUD_chat_{GROUP_CHAT}")
     assert window.shown
-    assert window.rect[:3] == (300, 200, 500)
+    # The window's body; its shadow's room lies around it
+    x, y, width, _ = window.rect
+    assert (x + SHADOW.left, y + SHADOW.top, width - SHADOW.left - SHADOW.right) == (300, 200, 500)
     assert overlay_errors(overlay) == []
 
 
@@ -46,14 +49,15 @@ def test_a_hidden_chat_stays_hidden_until_the_next_message():
     assert window.shown
 
 
-def test_the_chat_runs_the_loader_in_the_accent_color():
-    backend, overlay, manager = wired(accent_color="#ff0000")
+def test_the_chat_glows_on_its_bottom_edge_in_the_accent_color_while_the_wingman_works():
+    backend, overlay, manager = wired(accent_color="#ff0000", bg_color="#000000")
     manager.send_chat_message(GROUP_CHAT, "chat", "Jan", "Status?")
 
     manager.set_loader(GROUP_CHAT, "chat", True)
     run_frames(overlay)
 
-    assert (255, 0, 0, 255) in list(backend.window(f"HUD_chat_{GROUP_CHAT}").image.getdata())
+    r, g, b, _ = bottom_edge(backend, overlay, f"chat_{GROUP_CHAT}")
+    assert r > g + 40 and r > b + 40
 
 
 def test_tool_calls_stay_and_the_answer_comes_after_them():
@@ -69,6 +73,31 @@ def test_tool_calls_stay_and_the_answer_comes_after_them():
     light_text = rows(lambda p: p[0] > 200 and p[1] > 200 and p[2] > 200)
     assert chip_outline and max(chip_outline) < max(light_text)  # the answer is the lowest line
     assert overlay_errors(overlay) == []
+
+
+def test_the_users_name_shows_as_strongly_as_a_wingmans():
+    backend, overlay, manager = wired(bg_color="#000000")
+    manager.send_chat_message(GROUP_CHAT, "chat", "Jan", "Status?", color="#00ff00", own=True)
+    run_frames(overlay)
+
+    image = backend.window(f"HUD_chat_{GROUP_CHAT}").image
+    full_colour = [p for p in image.getdata() if p[1] > 230 and p[0] < 60 and p[2] < 60 and p[3] > 230]
+    assert len(full_colour) > 20
+
+
+def test_what_only_the_voice_needs_does_not_show():
+    backend, overlay, manager = wired()
+    reply = ('Systems check complete. <break time="400ms" /> Transponder '
+             '<verbatim>C8X-441</verbatim> confirmed. [sigh]')
+
+    # As Core sends a reply: straight to the HUD manager, not through the HTTP client
+    manager.send_chat_message(GROUP_CHAT, "chat", "Orionis", reply)
+    manager.show_message("atc", "message", "Orionis", reply)
+    run_frames(overlay)
+
+    shown = "Systems check complete. Transponder C8X-441 confirmed."
+    assert overlay._windows[f"chat_{GROUP_CHAT}"]["messages"][-1]["text"] == shown
+    assert overlay._windows["message_atc"]["current_blocks"]["msg"] == shown
 
 
 def test_text_never_joins_a_message_that_shows_tool_chips():

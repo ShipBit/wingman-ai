@@ -17,13 +17,15 @@ import urllib.request
 
 # PIL for rendering
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageChops, ImageDraw
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     Image = None
+    ImageChops = None
     ImageDraw = None
 
+from hud_server.rendering import glass
 from hud_server.constants import (
     MAX_IMAGE_CACHE_SIZE,
     MAX_INLINE_TOKEN_CACHE_SIZE,
@@ -1551,7 +1553,8 @@ class MarkdownRenderer:
             row_positions.append(pos)
             pos += len(line) + 1  # +1 for newline
 
-        border = self.bg_shade(0.13)
+        # The rows' shades, put on as one rounded, anti-aliased shape at the end
+        shades = []
 
         # Track visible rows for proper border drawing
         visible_rows = 0
@@ -1572,27 +1575,7 @@ class MarkdownRenderer:
             is_header = (ri == 0)
             current_font = bold_font if is_header else font
             text_color = self.colors['accent'] if is_header else self.colors['text']
-
-            bg = self.bg_shade(0.08 if is_header else (0.02 if ri % 2 == 1 else 0.045))
-
-            # Draw row background
-            if ri == 0:
-                draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                draw.rectangle([x, current_y + row_h - 8, x + table_w, current_y + row_h], fill=bg)
-            else:
-                # Check if this is the last visible row
-                next_row_visible = False
-                if ri + 1 < len(rows):
-                    next_orig_idx = row_line_indices[ri + 1]
-                    next_row_pos = row_positions[next_orig_idx] if next_orig_idx < len(row_positions) else float('inf')
-                    next_row_visible = (typewriter_pos == float('inf') or next_row_pos < typewriter_pos)
-
-                if not next_row_visible or ri == len(rows) - 1:
-                    # This is the last visible row - use rounded bottom
-                    draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                    draw.rectangle([x, current_y, x + table_w, current_y + 8], fill=bg)
-                else:
-                    draw.rectangle([x, current_y, x + table_w, current_y + row_h], fill=bg)
+            shades.append((current_y - y, row_h, self.bg_shade(0.08 if is_header else (0.02 if ri % 2 == 1 else 0.045))))
 
             # Draw cells with typewriter support
             cell_x = x
@@ -1612,20 +1595,20 @@ class MarkdownRenderer:
                     cell_start_approx, typewriter_pos
                 )
 
-                # Column separator
-                if ci < num_cols - 1:
-                    sep_x = cell_x + cell_w
-                    draw.line([(sep_x, current_y + 4), (sep_x, current_y + row_h - 4)],
-                             fill=border, width=1)
-
                 cell_x += cell_w
 
             last_visible_y = current_y + row_h
             current_y += row_h
 
-        # Outer border (only around visible portion)
         if visible_rows > 0:
-            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=border, width=1)
+            table_h = last_visible_y - y + 1
+            rows_layer = Image.new("RGBA", (table_w + 1, table_h), (0, 0, 0, 0))
+            rows_draw = ImageDraw.Draw(rows_layer)
+            for top, row_h, shade in shades:
+                rows_draw.rectangle([0, top, table_w, top + row_h], fill=shade)
+            rows_layer.putalpha(ImageChops.multiply(rows_layer.getchannel("A"), glass.rounded_mask(table_w + 1, table_h, 8)))
+            glass.put(canvas, rows_layer, (x, y))
+            glass.paint(canvas, glass.ring_mask(table_w + 1, table_h, 8), self.bg_shade(0.1), (x, y))
         canvas.alpha_composite(text_layer)
 
         return last_visible_y + 10 if visible_rows > 0 else y
