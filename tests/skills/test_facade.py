@@ -156,27 +156,71 @@ def test_categories_are_saved_with_the_commands(tmp_path, monkeypatch):
     assert yaml.safe_load(path.read_text())["command_categories"] == [{"id": "c1", "name": "Learned"}]
 
 
-def test_a_lost_hud_group_is_made_again_and_the_call_repeated(monkeypatch):
-    facade._hud_groups.clear()
-    client = MagicMock()
-    client.base_url = "http://hud"
-    client.add_item = AsyncMock(side_effect=[None, {"ok": True}])
-    hud = facade.SkillHud(SimpleNamespace(name="Bob"))
-    made = []
+def _hud(monkeypatch, *, chat=True, info=True, skill=None):
+    """A SkillHud for "Bob" (and `skill`) over a fake HUD service that runs."""
+    from services.hud_service import HudService
 
-    async def fake_client(element):
-        made.append(element)
-        return client
+    service = MagicMock(available=True)
+    monkeypatch.setattr(HudService, "_instance", service)
+    wingman = SimpleNamespace(
+        name="Bob", config=SimpleNamespace(hud=SimpleNamespace(chat=chat, info=info)),
+        get_avatar_path=lambda: None,
+    )
+    return facade.SkillHud(wingman, skill), service
 
-    monkeypatch.setattr(hud, "_client", fake_client)
+
+def test_info_goes_to_the_shared_panel_with_who_added_it(monkeypatch):
+    from hud_server.constants import GROUP_INFO
+
+    hud, service = _hud(monkeypatch, skill="Star Citizen Events")
+
     assert _run(hud.add_info("Fuel", "low"))
-    assert len(made) == 2
-    assert client.add_item.await_count == 2
+    service.add_info.assert_called_once_with(
+        GROUP_INFO, "Fuel", "low", color=None, duration=None,
+        added_by="the Star Citizen Events skill of Bob",
+    )
+
+
+def test_a_wingman_with_its_info_switch_off_does_not_write_to_the_panel(monkeypatch):
+    hud, service = _hud(monkeypatch, info=False)
+
+    assert not _run(hud.add_info("Fuel", "low"))
+    service.add_info.assert_not_called()
+
+
+def test_a_skills_own_group_is_named_after_the_wingman_and_goes_with_the_skill(monkeypatch):
+    hud, service = _hud(monkeypatch)
+
+    group = hud.group("mic", anchor="top_right", width=72)
+    _run(group.add_info(" ", "![](mic.png)"))
+    hud._release()
+
+    service.create_group.assert_called_with("Bob_mic", "persistent", {"anchor": "top_right", "width": 72})
+    service.delete_group.assert_called_once_with("Bob_mic", "persistent")
 
 
 def _star_citizen(game_path: str):
     settings = SimpleNamespace(star_citizen=SimpleNamespace(plays=True, game_path=game_path))
     return facade.SkillStarCitizen(SimpleNamespace(settings=settings))
+
+
+def test_a_tool_shows_the_logo_of_a_skill_loaded_from_its_file(tmp_path):
+    # As custom skills (and every skill in the release) are loaded: from the
+    # file, without being registered as a module
+    import importlib.util
+
+    from PIL import Image
+
+    folder = tmp_path / "uexcorp_beta"
+    folder.mkdir()
+    (folder / "main.py").write_text("class UEXCorpBeta:\n    def lookup(self):\n        return 1\n")
+    Image.new("RGB", (8, 8)).save(folder / "logo.png")
+    spec = importlib.util.spec_from_file_location("UEXCorpBeta", folder / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    wingman = SimpleNamespace(tool_skills={"uex_lookup": module.UEXCorpBeta()})
+
+    assert facade.SkillTools(wingman).icon("uex_lookup") == str(folder / "logo.png")
 
 
 def test_star_citizen_gives_skills_the_environment_folder(tmp_path):

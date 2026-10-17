@@ -1,264 +1,104 @@
-"""
-Test Messages - Basic message display and markdown rendering tests.
-"""
+"""The message window: one answer at a time, as with the chat flow off."""
 
-import asyncio
-import random
-from hud_server.tests.test_session import TestSession
+from hud_server.tests.harness import MESSAGE, STYLE, Demo, area
+from hud_server.types import WindowType
 
+TITLE = "Message window"
+M = WindowType.MESSAGE
 
-# =============================================================================
-# Test Data
-# =============================================================================
+MARKDOWN = """# Flight plan
+**Bold**, *italic*, ***both***, ~~struck~~, `inline code` and a [link](https://wingman-ai.com).
 
-SHORT_MESSAGES = [
-    "Hello, I'm ready to assist.",
-    "Command executed successfully.",
-    "Processing your request...",
-    "Target acquired.",
-    "Systems nominal.",
-]
+## Checklist
+- [x] Pre-flight checks
+- [x] Fuel at **100 %**
+- [ ] Clearance from ATC
+  - Pad assignment
+  - Hangar doors
 
-MARKDOWN_SAMPLES = [
-    """**Bold text** and *italic text* mixed together.
-Also `inline code` and ~~strikethrough~~ for variety.""",
+1. Spool the quantum drive
+2. Align with the marker
+3. Jump
 
-    """## Mission Briefing
+> Stay out of restricted airspace near Lorville.
 
-### Objective
-Retrieve the artifact from **Alpha Station**.
-
-### Intel
-1. Station has 3 docking bays
-2. Security level: *Medium*
-3. Expected resistance: `Minimal`""",
-
-    """Here's a checklist:
-- [x] Primary systems online
-- [x] Navigation calibrated
-- [ ] Cargo secured
-- [ ] Jump coordinates verified""",
-
-    """Configuration:
+```python
+def eta(distance_gm, speed_gm_s):
+    return distance_gm / speed_gm_s
 ```
-target = "Alpha Centauri"
-fuel = 87.5
-stealth = True
-```
-Ready for departure.""",
 
-    """| Parameter | Value | Status |
-|-----------|-------|--------|
-| Power     | 95%   | OK     |
-| Shields   | 78%   | WARN   |
-| Hull      | 100%  | OK     |
+| Leg | Distance | ETA |
+|---|---|---|
+| Hurston to Crusader | 32.5 Gm | 2 min |
+| Crusader to ArcCorp | 28.1 Gm | 1 min 40 s |
 
-> **Note:** Shields recharging""",
-]
+---
+*All systems nominal.*"""
 
-LONG_MESSAGE = """## Comprehensive Status Report
-
-### Navigation Systems
-All navigation systems are **fully operational**. Current heading: `045.7 deg`
-
-### Communication Array
-Minor interference detected on channels 4-6. Switching to backup frequencies.
-
-### Resource Status
-| Resource | Level | Rate |
-|----------|-------|------|
-| Fuel     | 67%   | -2%/h |
-| O2       | 98%   | -0.1%/h |
-| Power    | 85%   | +5%/h |
-
-### Recommendations
-1. Refuel at next station
-2. Run diagnostics on comm array
-3. Continue current heading
-
-> *ETA to destination: 4h 32m*"""
+LONG = "\n\n".join(
+    f"**Log {i:02d}.** Scanned sector {i}: {['no contacts', 'two asteroids', 'a derelict Hull C', 'an outpost'][i % 4]}."
+    for i in range(1, 31)
+) + "\n\n**End of log.** The newest part stays in view; the top fades."
 
 
-# =============================================================================
-# Tests
-# =============================================================================
+async def run(demo: Demo) -> None:
+    client = demo.client
+    await client.create_group(MESSAGE, M, {**STYLE, **area(40, 40, 560, 640)})
+    orionis = demo.picture("Orionis", "#d84f4f")
 
-async def test_basic_messages(session: TestSession, delay: float = 2.0):
-    """Test basic message display."""
-    print(f"[{session.name}] Testing basic messages...")
+    demo.scene("A Wingman answers", "picture with a ring, name, a fine accent line, the text typing itself out")
+    await client.show_message(MESSAGE, M, "Orionis", "Landing granted on **pad 04**. Hangar doors open in 30 seconds.",
+                              title_icon=orionis, duration=60)
+    await demo.pause(4)
 
-    await session.draw_user_message("Show me a status update")
-    await asyncio.sleep(delay)
+    demo.scene("Markdown", "headings, lists, checkboxes, a quote, code, a table with a shaded header")
+    await client.show_message(MESSAGE, M, "Orionis", MARKDOWN, title_icon=orionis, duration=60)
+    await demo.pause(9)
 
-    await session.draw_assistant_message(random.choice(SHORT_MESSAGES))
-    await asyncio.sleep(delay)
+    demo.scene("Streaming", "an answer arriving in chunks keeps typing where it was")
+    await client.show_message(MESSAGE, M, "Orionis", "Plotting the route", title_icon=orionis, duration=60)
+    for chunk in (" to Port Olisar.", " Two jumps,", " about **3 minutes**.", "\n\nFuel after arrival: 64 %."):
+        await demo.pause(0.8)
+        await client.append_message(MESSAGE, M, chunk)
+    await demo.pause(3)
 
-    await session.draw_assistant_message(
-        "This is a medium-length response that provides "
-        "more context and information about the current situation."
-    )
-    await asyncio.sleep(delay)
+    demo.scene("Thinking, tools, answer", "the bottom edge glows, then chips: a tool called 3 times shows once with a 3")
+    await client.hide_message(MESSAGE, M)
+    await client.show_loader(MESSAGE, M, True)
+    await demo.pause(2)
+    status = {"name": "get_ship_status", "source": "Ship Status", "icon": demo.icon("Ship Status", "#3b82f6")}
+    route = {"name": "plot_route", "source": "SC Tools", "icon": None}
+    await client.show_message(MESSAGE, M, "Orionis", "Checking the ship.", tools=[status, status, status, route],
+                              title_icon=orionis, duration=60)
+    await demo.pause(2.5)
+    await client.show_loader(MESSAGE, M, False)
+    await client.show_message(MESSAGE, M, "Orionis", "Shields at **96 %**, hull intact, the route is set.",
+                              tools=[status, status, status, route], title_icon=orionis, duration=60)
+    await demo.pause(4)
 
-    await session.hide()
-    print(f"[{session.name}] Basic messages complete")
+    demo.scene("The loader alone, in a colour of its own", "an empty panel glowing at its bottom edge, in green")
+    await client.hide_message(MESSAGE, M)
+    await demo.pause(1)
+    await client.show_loader(MESSAGE, M, True, color="#22c55e")
+    await demo.pause(3)
+    await client.show_loader(MESSAGE, M, False)
 
+    demo.scene("A long answer", "taller than the window: the end shows, the top fades out")
+    await client.show_message(MESSAGE, M, "Orionis", LONG, title_icon=orionis, duration=60)
+    await demo.pause(7)
 
-async def test_markdown(session: TestSession, delay: float = 3.0):
-    """Test markdown rendering."""
-    print(f"[{session.name}] Testing markdown...")
+    demo.scene("A title in another colour, without a picture")
+    await client.show_message(MESSAGE, M, "Warning", "Hull temperature **rising**. Reduce speed.",
+                              color="#f59e0b", duration=60)
+    await demo.pause(3)
 
-    for i, sample in enumerate(MARKDOWN_SAMPLES):
-        await session.draw_assistant_message(sample)
-        await asyncio.sleep(delay)
+    demo.scene("Restyled while it shows", "accent, size and width change on the window as it is")
+    await client.show_message(MESSAGE, M, "Orionis", "Watch me change.", title_icon=orionis, duration=60)
+    await demo.pause(1.5)
+    for props in ({"accent_color": "#3b82f6"}, {"font_size": 19}, {"width": 640}, {"accent_color": "#22c55e", "font_size": 15, "width": 460}):
+        demo.check(await client.update_group(MESSAGE, M, props), f"update_group {props}")
+        await demo.pause(1.5)
 
-    await session.hide()
-    print(f"[{session.name}] Markdown test complete")
-
-
-async def test_long_message(session: TestSession, delay: float = 5.0):
-    """Test long message with scrolling."""
-    print(f"[{session.name}] Testing long message...")
-
-    await session.draw_assistant_message(LONG_MESSAGE)
-    await asyncio.sleep(delay)
-
-    await session.hide()
-    print(f"[{session.name}] Long message test complete")
-
-
-async def test_loading_indicator(session: TestSession, delay: float = 1.0):
-    """Test loading indicator."""
-    print(f"[{session.name}] Testing loading indicator...")
-
-    await session.draw_user_message("What's the weather?")
-    await asyncio.sleep(delay)
-
-    await session.set_loading(True)
-    await asyncio.sleep(delay * 2)
-
-    await session.set_loading(False)
-    await session.draw_assistant_message("The weather is sunny with 22°C.")
-    await asyncio.sleep(delay * 2)
-
-    await session.hide()
-    print(f"[{session.name}] Loading indicator test complete")
-
-
-async def test_loader_only(session: TestSession, delay: float = 1.0):
-    """Test loading indicator without any message content."""
-    print(f"[{session.name}] Testing loader-only (no message)...")
-
-    # Show loader without any prior message
-    await session.set_loading(True)
-    await asyncio.sleep(delay * 3)
-
-    # Hide loader
-    await session.set_loading(False)
-    await asyncio.sleep(delay)
-
-    await session.hide()
-    print(f"[{session.name}] Loader-only test complete")
-
-
-async def test_sequential_messages(session: TestSession, delay: float = 1.5):
-    """Test sequential messages to verify cache invalidation."""
-    print(f"[{session.name}] Testing sequential messages...")
-
-    messages = [
-        "First message - this should display properly.",
-        "Second message - cache should invalidate.",
-        "Third message with **markdown** formatting.",
-        "Fourth message - all messages should render correctly.",
-    ]
-
-    for i, msg in enumerate(messages, 1):
-        await session.draw_assistant_message(msg)
-        await asyncio.sleep(delay)
-
-    await session.hide()
-    print(f"[{session.name}] Sequential messages test complete")
-
-
-async def test_message_bottom_fade(session: TestSession, delay: float = 2.0):
-    """Test bottom fade effect when message content overflows."""
-    print(f"[{session.name}] Testing message bottom fade...")
-
-    # Very long message that will overflow a small window
-    long_message = """# Comprehensive Status Report
-
-## Navigation Systems
-All navigation systems are **fully operational**. Current heading: `045.7 deg`
-
-## Communication Array
-Minor interference detected on channels 4-6. Switching to backup frequencies.
-
-## Resource Status
-| Resource | Level | Rate |
-|----------|-------|------|
-| Fuel     | 67%   | -2%/h |
-| O2       | 98%   | -0.1%/h |
-| Power    | 85%   | +5%/h |
-
-## Recommendations
-1. Refuel at next station
-2. Run diagnostics on comm array
-3. Continue current heading
-
-## Additional Intel
-- Sector scan complete
-- No hostile contacts detected
-- Friendly vessels in vicinity: 3
-
-> *ETA to destination: 4h 32m*
-
-## Mission Details
-- Objective: Survey nebula region
-- Timeline: 48 hours
-- Support: Available on demand
-
-## Final Notes
-All systems nominal. Ready for next assignment.
-"""
-
-    # Use a small max_height to force overflow and trigger bottom fade
-    await session.draw_message_with_props(
-        "Wingman",
-        long_message,
-        custom_props={"max_height": 150, "scroll_fade_height": 30}
-    )
-    await asyncio.sleep(delay)
-
-    # Also test with loading indicator (should reserve 30px at bottom)
-    await session.set_loading(True)
-    await asyncio.sleep(delay)
-    await session.set_loading(False)
-
-    await session.hide()
-    print(f"[{session.name}] Bottom fade test complete")
-
-
-# =============================================================================
-# Run All Tests
-# =============================================================================
-
-async def run_all_message_tests(session: TestSession):
-    """Run all message tests."""
-    await test_basic_messages(session)
-    await asyncio.sleep(1)
-    await test_markdown(session)
-    await asyncio.sleep(1)
-    await test_long_message(session)
-    await asyncio.sleep(1)
-    await test_loading_indicator(session)
-    await asyncio.sleep(1)
-    await test_loader_only(session)
-    await asyncio.sleep(1)
-    await test_sequential_messages(session)
-    await asyncio.sleep(1)
-    await test_message_bottom_fade(session)
-
-
-if __name__ == "__main__":
-    from hud_server.tests.test_runner import run_interactive_test
-    run_interactive_test(run_all_message_tests)
-
+    demo.scene("Duration, then gone", "shows for 2 seconds, fades out by itself")
+    await client.show_message(MESSAGE, M, "Orionis", "Gone in two seconds.", title_icon=orionis, duration=2)
+    await demo.pause(4)

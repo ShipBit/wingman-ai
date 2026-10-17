@@ -229,6 +229,17 @@ class StarCitizenFeatureKind(Enum):
     MCP = "mcp"
 
 
+class HudAlign(Enum):
+    """Where a HUD container sits inside its area when its content is shorter."""
+
+    TOP = "top"
+    """Sticks to the top edge of the area and grows down."""
+    CENTER = "center"
+    """Stays in the middle of the area and grows up and down."""
+    BOTTOM = "bottom"
+    """Sticks to the bottom edge of the area and grows up."""
+
+
 class LocalAiMode(Enum):
     """Where the support model runs.
 
@@ -437,6 +448,10 @@ class StarCitizenFeatureKindEnumModel(BaseEnumModel):
     star_citizen_feature_kind: StarCitizenFeatureKind
 
 
+class HudAlignEnumModel(BaseEnumModel):
+    hud_align: HudAlign
+
+
 class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
 
@@ -475,6 +490,7 @@ ENUM_TYPES = {
     "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
     "SkillRequirement": SkillRequirementEnumModel,
     "StarCitizenFeatureKind": StarCitizenFeatureKindEnumModel,
+    "HudAlign": HudAlignEnumModel,
     "SpokenLanguage": SpokenLanguageEnumModel,
     "PocketTtsQuality": PocketTtsQualityEnumModel,
     "ImageStyle": ImageStyleEnumModel,

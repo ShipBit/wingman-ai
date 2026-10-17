@@ -483,6 +483,8 @@ _STAGE_DIRECTION = r"(?<!\])\[[a-z][a-z ]{2,28}\](?![(\[])"
 _SPEECH_MARKUP = f"(?:{_SPEECH_TAG}|{_STAGE_DIRECTION})"
 _MARKUP_AT_LINE_START_RE = re.compile(rf"(?m)^([ \t]*){_SPEECH_MARKUP}[ \t]*")
 _MARKUP_RE = re.compile(rf"[ \t]*{_SPEECH_MARKUP}")
+# Code blocks and inline code are shown as written: <div> there is code
+_CODE_RE = re.compile(r"(```.*?(?:```|\Z)|`[^`\n]*`)", re.DOTALL)
 
 
 def display_text(text: str) -> str:
@@ -492,13 +494,16 @@ def display_text(text: str) -> str:
     (<break time="400ms" />), spelled-out names (<verbatim>L3</verbatim>) and
     stage directions ([sigh], or <sigh> when they get it wrong). The client
     renders those; the HUD showed them as typed. Everything else stays as
-    written, indentation and Markdown included.
+    written, indentation, Markdown and code included.
     """
     if not text:
         return text
-    # At the start of a line the space after the markup goes with it, the
-    # indentation before it stays; inside a line the space before it goes.
-    text = _VERBATIM_RE.sub("", text)
-    text = _MARKUP_AT_LINE_START_RE.sub(r"\1", text)
-    text = _MARKUP_RE.sub("", text)
-    return text.strip()
+    # split() with a group: prose at even places, code at odd ones
+    parts = _CODE_RE.split(text)
+    for i in range(0, len(parts), 2):
+        # At the start of a line the space after the markup goes with it, the
+        # indentation before it stays; inside a line the space before it goes.
+        prose = _VERBATIM_RE.sub("", parts[i])
+        prose = _MARKUP_AT_LINE_START_RE.sub(r"\1", prose)
+        parts[i] = _MARKUP_RE.sub("", prose)
+    return "".join(parts).strip()

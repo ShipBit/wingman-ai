@@ -266,7 +266,8 @@ class ScGameEvents(Skill):
             await self.wingman.conversation.show(
                 line, skill_name=self.config.display_name
             )
-            if self._show_in_hud():
+            hud_skill_shows_it = self._remember() and self.wingman.skills.has(HUD_SKILL)
+            if self._show_in_hud() and not hud_skill_shows_it:
                 await self.wingman.hud.show_message(
                     self.wingman.name, line, duration=15
                 )

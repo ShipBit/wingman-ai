@@ -11,7 +11,7 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **Persistent Items**: Progress bars, timers, and status indicators
 - **Chat Windows**: Multi-user chat overlays with auto-hide and message history
 - **State Management**: Persist and restore HUD state across sessions
-- **Overlay Integration**: Optional PIL-based overlay rendering on Windows
+- **Overlay Integration**: PIL-based overlay rendering, put on screen by a platform backend (Windows for now, see [Platforms](#platforms))
 
 ## Architecture
 
@@ -36,6 +36,12 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
                     ┌──────────────────┐
                     │  HeadsUpOverlay  │
                     │  (PIL Renderer)  │
+                    └─────────┬────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │ Platform backend │
+                    │ (OS windows)     │
                     └──────────────────┘
 ```
 
@@ -45,10 +51,70 @@ The HUD Server provides a REST API to control HUD overlays from any client. It r
 - **`hud_manager.py`**: Thread-safe state management for all HUD groups
 - **`http_client.py`**: Async/sync HTTP client for interacting with the server
 - **`models.py`**: Pydantic models for API requests/responses with validation
-- **`overlay/overlay.py`**: PIL-based overlay renderer (Windows only, optional)
+- **`overlay/overlay.py`**: PIL-based overlay renderer (any OS; draws through the platform backend)
 - **`layout/manager.py`**: Automatic positioning and stacking system
 - **`rendering/markdown.py`**: Sophisticated Markdown renderer
-- **`platform/win32.py`**: Windows API integration
+- **`rendering/layers.py`**: Windows drawn as a stack of cached pieces (see [Rendering](#rendering))
+- **`platform/`**: The bridge to the operating system, one backend per OS (see [Platforms](#platforms))
+
+## Rendering
+
+Every window (message, info panel, chat) is a stack of pieces: a title, each
+Markdown block, each chat message, each info item. A piece is rendered once,
+at its full height, and kept while the window shows it. A frame lays out only
+the pieces that reach into the window, newest at the bottom, so:
+
+- content scrolled out of view is neither rendered nor kept; when there is
+  more above, the newest part shows and the top fades,
+- the typewriter redraws only the block it is typing,
+- the loader is a glow on the window's bottom edge, under the content: a
+  line with a soft halo and light rising about 64 px into the window,
+  breathing every 2.8 s. It takes no room, so a window does not grow or
+  shrink when it starts or stops, and it eases in and out. While it breathes
+  the window is put together from its kept pieces, at most 30 times a
+  second; a running timer redraws its own item once a second, a moving
+  progress bar once a pixel,
+- images from the web download in the background and show once they arrived.
+
+### The look
+
+`rendering/glass.py` draws the HUD's glass: a body lighter at the top, with a
+fine outline and a line of light along its top edge, on a soft shadow. Every
+rounded shape (window, bubbles, chips, bars, avatars, tables) is cut from a
+circle drawn four times larger and scaled down, so its edges are smooth. What
+does not depend on the content (body, edges, shadow) is made once per size.
+
+The shadow lies only around the body, never under it: a see-through panel
+keeps exactly its own colour. It needs room, so a window's picture is larger
+than its body by `glass.SHADOW` on each side, and the window sits that much
+further up and left. Layout, collisions and the preview work with the body
+(`body_height`), not the picture. While it fades in, a window rises 8 px into
+place.
+
+## Platforms
+
+The overlay renders every HUD window into a PIL image, on every OS. Only the
+platform backend touches the OS: it shows those images in transparent,
+always-on-top, click-through windows, moves and hides them, routes the mouse
+for the preview, lists the monitors and finds the font files.
+
+`hud_server/platform/` is the bridge:
+
+| File | Role |
+| --- | --- |
+| `__init__.py` | Picks the backend for the OS Core runs on: `create_backend()`, `hud_supported()`, `unsupported_reason()`. |
+| `base.py` | `HudBackend`, the interface every backend implements, and its types (`Monitor`, `FontSet`, `Cursor`, `Pointer`). |
+| `windows.py` | The Windows backend: layered Win32 windows with per-pixel alpha. |
+| `win32.py` | The ctypes bindings `windows.py` uses. |
+| `linux.py`, `macos.py` | Registered, not written yet: they report the HUD as unsupported and say why. |
+
+Core starts the HUD server only where `hud_supported()` is true. Elsewhere it
+logs the reason, and skills see `self.wingman.hud.available == False`.
+
+To add an OS, implement `HudBackend` in its module and set `supported = True`.
+The overlay, layout, preview and Core stay as they are. The backend's window
+calls run on the overlay thread. Tests drive the overlay through a backend
+without an OS (`FakeHudBackend` in `tests/support.py`), so they run on every OS.
 
 ## Quick Start
 
@@ -137,6 +203,36 @@ with HudHttpClientSync() as client:
 
 > **Note:** Groups require an `element` parameter to specify the window type (`message`, `persistent`, or `chat`).
 
+### Defaults
+
+- `GET /defaults` - The values groups use for props their own calls leave out
+- `PUT /defaults` - Replace them: `props` for every group, `groups` per group name
+
+Every window resolves its props as: built-in values, then `defaults.props`,
+then `defaults.groups[group_name]`, then the group's own props, then the props
+sent with a call. A change to the defaults restyles and moves existing windows
+right away. Wingman AI Core sets them from the active HUD profile, so a skill
+that creates a group with only a position gets the user's look.
+
+### Shared Containers
+
+Core writes every Wingman's conversation to the group `wingman_chat`
+(element `message`) and the info panels to `wingman_info` (element
+`persistent`). Their area and look come from the defaults.
+
+### Preview
+
+- `PUT /preview` (or `POST`) - Show the chat and info containers as preview panels that fill their whole area, in their real style
+- `GET /preview` - The preview and its current areas
+- `DELETE /preview` - End it
+
+With `"interactive": true` the mouse moves a panel (drag the middle) and
+resizes it (drag an edge or corner). In-process listeners registered with
+`HudServer.add_event_listener()` get a `preview_changed` event with the new
+area (`x1`, `y1`, `x2`, `y2`, `final` on mouse-up). Coordinates are pixels on
+the HUD screen; the process is DPI-unaware, so on a scaled display both the
+windows and the mouse use the same virtualized pixels.
+
 ### Element Visibility
 
 - `POST /element/show` - Show a hidden element (message, persistent, or chat)
@@ -152,14 +248,14 @@ This allows you to temporarily hide HUD elements while preserving their state an
 
 - `POST /message` - Show a message in a group
 - `POST /message/append` - Append content to current message (streaming)
-- `POST /message/hide/{group_name}` - Hide the current message
+- `POST /message/hide/{group_name}/{element}` - Hide the current message
 
 ### Persistent Items
 
 - `POST /items` - Add a persistent item
 - `PUT /items` - Update an existing item
-- `DELETE /items/{group_name}/{title}` - Remove an item
-- `DELETE /items/{group_name}` - Clear all items
+- `DELETE /items/{group_name}/{element}/{title}` - Remove an item
+- `DELETE /items/{group_name}/{element}` - Clear all items
 
 ### Progress & Timers
 
@@ -203,27 +299,22 @@ await client.update_chat_message(
 
 This works for both the most recent message and any past message still in the chat history.
 
-### State Management
-
-- `GET /state/{group_name}` - Get group state for persistence
-- `POST /state/restore` - Restore group state from snapshot
-
 ## Configuration
 
 ### Server Settings
 
-```python
-from hud_server.models import HudServerSettings
+Core keeps them in `settings.yaml` under `hud_server` (`HudServerSettings` in
+`api/interface.py`):
 
-settings = HudServerSettings(
-    enabled=True,              # Auto-start with Core
-    host="127.0.0.1",         # Local only
-    port=7862,                # Default port
-    framerate=60,             # Overlay FPS (1-240)
-    layout_margin=20,         # Screen edge margin
-    layout_spacing=15,        # Window spacing
-    screen=1                  # Monitor index (1=primary, 2+=additional monitors)
-)
+```yaml
+hud_server:
+  enabled: true          # Start with Core
+  host: 127.0.0.1        # Local only; 0.0.0.0 for the LAN
+  port: 7862
+  framerate: 60          # Overlay FPS
+  layout_margin: 20      # Screen edge margin
+  layout_spacing: 15     # Space between stacked windows
+  screen: 1              # Monitor (1 = primary, 2+ = more monitors)
 ```
 
 ### Dynamic Settings Update
@@ -266,7 +357,8 @@ props = {
     # Layout (automatic positioning)
     "layout_mode": "auto",      # auto | manual | hybrid
     "anchor": "top_left",       # top_left | top_right | bottom_left | bottom_right | center
-    "priority": 10              # stacking order (0-100)
+    "priority": 10,             # stacking order (0-100)
+    "align": "top",             # manual mode: top | center | bottom of the area
 }
 ```
 
@@ -291,11 +383,12 @@ These properties can be set when creating or updating a HUD group:
 | `layout_mode` | string | `"auto"` | `"auto"`, `"manual"`, or `"hybrid"` |
 | `anchor` | string | `"top_left"` | Screen anchor point (see below) |
 | `priority` | int | `10` | Stacking priority (higher = closer to anchor) |
+| `align` | string | `"top"` | Manual mode: `"top"` sticks to `y` and grows down, `"center"` stays in the middle of the area and grows both ways, `"bottom"` sticks to `y + max_height` and grows up |
 
 ### Layout Modes
 
 - **`auto`** (default): Windows are automatically positioned and stacked based on anchor and priority
-- **`manual`**: Windows use the `x` and `y` properties directly (no auto-stacking)
+- **`manual`**: Windows live in the area `x`, `y`, `width`, `max_height` (no auto-stacking). They take no place in an anchor's stack and are kept on the screen.
 - **`hybrid`**: Reserved for future use with offset adjustments
 
 ### Anchor Points
@@ -497,22 +590,6 @@ Messages support rich Markdown formatting:
 - **Blockquotes**: `> quote`
 - **Tables**: Standard Markdown table syntax
 
-## State Persistence
-
-Save and restore HUD state across sessions:
-
-```python
-# Get current state
-state = await client.get_state("my_wingman")
-
-# Store state in your database/file
-save_to_storage(state)
-
-# Later, restore it
-state = load_from_storage()
-await client.restore_state("my_wingman", state)
-```
-
 ## Error Handling
 
 The server provides detailed error responses:
@@ -545,25 +622,46 @@ printr.print("HUD Server started", color=LogType.INFO, server_only=True)
 
 ## Testing
 
-Run the test suite:
+The unit tests are in `tests/hud/` (pytest, every OS, no windows):
 
 ```powershell
-python -m hud_server.tests.run_tests
+python -m pytest tests/hud -q
 ```
 
-Individual tests:
+`hud_server/tests/` holds the **demos**: they drive the HUD server through
+its HTTP API and show every feature on screen, then list every request the
+server refused and every error the overlay reported:
+
 ```powershell
-python -m hud_server.tests.run_tests                    # Run quick integration test
-python -m hud_server.tests.run_tests --all              # Run all test suites
-python -m hud_server.tests.run_tests --messages         # Run message tests
-python -m hud_server.tests.run_tests --progress         # Run progress tests
-python -m hud_server.tests.run_tests --persistent       # Run persistent info tests
-python -m hud_server.tests.run_tests --chat             # Run chat tests
-python -m hud_server.tests.run_tests --unicode          # Run Unicode/emoji stress tests
-python -m hud_server.tests.run_tests --layout           # Run layout manager unit tests (no server needed)
-python -m hud_server.tests.run_tests --layout-visual    # Run visual layout tests with actual HUD windows
-python -m hud_server.tests.run_tests --snake            # You know this one ...
+python -m hud_server.tests.run_tests                 # quick check: each element once
+python -m hud_server.tests.run_tests chat info       # some suites
+python -m hud_server.tests.run_tests --all           # every suite
+python -m hud_server.tests.run_tests --list          # what there is
+python -m hud_server.tests.run_tests snake           # the Snake game (needs `keyboard`)
 ```
+
+| Suite | Shows |
+| --- | --- |
+| `messages` | The message window: Markdown, streaming, tool chips with counts, the loader, long answers, live restyling |
+| `chat` | The chat flow: bubbles, pictures, tool calls between question and answer, typing, edits, hide and clear |
+| `info` | The info panel: panels with tables, countdowns, progress, updates, expiry, a full panel |
+| `images` | Pictures from files, data URIs and the web, avatars and tool icons |
+| `layout` | Anchors, stacking, areas and their align, live moves, a message covering its panel, hidden elements |
+| `profiles` | Switching HUD profiles (the server defaults) live, group props outranking them |
+| `look` | The glass look: accents, background opacity, corners, fonts, a light theme |
+| `preview` | The profile preview, with the chat flow, restyled, dragged with the mouse |
+| `settings` | Frame rate, margin, spacing and monitor, changed while the server runs |
+| `multiuser` | Several clients at once, sharing one chat |
+| `unicode` | Emoji sequences, scripts, symbols, emotion tags |
+
+With Core running and its HUD on, the demos use Core's HUD server, in groups
+of their own (`demo_*`); afterwards its defaults are put back, and `settings`
+is skipped. Otherwise they start a server of their own.
+
+Options: `--headless` runs them in this process with no windows and no pauses,
+which checks that every request is accepted and nothing breaks the drawing
+(`tests/hud/test_demo_suites.py` runs every suite this way); `--speed X`
+makes the pauses X times shorter; `--port`, `--screen`, `--no-web`.
 
 ## Troubleshooting
 
@@ -582,7 +680,7 @@ server.start(port=7863)
 ### Overlay not showing
 
 1. Check PIL is installed: `pip install Pillow`
-2. Windows only - not supported on macOS/Linux
+2. Only Windows has a platform backend so far; on macOS/Linux the log says `[HUD] The HUD does not run on ... yet.`
 3. Check logs for overlay errors
 
 ### Connection failures

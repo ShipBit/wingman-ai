@@ -297,6 +297,16 @@ if len(migration_hidden) < 14:
     )
 hiddenimports += migration_hidden
 
+# The HUD imports the backend for its OS by module name (hud_server/platform),
+# so the analysis never sees those modules either. Without them a packaged
+# build reports the HUD as unsupported and never starts it.
+hud_platform_hidden = sorted(
+    f"hud_server.platform.{name[:-3]}"
+    for name in os.listdir(os.path.join('hud_server', 'platform'))
+    if name.endswith('.py') and name != '__init__.py'
+)
+hiddenimports += hud_platform_hidden
+
 # ============================================================================
 # ANALYSIS
 # ============================================================================

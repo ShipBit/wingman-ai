@@ -135,6 +135,45 @@ hud_server:
   layout_margin: 20
   layout_spacing: 15
   screen: 1
+# Layout and look of the HUD. The default profile applies to every config no
+# other profile lists under `configs`. Areas are pixels on the HUD screen.
+hud_profiles:
+  - id: default
+    name: Default
+    is_default: true
+    configs: []
+    chat:
+      x1: 20
+      y1: 20
+      x2: 420
+      y2: 520
+      align: center
+    info:
+      x1: 20
+      y1: 540
+      x2: 420
+      y2: 1040
+      align: center
+    style:
+      font_size: 16
+      font_family: Segoe UI
+      accent_color: "#00aaff"
+      bg_color: "#1e212b"
+      bg_opacity: 100
+      text_color: "#f0f0f0"
+      border_radius: 12
+      content_padding: 16
+      opacity: 85
+      typewriter_effect: true
+    max_display_time: 5
+    audio_stop_delay: 1
+    display_tool_names: false
+    user_name: ""
+    chat_flow: false
+    restore_info_items: true
+# Core reads Star Citizen's Game.log live and hands the events to skills.
+# Switch it off if you do not play Star Citizen. On, it waits for a Game.log
+# at almost no cost. game_path is the folder that holds LIVE, PTU and so on.
 # Star Citizen for every feature that needs the game. plays is the answer
 # from the setup after the first start, null until the user gave it.
 # game_path is the folder that holds LIVE, PTU and so on.

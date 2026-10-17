@@ -15,7 +15,7 @@ from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
 from tests.support import template
 
-SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp", "HUD", "RadioChatter")
+SKILLS = ("ScGameEvents", "SC_Accountant", "UEXCorp", "RadioChatter")
 SERVERS = ("wingman_starhead", "wingman_galactapedia", "wingman_versetime")
 
 
@@ -262,22 +262,6 @@ def test_no_adds_no_servers(service):
     service.config_manager.read_config.return_value = template("mcp.template.yaml")
     asyncio.run(service.apply_answer(False))
     service.config_manager.save_mcp_config.assert_not_called()
-
-
-@pytest.mark.parametrize("plays", [True, False])
-def test_the_answer_leaves_the_hud_as_it_is(service, plays):
-    service.files["ATC"].discoverable_skills = ["HUD"]
-    asyncio.run(service.apply_answer(plays))
-    assert "HUD" in service.files["ATC"].discoverable_skills
-    assert "HUD" not in service.files["Computer"].discoverable_skills
-
-
-def test_the_hud_is_listed_and_marked_as_not_star_citizen(service):
-    service.files["ATC"].discoverable_skills = ["HUD"]
-    hud = {f.name: f for f in service.get_setup().wingmen[0].features}["HUD"]
-    assert hud.enabled is True
-    assert hud.star_citizen is False
-    assert hud.on_by_default is False
 
 
 @pytest.mark.parametrize(

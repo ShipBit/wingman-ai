@@ -43,6 +43,7 @@ REPLACED_BY_CORE = {
     "sc_log_reader": "replaced by Core's Star Citizen log reader",
     "sc_log_reader_2": "replaced by Core's Star Citizen log reader",
     "sc_accountant": "replaced by the bundled Star Citizen Accountant",
+    "hud": "replaced by Core's own HUD (HUD profiles in the settings)",
 }
 
 

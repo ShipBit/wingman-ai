@@ -34,6 +34,9 @@ DELIBERATELY_NOT_COPIED = {
     "hardware_scan_performed",
     # Filled by the client's own onboarding, not the settings page.
     "user_name",
+    # Written by the /hud/profiles endpoints; a drag in the preview changes
+    # them while the settings page is open.
+    "hud_profiles",
 }
 
 

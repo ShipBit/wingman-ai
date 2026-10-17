@@ -349,7 +349,9 @@ class SettingsService:
             settings.cancel_tts_joystick_button
         )
 
-        # HUD server
+        # HUD server. hud_profiles are not taken from the page: they have their
+        # own endpoints (/hud/profiles) and a drag in the preview changes them
+        # while the page is open.
         self.config_manager.settings_config.hud_server = settings.hud_server
         if settings.hud_server != old.hud_server:
             await self.settings_events.publish(

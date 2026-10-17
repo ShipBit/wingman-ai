@@ -54,8 +54,8 @@ def toggled(method: str, name: str, enabled: bool, on_disk: dict) -> WingmanConf
     [("toggle_wingman_skill", "discoverable_skills"), ("toggle_wingman_mcp", "discoverable_mcps")],
 )
 def test_switching_on_survives_the_save_merge(method, field):
-    config = toggled(method, "HUD", True, WINGMAN)
-    assert config.model_dump(exclude_unset=True)[field] == ["HUD"]
+    config = toggled(method, "Spotify", True, WINGMAN)
+    assert config.model_dump(exclude_unset=True)[field] == ["Spotify"]
 
 
 def test_switching_off_the_last_one_saves_an_empty_list():

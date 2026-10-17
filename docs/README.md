@@ -25,6 +25,7 @@ Learn how to create custom extensions for Wingman AI:
 
 Additional reference documentation:
 
+- **[The HUD](hud.md)** - The shared chat and info containers, HUD profiles per config, the preview and the per-Wingman switches
 - **[What Wingman AI shortens, and when](context-and-shortening.md)** - Every place where tool responses, the conversation or skill input get cut, cleared or summarized, with example scenarios
 - **[Available Edge TTS Voices](available-edge-tts-voices.md)** - Complete list of available voices for Edge TTS
 
