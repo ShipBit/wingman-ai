@@ -321,3 +321,17 @@ def test_the_conversion_runs_in_its_own_step_folder(users_dir, boot_config_manag
     assert context["default_config"] == "General"
     assert "Star Citizen" in context["deleted_template_configs"]
     assert config_manager.find_default_config().name == "General"
+
+
+@pytest.mark.parametrize("old_version", ["2_1_1", "3_2_8"])
+def test_the_hud_ends_up_on_from_any_older_version(users_dir, boot_config_manager, old_version):
+    make_old_version(users_dir, old_version, {"Star Citizen": {"Computer.yaml": None}})
+    settings_file = path.join(users_dir, old_version, "configs", "settings.yaml")
+    settings = read_yaml(settings_file)
+    settings["hud_server"]["enabled"] = False
+    write_yaml(settings_file, settings)
+
+    boot_and_migrate(boot_config_manager)
+
+    migrated = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "settings.yaml"))
+    assert migrated["hud_server"]["enabled"] is True
