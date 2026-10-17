@@ -264,6 +264,10 @@ class MacOsBackend(HudBackend):
             import Quartz
 
             error, displays, count = Quartz.CGGetActiveDisplayList(16, None, None)
+            if error or not count:
+                # A sleeping display is not active, but it is still the one
+                # the HUD will show on once it wakes
+                error, displays, count = Quartz.CGGetOnlineDisplayList(16, None, None)
             if error:
                 return []
             main = Quartz.CGMainDisplayID()
