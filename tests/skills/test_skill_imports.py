@@ -24,9 +24,6 @@ ALLOWED_PREFIXES = (
 )
 
 EXCEPTIONS = {
-    # Core's own HUD clients: the facade's hud has no images, timers, progress.
-    "hud": ("hud_server.", "services.file", "services.printr"),
-    "mic_status": ("hud_server.",),
     # Prompt file shipped in templates/prompts.
     "radio_chatter": ("services.file",),
     # Maintained by UEX; own data dir, console logging and secret handling.

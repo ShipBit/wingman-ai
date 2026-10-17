@@ -285,6 +285,11 @@ class BaseProps:
     max_height: Optional[int] = None
     """Maximum window height in pixels. Range: 100-2160."""
 
+    align: Optional[str] = None
+    """MANUAL mode: 'top' sticks to y and grows down, 'center' stays in the
+    middle of the area and grows both ways, 'bottom' sticks to y + max_height
+    and grows up. Default 'top'."""
+
     layout_mode: Optional[str] = None
     """Layout mode: 'auto', 'manual', or 'hybrid'. Use LayoutMode enum."""
 

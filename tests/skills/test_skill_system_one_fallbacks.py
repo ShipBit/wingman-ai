@@ -76,29 +76,23 @@ def test_uex_refuses_to_ask_about_an_unbounded_shortlist():
 # ── HUD panel titles ────────────────────────────────────────────────
 
 
-def _hud(enabled: bool, panels: dict):
-    from skills.hud.main import HUD
+def _resolve_panel(enabled: bool, asked: str, titles: list[str]):
+    from services.hud_tools import resolve_title
 
-    skill = HUD.__new__(HUD)
-    skill.wingman = _wingman(enabled)
-    skill._persistent_items = panels
-    return skill
+    return asyncio.run(resolve_title(_wingman(enabled).system_one, asked, titles))
 
 
 def test_hud_exact_title_still_resolves_with_system_one_off():
-    skill = _hud(False, {"Mining Yield": {}})
-    assert asyncio.run(skill._resolve_title("Mining Yield")) == "Mining Yield"
+    assert _resolve_panel(False, "Mining Yield", ["Mining Yield"]) == "Mining Yield"
 
 
 def test_hud_gives_up_on_a_rephrased_title_with_system_one_off():
-    """Today's behaviour, unchanged: the caller then reports 'not found'."""
-    skill = _hud(False, {"Mining Yield": {}})
-    assert asyncio.run(skill._resolve_title("the mining panel")) is None
+    """The caller then reports 'not found' and lists the panels."""
+    assert _resolve_panel(False, "the mining panel", ["Mining Yield"]) is None
 
 
 def test_hud_has_nothing_to_resolve_against_an_empty_hud():
-    skill = _hud(True, {})
-    assert asyncio.run(skill._resolve_title("anything")) is None
+    assert _resolve_panel(True, "anything", []) is None
 
 
 # ── Spotify playlists ───────────────────────────────────────────────

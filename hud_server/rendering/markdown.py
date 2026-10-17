@@ -1,9 +1,6 @@
 """
-HeadsUp Overlay - PIL-based implementation with sophisticated Markdown rendering
-
-This implementation uses ONLY:
-- PIL (Pillow) for rendering (text, shapes, images)
-- Win32 API for window management
+Markdown for the HUD, drawn with PIL: headers, paragraphs, lists, tables,
+code, quotes, images and emoji, with typewriter support.
 """
 
 import base64
@@ -11,43 +8,100 @@ import binascii
 import copy
 import os
 import re
-from typing import Tuple, Dict, List
+import queue
+import threading
+from collections import OrderedDict
+from typing import Tuple, Dict, List, Optional
 import io
 import urllib.request
-import urllib.error
 
 # PIL for rendering
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageChops
+    from PIL import Image, ImageChops, ImageDraw
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     Image = None
-    ImageDraw = None
-    ImageFont = None
     ImageChops = None
+    ImageDraw = None
 
-# Import cache size constants (with fallback defaults for standalone usage)
-try:
-    from hud_server.constants import (
-        MAX_IMAGE_CACHE_SIZE,
-        MAX_INLINE_TOKEN_CACHE_SIZE,
-        MAX_TEXT_WRAP_CACHE_SIZE,
-        MAX_TEXT_SIZE_CACHE_SIZE,
-        MAX_BASE64_IMAGE_BYTES,
-        DEFAULT_BORDER_COLOR,
-    )
-except ImportError:
-    # Fallback defaults for standalone testing
-    MAX_IMAGE_CACHE_SIZE = 20
-    MAX_INLINE_TOKEN_CACHE_SIZE = 100
-    MAX_TEXT_WRAP_CACHE_SIZE = 200
-    MAX_TEXT_SIZE_CACHE_SIZE = 2000
-    MAX_BASE64_IMAGE_BYTES = 8 * 1024 * 1024
-    DEFAULT_BORDER_COLOR = (55, 62, 74)
+from hud_server.rendering import glass
+from hud_server.constants import (
+    MAX_IMAGE_CACHE_SIZE,
+    MAX_INLINE_TOKEN_CACHE_SIZE,
+    MAX_TEXT_WRAP_CACHE_SIZE,
+    MAX_TEXT_SIZE_CACHE_SIZE,
+    MAX_BASE64_IMAGE_BYTES,
+)
 
 # data:image/<type>;base64,<data> URIs
 _DATA_URI_RE = re.compile(r'^data:image/[a-zA-Z0-9.+-]+;base64,(.+)$', re.DOTALL)
+
+# Images from the web: downloaded once per URL, beside the HUD (never on the
+# thread that draws it), kept for every renderer and every width.
+MAX_WEB_IMAGES = 64
+MAX_WEB_IMAGE_SIZE = 2048
+_web_lock = threading.Lock()
+_web_images: "OrderedDict[str, Image.Image]" = OrderedDict()
+_web_pending: set = set()
+_web_failed: set = set()
+_web_version = 0
+_web_jobs: Optional[queue.Queue] = None
+
+
+def web_image_version() -> int:
+    """Goes up whenever a download ends: what showed a placeholder for it
+    has to be drawn again."""
+    return _web_version
+
+
+def _web_image(url: str) -> Optional[Image.Image]:
+    """The downloaded image, or None while it loads (the download starts
+    here) or after it failed."""
+    global _web_jobs
+    with _web_lock:
+        image = _web_images.get(url)
+        if image is not None:
+            _web_images.move_to_end(url)
+            return image
+        if url in _web_pending or url in _web_failed:
+            return None
+        _web_pending.add(url)
+        if _web_jobs is None:
+            _web_jobs = queue.Queue()
+            for n in range(2):
+                # Daemon threads: a slow server must not hold up Core's exit
+                threading.Thread(
+                    target=_download_worker, args=(_web_jobs,), name=f"hud-image-{n}", daemon=True
+                ).start()
+        jobs = _web_jobs
+    jobs.put(url)
+    return None
+
+
+def _download_worker(jobs: queue.Queue) -> None:
+    global _web_version
+    while True:
+        url = jobs.get()
+        image = None
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                image = Image.open(io.BytesIO(response.read()))
+                image.load()
+            image = image.convert('RGBA')
+            image.thumbnail((MAX_WEB_IMAGE_SIZE, MAX_WEB_IMAGE_SIZE))
+        except Exception:
+            image = None
+        with _web_lock:
+            _web_pending.discard(url)
+            if image is None:
+                _web_failed.add(url)
+            else:
+                _web_images[url] = image
+                while len(_web_images) > MAX_WEB_IMAGES:
+                    _web_images.popitem(last=False)
+            _web_version += 1
 
 
 class MarkdownRenderer:
@@ -63,8 +117,6 @@ class MarkdownRenderer:
         # Calculate line height based on font size (1.625x for good readability)
         font_size = fonts.get('_font_size', 16)
         self.line_height = int(font_size * 1.625)
-        self.letter_spacing = 0  # No letter spacing
-        self.char_count = 0  # For typewriter tracking
         self._text_size_cache = {}
         self._text_size_cache_max = MAX_TEXT_SIZE_CACHE_SIZE
         self._image_cache = {}  # Cache for loaded images
@@ -81,32 +133,20 @@ class MarkdownRenderer:
         self._wrap_cache = {}
         self._max_wrap_cache_size = MAX_TEXT_WRAP_CACHE_SIZE
 
-        # Cache statistics for monitoring
-        self._cache_stats = {
-            'text_size_hits': 0,
-            'text_size_misses': 0,
-            'token_cache_hits': 0,
-            'token_cache_misses': 0,
-            'wrap_cache_hits': 0,
-            'wrap_cache_misses': 0,
-        }
+    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple, bg_alpha: int = 255):
+        """Text, accent and background colour, and how opaque the background is."""
+        self.colors = {'text': text, 'accent': accent, 'bg': bg, 'bg_alpha': bg_alpha}
 
-    def get_cache_stats(self) -> Dict[str, int]:
-        """Get cache statistics for performance monitoring."""
-        return dict(self._cache_stats)
+    def bg_shade(self, strength: float) -> Tuple[int, int, int, int]:
+        """The panel's background a little lighter (a dark one) or darker (a
+        light one), and as see-through as the background."""
+        r, g, b = self.colors.get('bg', (30, 33, 43))[:3]
+        shade = (255, 255, 255) if 0.2126 * r + 0.7152 * g + 0.0722 * b < 128 else (0, 0, 0)
+        return shade + (round(strength * self.colors.get('bg_alpha', 255)),)
 
-    def clear_caches(self):
-        """Clear all caches. Call when memory pressure is high."""
-        self._text_size_cache.clear()
-        self._image_cache.clear()
-        self._inline_token_cache.clear()
-        self._wrap_cache.clear()
-        # Reset stats
-        for key in self._cache_stats:
-            self._cache_stats[key] = 0
-
-    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple):
-        self.colors = {'text': text, 'accent': accent, 'bg': bg}
+    def accent_tint(self, strength: float) -> Tuple[int, int, int, int]:
+        """The accent over the panel at `strength`, as see-through as the panel's background."""
+        return tuple(self.colors['accent'][:3]) + (round(strength * self.colors.get('bg_alpha', 255)),)
 
     def _load_image(self, url: str, max_width: int) -> Image.Image:
         """Load an image from a local path, URL, or base64 source, resize to fit max_width
@@ -114,14 +154,21 @@ class MarkdownRenderer:
 
         Returns None if loading fails.
         """
-        # Check cache first
+        # Check cache first (least recently used goes first)
         cache_key = (url, max_width)
         if cache_key in self._image_cache:
-            return self._image_cache[cache_key]
+            img = self._image_cache.pop(cache_key)
+            self._image_cache[cache_key] = img
+            return img
 
         # Check if we already failed to load this source
         if url in self._image_load_failures:
             return None
+
+        if url.startswith(('http://', 'https://')):
+            # Shown once it has arrived; until then the placeholder
+            original = _web_image(url)
+            return self._remember_image(cache_key, original) if original is not None else None
 
         try:
             img = None
@@ -134,12 +181,6 @@ class MarkdownRenderer:
                 file_path = url[7:]  # Remove 'file://'
                 if os.path.isfile(file_path):
                     img = Image.open(file_path)
-            elif url.startswith(('http://', 'https://')):
-                # Download from URL with timeout
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    img_data = response.read()
-                    img = Image.open(io.BytesIO(img_data))
             else:
                 # data:image/<type>;base64,<data> URI, or a raw base64 string
                 data_uri_match = _DATA_URI_RE.match(url)
@@ -160,30 +201,33 @@ class MarkdownRenderer:
                 self._image_load_failures.add(url)
                 return None
 
-            # Convert to RGBA if necessary
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
-
-            # Resize to fit max_width while keeping aspect ratio (only shrink, never enlarge)
-            orig_width, orig_height = img.size
-            if orig_width > max_width:
-                ratio = max_width / orig_width
-                new_height = int(orig_height * ratio)
-                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-
-            # Cache the result (limit cache size)
-            if len(self._image_cache) >= self._image_cache_max:
-                # Remove oldest entry
-                oldest_key = next(iter(self._image_cache))
-                del self._image_cache[oldest_key]
-
-            self._image_cache[cache_key] = img
-            return img
+            return self._remember_image(cache_key, img)
 
         except Exception as e:
             # Mark as failed to avoid retrying
             self._image_load_failures.add(url)
             return None
+
+    def _remember_image(self, cache_key, img: Image.Image) -> Image.Image:
+        """The image as RGBA, shrunk to the width (never enlarged), cached."""
+        max_width = cache_key[1]
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        orig_width, orig_height = img.size
+        if orig_width > max_width:
+            ratio = max_width / orig_width
+            new_height = int(orig_height * ratio)
+            img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+        if len(self._image_cache) >= self._image_cache_max:
+            oldest_key = next(iter(self._image_cache))
+            del self._image_cache[oldest_key]
+        self._image_cache[cache_key] = img
+        return img
+
+    @property
+    def image_version(self) -> int:
+        return web_image_version()
 
     def _get_text_size(self, text: str, font) -> Tuple[int, int]:
         """Get text size with caching.
@@ -193,10 +237,8 @@ class MarkdownRenderer:
         # Use id(font) because font objects are not hashable but are persistent in this app
         key = (text, id(font))
         if key in self._text_size_cache:
-            self._cache_stats['text_size_hits'] += 1
             return self._text_size_cache[key]
 
-        self._cache_stats['text_size_misses'] += 1
 
         try:
             bbox = font.getbbox(text)
@@ -377,10 +419,8 @@ class MarkdownRenderer:
         # Check cache first
         cache_key = (text, id(font), max_width)
         if cache_key in self._wrap_cache:
-            self._cache_stats['wrap_cache_hits'] += 1
             return self._wrap_cache[cache_key]
 
-        self._cache_stats['wrap_cache_misses'] += 1
 
         words = text.split(' ')
         lines, current = [], []
@@ -427,11 +467,9 @@ class MarkdownRenderer:
         """
         # Check cache first - tokens are immutable once parsed
         if text in self._inline_token_cache:
-            self._cache_stats['token_cache_hits'] += 1
             # Deep copy required: callers modify token positions for typewriter effect
             return copy.deepcopy(self._inline_token_cache[text])
 
-        self._cache_stats['token_cache_misses'] += 1
 
         tokens = self._tokenize_inline_uncached(text)
 
@@ -752,7 +790,6 @@ class MarkdownRenderer:
             if stripped.startswith('```'):
                 lang = stripped[3:].strip()
                 code_lines = []
-                start_i = i
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith('```'):
                     code_lines.append(lines[i])
@@ -790,7 +827,6 @@ class MarkdownRenderer:
             # Blockquote > (can start with > or have spaces before it)
             if stripped.startswith('>') or line.lstrip().startswith('>'):
                 quote_lines = []
-                start_i = i
                 while i < len(lines):
                     current_line = lines[i].strip()
                     if current_line.startswith('>'):
@@ -827,7 +863,6 @@ class MarkdownRenderer:
             # Table |
             if stripped.startswith('|') and '|' in stripped[1:]:
                 table_lines = []
-                start_i = i
                 while i < len(lines) and '|' in lines[i]:
                     table_lines.append(lines[i].strip())
                     i += 1
@@ -844,7 +879,6 @@ class MarkdownRenderer:
             m = re.match(r'^(\s*)([-*+])\s+(.*)$', line)
             if m:
                 items = []
-                start_i = i
                 while i < len(lines):
                     item_m = re.match(r'^(\s*)([-*+])\s+(.*)$', lines[i])
                     if item_m:
@@ -875,7 +909,6 @@ class MarkdownRenderer:
             m = re.match(r'^(\s*)((?:\d+\.)+\d*)\s+(.*)$', line)
             if m:
                 items = []
-                start_i = i
                 while i < len(lines):
                     item_m = re.match(r'^(\s*)((?:\d+\.)+\d*)\s+(.*)$', lines[i])
                     if item_m:
@@ -925,7 +958,6 @@ class MarkdownRenderer:
 
             # Paragraph (default)
             para = []
-            start_i = i
             while i < len(lines) and lines[i].strip() and not self._is_block_start(lines[i]):
                 para.append(lines[i].strip())
                 i += 1
@@ -976,7 +1008,6 @@ class MarkdownRenderer:
 
         for block in blocks:
             block_start = block.get('start', 0)
-            block_end = block.get('end', block_start)
 
             # Skip blocks that haven't been reached yet by typewriter
             if self.remaining_chars != float('inf') and block_start >= self.remaining_chars:
@@ -1160,7 +1191,6 @@ class MarkdownRenderer:
         for line in wrapped_lines:
             # Calculate visibility based on typewriter position
             line_start_in_code = chars_shown
-            line_end_in_code = chars_shown + len(line)
 
             # Check if this line should be visible
             if typewriter_pos != float('inf'):
@@ -1191,55 +1221,6 @@ class MarkdownRenderer:
             chars_shown += len(line) + 1  # +1 for newline
 
         return y + total_h + 12
-
-    def _render_text_with_emoji(self, draw, text: str, x: int, y: int, color: Tuple, font, emoji_y_offset: int = 5):
-        """Render text with inline emoji support for titles and labels.
-
-        Args:
-            draw: ImageDraw object
-            text: Text to render (may contain emojis)
-            x: X position
-            y: Y position
-            color: Text color (RGBA tuple)
-            font: Font to use for text
-            emoji_y_offset: Vertical offset for emojis (default 5 for bold titles)
-        """
-        if not text:
-            return
-
-        current_x = x
-        i = 0
-        emoji_font = self.fonts.get('emoji', font)
-
-        while i < len(text):
-            # Check for emoji at current position
-            emoji_len = self._get_emoji_length(text, i)
-            if emoji_len > 0:
-                # Render emoji with emoji font and color support
-                emoji_text = text[i:i+emoji_len]
-                if self.color_emojis:
-                    draw.text((current_x, y + emoji_y_offset), emoji_text, fill=color, font=emoji_font, embedded_color=True)
-                else:
-                    draw.text((current_x, y + emoji_y_offset), emoji_text, fill=color, font=emoji_font)
-                emoji_w, _ = self._get_text_size(emoji_text, emoji_font)
-                # Reduce emoji width - more aggressive for variation selector emojis
-                has_variation_selector = '\ufe0f' in emoji_text
-                if has_variation_selector:
-                    current_x += int(emoji_w * 0.55)
-                else:
-                    current_x += int(emoji_w * 0.85)
-                i += emoji_len
-            else:
-                # Find the next emoji or end of text
-                text_start = i
-                while i < len(text) and self._get_emoji_length(text, i) == 0:
-                    i += 1
-                # Render text segment
-                text_segment = text[text_start:i]
-                if text_segment:
-                    draw.text((current_x, y), text_segment, fill=color, font=font)
-                    text_w, _ = self._get_text_size(text_segment, font)
-                    current_x += text_w
 
     def _render_code_line_with_emoji(self, draw, line: str, x: int, y: int, color: Tuple, font, emoji_y_offset: int = 0, emoji_x_offset: int = 0):
         """Render a code line with emoji support.
@@ -1371,24 +1352,19 @@ class MarkdownRenderer:
             if max_chars <= 0:
                 return y - 4  # Nothing visible yet
 
-        # First, estimate the height by doing a dry run
-        # We'll use a simple line-based estimate
-        font = self.fonts.get('italic', self.fonts['normal'])
-        lines = self._wrap_text(text, font, content_w)
-        line_h = self.line_height
-
-        # Calculate how much text is visible
-        if max_chars is not None:
-            chars_shown = 0
-            visible_lines = 0
-            for line in lines:
-                if chars_shown >= max_chars:
-                    break
-                visible_lines += 1
-                chars_shown += len(line) + 1
-            visible_h = max(1, visible_lines) * line_h + 12
-        else:
-            visible_h = len(lines) * line_h + 12
+        # The text goes on a layer of its own first: its real height sizes the box. An estimate from
+        # wrapped lines was off with bold (wider) or short text (a box a line too tall).
+        quote_color = (180, 186, 196)
+        text_y = y + 6
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_end = self._render_tokens(
+            ImageDraw.Draw(text_layer), tokens, content_x, text_y, content_w,
+            override_color=quote_color,
+            max_chars=max_chars,
+            quote=True,
+        ) - 10  # _render_tokens adds a 10 px margin after the last line
+        visible_h = text_end - y + 8
 
         # Draw accent border on left
         accent = self.colors['accent']
@@ -1398,17 +1374,7 @@ class MarkdownRenderer:
         bg = (40, 46, 56, 180)
         draw.rounded_rectangle([x + border_w, y, x + width, y + visible_h], radius=6, fill=bg)
 
-        # Render the blockquote content with full markdown support
-        quote_color = (180, 186, 196)
-        text_y = y + 6
-
-        # Use _render_tokens for proper markdown/emoji rendering
-        final_y = self._render_tokens(
-            draw, tokens, content_x, text_y, content_w,
-            override_color=quote_color,
-            override_font=font,
-            max_chars=max_chars
-        )
+        canvas.alpha_composite(text_layer)
 
         return y + visible_h + 10
 
@@ -1517,6 +1483,13 @@ class MarkdownRenderer:
         bold_font = self.fonts.get('bold', font)
         line_h = self.line_height - 4
 
+        # The text goes on a layer of its own, laid over the rows at the end:
+        # drawn straight onto a see-through row shade, its anti-aliased edges
+        # would mix with the shade instead of covering it and show as a halo
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_draw = ImageDraw.Draw(text_layer)
+
         # Parse rows (skip separator lines)
         rows = []
         row_line_indices = []  # Track which original line each row came from
@@ -1533,13 +1506,10 @@ class MarkdownRenderer:
         if num_cols == 0:
             return y
 
-        # Calculate column widths - table uses full width like code blocks
+        # Column widths follow their content - table uses full width like code blocks
         cell_padding = 6
         table_w = width  # Match code block width
-        col_width = max(40, table_w // num_cols)
-        col_widths = [col_width] * num_cols
-        # Adjust last column to fill remaining space
-        col_widths[-1] = table_w - sum(col_widths[:-1])
+        col_widths = self._table_column_widths(rows, num_cols, font, bold_font, table_w, cell_padding)
 
         # Calculate row heights (need to pre-calculate for proper backgrounds)
         row_heights = []
@@ -1565,6 +1535,9 @@ class MarkdownRenderer:
             row_positions.append(pos)
             pos += len(line) + 1  # +1 for newline
 
+        # The rows' shades, put on as one rounded, anti-aliased shape at the end
+        shades = []
+
         # Track visible rows for proper border drawing
         visible_rows = 0
         last_visible_y = y
@@ -1584,28 +1557,7 @@ class MarkdownRenderer:
             is_header = (ri == 0)
             current_font = bold_font if is_header else font
             text_color = self.colors['accent'] if is_header else self.colors['text']
-
-            # Row background
-            bg = (45, 52, 64) if is_header else ((32, 38, 48) if ri % 2 == 1 else (38, 44, 54))
-
-            # Draw row background
-            if ri == 0:
-                draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                draw.rectangle([x, current_y + row_h - 8, x + table_w, current_y + row_h], fill=bg)
-            else:
-                # Check if this is the last visible row
-                next_row_visible = False
-                if ri + 1 < len(rows):
-                    next_orig_idx = row_line_indices[ri + 1]
-                    next_row_pos = row_positions[next_orig_idx] if next_orig_idx < len(row_positions) else float('inf')
-                    next_row_visible = (typewriter_pos == float('inf') or next_row_pos < typewriter_pos)
-
-                if not next_row_visible or ri == len(rows) - 1:
-                    # This is the last visible row - use rounded bottom
-                    draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                    draw.rectangle([x, current_y, x + table_w, current_y + 8], fill=bg)
-                else:
-                    draw.rectangle([x, current_y, x + table_w, current_y + row_h], fill=bg)
+            shades.append((current_y - y, row_h, self.bg_shade(0.08 if is_header else (0.02 if ri % 2 == 1 else 0.045))))
 
             # Draw cells with typewriter support
             cell_x = x
@@ -1620,27 +1572,66 @@ class MarkdownRenderer:
 
                 # Render cell with typewriter effect
                 self._render_cell_content_with_pos(
-                    draw, cell_text, cell_x + cell_padding, current_y + 5,
+                    text_draw, cell_text, cell_x + cell_padding, current_y + 5,
                     content_w, line_h + 6, current_font, text_color,
                     cell_start_approx, typewriter_pos
                 )
-
-                # Column separator
-                if ci < num_cols - 1:
-                    sep_x = cell_x + cell_w
-                    draw.line([(sep_x, current_y + 4), (sep_x, current_y + row_h - 4)],
-                             fill=DEFAULT_BORDER_COLOR, width=1)
 
                 cell_x += cell_w
 
             last_visible_y = current_y + row_h
             current_y += row_h
 
-        # Outer border (only around visible portion)
         if visible_rows > 0:
-            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=DEFAULT_BORDER_COLOR, width=1)
+            table_h = last_visible_y - y + 1
+            rows_layer = Image.new("RGBA", (table_w + 1, table_h), (0, 0, 0, 0))
+            rows_draw = ImageDraw.Draw(rows_layer)
+            for top, row_h, shade in shades:
+                rows_draw.rectangle([0, top, table_w, top + row_h], fill=shade)
+            rows_layer.putalpha(ImageChops.multiply(rows_layer.getchannel("A"), glass.rounded_mask(table_w + 1, table_h, 8)))
+            glass.put(canvas, rows_layer, (x, y))
+            glass.paint(canvas, glass.ring_mask(table_w + 1, table_h, 8), self.bg_shade(0.1), (x, y))
+        canvas.alpha_composite(text_layer)
 
         return last_visible_y + 10 if visible_rows > 0 else y
+
+    TABLE_MIN_COLUMN = 40
+
+    def _table_column_widths(self, rows: List[List[str]], num_cols: int, font, bold_font,
+                             table_w: int, cell_padding: int) -> List[int]:
+        """Widths that follow the content, summing to table_w: a short column ('SCU') stays narrow and
+        a long one ('Recycled Material Composite') gets the room, instead of equal thirds where the long
+        one wraps. Space left over is shared by content width; when the content is too wide, columns
+        that fit their fair share keep their width and the others share the rest equally."""
+        natural = []
+        for ci in range(num_cols):
+            widest = 0
+            for ri, row in enumerate(rows):
+                cell = re.sub(r"\*\*|__|~~|`", "", row[ci].strip()) if ci < len(row) else ''
+                widest = max(widest, self._get_text_size(cell, bold_font if ri == 0 else font)[0])
+            natural.append(max(self.TABLE_MIN_COLUMN, widest + cell_padding * 2 + 4))
+
+        if sum(natural) <= table_w:
+            extra = table_w - sum(natural)
+            widths = [n + extra * n // sum(natural) for n in natural]
+        else:
+            widths = [0] * num_cols
+            open_columns = list(range(num_cols))
+            remaining = table_w
+            while open_columns:
+                share = remaining / len(open_columns)
+                fitting = [ci for ci in open_columns if natural[ci] <= share]
+                if not fitting:
+                    for ci in open_columns:
+                        widths[ci] = max(self.TABLE_MIN_COLUMN, int(share))
+                    break
+                for ci in fitting:
+                    widths[ci] = natural[ci]
+                    remaining -= natural[ci]
+                    open_columns.remove(ci)
+        # Rounding: the last column takes what is left, so the table is exactly table_w wide
+        widths[-1] = max(self.TABLE_MIN_COLUMN, table_w - sum(widths[:-1]))
+        return widths
 
     def _render_cell_content_with_pos(self, draw, text: str, x: int, y: int, max_width: int,
                                       line_h: int, base_font, base_color: Tuple,
@@ -1837,9 +1828,14 @@ class MarkdownRenderer:
                 else:
                     draw.text((render_x, render_y), word, fill=tcolor, font=tfont)
 
-                # Strikethrough
+                # Strikethrough: through the middle of the drawn letters. word_h is only their height;
+                # the font puts them bbox[1] below render_y, so word_h // 2 alone hit their top.
                 if is_strike:
-                    sy = render_y + word_h // 2
+                    try:
+                        top, bottom = tfont.getbbox(word)[1], tfont.getbbox(word)[3]
+                    except Exception:
+                        top, bottom = 0, word_h
+                    sy = render_y + (top + bottom) // 2
                     draw.line([(render_x, sy), (render_x + word_w, sy)], fill=tcolor, width=1)
 
                 render_x += word_w
@@ -1900,35 +1896,6 @@ class MarkdownRenderer:
 
         return max(1, lines)
 
-    def _calculate_wrapped_lines(self, text: str, font, max_width: int) -> int:
-        """Calculate how many lines the text will need when wrapped to max_width."""
-        if not text or max_width <= 0:
-            return 1
-
-        # Strip markdown syntax for width calculation
-        plain_text = re.sub(r'\*{1,3}|`|~~|\[.*?]\(.*?\)|!\[.*?]\(.*?\)', '', text)
-
-        words = plain_text.split()
-        if not words:
-            return 1
-
-        lines = 1
-        current_width = 0
-        space_width, _ = self._get_text_size(' ', font)
-
-        for word in words:
-            word_width, _ = self._get_text_size(word, font)
-
-            if current_width == 0:
-                current_width = word_width
-            elif current_width + space_width + word_width <= max_width:
-                current_width += space_width + word_width
-            else:
-                lines += 1
-                current_width = word_width
-
-        return max(1, lines)
-
     def _render_ul(self, draw, canvas, block: Dict, x: int, y: int, width: int) -> int:
         """Render unordered list with typewriter support."""
         items = block.get('items', []) if isinstance(block, dict) else block
@@ -1957,10 +1924,12 @@ class MarkdownRenderer:
             indent_px = indent * 20
             bullet = bullets[min(indent, len(bullets) - 1)]
             bullet_x = x + indent_px
-            text_x = bullet_x + 16
+            # A task item's checkbox is its marker: no bullet in front of it
+            is_task = text.lstrip()[:3] in ('[ ]', '[x]', '[X]')
+            text_x = bullet_x if is_task else bullet_x + 16
 
             # Only draw bullet if typewriter has reached at least the marker
-            if typewriter_pos == float('inf') or typewriter_pos > item_start:
+            if not is_task and (typewriter_pos == float('inf') or typewriter_pos > item_start):
                 bullet_font = self.fonts.get('bold', self.fonts['normal'])
                 draw.text((bullet_x, current_y), bullet, fill=self.colors['accent'], font=bullet_font)
 
@@ -2016,7 +1985,7 @@ class MarkdownRenderer:
             num_x = x + indent_px
 
             num_font = self.fonts.get('bold', self.fonts['normal'])
-            nw, nh = self._get_text_size(num_text, num_font)
+            nw, _ = self._get_text_size(num_text, num_font)
 
             # Only draw number if typewriter has reached at least the marker
             if typewriter_pos == float('inf') or typewriter_pos > item_start:
@@ -2044,7 +2013,7 @@ class MarkdownRenderer:
 
     def _render_tokens(self, draw, tokens: List[Dict], x: int, y: int, width: int,
                        override_color: Tuple = None, override_font = None, max_chars: int = None,
-                       header_level: int = None) -> int:
+                       header_level: int = None, quote: bool = False) -> int:
         """Render inline tokens with word wrapping and styling.
 
         The typewriter effect uses 'remaining_chars' as a position in the ORIGINAL text.
@@ -2055,12 +2024,16 @@ class MarkdownRenderer:
         Args:
             max_chars: If provided, limits the number of visible characters (overrides remaining_chars)
             header_level: If provided (1-6), uses appropriately sized emoji font for headers
+            quote: Blockquote text: italic, but bold stays bold (bold italic) and code stays code
         """
         current_x = x
         current_y = y
 
         # Get actual line height from font metrics
-        base_font = override_font if override_font else self.fonts['normal']
+        if quote:
+            base_font = self.fonts.get('italic', self.fonts['normal'])
+        else:
+            base_font = override_font if override_font else self.fonts['normal']
         _, base_h = self._get_text_size('Ay', base_font)  # Use 'Ay' to get proper ascender/descender height
         line_h = base_h
 
@@ -2092,6 +2065,9 @@ class MarkdownRenderer:
                     font = self.fonts.get(emoji_font_key, self.fonts.get('emoji', self.fonts['normal']))
                 else:
                     font = self.fonts.get('emoji', self.fonts['normal'])
+            elif quote:
+                style = 'code' if ttype == 'code' else 'bold_italic' if ttype in ('bold', 'bold_italic') else 'italic'
+                font = self.fonts.get(style, self.fonts['normal'])
             elif override_font:
                 font = override_font
             elif ttype == 'bold':
@@ -2245,7 +2221,7 @@ class MarkdownRenderer:
                 fn_color = self.colors['accent']
 
                 # Get text size
-                fn_w, fn_h = self._get_text_size(fn_text, fn_font)
+                fn_w, _ = self._get_text_size(fn_text, fn_font)
 
                 # Draw slightly lower (moved down)
                 fn_y = current_y + 5

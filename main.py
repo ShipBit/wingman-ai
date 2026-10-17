@@ -329,6 +329,7 @@ app.add_middleware(
 app.include_router(core.router)
 app.include_router(core.config_service.router)
 app.include_router(core.settings_service.router)
+app.include_router(core.hud_service.router)
 app.include_router(core.voice_service.router)
 
 app.include_router(system_manager.router)

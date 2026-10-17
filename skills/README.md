@@ -710,7 +710,7 @@ discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
 # the skill out and tells the user which setting to turn on first.
-# hud_server = the HUD (Windows only), sc_gamelog = the Star Citizen log.
+# hud_server = the HUD (Windows for now), sc_gamelog = the Star Citizen log.
 # Leave it out when your skill needs neither.
 requires:
   - sc_gamelog
@@ -1583,20 +1583,48 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 
 ### `self.wingman.hud` — the HUD overlay
 
-Core's HUD server draws the overlay, on Windows only and only when the user
-switched it on in the settings. Every call checks that: when the HUD is off or
-unreachable, nothing happens and the call returns `False`. Everything lands in
-this Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+Core's HUD server draws the overlay, on an OS the HUD supports (Windows for
+now) and only when the user switched it on in the settings. All Wingmen share two containers, the chat and
+the info panel; where they are and how they look comes from the user's HUD
+profile. Every call checks that the HUD runs and returns `False` when it does
+not. The shared containers also follow the Wingman's own HUD switches.
 
 | Member | Description |
 | --- | --- |
-| `.available` | `bool` — the HUD is switched on and this is Windows. |
-| `await .show_message(title, text, *, duration=10.0, color=None)` | A message in this Wingman's message window. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |
-| `await .add_info(title, text="", *, color=None, duration=None)` | An item on this Wingman's info panel. The same title replaces it. |
-| `await .remove_info(title)` | Take an item off the info panel. |
+| `.available` | `bool` — the HUD runs (switched on, on a supported OS). |
+| `.chat_enabled` / `.info_enabled` | `bool` — the HUD runs and this Wingman uses the chat container / the info panel. |
+| `.profile` | The HUD profile in use, read-only: `chat` and `info` are the containers' areas (`x1`, `y1`, `x2`, `y2` in pixels), `style` their look. `None` before a config is loaded. |
+| `await .show_message(title, text, *, duration=10.0, color=None)` | A message in the shared chat container for `duration` seconds. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |
+| `await .add_info(title, text="", *, color=None, duration=None)` | A panel on the shared info panel. The same title replaces it; `duration` removes it after that many seconds. |
+| `await .remove_info(title)` | Take a panel off the info panel. |
+| `await .show_progress(title, current, maximum=100, *, text="", color=None, auto_close=False)` | A progress bar on the info panel; the same title updates it. |
+| `await .show_timer(title, seconds, *, text="", color=None, auto_close=True)` | A countdown on the info panel. |
+| `.info_items()` | What the shared info panel shows now, oldest first: dicts with `title`, `text` and `added_by`. `[]` when the HUD is off. |
+| `.group(name, element="persistent", **props)` | A group of the skill's own, e.g. a status icon in a corner (see below). |
 
-The HUD skill already shows every line that goes into the conversation. Show a
-line yourself only when it does not go there, or it appears twice.
+The info panel belongs to every Wingman: only remove panels your skill put
+there. Each panel remembers who added it; yours read as "added by the Your
+Skill skill of Computer" to the Wingmen, which read the panel with their
+`hud_read_info` tool.
+
+Core already shows every line that goes into the conversation in the chat
+container. Show a line yourself only when it does not go there, or it appears
+twice (`chat_enabled` tells you whether Core shows it).
+
+**A group of your own.** `self.wingman.hud.group("mic", anchor="top_right",
+width=72)` returns a handle named after the Wingman plus `"mic"`, so two
+Wingmen running your skill get one each. `props` are HUD server props:
+`anchor`/`priority` to stack at a screen edge, or `layout_mode="manual"` with
+`x`/`y` (and `align`) for a free spot; colours, `opacity`, `content_padding`...
+Anything you leave out comes from the user's HUD profile. The handle has
+`show_message`, `hide_message`, `append_message` (text added to the message
+on screen, for streaming), `add_info`, `remove_info`, `show_progress`,
+`show_timer`, `info_items()`, `clear()`, `set_loader(show)`, `hide()` and
+`show()` (a hidden group keeps every update), `update(**props)` (windows
+follow right away) and `delete()`. The shared chat and info panel have no
+`clear` or `hide`: they belong to every Wingman.
+Core deletes the group when the skill unloads, and makes it again with its
+props if the HUD server restarts. See `skills/mic_status`.
 
 If your skill is pointless without the HUD, declare `requires: [hud_server]`
 in its `default_config.yaml`. The client then keeps the skill off and tells the
@@ -2148,7 +2176,6 @@ class GameStatsTracker(Skill):
 - [thinking_sound](thinking_sound/) - Plays sound effects during AI processing
 - [voice_changer](voice_changer/) - Real-time voice modification for TTS
 - [radio_chatter](radio_chatter/) - Background ambient radio audio
-- [hud](hud/) - Transparent HUD overlay for messages and panels
 - [quick_commands](quick_commands/) - Frequently-used shortcut actions
 
 **Tool-Based (Progressive Disclosure):**
@@ -2173,7 +2200,10 @@ class GameStatsTracker(Skill):
 
 **HUD:**
 
-- [mic_status](mic_status/) - Microphone state as a HUD icon (`audio.on_mic_status_changed`, `requires: [hud_server]`)
+- [mic_status](mic_status/) - Microphone state as a HUD icon in its own group (`hud.group`, `audio.on_mic_status_changed`, `requires: [hud_server]`)
+
+The chat and info panel on the HUD are Core's own (HUD profiles in the
+settings, `hud` switches per Wingman); there is no HUD skill any more.
 
 ### Key APIs
 
@@ -2193,7 +2223,8 @@ self.wingman.audio.is_playing          # Is the wingman speaking?
 ```python
 await self.wingman.conversation.show(text)              # A line in the chat, as said by this Wingman
 await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
-await self.wingman.hud.show_message(title, text)        # False when the HUD is off
+await self.wingman.hud.add_info(title, markdown)         # shared info panel; False when the HUD is off
+icon = self.wingman.hud.group("status", anchor="top_right")  # a group of your own, profile look
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
 ```
 

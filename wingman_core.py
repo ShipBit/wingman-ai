@@ -17,6 +17,7 @@ import mouse.mouse as mouse
 from api.commands import (
     AudioLibraryPlaybackFinishedCommand,
     CoreStateChangedCommand,
+    HudProfilesChangedCommand,
     LogCommand,
     ScGameLogStateChangedCommand,
     SttVocabularyChangedCommand,
@@ -110,6 +111,7 @@ from services.local_model_manager import LocalModelManager
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
+from services.hud_service import HudService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
@@ -136,6 +138,7 @@ from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
+from hud_server.platform import hud_supported, unsupported_reason
 from hud_server.validation import validate_hud_settings, get_invalid_summary
 
 # Share of a transcript's words that must occur in what the wingman is saying
@@ -831,6 +834,14 @@ class WingmanCore(WebSocketUser):
         self.config_manager = config_manager
         self.config_manager.perform_hardware_scan(self.system_manager)
         self.config_service = ConfigService(config_manager=config_manager)
+
+        # HUD profiles and the shared HUD containers (_initialize_tower tells it
+        # which config's Wingmen load)
+        self.hud_service = HudService()
+        self.hud_service.configure(config_manager, self.config_service)
+        self.hud_service.broadcast_state = self._broadcast_hud_profiles
+        self.hud_service.run_on_main_loop = self._run_on_main_loop
+
         self.config_service.config_events.subscribe(
             "config_loaded", self.initialize_tower
         )
@@ -1080,7 +1091,7 @@ class WingmanCore(WebSocketUser):
 
         # 6. HUD server
         hud_settings = getattr(self.settings_service.settings, "hud_server", None)
-        if hud_settings and hud_settings.enabled:
+        if hud_settings and hud_settings.enabled and hud_supported():
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
                 message="Starting HUD server...",
@@ -1147,9 +1158,9 @@ class WingmanCore(WebSocketUser):
         if not hud_settings or not hud_settings.enabled:
             return
 
-        if platform.system() != "Windows":
+        if not hud_supported():
             self.printr.print(
-                "[HUD] Server is only supported on Windows.",
+                f"[HUD] {unsupported_reason()}",
                 color=LogType.WARNING,
                 server_only=True,
             )
@@ -1177,6 +1188,8 @@ class WingmanCore(WebSocketUser):
                     server_only=False,
                 )
                 self._hud_server = None
+            else:
+                await self.hud_service.attach_server(self._hud_server)
         except Exception as e:
             self.printr.print(
                 f"[HUD] Server error: {e}",
@@ -1193,7 +1206,7 @@ class WingmanCore(WebSocketUser):
         should_run = (
             hud_settings is not None
             and hud_settings.enabled
-            and platform.system() == "Windows"
+            and hud_supported()
         )
         is_running = self._hud_server is not None and self._hud_server.is_running
 
@@ -1220,8 +1233,13 @@ class WingmanCore(WebSocketUser):
     async def _stop_hud_server(self):
         """Stop the HUD server if running."""
         if self._hud_server and self._hud_server.is_running:
+            await self.hud_service.detach_server()
             await self._hud_server.stop()
             self._hud_server = None
+
+    async def _broadcast_hud_profiles(self, state) -> None:
+        if self._connection_manager:
+            await self._connection_manager.broadcast(HudProfilesChangedCommand(state=state))
 
     async def _broadcast_loading_status(
         self, message: str, progress: float | None = None
@@ -1606,6 +1624,10 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
             return
+
+        # The HUD shows this config's profile from now on, before the Wingmen
+        # load (they can take a while, or fail). A load without them shows none.
+        await self.hud_service.channel_loaded(config_dir_info.config_dir.name)
 
         # Broadcast state change - wingmen are being initialized
         await self.set_core_state(CoreState.INITIALIZING_WINGMEN)
@@ -2383,6 +2405,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_started()
+        self.hud_service.playback_started(wingman_name)
         if getattr(self, "audio_input", None):
             self.audio_input.set_output_busy(True)
         self._emit_voice_state()
@@ -2404,6 +2427,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.listen_controller.playback_finished()
+        self.hud_service.playback_finished(wingman_name)
         if getattr(self, "audio_input", None):
             self.audio_input.set_output_busy(False)
         self._emit_voice_state()

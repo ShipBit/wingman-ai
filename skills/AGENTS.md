@@ -196,7 +196,6 @@ class YourSkill(Skill):
 
 - `radio_chatter` — `turn_on_radio` / `turn_off_radio` / `get_radio_status`: stacks `@command_action` on existing `@tool` methods; no-arg `respond="speak"` toggles.
 - `spotify` — `control_spotify_playback`: a `Literal[...]` param renders as an enum dropdown (the user fixes one action per command) plus an optional `int` input.
-- `hud` — `hud_show` / `hud_hide`: no-arg async toggles.
 - `voice_changer` — `switch_voice_now`: a *new* method (no matching `@tool`), giving users a manual handle on an otherwise event-driven skill.
 
 ## Minimal default_config.yaml
@@ -308,7 +307,14 @@ summary = await self.wingman.local_ai.summarize(text, instruction="...")   # chu
 # CLIENT UI:
 await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
 await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .remove_info(title)
-#   Returns False when the HUD is off (Windows only, switch in the settings); nothing to check yourself.
+await self.wingman.hud.show_progress(title, current, maximum) / .show_timer(title, seconds)
+#   The chat and info panel all Wingmen share; their place and look come from the user's HUD profile.
+#   Returns False when the HUD is off (Windows only) or this Wingman's hud switch is off.
+icon = self.wingman.hud.group("mic", anchor="top_right", width=72)   # a group of your own
+await icon.add_info(" ", "![](icon.png)") / icon.update(x=40) / icon.delete()
+#   also icon.info_items() / .clear() / .hide() / .show() / .set_loader(True) / .append_message(t);
+#   self.wingman.hud.info_items() reads the shared info panel
+#   Props you leave out come from the HUD profile; Core deletes the group when the skill unloads.
 
 # STAR CITIZEN — Core reads the Game.log live (the user can switch it off):
 self.wingman.sc_gamelog.available / .state() / .recent(10, types={...})
@@ -454,7 +460,7 @@ Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `star_citizen`, `
 |-------|------|-------------|
 | [audio_device_changer](audio_device_changer/) | Hook (auto) | Audio routing via `on_play_to_user` |
 | [thinking_sound](thinking_sound/) | Hook (auto) | Sound during processing |
-| [mic_status](mic_status/) | Hook (auto) | `audio.on_mic_status_changed`, `requires: [hud_server]` |
+| [mic_status](mic_status/) | Hook (auto) | `audio.on_mic_status_changed`, `hud.group`, `requires: [hud_server]` |
 | [image_generation](image_generation/) | Tool | `@tool` with `wait_response` |
 | [timer](timer/) | Hook+Tool | State management, `unload()` cleanup |
 | [vision_ai](vision_ai/) | Tool | Screen capture, discovery keywords |
@@ -464,4 +470,4 @@ Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `star_citizen`, `
 | [sc_game_events](sc_game_events/) | Hook+Tool (auto) | Star Citizen log events via `self.wingman.sc_gamelog.on`, support-model reactions, `language.name` in prompts |
 | [sc_accountant](sc_accountant/) | Hook+Tool (auto) | `sc_gamelog.on("*")`, own web dashboard, `ui.show_dialog(once=...)` |
 
-Do not copy the tool count of `hud`, `control_windows` or `file_manager`: they predate the token rules and expose 9–10 tools each.
+Do not copy the tool count of `control_windows` or `file_manager`: they predate the token rules and expose 9–10 tools each.

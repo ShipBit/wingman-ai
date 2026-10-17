@@ -1,24 +1,12 @@
-﻿import sys
+"""ctypes bindings for the Win32 calls of the Windows HUD backend (windows.py)."""
+
+import sys
 
 if sys.platform != "win32":
     raise ImportError("hud_server.platform.win32 is only available on Windows")
 
 import ctypes
 from ctypes import wintypes
-
-from api.enums import LogType
-from services.printr import Printr
-from hud_server.constants import (
-    LOG_MONITORS_AVAILABLE,
-    LOG_MONITOR_NONE,
-    LOG_MONITOR_SELECTED,
-    LOG_MONITOR_FALLBACK_GETSYSTEMMETRICS,
-    LOG_MONITOR_FALLBACK_UNAVAILABLE,
-    LOG_MONITOR_NONE_AVAILABLE,
-    LOG_MONITOR_ERROR,
-)
-
-printr = Printr()
 
 # Windows API Constants
 GWL_EXSTYLE = -20
@@ -28,23 +16,16 @@ WS_EX_TRANSPARENT = 0x20
 WS_EX_TOPMOST = 0x00000008
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
-LWA_ALPHA = 0x00000002
-LWA_COLORKEY = 0x00000001
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_HIDEWINDOW = 0x0080
 SWP_SHOWWINDOW = 0x0040
 SWP_NOACTIVATE = 0x0010
-SWP_ASYNCWINDOWPOS = 0x4000
-SRCCOPY = 0x00CC0020
 DIB_RGB_COLORS = 0
 BI_RGB = 0
 
-# UpdateLayeredWindow - true per-pixel alpha compositing (vs. the binary
-# LWA_COLORKEY / uniform LWA_ALPHA supported by SetLayeredWindowAttributes)
-ULW_COLORKEY = 0x00000001
+# UpdateLayeredWindow: true per-pixel alpha compositing
 ULW_ALPHA = 0x00000002
-ULW_OPAQUE = 0x00000004
 AC_SRC_OVER = 0x00
 AC_SRC_ALPHA = 0x01
 
@@ -54,7 +35,6 @@ user32 = ctypes.WinDLL("user32.dll", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32.dll", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
 
-SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 HWND_TOPMOST = wintypes.HWND(-1)
 
@@ -104,15 +84,6 @@ class BITMAPINFOHEADER(ctypes.Structure):
     ]
 
 
-class RGBQUAD(ctypes.Structure):
-    _fields_ = [
-        ("rgbBlue", ctypes.c_byte),
-        ("rgbGreen", ctypes.c_byte),
-        ("rgbRed", ctypes.c_byte),
-        ("rgbReserved", ctypes.c_byte),
-    ]
-
-
 class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3)]
 
@@ -129,13 +100,6 @@ class BLENDFUNCTION(ctypes.Structure):
 # Setup Function Prototypes
 user32.DefWindowProcW.argtypes = [wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
 user32.DefWindowProcW.restype = LRESULT
-user32.SetLayeredWindowAttributes.argtypes = [
-    wintypes.HWND,
-    wintypes.COLORREF,
-    wintypes.BYTE,
-    wintypes.DWORD,
-]
-user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
 user32.UpdateLayeredWindow.argtypes = [
     wintypes.HWND,
     wintypes.HDC,
@@ -233,13 +197,54 @@ user32.MoveWindow.restype = wintypes.BOOL
 MONITORINFOF_PRIMARY = 1
 
 
-class MONITORINFO(ctypes.Structure):
+class MONITORINFOEXW(ctypes.Structure):
     _fields_ = [
         ("cbSize", wintypes.DWORD),
         ("rcMonitor", wintypes.RECT),
         ("rcWork", wintypes.RECT),
         ("dwFlags", wintypes.DWORD),
+        ("szDevice", wintypes.WCHAR * 32),
     ]
+
+
+class DEVMODEW(ctypes.Structure):
+    """The display variant of DEVMODEW (220 bytes)."""
+
+    _fields_ = [
+        ("dmDeviceName", wintypes.WCHAR * 32),
+        ("dmSpecVersion", wintypes.WORD),
+        ("dmDriverVersion", wintypes.WORD),
+        ("dmSize", wintypes.WORD),
+        ("dmDriverExtra", wintypes.WORD),
+        ("dmFields", wintypes.DWORD),
+        ("dmPositionX", wintypes.LONG),
+        ("dmPositionY", wintypes.LONG),
+        ("dmDisplayOrientation", wintypes.DWORD),
+        ("dmDisplayFixedOutput", wintypes.DWORD),
+        ("dmColor", ctypes.c_short),
+        ("dmDuplex", ctypes.c_short),
+        ("dmYResolution", ctypes.c_short),
+        ("dmTTOption", ctypes.c_short),
+        ("dmCollate", ctypes.c_short),
+        ("dmFormName", wintypes.WCHAR * 32),
+        ("dmLogPixels", wintypes.WORD),
+        ("dmBitsPerPel", wintypes.DWORD),
+        ("dmPelsWidth", wintypes.DWORD),
+        ("dmPelsHeight", wintypes.DWORD),
+        ("dmDisplayFlags", wintypes.DWORD),
+        ("dmDisplayFrequency", wintypes.DWORD),
+        ("dmICMMethod", wintypes.DWORD),
+        ("dmICMIntent", wintypes.DWORD),
+        ("dmMediaType", wintypes.DWORD),
+        ("dmDitherType", wintypes.DWORD),
+        ("dmReserved1", wintypes.DWORD),
+        ("dmReserved2", wintypes.DWORD),
+        ("dmPanningWidth", wintypes.DWORD),
+        ("dmPanningHeight", wintypes.DWORD),
+    ]
+
+
+ENUM_CURRENT_SETTINGS = -1
 
 
 MONITORENUMPROC = ctypes.WINFUNCTYPE(
@@ -258,8 +263,12 @@ user32.EnumDisplayMonitors.argtypes = [
     LPARAM,
 ]
 user32.EnumDisplayMonitors.restype = wintypes.BOOL
-user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFOEXW)]
 user32.GetMonitorInfoW.restype = wintypes.BOOL
+user32.EnumDisplaySettingsW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(DEVMODEW)]
+user32.EnumDisplaySettingsW.restype = wintypes.BOOL
+user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+user32.GetSystemMetrics.restype = ctypes.c_int
 
 
 # Basic Win32 message structures for a non-blocking pump
@@ -328,150 +337,42 @@ user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
 user32.UnhookWinEvent.restype = wintypes.BOOL
 
 
-def _wnd_proc(hwnd, msg, wparam, lparam):
-    """Window procedure callback - must handle all message types safely."""
-    try:
-        return user32.DefWindowProcW(hwnd, msg, WPARAM(wparam), LPARAM(lparam))
-    except:
-        return 0
+# Mouse input (only windows that are not click-through receive it)
+WM_SETCURSOR = 0x0020
+WM_MOUSEACTIVATE = 0x0021
+WM_MOUSEMOVE = 0x0200
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+WM_CAPTURECHANGED = 0x0215
+MA_NOACTIVATE = 3
 
+IDC_ARROW = 32512
+IDC_SIZENWSE = 32642
+IDC_SIZENESW = 32643
+IDC_SIZEWE = 32644
+IDC_SIZENS = 32645
+IDC_SIZEALL = 32646
 
-_wnd_proc_callback = WNDPROC(_wnd_proc)
-_class_registered = False
-_class_name = "WingmanHeadsUpOverlay"
+if ctypes.sizeof(ctypes.c_void_p) == 8:
+    GetWindowLongPtr = user32.GetWindowLongPtrW
+    SetWindowLongPtr = user32.SetWindowLongPtrW
+    _LONG_PTR = ctypes.c_int64
+else:
+    GetWindowLongPtr = user32.GetWindowLongW
+    SetWindowLongPtr = user32.SetWindowLongW
+    _LONG_PTR = ctypes.c_long
+GetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
+GetWindowLongPtr.restype = _LONG_PTR
+SetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int, _LONG_PTR]
+SetWindowLongPtr.restype = _LONG_PTR
 
-
-def _ensure_window_class():
-    global _class_registered
-    if _class_registered:
-        return True
-    hInstance = kernel32.GetModuleHandleW(None)
-    wc = WNDCLASSEXW()
-    wc.cbSize = ctypes.sizeof(WNDCLASSEXW)
-    wc.lpfnWndProc = _wnd_proc_callback
-    wc.hInstance = hInstance
-    wc.lpszClassName = _class_name
-    if user32.RegisterClassExW(ctypes.byref(wc)):
-        _class_registered = True
-        return True
-    return False
-
-
-# Common helpers
-def force_on_top(hwnd):
-    user32.SetWindowPos(
-        hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-    )
-
-
-# ─────────────────────────────── Multi-Monitor Support ─────────────────────────────── #
-
-
-# Store callback globally to prevent garbage collection
-_enum_callback = None
-
-
-def get_all_monitors():
-    """Get information about all connected monitors.
-
-    Returns:
-        list: List of monitor info dicts with keys: left, top, right, bottom, width, height, is_primary
-    """
-    global _enum_callback
-
-    monitors = []
-    try:
-        # Use a closure to capture monitors list
-        def callback(hmonitor, hdc, lprect, lparam):
-            mi = MONITORINFO()
-            mi.cbSize = ctypes.sizeof(MONITORINFO)
-            if user32.GetMonitorInfoW(hmonitor, ctypes.byref(mi)):
-                monitors.append(
-                    {
-                        "left": mi.rcMonitor.left,
-                        "top": mi.rcMonitor.top,
-                        "right": mi.rcMonitor.right,
-                        "bottom": mi.rcMonitor.bottom,
-                        "width": mi.rcMonitor.right - mi.rcMonitor.left,
-                        "height": mi.rcMonitor.bottom - mi.rcMonitor.top,
-                        "is_primary": bool(mi.dwFlags & MONITORINFOF_PRIMARY),
-                    }
-                )
-            return True
-
-        _enum_callback = MONITORENUMPROC(callback)
-        user32.EnumDisplayMonitors(None, None, _enum_callback, 0)
-    except Exception as e:
-        printr.print(LOG_MONITOR_ERROR.format(e), color=LogType.ERROR, server_only=True)
-    return monitors
-
-
-def get_monitor_dimensions(screen_index: int = 1):
-    """Get the dimensions and offset of a specific monitor by index.
-
-    Args:
-        screen_index: Monitor index (1 = primary, 2 = secondary, etc.)
-
-    Returns:
-        tuple: (width, height, offset_x, offset_y) of the requested monitor
-    """
-    monitors = get_all_monitors()
-
-    # Log available monitors
-    if monitors:
-        monitor_list = ", ".join(
-            f"{i+1}: {m['width']}x{m['height']}{' (primary)' if m['is_primary'] else ''}"
-            for i, m in enumerate(monitors)
-        )
-        printr.print(
-            LOG_MONITORS_AVAILABLE.format(monitor_list),
-            color=LogType.INFO,
-            server_only=True,
-        )
-    else:
-        printr.print(LOG_MONITOR_NONE, color=LogType.WARNING, server_only=True)
-
-    if not monitors:
-        # Fallback to primary monitor using GetSystemMetrics
-        width = (
-            user32.GetSystemMetrics(0) if hasattr(user32, "GetSystemMetrics") else 1920
-        )
-        height = (
-            user32.GetSystemMetrics(1) if hasattr(user32, "GetSystemMetrics") else 1080
-        )
-        printr.print(
-            LOG_MONITOR_FALLBACK_GETSYSTEMMETRICS.format(screen_index, width, height),
-            color=LogType.WARNING,
-            server_only=True,
-        )
-        return width, height, 0, 0
-
-    # Adjust index to 0-based
-    index = screen_index - 1
-
-    if index < len(monitors):
-        monitor = monitors[index]
-        printr.print(
-            LOG_MONITOR_SELECTED.format(
-                screen_index, monitor["width"], monitor["height"]
-            ),
-            color=LogType.INFO,
-            server_only=True,
-        )
-        return monitor["width"], monitor["height"], monitor["left"], monitor["top"]
-
-    # If the requested screen doesn't exist, return the last available monitor
-    if monitors:
-        monitor = monitors[-1]
-        printr.print(
-            LOG_MONITOR_FALLBACK_UNAVAILABLE.format(
-                screen_index, len(monitors), monitor["width"], monitor["height"]
-            ),
-            color=LogType.WARNING,
-            server_only=True,
-        )
-        return monitor["width"], monitor["height"], monitor["left"], monitor["top"]
-
-    # Ultimate fallback
-    printr.print(LOG_MONITOR_NONE_AVAILABLE, color=LogType.WARNING, server_only=True)
-    return 1920, 1080, 0, 0
+user32.SetCapture.argtypes = [wintypes.HWND]
+user32.SetCapture.restype = wintypes.HWND
+user32.ReleaseCapture.argtypes = []
+user32.ReleaseCapture.restype = wintypes.BOOL
+user32.LoadCursorW.argtypes = [wintypes.HINSTANCE, wintypes.LPVOID]
+user32.LoadCursorW.restype = wintypes.HANDLE
+user32.SetCursor.argtypes = [wintypes.HANDLE]
+user32.SetCursor.restype = wintypes.HANDLE
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.GetCursorPos.restype = wintypes.BOOL

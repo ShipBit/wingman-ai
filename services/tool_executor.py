@@ -3,7 +3,7 @@
 import json
 import time
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from api.enums import LogType
 from services.benchmark import Benchmark
@@ -40,6 +40,8 @@ class ToolExecutor:
         self._settings = settings
         self._wingman_name = wingman_name
         self._tool_response_limiter = ToolResponseLimiter()
+        self.hud_tool_runner: Optional[Callable[[str, dict], Awaitable[str]]] = None
+        """Set by the Wingman: runs the info panel tools (services/hud_tools.py)."""
         self._budget_fn = budget_fn
         """The wingman's ContextBudget, asked per call: the model's window can
         change (config update, a learned overflow)."""
@@ -279,6 +281,14 @@ class ToolExecutor:
                 function_response, color=LogType.INFO, source_name=self._wingman_name
             )
             return function_response, None, None, f"🔤 {function_name}"
+
+        # ── 0b. HUD info panel tools ────────────────────────────────
+        if self.hud_tool_runner is not None:
+            from services.hud_tools import HUD_TOOL_NAMES
+
+            if function_name in HUD_TOOL_NAMES:
+                function_response = await self.hud_tool_runner(function_name, function_args)
+                return function_response, None, None, f"🖥️ {function_name}"
 
         # ── 1. Persistent memory tools ──────────────────────────────
         if (

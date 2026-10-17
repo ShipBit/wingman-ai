@@ -9,12 +9,12 @@ Included modules:
 - hud_manager.py: State management for HUD groups
 - http_client.py: HTTP client for skills to use
 - types.py: Type definitions (enums, property classes) for HUD elements
-- overlay/overlay.py: PIL-based overlay renderer (Windows)
+- overlay/overlay.py: PIL-based overlay renderer (any OS)
 - rendering/markdown.py: Markdown rendering
-- platform/win32.py: Win32 API definitions
+- platform/: the bridge to the OS, one window backend per OS (Windows for now)
 
 Type-Safe Usage:
-    from hud_server import HudHttpClient, Anchor, HudColor, FontFamily
+    from hud_server import HudHttpClient, Anchor, HudColor, FontFamily, WindowType
     from hud_server.types import message_props, chat_window_props
 
     async with HudHttpClient() as client:
@@ -24,11 +24,12 @@ Type-Safe Usage:
             accent_color=HudColor.WARNING,
             font_family=FontFamily.CONSOLAS
         )
-        await client.create_group("alerts", props=props)
+        await client.create_group("alerts", WindowType.MESSAGE, props=props)
 
         # Use enums directly in method calls
         await client.show_message(
             "alerts",
+            WindowType.MESSAGE,
             "Warning",
             "Low fuel!",
             color=HudColor.WARNING
@@ -38,16 +39,12 @@ Type-Safe Usage:
 from hud_server.server import HudServer
 from hud_server.http_client import HudHttpClient, HudHttpClientSync
 from hud_server.models import (
-    HudServerSettings,
-    GroupState,
     MessageRequest,
     ChatMessageRequest,
     ProgressRequest,
     TimerRequest,
     ItemRequest,
-    StateRestoreRequest,
     HealthResponse,
-    GroupStateResponse,
 )
 from hud_server.types import (
     # Enums
@@ -81,16 +78,12 @@ __all__ = [
     "HudHttpClient",
     "HudHttpClientSync",
     # Models
-    "HudServerSettings",
-    "GroupState",
     "MessageRequest",
     "ChatMessageRequest",
     "ProgressRequest",
     "TimerRequest",
     "ItemRequest",
-    "StateRestoreRequest",
     "HealthResponse",
-    "GroupStateResponse",
     # Enums
     "Anchor",
     "LayoutMode",

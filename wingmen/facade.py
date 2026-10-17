@@ -569,6 +569,22 @@ class SkillMemory:
         return await self._la.forget_memory_by_id(entry_id)
 
 
+def _defined_in(cls: type) -> Optional[str]:
+    """The file a class was written in. A custom skill (and every skill in the
+    release) is loaded from its file without being registered as a module,
+    so inspect.getfile cannot find it: its own functions still know."""
+    import sys
+
+    module = sys.modules.get(cls.__module__)
+    if getattr(module, "__file__", None):
+        return module.__file__
+    for value in vars(cls).values():
+        code = getattr(getattr(value, "__func__", value), "__code__", None)
+        if code is not None:
+            return code.co_filename
+    return None
+
+
 class SkillTools:
     """Discover and invoke the wingman's callable functions (skill @tools, MCP tools,
     commands) by name. Scoped to enumerable tools — not arbitrary attribute access."""
@@ -630,12 +646,13 @@ class SkillTools:
         skill = (self._wingman.tool_skills or {}).get(name)
         if skill is None:
             return None
-        import inspect
         import os
 
         try:
-            skill_dir = os.path.dirname(inspect.getfile(skill.__class__))
-            logo_path = os.path.join(skill_dir, "logo.png")
+            skill_file = _defined_in(type(skill))
+            if not skill_file:
+                return None
+            logo_path = os.path.join(os.path.dirname(skill_file), "logo.png")
             return logo_path if os.path.exists(logo_path) else None
         except Exception:
             return None
@@ -1270,110 +1287,269 @@ class SkillUi:
         return True
 
 
-# One HUD connection for all Wingmen, and the groups already made sure of.
-_hud_clients: dict = {}
-_hud_groups: set = set()
-
-
 class SkillHud:
     """The HUD overlay (`self.wingman.hud`), drawn by Core's HUD server.
 
-    The server runs on Windows only, and only when the user switched it on in
-    the settings. Every call checks that: when the HUD is off or unreachable,
-    nothing happens and the call returns False. Everything lands in this
-    Wingman's own windows, the ones the HUD skill uses, so it looks the same.
+    All Wingmen share two containers: the chat and the info panel. Where they
+    are and how they look comes from the user's HUD profile. A skill writes
+    into them with `show_message` / `add_info` / `show_progress` /
+    `show_timer`, or draws its own group with `group()`, which takes the
+    profile's look for everything it does not set itself.
+
+    The HUD runs only when the user switched it on, on an OS the HUD supports
+    (Windows for now). Every call checks that: when the HUD is off, nothing
+    happens and the call returns False. The shared containers also respect this Wingman's own
+    switches (`chat_enabled`, `info_enabled`).
     """
 
-    def __init__(self, wingman: "Wingman") -> None:
+    def __init__(self, wingman: "Wingman", skill_name: Optional[str] = None) -> None:
         self._wingman = wingman
+        self._skill_name = skill_name
+        self._groups: dict[tuple[str, str], "SkillHudGroup"] = {}
+
+    @property
+    def _added_by(self) -> str:
+        """How a reader of the info panel learns where a panel came from."""
+        if self._skill_name:
+            return f"the {self._skill_name} skill of {self._wingman.name}"
+        return self._wingman.name
+
+    @staticmethod
+    def _service():
+        from services.hud_service import HudService
+
+        return HudService()
 
     @property
     def available(self) -> bool:
-        """The user switched the HUD on and this is Windows."""
-        import platform
-
-        hud = getattr(self._wingman.settings, "hud_server", None)
-        return bool(hud and hud.enabled) and platform.system() == "Windows"
+        """The HUD runs: the user switched it on and the OS supports it."""
+        return self._service().available
 
     @property
-    def _group(self) -> str:
-        import re
+    def chat_enabled(self) -> bool:
+        """The HUD runs and this Wingman shows its conversation in the chat container."""
+        hud = getattr(self._wingman.config, "hud", None)
+        return self.available and bool(hud and hud.chat)
 
-        return re.sub(r"[^a-zA-Z0-9_-]", "_", self._wingman.name)
+    @property
+    def info_enabled(self) -> bool:
+        """The HUD runs and this Wingman uses the info panel."""
+        hud = getattr(self._wingman.config, "hud", None)
+        return self.available and bool(hud and hud.info)
 
-    async def _client(self, element):
-        if not self.available:
-            return None
-        from hud_server.http_client import HudHttpClient
-        from hud_server.validation import validate_hud_settings
-
-        settings = validate_hud_settings(self._wingman.settings.hud_server)
-        base_url = f"http://{settings['host']}:{settings['port']}"
-        client = _hud_clients.get(base_url)
-        if client is None:
-            client = _hud_clients[base_url] = HudHttpClient(base_url=base_url)
-        if not client.connected and not await client.connect(timeout=1.0):
-            return None
-        key = (base_url, self._group, element)
-        if key not in _hud_groups:
-            # Creates the group if it is missing, keeps its look if it exists.
-            if await client.create_group(self._group, element) is None:
-                return None
-            _hud_groups.add(key)
-        return client
-
-    async def _send(self, element, call) -> bool:
-        """Run `call(client)` against this Wingman's window. A None result means
-        the server lost the group (it restarted, or the HUD skill unloaded and
-        deleted it); the group is made again and the call tried once more."""
-        for _ in range(2):
-            client = await self._client(element)
-            if client is None:
-                return False
-            if await call(client) is not None:
-                return True
-            _hud_groups.difference_update(
-                {k for k in _hud_groups if k[0] == client.base_url}
-            )
-        return False
+    @property
+    def profile(self) -> "ReadOnlyConfigView | None":
+        """The HUD profile in use (read-only): `chat` and `info` are the
+        containers' areas (x1, y1, x2, y2 in pixels), `style` their look. Use it
+        to place a group of your own next to them."""
+        profile = self._service().active_profile()
+        return ReadOnlyConfigView(profile) if profile is not None else None
 
     async def show_message(
         self, title: str, text: str, *, duration: float = 10.0, color: Optional[str] = None
     ) -> bool:
-        """Show a message in this Wingman's message window. Markdown; `color`
-        is a hex accent like "#00aaff"."""
-        from hud_server.types import WindowType
+        """Show a message in the shared chat container for `duration` seconds.
+        Markdown; `color` is a hex accent like "#00aaff"."""
+        from hud_server.constants import GROUP_CHAT
 
+        if not self.chat_enabled:
+            return False
         icon = self._wingman.get_avatar_path() if title == self._wingman.name else None
-        return await self._send(
-            WindowType.MESSAGE,
-            lambda client: client.show_message(
-                self._group, WindowType.MESSAGE, title, text,
-                color=color, duration=duration, title_icon=icon,
-            ),
+        return self._service().show_message(
+            GROUP_CHAT, title, text, duration=duration, color=color, icon=icon
         )
 
     async def add_info(
         self, title: str, text: str = "", *, color: Optional[str] = None,
         duration: Optional[float] = None,
     ) -> bool:
-        """Put an item on this Wingman's info panel; the same title replaces it."""
-        from hud_server.types import WindowType
+        """Put a panel on the shared info panel; the same title replaces it.
+        `duration` removes it after that many seconds."""
+        from hud_server.constants import GROUP_INFO
 
-        return await self._send(
-            WindowType.PERSISTENT,
-            lambda client: client.add_item(
-                self._group, WindowType.PERSISTENT, title, text, color=color, duration=duration
-            ),
+        if not self.info_enabled:
+            return False
+        return self._service().add_info(
+            GROUP_INFO, title, text, color=color, duration=duration, added_by=self._added_by
         )
 
     async def remove_info(self, title: str) -> bool:
-        from hud_server.types import WindowType
+        from hud_server.constants import GROUP_INFO
 
-        return await self._send(
-            WindowType.PERSISTENT,
-            lambda client: client.remove_item(self._group, WindowType.PERSISTENT, title),
+        if not self.info_enabled:
+            return False
+        return self._service().remove_info(GROUP_INFO, title)
+
+    async def show_progress(
+        self, title: str, current: float, maximum: float = 100, *, text: str = "",
+        color: Optional[str] = None, auto_close: bool = False,
+    ) -> bool:
+        """A progress bar on the shared info panel; the same title updates it."""
+        from hud_server.constants import GROUP_INFO
+
+        if not self.info_enabled:
+            return False
+        return self._service().show_progress(
+            GROUP_INFO, title, current, maximum, text=text, color=color, auto_close=auto_close,
+            added_by=self._added_by,
         )
+
+    async def show_timer(
+        self, title: str, seconds: float, *, text: str = "", color: Optional[str] = None,
+        auto_close: bool = True,
+    ) -> bool:
+        """A countdown on the shared info panel."""
+        from hud_server.constants import GROUP_INFO
+
+        if not self.info_enabled:
+            return False
+        return self._service().show_timer(
+            GROUP_INFO, title, seconds, text=text, color=color, auto_close=auto_close,
+            added_by=self._added_by,
+        )
+
+    def info_items(self) -> list[dict]:
+        """What the shared info panel shows right now, oldest first, also what
+        other Wingmen and skills put there: `title`, `text` and `added_by`."""
+        if not self.available:
+            return []
+        return _panels(self._service().info_items())
+
+    def group(self, name: str, element: str = "persistent", **props) -> "SkillHudGroup":
+        """A group of this skill's own, e.g. a status icon in a corner.
+
+        The group is named after this Wingman plus `name`, so two Wingmen
+        running the same skill get one each. `element` is "persistent" (items,
+        progress bars, timers) or "message" (one message at a time). `props`
+        are HUD server props: anchor, priority, width, layout_mode="manual"
+        with x/y, colours... Anything left out comes from the HUD profile.
+        Core deletes the group when the skill unloads.
+        """
+        import re
+
+        group_name = f"{re.sub(r'[^a-zA-Z0-9_-]', '_', self._wingman.name)}_{name}"
+        key = (group_name, element)
+        handle = self._groups.get(key)
+        if handle is None:
+            handle = self._groups[key] = SkillHudGroup(group_name, element, props)
+        elif props:
+            handle._props.update(props)
+        return handle
+
+    def _release(self) -> None:
+        """The skill unloaded: its groups go."""
+        for handle in self._groups.values():
+            self._service().delete_group(handle.name, handle.element)
+        self._groups.clear()
+
+
+def _panels(items: list[dict]) -> list[dict]:
+    return [
+        {"title": i.get("title", ""), "text": i.get("description", ""), "added_by": i.get("added_by")}
+        for i in items
+    ]
+
+
+class SkillHudGroup:
+    """A HUD group a skill draws itself (`self.wingman.hud.group(...)`).
+
+    Every call returns False when the HUD is off. The group is made again with
+    its props if the HUD server restarted in between.
+    """
+
+    def __init__(self, name: str, element: str, props: dict) -> None:
+        self.name = name
+        self.element = element
+        self._props = dict(props)
+
+    def _service(self):
+        from services.hud_service import HudService
+
+        hud = HudService()
+        if not hud.available:
+            return None
+        hud.create_group(self.name, self.element, self._props)
+        return hud
+
+    async def update(self, **props) -> bool:
+        """Change the group's props; its windows follow right away."""
+        self._props.update(props)
+        hud = self._service()
+        return bool(hud and hud.update_group(self.name, self.element, props))
+
+    async def show_message(
+        self, title: str, text: str, *, duration: float = 10.0, color: Optional[str] = None
+    ) -> bool:
+        hud = self._service()
+        return bool(hud and hud.show_message(self.name, title, text, duration=duration, color=color))
+
+    async def hide_message(self) -> bool:
+        hud = self._service()
+        return bool(hud and hud.hide_message(self.name))
+
+    async def add_info(
+        self, title: str, text: str = "", *, color: Optional[str] = None,
+        duration: Optional[float] = None,
+    ) -> bool:
+        hud = self._service()
+        return bool(hud and hud.add_info(self.name, title, text, color=color, duration=duration))
+
+    async def remove_info(self, title: str) -> bool:
+        hud = self._service()
+        return bool(hud and hud.remove_info(self.name, title))
+
+    async def show_progress(
+        self, title: str, current: float, maximum: float = 100, *, text: str = "",
+        color: Optional[str] = None, auto_close: bool = False,
+    ) -> bool:
+        hud = self._service()
+        return bool(hud and hud.show_progress(
+            self.name, title, current, maximum, text=text, color=color, auto_close=auto_close
+        ))
+
+    async def show_timer(
+        self, title: str, seconds: float, *, text: str = "", color: Optional[str] = None,
+        auto_close: bool = True,
+    ) -> bool:
+        hud = self._service()
+        return bool(hud and hud.show_timer(
+            self.name, title, seconds, text=text, color=color, auto_close=auto_close
+        ))
+
+    async def append_message(self, text: str) -> bool:
+        """Add text to the message on screen, e.g. while it streams in."""
+        hud = self._service()
+        return bool(hud and hud.append_message(self.name, text))
+
+    async def info_items(self) -> list[dict]:
+        """The group's items, oldest first: `title`, `text` and `added_by`."""
+        hud = self._service()
+        return _panels(hud.info_items(self.name)) if hud else []
+
+    async def clear(self) -> bool:
+        """Removes every item of the group."""
+        hud = self._service()
+        return bool(hud and hud.clear_info(self.name))
+
+    async def set_loader(self, show: bool, *, color: Optional[str] = None) -> bool:
+        """The small loading animation, e.g. while the skill fetches something."""
+        hud = self._service()
+        return bool(hud and hud.set_loader(self.name, self.element, show, color))
+
+    async def show(self) -> bool:
+        """Shows the group again after hide(); it kept every update meanwhile."""
+        hud = self._service()
+        return bool(hud and hud.set_group_visible(self.name, self.element, True))
+
+    async def hide(self) -> bool:
+        """Hides the group without losing what it holds."""
+        hud = self._service()
+        return bool(hud and hud.set_group_visible(self.name, self.element, False))
+
+    async def delete(self) -> bool:
+        from services.hud_service import HudService
+
+        return HudService().delete_group(self.name, self.element)
 
 
 class SkillStarCitizen:

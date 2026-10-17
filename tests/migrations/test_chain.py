@@ -52,6 +52,18 @@ def test_a_complete_chain_reaches_the_current_version(users_dir, boot_config_man
     assert chain[-1] == VERSION_DIR
 
 
+def test_a_step_past_this_cores_version_waits_for_the_version_bump(
+    users_dir, boot_config_manager, monkeypatch
+):
+    import services.config_migration_service as module
+
+    monkeypatch.setattr(module, "LOCAL_VERSION", "3.2.7")
+    service = migration_service(boot_config_manager())
+
+    assert service.latest_version == "3_2_7"
+    assert [(old, new) for old, new, _ in service.waiting_migrations][0] == ("3_2_7", "3_2_8")
+
+
 def test_a_missing_link_is_no_chain(users_dir, boot_config_manager):
     make_old_version(users_dir, OLD_VERSION_DIR, {"Star Citizen": {"Computer.yaml": None}})
     service = migration_service(boot_config_manager())
@@ -309,3 +321,17 @@ def test_the_conversion_runs_in_its_own_step_folder(users_dir, boot_config_manag
     assert context["default_config"] == "General"
     assert "Star Citizen" in context["deleted_template_configs"]
     assert config_manager.find_default_config().name == "General"
+
+
+@pytest.mark.parametrize("old_version", ["2_1_1", "3_2_8"])
+def test_the_hud_ends_up_on_from_any_older_version(users_dir, boot_config_manager, old_version):
+    make_old_version(users_dir, old_version, {"Star Citizen": {"Computer.yaml": None}})
+    settings_file = path.join(users_dir, old_version, "configs", "settings.yaml")
+    settings = read_yaml(settings_file)
+    settings["hud_server"]["enabled"] = False
+    write_yaml(settings_file, settings)
+
+    boot_and_migrate(boot_config_manager)
+
+    migrated = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "settings.yaml"))
+    assert migrated["hud_server"]["enabled"] is True

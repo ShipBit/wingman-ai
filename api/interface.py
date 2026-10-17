@@ -7,6 +7,7 @@ from api.enums import (
     CoreState,
     ImageGenerationProvider,
     ImageStyle,
+    HudAlign,
     LocalAiMode,
     PocketTtsQuality,
     ScGameLogRulesProblem,
@@ -1250,10 +1251,20 @@ class McpConfig(BaseModel):
     """List of all available MCP server configurations."""
 
 
+class HudConfig(BaseModel):
+    """A Wingman's use of the shared HUD containers."""
+
+    chat: bool
+    """Show the conversation in the shared chat container."""
+    info: bool
+    """Give the Wingman the info panel tools."""
+
+
 class NestedConfig(BaseModel):
     prompts: PromptConfig
     sound: SoundConfig
     features: FeaturesConfig
+    hud: HudConfig
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
@@ -1421,6 +1432,93 @@ class HudServerSettings(BaseModel):
 
     screen: int
     """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
+
+
+class HudArea(BaseModel):
+    """Where a shared HUD container lives, in pixels on the HUD monitor."""
+
+    x1: int
+    """Left edge."""
+    y1: int
+    """Top edge."""
+    x2: int
+    """Right edge. The container is x2 - x1 wide."""
+    y2: int
+    """Bottom edge. The container grows up to y2 - y1 high."""
+    align: HudAlign
+    """Where the container sits in its area when its content is shorter."""
+
+
+class HudStyle(BaseModel):
+    """The look of every HUD window, skill groups included unless they set their own."""
+
+    font_size: int
+    font_family: str
+    accent_color: str
+    """Titles and highlights (hex)."""
+    bg_color: str
+    """Background (hex, #RRGGBB)."""
+    bg_opacity: int
+    """Background transparency only, 0-100. Text and borders stay."""
+    text_color: str
+    border_radius: int
+    content_padding: int
+    opacity: int
+    """Transparency of the whole window, text included, 0-100."""
+    typewriter_effect: bool
+
+
+class HudProfile(BaseModel):
+    """Layout and look of the HUD, applied when a config (channel) loads."""
+
+    id: str
+    name: str
+    is_default: bool
+    """Applies to every config no profile names. Exactly one profile has it."""
+    configs: list[str]
+    """Names of the configs this profile applies to."""
+    chat: HudArea
+    """The chat container all Wingmen share."""
+    info: HudArea
+    """The info panel container all Wingmen share."""
+    style: HudStyle
+    max_display_time: float
+    """Seconds a chat message stays when no audio plays."""
+    audio_stop_delay: float
+    """Seconds a chat message stays after the Wingman stops speaking."""
+    display_tool_names: bool
+    """Show tool names instead of skill/server names on the chat message."""
+    user_name: str
+    """What the chat calls the user. Empty: the account name the client is
+    signed in with, or "User" without one."""
+    chat_flow: bool
+    """Show the conversation as a running chat, earlier messages above the
+    newest. Off: the chat shows only the newest message."""
+    restore_info_items: bool
+    """Bring info panels back after Core restarts."""
+
+
+class HudProfilesState(BaseModel):
+    """The HUD profiles and what Core currently does with them."""
+
+    profiles: list[HudProfile]
+    active_profile_id: Optional[str]
+    """The profile the config whose Wingmen are loaded uses. None until a
+    config's Wingmen load (on start, before the client signs in)."""
+    preview_profile_id: Optional[str]
+    """The profile shown as preview panels, None when no preview runs."""
+    hud_available: bool
+    """The HUD server runs (switched on, Windows only)."""
+
+
+class CreateHudProfileRequest(BaseModel):
+    name: str
+    copy_from: Optional[str] = None
+    """Id of the profile to copy. Without it the new profile starts from the template."""
+
+
+class HudProfilePreviewRequest(BaseModel):
+    enabled: bool
 
 
 class DetectContextSizeRequest(BaseModel):
@@ -1640,6 +1738,7 @@ class SettingsConfig(BaseModel):
     llama_cpp: LlamaCppSettings
     system_one: SystemOneSettings
     hud_server: HudServerSettings
+    hud_profiles: list[HudProfile]
     star_citizen: StarCitizenSettings
     sc_gamelog: ScGameLogSettings
     debug_mode: bool

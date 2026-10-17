@@ -58,8 +58,8 @@ class _Feature:
     """The shipped Wingmen it is switched on for when the user plays the
     game; None for all of them, () for none."""
     star_citizen: bool = True
-    """False for a feature that works without the game, like the HUD. The
-    answer to "Do you play Star Citizen?" leaves it as it is."""
+    """False for a feature that works without the game. The answer to "Do
+    you play Star Citizen?" leaves it as it is."""
 
 
 FEATURES = (
@@ -77,9 +77,6 @@ FEATURES = (
     # Background chatter is a matter of taste: offered, but off.
     _Feature(StarCitizenFeatureKind.SKILL, "RadioChatter", ()),
     _Feature(StarCitizenFeatureKind.MCP, "wingman_versetime", ALL_WINGMEN),
-    # Listed here so the setup can switch it per Wingman next to the HUD
-    # server, for players of any game.
-    _Feature(StarCitizenFeatureKind.SKILL, "HUD", (), star_citizen=False),
 )
 
 

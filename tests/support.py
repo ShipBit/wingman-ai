@@ -4,13 +4,16 @@ Fixtures live in conftest.py. This module holds plain functions and constants,
 so test modules import them explicitly instead of from conftest.
 """
 
+import importlib
 import os
+import queue
 import shutil
 from os import path
 from types import SimpleNamespace
 
 import yaml
 
+from hud_server.platform.base import HudBackend, Monitor
 from services.system_manager import LOCAL_VERSION
 
 REPO_ROOT = path.dirname(path.dirname(path.abspath(__file__)))
@@ -28,6 +31,16 @@ def read_yaml(file_path: str):
 def write_yaml(file_path: str, content) -> None:
     with open(file_path, "w", encoding="UTF-8") as f:
         yaml.safe_dump(content, f)
+
+
+def migration_modules() -> list:
+    """Every config migration module, imported."""
+    folder = path.join(REPO_ROOT, "services", "migrations")
+    return [
+        importlib.import_module(f"services.migrations.{name[:-3]}")
+        for name in sorted(os.listdir(folder))
+        if name.startswith("migration_") and name.endswith(".py")
+    ]
 
 
 def template(name: str):
@@ -127,3 +140,122 @@ class FakeConfigManager:
     def write_config(self, file_path, content):
         write_yaml(file_path, content)
         return True
+
+
+# ── a HUD backend without an operating system ──────────────────────────
+
+
+class FakeHudBackend(HudBackend):
+    """The HUD's windows as plain records, so the overlay runs on any OS.
+    `present` keeps a copy of the image; `pointer()` plays the mouse."""
+
+    def __init__(self, monitors=None):
+        self.screens = [Monitor(0, 0, 1920, 1080, True)] if monitors is None else monitors
+        self.windows: list[SimpleNamespace] = []
+        self.cursor = (0, 0)
+        self.captured = None
+        self.started = False
+
+    def start(self):
+        self.started = True
+
+    def stop(self):
+        self.started = False
+        self.windows.clear()
+
+    def pump_events(self):
+        pass
+
+    def create_window(self, title, x, y, width, height):
+        window = SimpleNamespace(
+            title=title, rect=(x, y, width, height), shown=True, image=None,
+            opacity=0, click_through=True, handler=None, raised=0,
+        )
+        self.windows.append(window)
+        return window
+
+    def destroy_window(self, window):
+        if window in self.windows:
+            self.windows.remove(window)
+
+    def move_window(self, window, x, y, width, height):
+        window.rect = (x, y, width, height)
+
+    def raise_window(self, window):
+        window.raised += 1
+
+    def show_window(self, window):
+        window.shown = True
+
+    def hide_window(self, window):
+        window.shown = False
+
+    def present(self, window, image, opacity):
+        window.image = image.copy()
+        window.opacity = opacity
+
+    def set_click_through(self, window, click_through):
+        window.click_through = click_through
+
+    def set_pointer_handler(self, window, handler):
+        window.handler = handler
+
+    def capture_pointer(self, window):
+        self.captured = window
+
+    def release_pointer(self):
+        self.captured = None
+
+    def cursor_position(self):
+        return self.cursor
+
+    def monitors(self):
+        return list(self.screens)
+
+    def window(self, title: str):
+        return next(w for w in self.windows if w.title == title)
+
+    def pointer(self, window, event, x, y):
+        """The mouse did `event` at screen (x, y) over `window`."""
+        self.cursor = (x, y)
+        return window.handler(event, x, y) if window.handler else None
+
+
+def make_overlay(backend, events=None):
+    """A HUD overlay on `backend`, fonts loaded, ready to step frames by hand."""
+    from hud_server.overlay.overlay import HeadsUpOverlay
+
+    overlay = HeadsUpOverlay(
+        command_queue=queue.Queue(),
+        error_queue=queue.Queue(),
+        event_callback=(events.append if events is not None else None),
+        backend=backend,
+    )
+    overlay._init_fonts()
+    overlay.dt = 0.05
+    return overlay
+
+
+def run_frames(overlay, count=10):
+    for _ in range(count):
+        overlay._update_all_windows()
+
+
+def bottom_edge(backend, overlay, window: str) -> tuple:
+    """The pixel in the middle of a HUD window's bottom edge, where the
+    loader glows. `window` is the overlay's name for it, as "message_atc"."""
+    from hud_server.rendering.glass import SHADOW
+
+    image = backend.window(f"HUD_{window}").image
+    width = image.width - SHADOW.left - SHADOW.right
+    return image.getpixel((SHADOW.left + width // 2, SHADOW.top + overlay._windows[window]["body_height"] - 1))
+
+
+def overlay_errors(overlay) -> list:
+    """The errors the overlay reported so far (heartbeats left out)."""
+    reports = []
+    while not overlay.error_queue.empty():
+        report = overlay.error_queue.get()
+        if isinstance(report, dict) and report.get("type") == "error":
+            reports.append(report)
+    return reports
