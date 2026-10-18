@@ -50,9 +50,8 @@ Where the containers are and how they look is a **HUD profile**, under
   up,
 - the look: font, size, colours, background and overall transparency, corner
   radius, padding, typewriter effect. While a Wingman works, the bottom edge
-  of its window glows softly in the accent colour;
-  tables a shade of the background, as see-through as the background,
-
+  of its window glows softly in the accent colour; tables use a shade of the
+  background and are as see-through as the background,
 - how long chat messages stay, whether the chat shows tool names, and the
   name the chat calls you. Left empty, it is the name you are signed in to
   Wingman AI with, or "User" when you are not signed in,

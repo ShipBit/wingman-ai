@@ -33,29 +33,15 @@ python -m venv venv                 # create a virtual environment
 pip install -r requirements.txt     # install dependencies
 ```
 
-### NVIDIA GPU acceleration (optional)
+`requirements.txt` installs one package (`pocket-tts`) from GitHub, so Git must be installed.
 
-If you have an NVIDIA RTX GPU and want to use CUDA for FasterWhisper and PocketTTS:
+### NVIDIA GPU acceleration
 
-```bash
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-```
+GPU speech recognition (Parakeet) needs no extra step: `requirements.txt` installs `onnxruntime-gpu` and the CUDA 13 packages. It needs an NVIDIA GPU from the GTX 16xx / RTX 20xx series or newer and driver 580 or newer. torch is only used for Pocket TTS, which runs on the CPU.
 
-This replaces the CPU-only torch that `requirements.txt` installs with a CUDA 12.4 build.
+## Models
 
-## Copy runtime dependencies from the Wingman AI client
-
-The release version of Wingman AI bundles several model files and binaries that are too large for git. To get the full experience in your dev environment, install the latest [Wingman AI release](https://wingman-ai.com) and copy the following directories from the installation directory (default: `C:\Program Files\Wingman AI\`) into your repository root:
-
-| Directory | Purpose | What happens if you skip it |
-| --- | --- | --- |
-| `faster-whisper-models/` | Pre-downloaded speech recognition models | Models auto-download from HuggingFace on first use — this can be slow and may crash on first launch. Restart and it will work. |
-| `pocket-tts-models/` | PocketTTS text-to-speech model weights | Models auto-download on first use. |
-| `pocket-tts-voices/` | Pre-packaged TTS voice samples | Voices auto-download on first use. |
-| `whispercpp/` | WhisperCPP binary (optional, legacy) | Only needed if you use whispercpp instead of FasterWhisper. |
-| `whispercpp-cuda/` | WhisperCPP CUDA variant (optional, legacy) | Same as above, for NVIDIA GPUs. |
-
-Copying these directories is optional but recommended — it avoids slow first-launch downloads and potential timeouts.
+Models (Parakeet, Pocket TTS, Silero VAD and others) are downloaded by Core on first use into the `models/` folder of the Wingman user data directory (`%APPDATA%\ShipBit\WingmanAI\models` on Windows). If you already have a Wingman AI installation, the dev environment uses the same folder, so there is nothing to copy.
 
 ## Setup Visual Studio Code
 
@@ -70,6 +56,13 @@ If it doesn't start, verify that:
 - The virtual environment is selected as the Python interpreter
 - All dependencies are installed (`pip install -r requirements.txt`)
 - The integrated terminal is running from the repository root directory
+
+## Run the tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ## Developing Skills
 

@@ -42,7 +42,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - Parakeet on a remote server
   - Wingman Subscription (cloud)
 - **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - bundled with CUDA for GPU acceleration, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
+  - PocketTTS (local, free - runs on the CPU, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
   - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
   - OpenAI TTS
   - Edge TTS (free)
@@ -54,7 +54,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **Audio markups (aka "emotions")** that work with every supported TTS provider
 - **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
 - **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT)
-- **HUD overlay** (Windows, macOS, Linux): the conversation and an info panel your Wingmen share, laid out per game with HUD profiles you place by dragging them on screen ([docs/hud.md](docs/hud.md))
+- **HUD overlay** (Windows, macOS, Linux): messages, an info panel, progress bars and timers on top of your game, shared by your Wingmen, laid out per game with HUD profiles you place by dragging them on screen ([docs/hud.md](docs/hud.md))
 - **Command recording & execution** (keyboard & mouse)
   - **AI-powered**: The LLM decides when to execute commands based on user input. Users don't need to say exact phrases.
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
@@ -62,7 +62,6 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
 - **Persistent memory**: Wingmen remember facts about you across sessions, and you can ask them to forget them again
 - **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, or locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server
-- **HUD overlay** that shows messages, panels, progress bars and timers on top of your game
 - **Star Citizen game log**: Wingman reads the game's log file and can react to missions, zones, injuries and trades
 - **Built-in Skills** - Internal Python modules that extend Wingman capabilities:
   - **File Manager**: Read, write, list, and search files
@@ -84,7 +83,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Star Citizen Events**: Your Wingman reacts in character to what happens in Star Citizen (from the game log)
   - **Star Citizen Accountant**: Tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
   - **Voice Changer**: Changes the voice of your Wingman automatically
-  - **HUD Overlay** and **Microphone Status**: Show information and the live mic state on the HUD
+  - **Microphone Status**: Shows the live mic state on the HUD
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers
   - Supports HTTP, STDIO, and SSE transports
@@ -96,6 +95,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
     - **StarHead**: Star Citizen Game Data like ships, locations, and game mechanics
     - **VerseTime**: Star Citizen time
     - **Elite Dangerous**: Systems, stations and trade data
+    - **Galactapedia**: Star Citizen lore from RSI's Galactapedia
+    - **ElevenLabs** (OAuth, you authorize with your own ElevenLabs account): images, video, speech, transcription and voices ([docs/mcp-oauth.md](docs/mcp-oauth.md))
   - Developers can connect their own custom MCP servers (local or remote)
   - **Key difference**: Skills are built-in Python modules, MCP servers are external tools that can be developed in any language
 - **Directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
@@ -182,7 +183,7 @@ Yes. Use the "Local LLM" provider and connect any LLM offering an OpenAI-compati
 
 ### Can I use a local TTS provider?
 
-Yes! **PocketTTS** is bundled with Wingman AI and works out of the box as a local, free TTS provider with GPU acceleration via CUDA. It supports voice cloning with just a few seconds of reference audio.
+Yes! **PocketTTS** is bundled with Wingman AI and works out of the box as a local, free TTS provider. It runs on the CPU. It supports voice cloning with just a few seconds of reference audio.
 
 If you want to offload TTS to a separate machine (e.g. a more powerful GPU server), you can use the [PocketTTS OpenAI Streaming Server](https://github.com/teddybear082/pocket-tts-openai_streaming_server) — a server wrapper that exposes PocketTTS via an OpenAI-compatible API. Connect to it in Wingman AI using the "OpenAI-compatible" TTS provider and point it at your server's address.
 
@@ -206,7 +207,7 @@ If that doesn't work for some reason, try starting `Wingman AI Core.exe` manuall
 - Download the `.dmg` from [wingman-ai.com](https://www.wingman-ai.com) and move Wingman AI to your Applications folder.
 - It needs a Mac with Apple Silicon (M1 or newer) and macOS 14 (Sonoma) or newer.
 - On the first start, allow access to the microphone. For hotkeys and push-to-talk, also allow Accessibility in System Settings > Privacy & Security.
-- Not available on macOS: XVASynth and a few Windows-only skills.
+- Not available on macOS: XVASynth and the two Windows-only skills (ATS Telemetry, MSFS2020 Control).
 
 You can also [run it from source](#develop-with-wingman-ai).
 
@@ -220,7 +221,7 @@ You can also [run it from source](#develop-with-wingman-ai).
   - Arch, CachyOS: `sudo pacman -S portaudio pipewire-alsa`
 - For hotkeys and push-to-talk, add yourself to the `input` group, then log out and back in: `sudo usermod -aG input $USER`. This works on X11 and Wayland.
 - The HUD overlay needs an X display (X11, or XWayland in a Wayland session) and a compositor, which every desktop has.
-- Not available on Linux: XVASynth and a few Windows-only skills.
+- Not available on Linux: XVASynth and the two Windows-only skills (ATS Telemetry, MSFS2020 Control).
 
 If Wingman does not start, run the AppImage from a terminal. Core's messages, such as a missing PortAudio, are printed there.
 
@@ -316,6 +317,8 @@ Please follow our guides to setup your dev environment:
 - [Windows development](docs/develop-windows.md)
 - [MacOS development](docs/develop-macos.md)
 - [Linux development](docs/develop-linux.md)
+
+Run the tests with `pip install -r requirements-dev.txt` and `python -m pytest`.
 
 ### Creating Custom Skills
 

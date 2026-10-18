@@ -10,17 +10,17 @@ www-authenticate: Bearer resource_metadata="https://api.us.elevenlabs.io/.well-k
 {"detail":"OAuth bearer token required for the hosted MCP."}
 ```
 
-Before this change Wingman could only send a static `Authorization: Bearer <secret>`
+Without OAuth, Wingman could only send a static `Authorization: Bearer <secret>`
 header, so every server of that kind was out of reach.
 
 ## What a user sees
 
 An MCP server in `mcp.yaml` now carries an `auth` field with three values:
 
-* `none` — no credentials, the default.
-* `api_key` — the old behaviour. The secret `mcp_<name>` goes out as a bearer
+* `api_key` — the default, the old behaviour. The secret `mcp_<name>` goes out as a bearer
   header. Configs written before 3.2.1 keep working: a server with a `headers`
   entry or a stored `mcp_<name>` secret behaves exactly as it did.
+* `none` — no credentials, not even a stored secret is sent.
 * `oauth` — the server is reached with an OAuth access token that Wingman
   obtains, stores and refreshes.
 
@@ -128,10 +128,9 @@ Two things about that server are not obvious and both cost a debugging round:
   the regional one.
 * **Its client id is a URL.** `oauth_client_id` points at
   `https://wingman-ai-mcp-servers.wingman-ai.workers.dev/oauth/client`, a client
-  id metadata document added to the worker repository on the branch
-  `feat/oauth-client-metadata`.
+  id metadata document served by Wingman's own worker.
 
-The worker branch is merged and deployed. The whole path is verified against the
+The worker is deployed. The whole path is verified against the
 live server: discovery, the authorization URL, consent in a browser, the
 callback, the token exchange, a silent refresh of an expired token, and the
 failure pages.
