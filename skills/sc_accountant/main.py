@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from typing import Any
 import secrets
+import threading
 import webbrowser
 
 from skills.skill_base import Skill, tool
@@ -104,7 +105,10 @@ class _Books:
         self._capture_task = None
         self._subscription = None
         self._dirty = asyncio.Event()
-        self._engine_lock = asyncio.Lock()
+        # A thread lock, taken in the worker thread: the capture runs on
+        # Core's loop and the tools on the loop of each turn, and an
+        # asyncio.Lock one loop holds raises when another waits for it.
+        self._engine_lock = threading.Lock()
         self._dashboard_lock = asyncio.Lock()  # Two Wingmen starting at once.
 
     @classmethod
@@ -129,8 +133,11 @@ class _Books:
 
     async def run(self, fn, *args, **kwargs):
         """Engine work runs off the event loop, one call at a time."""
-        async with self._engine_lock:
-            return await asyncio.to_thread(fn, *args, **kwargs)
+        return await asyncio.to_thread(self._locked, fn, *args, **kwargs)
+
+    def _locked(self, fn, *args, **kwargs):
+        with self._engine_lock:
+            return fn(*args, **kwargs)
 
     async def _open(self) -> None:
         from skills.sc_accountant.erp import ERP
@@ -151,8 +158,7 @@ class _Books:
             await asyncio.to_thread(self.server.stop)
             self.server = None
         if self.engine is not None:
-            async with self._engine_lock:
-                await asyncio.to_thread(self.engine.close)
+            await self.run(self.engine.close)
             self.engine = None
 
     async def _capture_loop(self) -> None:
