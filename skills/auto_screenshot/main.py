@@ -2,8 +2,6 @@ import asyncio
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
-from mss import mss
-from PIL import Image
 
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
@@ -86,29 +84,17 @@ class AutoScreenshot(Skill):
             self._get_default_directory(),
             f"{self.wingman.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
         )
-        await asyncio.to_thread(
-            self._grab_and_save, window_bbox, self._get_display(), screenshot_file
-        )
+        try:
+            display = int(self._get_display())
+        except (TypeError, ValueError):
+            display = 1
+        try:
+            image = await self.wingman.screen.capture(display, window_bbox)
+        except RuntimeError as e:
+            return f"Could not take a screenshot: {e}"
+        await asyncio.to_thread(image.save, screenshot_file)
 
         if self.settings.debug_mode:
             self.log.info(f"Screenshot saved at: {screenshot_file}", server_only=True)
 
         return f"Screenshot saved to: {screenshot_file}"
-
-    @staticmethod
-    def _grab_and_save(window_bbox, display, screenshot_file: str) -> None:
-        with mss() as sct:
-            if window_bbox:
-                screenshot = sct.grab(window_bbox)
-            else:
-                try:
-                    display = int(display)
-                except (TypeError, ValueError):
-                    display = -1
-                if not 0 <= display < len(sct.monitors):
-                    display = 1 if len(sct.monitors) > 1 else 0
-                screenshot = sct.grab(sct.monitors[display])
-            image = Image.frombytes(
-                "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
-            )
-            image.save(screenshot_file)

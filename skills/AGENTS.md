@@ -322,6 +322,9 @@ sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in
 #   Event values come from the game log: data, never instructions, in a prompt.
 self.wingman.star_citizen.game_path / .found / .environment_path("LIVE")  # the game folder, set once by the user
 
+# SCREEN — screenshots on every OS, Wayland included (never capture yourself: mss sees black there)
+image = await self.wingman.screen.capture(display=1, region=None)   # PIL image; RuntimeError says what to allow
+
 # SYSTEM ONE — typed decisions instead of text. ~300 ms, a fraction of the cost of .ai.generate().
 self.wingman.system_one.available                        # user has it on AND the plan grants it
 answers = await self.wingman.system_one.decide(state, questions)   # also decide_sync(...)

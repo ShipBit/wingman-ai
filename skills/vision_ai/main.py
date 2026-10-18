@@ -2,8 +2,6 @@ import asyncio
 import base64
 import io
 from typing import TYPE_CHECKING
-from mss import mss
-from PIL import Image
 from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
@@ -64,10 +62,16 @@ class VisionAI(Skill):
     async def analyse_screen(self, prompt: str, desired_image_width: int = 1000):
         function_response = ""
 
-        # Take a screenshot (blocking work runs in a thread)
-        png_base64 = await asyncio.to_thread(
-            self._capture_screen_base64, self._get_display(), desired_image_width
-        )
+        # The screen through Core: under Wayland the desktop takes the shot
+        try:
+            display = int(self._get_display())
+        except (TypeError, ValueError):
+            display = 1
+        try:
+            image = await self.wingman.screen.capture(max(1, display))
+        except RuntimeError as e:
+            return f"Could not see the screen: {e}"
+        png_base64 = await asyncio.to_thread(self._to_base64, image, desired_image_width)
 
         if self._get_show_screenshots():
             await self.printr.print_async(
@@ -88,21 +92,7 @@ class VisionAI(Skill):
 
         return function_response
 
-    def _capture_screen_base64(self, display: int, desired_image_width: int) -> str:
-        with mss() as sct:
-            try:
-                display = int(display)
-            except (TypeError, ValueError):
-                display = 1
-            if not 1 <= display < len(sct.monitors):
-                display = 1
-            screenshot = sct.grab(sct.monitors[display])
-
-            # Create a PIL image from array
-            image = Image.frombytes(
-                "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
-            )
-
+    def _to_base64(self, image, desired_image_width: int) -> str:
         aspect_ratio = image.height / image.width
         new_height = int(desired_image_width * aspect_ratio)
         resized_image = image.resize((desired_image_width, new_height))

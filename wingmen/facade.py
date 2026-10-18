@@ -1552,6 +1552,32 @@ class SkillHudGroup:
         return HudService().delete_group(self.name, self.element)
 
 
+class SkillScreen:
+    """Screenshots (`self.wingman.screen`) on Windows, macOS and Linux.
+
+    Under Wayland the desktop takes the shot (Spectacle on KDE, grim on
+    wlroots, else the screenshot portal, which may ask the user once), since
+    a skill's own capture there only sees XWayland windows.
+    """
+
+    @property
+    def wayland(self) -> bool:
+        """A Wayland session: no picking a monitor, the desktop picks."""
+        from services.screen_capture import is_wayland
+
+        return is_wayland()
+
+    async def capture(self, display: int = 1, region: Optional[dict] = None):
+        """A PIL image (RGB) of monitor `display` (1 = the first, 0 = all), or
+        of `region` ({"left", "top", "width", "height"}). Raises RuntimeError
+        with what the user has to do when the screen cannot be captured."""
+        import asyncio
+
+        from services.screen_capture import capture
+
+        return await asyncio.to_thread(capture, display, region)
+
+
 class SkillStarCitizen:
     """Where Star Citizen is installed (`self.wingman.star_citizen`).
 

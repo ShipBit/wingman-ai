@@ -67,6 +67,7 @@ class WingmanContext:
         self.__system_one = None
         self.__sc_gamelog = None
         self.__star_citizen = None
+        self.__screen = None
         self.__ui = None
         self.__hud = None
         self.__secrets = None
@@ -243,6 +244,14 @@ class WingmanContext:
             from wingmen.facade import SkillStarCitizen
             self.__star_citizen = SkillStarCitizen(self.__wingman)
         return self.__star_citizen
+
+    @property
+    def screen(self) -> "SkillScreen":
+        """Screenshots on every OS, Wayland included."""
+        if self.__screen is None:
+            from wingmen.facade import SkillScreen
+            self.__screen = SkillScreen()
+        return self.__screen
 
     @property
     def secrets(self) -> "SkillSecrets":
