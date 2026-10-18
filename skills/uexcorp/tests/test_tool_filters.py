@@ -173,12 +173,24 @@ class ValidatorTest(_FilterTestBase):
         self.assertIsNone(validate(["not a dict"]))
         self.assertIsNone(validate([{"operation": "~", "value": 1}]))
 
+    def test_a_category_by_its_own_name(self) -> None:
+        from skills.uexcorp.uexcorp.tool.validator import Validator
+
+        for category_id, section, name in ((1, "Personal Weapons", "Personal Weapons"), (2, "Personal Weapons", "Attachments")):
+            self._db.execute(
+                "INSERT INTO category (id, type, section, name, is_game_related, combined_name) VALUES (?, 'item', ?, ?, 1, ?)",
+                (category_id, section, name, f"{section} {name}"),
+            )
+        # Categories are "<section> <name>": "Personal Weapons" is the first, not a question to the user
+        self.assertEqual(self._validate(Validator.VALIDATE_CATEGORY, "Personal Weapons"), "Personal Weapons Personal Weapons")
+        self.assertEqual(self._validate(Validator.VALIDATE_CATEGORY, "attachments"), "Personal Weapons Attachments")
+
 
 class CommodityInformationFilterTest(_FilterTestBase):
     def _seed(self) -> None:
         _seed_terminals(self._db)
         for commodity_id, name in COMMODITIES:
-            self._db.execute("INSERT INTO commodity (id, name, is_illegal, is_blacklisted) VALUES (?, ?, 0, 0)", (commodity_id, name))
+            self._db.execute("INSERT INTO commodity (id, name, is_illegal, is_blacklisted, is_buyable, is_sellable) VALUES (?, ?, 0, 0, 1, 1)", (commodity_id, name))
         for price_id, (commodity_id, terminal_id, buy, sell) in enumerate(COMMODITY_PRICES, start=1):
             self._db.execute(
                 "INSERT INTO commodity_price (id, id_commodity, id_terminal, price_buy, price_sell) VALUES (?, ?, ?, ?, ?)",
@@ -217,6 +229,12 @@ class CommodityInformationFilterTest(_FilterTestBase):
 
     def test_empty_lists_are_no_filter(self) -> None:
         self.assertEqual(self._names(filter_commodities=[], filter_location_whitelist=[]), ["Gold", "Tin", "Waste"])
+
+    def test_buyable_at_a_location_means_buyable_there(self) -> None:
+        # Ruin sells Gold and buys Tin and Waste
+        self.assertEqual(self._names(filter_location_whitelist=["Pyro"]), ["Gold", "Tin", "Waste"])
+        self.assertEqual(self._names(filter_location_whitelist=["Pyro"], filter_is_buyable=True), ["Gold"])
+        self.assertEqual(self._names(filter_location_whitelist=["Pyro"], filter_is_sellable=True), ["Tin", "Waste"])
 
 
 class ItemInformationFilterTest(_FilterTestBase):
@@ -291,6 +309,25 @@ class LocationInformationFilterTest(_FilterTestBase):
 
     def test_orbit_by_name(self) -> None:
         self.assertEqual(self._names(filter_locations=["Hurston Lagrange Point 1"]), ["Hurston Lagrange Point 1"])
+
+    def test_a_shared_parent_is_given_in_full_once(self) -> None:
+        from skills.uexcorp.uexcorp.tool.location_information import _drop_repeats
+
+        moon = {"name": "Daymar", "outposts": ["Kudre Ore", "Jumptown"]}
+        results = _drop_repeats([
+            {"name": "Kudre Ore", "located_at": dict(moon)},
+            {"name": "Jumptown", "located_at": dict(moon)},
+            {"name": "Lorville", "located_at": {"name": "Hurston"}},
+        ])
+        self.assertEqual([r["located_at"] for r in results], [moon, "Daymar", {"name": "Hurston"}])
+
+    def test_several_terminals_show_their_first_offerings(self) -> None:
+        from skills.uexcorp.uexcorp.tool.location_information import _trim_offerings
+
+        results = [{"name": "CBD", "offerings": {"commodity": list(range(30)), "item": [1, 2]}}, {"name": "Lorville", "offerings": ["Refuel"]}]
+        self.assertTrue(_trim_offerings(results, 10))
+        self.assertEqual(results[0]["offerings"], {"commodity": list(range(10)), "commodity_count": 30, "item": [1, 2]})
+        self.assertEqual(results[1]["offerings"], ["Refuel"])  # a city's offerings are a list of services
 
 
 def _seed_terminals(db) -> None:

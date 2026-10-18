@@ -1,7 +1,38 @@
+import json
+
 from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
+
+
+def _drop_repeats(results: list[dict]) -> list[dict]:
+    """A parent several results share (the moon of seven outposts) in full once, then by name."""
+    seen = set()
+    for result in results:
+        for key, value in result.items():
+            if isinstance(value, dict) and value.get("name"):
+                marker = (key, json.dumps(value, sort_keys=True, default=str))
+                if marker in seen:
+                    result[key] = value["name"]
+                else:
+                    seen.add(marker)
+    return results
+
+
+def _trim_offerings(results: list[dict], per_kind: int) -> bool:
+    """Caps what each terminal offers (a shop can list hundreds of items). True if anything was cut."""
+    trimmed = False
+    for result in results:
+        offerings = result.get("offerings")
+        if not isinstance(offerings, dict):
+            continue
+        for kind, entries in list(offerings.items()):
+            if isinstance(entries, list) and len(entries) > per_kind:
+                offerings[kind] = entries[:per_kind]
+                offerings[f"{kind}_count"] = len(entries)
+                trimmed = True
+    return trimmed
 
 
 class LocationInformation(Tool):
@@ -17,6 +48,7 @@ class LocationInformation(Tool):
     LOCATION_TYPE_MOON = "moon"
     LOCATION_TYPE_CITY = "city"
     LOCATION_TYPE_TERMINAL = "terminal"
+    OFFERINGS_PER_KIND = 10
 
     def __init__(self):
         super().__init__()
@@ -77,7 +109,13 @@ class LocationInformation(Tool):
             )
             return [], ""
         elif len(locations) <= 10:
-            locations = [location.get_data_for_ai() for location in locations]
+            locations = _drop_repeats([location.get_data_for_ai() for location in locations])
+            # One terminal is listed in full, several only with their first offerings
+            if len(locations) > 1 and _trim_offerings(locations, self.OFFERINGS_PER_KIND):
+                helper.get_handler_tool().add_note(
+                    f"Several terminals: their offerings show the first {self.OFFERINGS_PER_KIND} per kind "
+                    "(<kind>_count = all). Ask for one terminal to see everything it offers."
+                )
         elif len(locations) <= 20:
             locations = [location.get_data_for_ai_minimal() for location in locations]
             helper.get_handler_tool().add_note(

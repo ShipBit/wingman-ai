@@ -415,6 +415,8 @@ class ImportHandler:
                 skipped += 1
                 continue
             model = model_class(row["id"])
+            if dataset.table == "item_attribute":
+                model_class.normalize_unit(row)
             model.set_data(row)
             if dataset.table == "category":
                 self.__prepare_category(model, row)

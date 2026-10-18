@@ -228,11 +228,28 @@ class CommodityRoute(Tool):
             max_jumps=max_system_jumps,
         )[offset or 0:]
 
-        if not plans and container_limit:
-            helper.get_handler_tool().add_note(
-                f"No route found. One reason can be the ship: the {container_limit[1]} takes containers up to "
-                f"{container_limit[0]} SCU, so terminals that only load bigger containers were left out."
-            )
+        if not plans:
+            # The filters the user set are the likely reason; the ship's container limit is one more
+            narrowing = [label for label, is_set in (
+                ("commodities", filter_commodity_whitelist),
+                ("auto loading only", filter_require_auto_load),
+                ("start", filter_start_location),
+                ("destination", filter_destination_location),
+                ("round trip", return_to_start),
+                ("excluded locations", filter_location_blacklist),
+                ("star systems", filter_star_system_whitelist),
+                ("no illegal cargo", filter_allow_illegal_commodities is False),
+                (f"at most {max_system_jumps} system jumps", max_system_jumps is not None),
+            ) if is_set]
+            note = "No route found."
+            if narrowing:
+                note += f" Filters set: {', '.join(narrowing)}. Offer to leave one out."
+            if container_limit:
+                note += (
+                    f" The ship also limits it: the {container_limit[1]} takes containers up to "
+                    f"{container_limit[0]} SCU, so terminals that only load bigger containers were left out."
+                )
+            helper.get_handler_tool().add_note(note)
         if max_stops > 1 and plans and plans[0].stop_count < max_stops:
             helper.get_handler_tool().add_note(
                 f"The best route has fewer than {max_stops} stops: shorter routes ranked better by {ranking.replace('_', ' ')} (skill setting)."
@@ -281,6 +298,7 @@ class CommodityRoute(Tool):
     MAX_STOPS = 5
     MAX_SYSTEM_JUMPS = 10
     MAIN_CARGO_COUNT = 3
+    ALTERNATIVE_END_COUNT = 4
     NO_AVAILABILITY_NOTE_LIMIT = 3
     # Columns read by __to_leg and __terminal_info
     LEG_COLUMNS = [
@@ -542,6 +560,11 @@ class CommodityRoute(Tool):
             route["profit_per_stop"] = round(plan.profit / plan.stop_count)
             if plan.max_cash_needed:
                 route["return_on_investment"] = round(plan.profit / plan.max_cash_needed * 100, 1)
+        if plan.alternative_ends:
+            route["last_sale_also_at"] = [
+                str(terminals.get(terminal_id, {}).get("terminal"))
+                for terminal_id in plan.alternative_ends[:self.ALTERNATIVE_END_COUNT]
+            ]
         route["stops"] = stops
         return route
 
@@ -644,7 +667,7 @@ class CommodityRoute(Tool):
                     "min": 0,
                     "max": self.MAX_SYSTEM_JUMPS,
                 },
-                prompt="Most jumps between star systems (e.g. Stanton to Pyro) on the whole route. 0 = the route stays in the star system it starts in: use 0 for 'only Stanton', 'within Pyro', 'stay in the system' or 'no jumps'. If the start is not known, also set filter_start_location to that system, e.g. \"Stanton\". Leave out for no limit.",
+                prompt="Most jumps between star systems (e.g. Stanton to Pyro) on the whole route. 0 = the route stays in the star system it starts in: use 0 for 'stay in the system' or 'no jumps'. For named systems ('only Stanton', 'Stanton or Nyx') use filter_star_system_whitelist instead. If the start is not known, also set filter_start_location to that system, e.g. \"Stanton\". Leave out for no limit.",
             ),
             "filter_start_location": Validator(
                 Validator.VALIDATE_LOCATION,
@@ -686,7 +709,11 @@ class CommodityRoute(Tool):
             ),
 
             # Currently used unreliably by AI
-            # "filter_star_system_whitelist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
+            "filter_star_system_whitelist": Validator(
+                Validator.VALIDATE_STAR_SYSTEM,
+                multiple=True,
+                prompt="Only these star systems, every stop in one of them: [\"Stanton\"] for 'only Stanton', [\"Stanton\", \"Nyx\"] for 'Stanton or Nyx'.",
+            ),
             # "filter_star_system_blacklist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
 
             "filter_allow_illegal_commodities": Validator(
@@ -714,5 +741,6 @@ class CommodityRoute(Tool):
             "(max_investment) and main_cargo. If volume_limited, say once that some volumes are limited by availability. "
             "Do not list the stops' cargo here. When the user picks a route, call uex_active_trade_route with action set "
             "and its route_number, then guide them with it. "
-            "If a route has a 'warning' about illegal cargo, say so clearly before describing the route."
+            "If a route has a 'warning' about illegal cargo, say so clearly before describing the route. "
+            "last_sale_also_at: the last sale works there too, same cargo and profit: mention it in one short phrase."
         )

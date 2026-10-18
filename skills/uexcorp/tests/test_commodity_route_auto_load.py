@@ -127,8 +127,12 @@ def _parse_routes(payload: str) -> list[dict]:
 
 
 def _route_pairs(routes: list[dict]) -> set[tuple[str, str]]:
-    """(first stop, last stop) terminal names of each route."""
-    return {(route["stops"][0]["terminal"], route["stops"][-1]["terminal"]) for route in routes}
+    """(first stop, last stop) terminal names of each route, also the other last stops of the same sale."""
+    return {
+        (route["stops"][0]["terminal"], end)
+        for route in routes
+        for end in [route["stops"][-1]["terminal"]] + route.get("last_sale_also_at", [])
+    }
 
 
 def _first_buys(route: dict) -> list[dict]:
@@ -347,6 +351,12 @@ class CommodityRouteAutoLoadFilterTest(unittest.TestCase):
             )
         )
         self.assertEqual(auto_start, {("Auto City TDD", "Auto Station TDD")})
+
+    def test_no_route_names_the_filters_that_were_set(self) -> None:
+        self._helper.get_handler_tool().notes.clear()
+        self._execute(filter_start_location="Manual Outpost", filter_require_auto_load=True)
+        notes = self._helper.get_handler_tool().notes
+        self.assertTrue(any("No route found. Filters set: auto loading only, start." in note for note in notes), notes)
 
     def test_unknown_ship_returns_note_instead_of_crashing(self) -> None:
         payload, _instant = self._tool.execute(limit=15, used_ship="Not A Real Ship")

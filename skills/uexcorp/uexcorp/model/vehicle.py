@@ -5,6 +5,7 @@ from skills.uexcorp.uexcorp.model.data_model import DataModel
 class Vehicle(DataModel):
 
     required_keys = ["id"]
+    RENTAL_OPTION_COUNT = 5
 
     VEHICLE_ROLES = {
         "spaceship": "is_spaceship",
@@ -213,16 +214,18 @@ class Vehicle(DataModel):
 
         company = Company(self.get_id_company(), load=True) if self.get_id_company() else None
         parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() and self.get_id_parent() != self.get_id() else None
+        rentals = self.get_rental_options()
 
         data = {
             "name": self.get_name_full(),
             "parent": parent.get_data_for_ai_minimal() if parent else "",
-            "company": company.get_data_for_ai_minimal() if company else "",
+            # Name only: the company view lists every ship of that maker
+            "company": company.get_name() if company else "",
             "scu": self.get_scu(),
             "crew": self.get_crew().replace(",", " - ") if self.get_crew() else "unknown",
             "needed_hangar_pad_size": self.get_pad_type(),
             "purchase_options": self.get_purchase_options(),
-            "rental_options": self.get_rental_options(),
+            "rental_options": rentals[:self.RENTAL_OPTION_COUNT],
             "roles": self.get_roles(),
             "additional_information": self.get_additional_information(),
 
@@ -235,6 +238,8 @@ class Vehicle(DataModel):
             # "fuel_hydrogen_in_scu": self.get_fuel_hydrogen() or "unknown",
             # "scu_container_compatibility": self.get_container_sizes() or "unknown",
         }
+        if len(rentals) > self.RENTAL_OPTION_COUNT:
+            data["rental_terminal_count"] = len(rentals)
 
         return data
 
@@ -271,7 +276,8 @@ class Vehicle(DataModel):
         for price in prices:
             price_data.append(price.get_data_for_ai(show_vehicle_data=False))
 
-        return price_data
+        # Cheapest first: a popular ship rents at 30 terminals, mostly for the same price
+        return sorted(price_data, key=lambda option: option.get("price_rent") or float("inf"))
 
     def get_id(self) -> int:
         return self.data["id"]

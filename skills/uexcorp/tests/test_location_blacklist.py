@@ -139,6 +139,16 @@ class LocationBlacklistTest(unittest.TestCase):
         used = set().union(*(self._terminals(route) for route in routes))
         self.assertEqual(used, {"Term Lorville", "Term Everus", "Term Levski"})
 
+    def test_star_system_whitelist_keeps_every_stop_in_those_systems(self) -> None:
+        for systems, allowed in (
+            (["Stanton"], {"Term Lorville", "Term Everus"}),
+            (["Stanton", "Nyx"], {"Term Lorville", "Term Everus", "Term Levski"}),
+        ):
+            routes = self._routes(max_stops=3, filter_star_system_whitelist=systems)
+            self.assertTrue(routes, systems)
+            used = set().union(*(self._terminals(route) | set(route.get("last_sale_also_at", [])) for route in routes))
+            self.assertEqual(used, allowed, systems)
+
 
 def main() -> None:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LocationBlacklistTest)

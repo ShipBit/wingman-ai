@@ -54,6 +54,25 @@ def _container_reason(note: str, here: str) -> str | None:
     return note.rstrip(".") or None
 
 
+def _deviation(entry: dict, key: str) -> list[str]:
+    """How a recorded trade differs from the plan. Another amount is compared per SCU: a total for fewer
+    SCU is lower even at a worse price."""
+    planned_scu, planned_price = entry.get("planned_trade_scu"), entry.get("planned_price_per_scu")
+    if planned_scu is None or not planned_price or entry["scu"] == planned_scu:
+        planned = entry.get("planned_aUEC")
+        if planned is None or planned == entry["total_aUEC"]:
+            return []
+        difference = entry["total_aUEC"] - planned
+        verb = "got" if key == "sell" else "paid"
+        return [f"{verb} {abs(difference):,} aUEC {'more' if difference > 0 else 'less'} than planned"]
+    parts = [f"{'sold' if key == 'sell' else 'bought'} {entry['scu']:,} SCU instead of {planned_scu:,}"]
+    if entry["scu"]:
+        difference = entry["total_aUEC"] / entry["scu"] - planned_price
+        if abs(difference) >= 1:
+            parts.append(f"{abs(difference):,.0f} aUEC {'more' if difference > 0 else 'less'} per SCU than planned")
+    return parts
+
+
 class ActiveTradeRoute:
     FILE_NAME = "active_trade_route.json"
 
@@ -138,7 +157,17 @@ class ActiveTradeRoute:
             entries = [e for e in stop.get(side, []) if e["commodity"].lower() == commodity.strip().lower()]
             if not entries:
                 planned = ", ".join(e["commodity"] for e in stop.get(side, [])) or "nothing"
-                return None, f"The plan has no {side} of {commodity} at {stop['terminal']} (planned: {planned}).", []
+                problem = f"The plan has no {side} of {commodity} at stop {index + 1}, {stop['terminal']} (planned: {planned})."
+                elsewhere = [
+                    (number, other["terminal"]) for number, other in enumerate(stops, 1)
+                    if any(e["commodity"].lower() == commodity.strip().lower() for e in other.get(side, []))
+                ]
+                if elsewhere:
+                    number, terminal = elsewhere[0]
+                    problem += f" It is planned at stop {number}, {terminal}."
+                    if number > index + 1:
+                        problem += " If the user is there now, call next until that stop is current, then record it."
+                return None, problem, []
             entry = entries[0]
             warnings = []
             left = int(scu)
@@ -147,6 +176,9 @@ class ActiveTradeRoute:
                 left -= part_scu
                 delta = part_scu - part["scu"]
                 part.setdefault("planned_aUEC", part["total_aUEC"])  # what UEX expected, for the HUD
+                # The plan at the time of recording (a sale already follows a changed purchase)
+                part.setdefault("planned_trade_scu", part["scu"])
+                part.setdefault("planned_price_per_scu", part.get("price_per_scu"))
                 part.update(scu=part_scu, total_aUEC=round(total_price * part_scu / scu) if scu else 0, recorded=True)
                 if scu:
                     part["price_per_scu"] = round(total_price / scu, 2)
@@ -282,11 +314,16 @@ class ActiveTradeRoute:
                 if key == "buy" and e.get("sell_at"):
                     line += f", keep it aboard until {e['sell_at']}"
                 instructions.append(line + ".")
-                limit = VOLUME_NOTE.search(e.get("volume_note") or "")
+                if e.get("recorded"):
+                    # The real amount replaces the plan's reasons for its amount
+                    deviation = _deviation(e, key)
+                    if deviation:
+                        notes.append(f"{e['commodity']}: " + "; ".join(deviation) + ".")
+                limit = None if e.get("recorded") else VOLUME_NOTE.search(e.get("volume_note") or "")
                 if limit:
                     cause = {"buy": "stock", "sell": "demand"}.get(limit[3], "stock and demand")
                     notes.append(f"{e['commodity']}: only {int(limit[1]):,} SCU ({cause}).")
-                money = MONEY_NOTE.search(e.get("volume_note") or "")
+                money = None if e.get("recorded") else MONEY_NOTE.search(e.get("volume_note") or "")
                 if money:
                     kept = f"; the rest is needed for the purchases at {money[4]}" if money[4] else ""
                     notes.append(f"{e['commodity']}: only {int(money[1]):,} SCU, all the money allows "
@@ -385,13 +422,10 @@ class ActiveTradeRoute:
         illegal = set(route.get("illegal_commodities") or [])
         for key in ("sell", "buy"):
             for e in stop.get(key, []):
-                parts = []
-                planned = e.get("planned_aUEC")
-                if e.get("recorded") and planned is not None and planned != e["total_aUEC"]:
-                    difference = e["total_aUEC"] - planned
-                    verb = "got" if key == "sell" else "paid"
-                    parts.append(f"{verb} {abs(difference):,} aUEC {'more' if difference > 0 else 'less'} than planned")
-                limit = VOLUME_NOTE.search(e.get("volume_note") or "") if key == "buy" else None
+                parts = _deviation(e, key) if e.get("recorded") else []
+                # The plan's reasons for its amount no longer apply once the real one is recorded
+                planned_buy = key == "buy" and not e.get("recorded")
+                limit = VOLUME_NOTE.search(e.get("volume_note") or "") if planned_buy else None
                 if limit:
                     scu, room, side = f"{int(limit[1]):,}", f"{int(limit[2]):,}", limit[3]
                     buyer = _short(e.get("sell_at") or (next_stop or {}).get("terminal") or "the sell terminal")
@@ -399,7 +433,7 @@ class ActiveTradeRoute:
                         "buy": f"only {scu} in stock here (room for {room})",
                         "sell": f"{buyer} only takes {scu} (room for {room})",
                     }.get(side, f"stock here and demand at {buyer} allow no more than {scu} (room for {room})"))
-                money = MONEY_NOTE.search(e.get("volume_note") or "") if key == "buy" else None
+                money = MONEY_NOTE.search(e.get("volume_note") or "") if planned_buy else None
                 if money:
                     kept = f", the rest is for {_short(money[4])}" if money[4] else ""
                     parts.append(f"all the money allows, {money[3]} aUEC left for it{kept} (room for {int(money[2]):,})")

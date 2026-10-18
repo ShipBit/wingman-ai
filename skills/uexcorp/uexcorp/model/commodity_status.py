@@ -68,7 +68,11 @@ class CommodityStatus(DataModel):
 
     def get_data_for_ai_minimal(self) -> str:
         labels = self._BUY_STOCK_LABELS if self.get_is_buy() else self._SELL_DEMAND_LABELS
-        label = labels.get(self.get_code())
+        try:
+            code = int(self.get_code())  # stored as TEXT
+        except (TypeError, ValueError):
+            code = None
+        label = labels.get(code)
         if label is None:
             if self.get_percentage() is not None:
                 return f"{self.get_name()} ({self.get_percentage()})"

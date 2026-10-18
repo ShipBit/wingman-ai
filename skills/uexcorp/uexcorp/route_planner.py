@@ -84,6 +84,7 @@ class RoutePlan:
     trades: list[Trade] = field(default_factory=list)
     distances: list[float | None] = field(default_factory=list)  # per hop
     jumps: list[int] = field(default_factory=list)  # star system jumps per hop
+    alternative_ends: list[int] = field(default_factory=list)  # other last terminals, same cargo and profit
 
     @property
     def profit(self) -> float:
@@ -267,10 +268,35 @@ class RoutePlanner:
             plans = [plan for plan in plans if not plan.has_idle_stop()]
         plans = [self.__drop_fillers(plan) for plan in plans]
         plans.sort(key=self.__rank_key, reverse=True)
+        plans = self.__group_alternative_ends(plans)
         plans = plans[:limit] if limit else plans
         for plan in plans:
             self.__mark_money_limits(plan)
         return plans
+
+    @staticmethod
+    def __group_alternative_ends(plans: list[RoutePlan]) -> list[RoutePlan]:
+        """Routes that only differ in the terminal of the last sale, at the same profit, are one route
+        with alternatives: else five results can be one purchase sold at five neighbours. The best
+        ranked one stays (plans come sorted)."""
+        grouped = []
+        first_of: dict[tuple, RoutePlan] = {}
+        for plan in plans:
+            if plan.is_circular():
+                grouped.append(plan)
+                continue
+            key = (
+                tuple(plan.stops[:-1]),
+                tuple(sorted((t.leg.id_commodity, t.buy_stop, t.sell_stop, t.scu) for t in plan.trades)),
+                round(plan.profit),
+            )
+            first = first_of.get(key)
+            if first is None:
+                first_of[key] = plan
+                grouped.append(plan)
+            elif plan.stops[-1] not in first.alternative_ends:
+                first.alternative_ends.append(plan.stops[-1])
+        return grouped
 
     def __collect_stop_variants(
         self, plans: list[RoutePlan], max_stops: int, return_to_start: bool,

@@ -1,10 +1,36 @@
 from datetime import datetime
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 
+# UEX spells some units several ways, some in another scale: one unit each, so values compare
+_UNITS = {
+    "Mm/s": ("km/s", 1000),
+    "μSCU": ("µSCU", 1), "μSCUI": ("µSCU", 1), "uSCU": ("µSCU", 1), "microSCU": ("µSCU", 1),
+    "KµSCU": ("µSCU", 1000), "cSCU": ("µSCU", 10000),
+    "mRem": ("REM", 0.001), "mRem/s": ("REM/s", 0.001), "REM/S": ("REM/s", 1),
+    "RPM": ("rpm", 1), "KG": ("kg", 1), "Kg": ("kg", 1), "SUC/s": ("SCU/s", 1),
+    "º C": ("°C", 1), "ºC": ("°C", 1), "℃": ("°C", 1), "C°": ("°C", 1), "degrees C": ("°C", 1),
+}
+
+
 # Currently unused, as information is included in the Item model
 class ItemAttribute(DataModel):
 
     required_keys = ["id"]
+
+    @staticmethod
+    def normalize_unit(row: dict) -> None:
+        """Rewrites value and unit of an imported row to the one unit of that quantity."""
+        target = _UNITS.get(row.get("unit"))
+        if not target:
+            return
+        unit, factor = target
+        if factor != 1:
+            try:
+                number = float(str(row.get("value")).replace(",", "")) * factor
+            except (TypeError, ValueError):
+                return
+            row["value"] = format(round(number, 6), "f").rstrip("0").rstrip(".")
+        row["unit"] = unit
 
     def __init__(
             self,

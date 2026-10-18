@@ -27,6 +27,8 @@ class CommodityInformation(Tool):
         terminal_ids: list[int] | None,
         buy_conditions: list[tuple[int, str]] | None = None,
         sell_conditions: list[tuple[int, str]] | None = None,
+        buyable: bool = False,
+        sellable: bool = False,
     ) -> None:
         """Limit to commodities with a price row (at the given terminals) that meets all conditions."""
         from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
@@ -34,13 +36,13 @@ class CommodityInformation(Tool):
         commodity_price_data_access = CommodityPriceDataAccess()
         if terminal_ids is not None:
             commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
-        if buy_conditions:
+        if buy_conditions or buyable:
             commodity_price_data_access.add_filter_by_is_buyable(True)
-            for price, operation in buy_conditions:
+            for price, operation in buy_conditions or []:
                 commodity_price_data_access.add_filter_by_price_buy(price, operation=operation)
-        if sell_conditions:
+        if sell_conditions or sellable:
             commodity_price_data_access.add_filter_by_is_sellable(True)
-            for price, operation in sell_conditions:
+            for price, operation in sell_conditions or []:
                 commodity_price_data_access.add_filter_by_price_sell(price, operation=operation)
         commodity_data_access.add_filter_by_id(list({
             commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
@@ -103,8 +105,14 @@ class CommodityInformation(Tool):
                 self.__filter_by_prices(commodity_data_access, terminal_ids, buy_conditions=filter_buy_price)
             if filter_sell_price:
                 self.__filter_by_prices(commodity_data_access, terminal_ids, sell_conditions=filter_sell_price)
-            if terminal_ids is not None and not filter_buy_price and not filter_sell_price:
-                self.__filter_by_prices(commodity_data_access, terminal_ids)
+            if terminal_ids is not None:
+                # "Buy at Lorville": buyable there, not just somewhere
+                if filter_is_buyable and not filter_buy_price:
+                    self.__filter_by_prices(commodity_data_access, terminal_ids, buyable=True)
+                if filter_is_sellable and not filter_sell_price:
+                    self.__filter_by_prices(commodity_data_access, terminal_ids, sellable=True)
+                if not (filter_buy_price or filter_sell_price or filter_is_buyable or filter_is_sellable):
+                    self.__filter_by_prices(commodity_data_access, terminal_ids)
 
         commodities = commodity_data_access.load()
 
@@ -184,11 +192,11 @@ class CommodityInformation(Tool):
             ),
             "filter_is_buyable": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only commodities the player can buy somewhere.",
+                prompt="If true, only commodities the player can buy: at the filter_location_whitelist locations if given, else anywhere.",
             ),
             "filter_is_sellable": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only commodities the player can sell somewhere.",
+                prompt="If true, only commodities the player can sell: at the filter_location_whitelist locations if given, else anywhere.",
             ),
             "filter_is_legal": Validator(
                 Validator.VALIDATE_BOOL,

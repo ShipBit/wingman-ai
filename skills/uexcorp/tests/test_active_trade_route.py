@@ -242,6 +242,33 @@ class ActiveTradeRouteTest(_DatabaseTest):
         self.assertIn("The plan has no buy of Quantainium", text)
         self.assertIn("planned:", text)
 
+    def test_a_sale_recorded_before_next_names_the_stop_it_belongs_to(self) -> None:
+        self._search()
+        self._active(action="set", route_number=1)
+        stops = Store(self._helper).get()["route"]["stops"]
+        number, sale = next((n, s["sell"][0]) for n, s in enumerate(stops, 1) if s.get("sell"))
+        text = self._active(action="record_sell", commodity=sale["commodity"], scu=sale["scu"], total_price=1)["text"]
+        self.assertIn(f"It is planned at stop {number}", text)
+        self.assertIn("call next", text)
+        self.assertEqual(Store(self._helper).get()["step"], 1)  # nothing recorded, nothing skipped
+
+    def test_another_amount_is_compared_per_scu_and_the_plan_reason_goes(self) -> None:
+        stop = {"terminal": "Admin - Starlight Service", "location": "Bloom, Pyro", "buy": [{
+            "commodity": "Nitrogen", "scu": 2000, "total_aUEC": 4900000, "price_per_scu": 2450.0, "sell_at": None,
+            "warnings": [], "recorded": True,
+            "planned_aUEC": 4985316, "planned_trade_scu": 2044, "planned_price_per_scu": 2439.0,
+            "volume_note": "SCU count limited to 2044 (instead of 2200) by available money (4,987,363 aUEC left for it at this stop).",
+        }]}
+        last = {"terminal": "Admin - ARC-L4", "location": "ArcCorp, Stanton",
+                "sell": [{"commodity": "Nitrogen", "scu": 2000, "total_aUEC": 7800000, "price_per_scu": 3900.0}]}
+        text = Store.hud_text({"route": {"estimated_profit": 2900000, "hold_scu": 2200, "stops": [stop, last]}, "step": 1})
+        # 85,316 aUEC less in total, but more per SCU
+        self.assertIn("bought 2,000 SCU instead of 2,044; 11 aUEC more per SCU than planned", text)
+        self.assertNotIn("all the money allows", text)
+        # The same for the Wingman
+        _, notes = Store.stop_instructions(stop)
+        self.assertEqual(notes, ["Nitrogen: bought 2,000 SCU instead of 2,044; 11 aUEC more per SCU than planned."])
+
     def test_the_last_ship_is_used_and_a_switch_is_flagged(self) -> None:
         self._db.execute(
             "INSERT INTO vehicle (id, name_full, scu, container_sizes) VALUES (1, 'Gatac Railen', 10, ''), (2, 'Drake Golem Ox', 5, '')"

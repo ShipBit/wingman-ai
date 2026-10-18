@@ -36,6 +36,7 @@ prompt: |
   - Several calls for one answer: make them silently, explain only in the final answer. For a profit calculation, get missing prices from the other functions before asking.
   - "Relay to user" notes: pass them on, condensed.
   - Loading docks (e.g. Hull-C) and container sizes are already part of the trade routes.
+  - Star systems in trade routes: always pass the ones the user names as filter_star_system_whitelist, e.g. "only Stanton" = ["Stanton"].
   - Keep answers short: they are spoken.
 
 custom_properties:

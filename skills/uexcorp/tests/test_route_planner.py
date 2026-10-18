@@ -358,6 +358,16 @@ class RankingTest(unittest.TestCase):
         self.assertIsNone(plan.distance)
 
 
+    def test_the_same_sale_at_other_terminals_is_one_route_with_alternatives(self) -> None:
+        # 10 SCU bought at A sell at B, C or D for the same price; only B also takes a second cargo
+        legs = [leg(1, A, B, 10, 20, stock=10, distance=30), leg(1, A, C, 10, 20, stock=10, distance=20),
+                leg(1, A, D, 10, 20, stock=10, distance=10), leg(2, A, B, 10, 15, distance=30)]
+        plans = RoutePlanner(legs, cargo_scu=20, ranking=RANKING_PROFIT_PER_DISTANCE).plan(limit=5)
+        self.assertEqual([plan.stops for plan in plans], [[A, D], [A, B]])
+        self.assertEqual(plans[0].alternative_ends, [C])  # the nearest one leads, C is the same sale
+        self.assertEqual(plans[1].alternative_ends, [])  # more cargo, another route
+
+
 class SystemJumpTest(unittest.TestCase):
     # A -> B -> C crosses two systems, the direct A -> C hop only one
     LEGS = [

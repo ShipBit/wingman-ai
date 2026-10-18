@@ -121,13 +121,18 @@ Every `tests/test_*.py` module runs this way and prints `ALL OK`.
 ### 3.0.0
 
 - **Trade routes:** multi-stop routes with buy-only stops, round trips, `max_stops` (at most) and
-  `max_system_jumps`; an exact cargo plan for the best routes; ranking setting.
+  `max_system_jumps`, star systems ("only Stanton"); an exact cargo plan for the best routes; ranking setting.
 - **Active trade route:** pick a route by number and get guided stop by stop, record the amounts
   and prices you really got, HUD panel with the route, hold, sell and buy tables and the money.
 - **Notes the Wingman can explain:** stock, demand and money limits, container sizes, illegal cargo.
 - Purchases that earn next to nothing are left out of routes; illegal cargo must earn at least 5 %
   of the route.
-- Name matching with Core's embeddings and System One, star system aware ("Nyx Gateway (Stanton)").
+- Routes that only differ in the terminal of the last sale are one route that names the others.
+- Name matching with Core's embeddings and System One, star system aware ("Nyx Gateway (Stanton)");
+  stations, outposts and points of interest also by nickname ("Grim HEX", "Everus").
+- Fixed: stock/demand on sell terminals (raw UEX names read the wrong way), ship rental prices
+  (read from the purchase table), item stats in two units (quantum speed in Mm/s and km/s),
+  "buy at a location" (also matched what is only sold there), ships listing every ship of their maker.
 - **Data relay** instead of ~130 UEX API requests: a full download takes seconds. Relay outages are
   reported once and retried; without data the tools say so instead of rejecting names.
 - Route searches run off Core's event loop; the background refresh survives errors.

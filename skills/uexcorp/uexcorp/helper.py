@@ -47,7 +47,7 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_skill: str = 'v3.0.0-20261014'
+        self.__version_skill: str = 'v3.0.0-20261018'
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()

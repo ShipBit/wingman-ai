@@ -281,12 +281,16 @@ class Validator:
         if self.GATEWAY_SEARCH.search(name or ""):
             return self.__match_gateway(name, name_collection)
 
+        # Nicknames match too ("Grim HEX" is the Green Imperial Housing Exchange), the filters get the name
+        aliases = {
+            alias: real for alias, real in self.location_aliases(for_trading).items() if alias not in name_collection
+        }
         closest_match, options = await self.__helper.get_llm().find_closest_match(
-            name, [location for location in name_collection if not self.GATEWAY_NAME.search(location)],
-            same_place=lambda names: self.__same_terminals(names, for_trading),
+            name, [location for location in name_collection if not self.GATEWAY_NAME.search(location)] + list(aliases),
+            same_place=lambda names: self.__same_terminals([aliases.get(n, n) for n in names], for_trading),
         )
         if closest_match:
-            return closest_match, None
+            return aliases.get(closest_match, closest_match), None
 
         return None, f"Invalid location name, no match found for '{name}': Did you mean one of those?: {options}"
 
@@ -418,6 +422,20 @@ class Validator:
 
         return name_collection
 
+    @staticmethod
+    def location_aliases(for_trading: bool = False) -> dict[str, str]:
+        """Nickname -> name of stations, outposts and points of interest, where they differ."""
+        aliases = {}
+        for data_access in (SpaceStationDataAccess(), OutpostDataAccess(), PoiDataAccess()):
+            data_access.add_filter_by_is_available_live(True)
+            if for_trading:
+                data_access.add_filter_by_has_trade_terminal(True)
+            for location in data_access.load():
+                nickname = (location.get_nickname() or "").strip()
+                if nickname and nickname != str(location):
+                    aliases.setdefault(nickname, str(location))
+        return aliases
+
     def __definition_location(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}
 
@@ -460,6 +478,12 @@ class Validator:
         category_names = []
         for category in categories:
             category_names.append(str(category))
+
+        # "Personal Weapons" is the category "Personal Weapons Personal Weapons" (section + name)
+        wanted = name.strip().lower()
+        exact = [str(c) for c in categories if wanted in (str(c).lower(), (c.get_name() or "").lower())]
+        if len(exact) == 1:
+            return exact[0], None
 
         closest_match, options = await self.__helper.get_llm().find_closest_match(name, category_names)
         if closest_match:
