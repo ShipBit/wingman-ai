@@ -25,6 +25,28 @@ class ConnectionManager:
             self.message_queue: list[WebSocketCommandModel] = []
             self._lock: asyncio.Lock = asyncio.Lock()
             self._send_locks: dict[int, asyncio.Lock] = {}
+            self._main_loop: asyncio.AbstractEventLoop | None = None
+
+    def set_main_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._main_loop = loop
+
+    async def _on_main_loop(self, coro) -> Any:
+        """Run `coro` on the main loop and wait for it from the caller's loop.
+
+        The WebSockets and the locks here belong to the main loop, but each
+        turn and many skills run on loops of their own. A lock the main loop
+        holds raises RuntimeError when another loop waits for it; the send
+        then counted as failed and the socket was closed from the turn's
+        thread. On Windows that cancels the socket's pending read under the
+        main loop, which ended it ("invalid state")."""
+        loop = self._main_loop
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if loop is None or running is loop or loop.is_closed() or not loop.is_running():
+            return await coro
+        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(coro, loop))
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -87,6 +109,9 @@ class ConnectionManager:
     EPHEMERAL = ("core_state_changed", "sc_gamelog_state_changed")
 
     async def broadcast(self, command: WebSocketCommandModel) -> None:
+        await self._on_main_loop(self._broadcast(command))
+
+    async def _broadcast(self, command: WebSocketCommandModel) -> None:
         json_str = command.model_dump_json()
 
         async with self._lock:
@@ -124,10 +149,18 @@ class ConnectionManager:
         self, command: WebSocketCommandModel, websocket: WebSocket
     ) -> None:
         """Send a command to a specific client."""
+        await self._on_main_loop(self._send_to(command, websocket))
+
+    async def _send_to(
+        self, command: WebSocketCommandModel, websocket: WebSocket
+    ) -> None:
         if not await self._send_text(websocket, command.model_dump_json()):
             await self.disconnect(websocket)
 
     async def disconnect(self, websocket: WebSocket) -> None:
+        await self._on_main_loop(self._disconnect(websocket))
+
+    async def _disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
@@ -136,6 +169,9 @@ class ConnectionManager:
         await self._close(websocket)
 
     async def shutdown(self) -> None:
+        await self._on_main_loop(self._shutdown())
+
+    async def _shutdown(self) -> None:
         async with self._lock:
             websockets = list(self.active_connections)
             self.active_connections.clear()

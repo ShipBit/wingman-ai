@@ -244,6 +244,7 @@ async def lifespan(_app: FastAPI):
     # executed before the application starts
     # WebSocket sends from worker threads have to be routed back to this loop
     WebSocketUser.set_main_loop(asyncio.get_running_loop())
+    connection_manager.set_main_loop(asyncio.get_running_loop())
     error_reporting.watch_event_loop(asyncio.get_running_loop())
     modify_openapi()
 
