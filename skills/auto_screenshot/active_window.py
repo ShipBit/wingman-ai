@@ -12,6 +12,11 @@ from typing import Optional
 
 Box = dict[str, int]
 
+# Xlib's default error handler ends the process. The active window can close
+# between two calls (BadWindow), so errors are ignored. Kept at module level so
+# the callback outlives the call.
+_ignore_x_errors = None
+
 
 def active_window_bbox() -> Optional[Box]:
     if sys.platform == "win32":
@@ -95,6 +100,11 @@ def _linux() -> Optional[Box]:
     x.XTranslateCoordinates.argtypes = [
         d, c_ulong, c_ulong, c_int, c_int, POINTER(c_int), POINTER(c_int), POINTER(c_ulong),
     ]
+    x.XSetErrorHandler.restype, x.XSetErrorHandler.argtypes = c_void_p, [c_void_p]
+    global _ignore_x_errors
+    if _ignore_x_errors is None:
+        _ignore_x_errors = ctypes.CFUNCTYPE(c_int, c_void_p, c_void_p)(lambda display, event: 0)
+    x.XSetErrorHandler(ctypes.cast(_ignore_x_errors, c_void_p))
 
     display = x.XOpenDisplay(None)
     if not display:

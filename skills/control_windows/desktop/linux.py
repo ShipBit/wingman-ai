@@ -310,12 +310,14 @@ class LinuxDesktop(Desktop):
             # No pipes: the app inherits them, and reading them would wait
             # until the app quits
             try:
-                return subprocess.run(
+                if subprocess.run(
                     ["gio", "launch", str(desktop_file)],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
-                ).returncode == 0
+                ).returncode == 0:
+                    return True
             except subprocess.TimeoutExpired:
                 return False
+            # An older gio without "launch": start the Exec line instead
         try:
             subprocess.Popen(command, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
@@ -371,7 +373,11 @@ def _desktop_entry(path: Path) -> Optional[tuple[str, list[str]]]:
         return None
     try:
         # Field codes (%f, %U, ...) are for files to open: none here
-        parts = [p for p in shlex.split(command) if not (len(p) == 2 and p.startswith("%"))]
+        parts = [
+            "%" if p == "%%" else p
+            for p in shlex.split(command)
+            if not (len(p) == 2 and p[0] == "%" and p != "%%")
+        ]
     except ValueError:
         return None
     return (label, parts) if parts else None

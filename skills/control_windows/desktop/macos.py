@@ -94,7 +94,7 @@ class MacDesktop(Desktop):
         ("Calculator"), so either finds the app."""
         names = [app.localizedName() or ""]
         url = app.bundleURL()
-        if url is not None:
+        if url is not None and url.path():
             names.append(Path(str(url.path())).stem)
         return tuple(names)
 
