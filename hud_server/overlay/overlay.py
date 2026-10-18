@@ -1234,7 +1234,13 @@ class HeadsUpOverlay(PreviewMixin):
                 y += 10 + bar_h + 2
 
             if desc:
-                y = renderer.render(d, image, desc, padding, y + 8 if y else 0, bar_width)
+                top = y + 8 if y else 0
+                y = renderer.render(d, image, desc, padding, top, bar_width)
+                # A last table or card leaves room for a block below it: end 4 px under its
+                # ink, as text does (never lower, so text keeps its height)
+                ink = image.crop((0, top, width, y)).getchannel("A").getbbox() if y <= image.height else None
+                if ink:
+                    y = min(y, top + ink[3] + 4)
             return y + 2
 
         return Piece(key, draw, gap=self.ITEM_SPACING)

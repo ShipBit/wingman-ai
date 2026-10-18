@@ -11,7 +11,7 @@ import hud_server.rendering.markdown as markdown
 from hud_server.constants import GROUP_CHAT
 from hud_server.hud_manager import HudManager
 from hud_server.rendering.glass import SHADOW
-from hud_server.rendering.layers import MAX_PIECE_HEIGHT, render_piece
+from hud_server.rendering.layers import MAX_PIECE_HEIGHT, Piece, PieceCache, lay_out, render_piece
 from hud_server.rendering.markdown import MarkdownRenderer
 from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
 
@@ -451,6 +451,210 @@ def test_strikethrough_in_a_table_cell_crosses_the_word(monkeypatch):
     strike_y = [points[0][1] for points in lines if points[0][0] == x]
     # Through the letters, not along their top (it used to ignore the font's offset to the ink)
     assert strike_y and y + top < strike_y[0] < y + bottom
+
+
+def drawn_texts(renderer, monkeypatch, text: str, width: int = 380) -> dict:
+    """Where (x, y) and in which colour each piece of `text` was drawn."""
+    drawn = {}
+
+    def record(draw, pos, word, fill, font, embedded_color=False):
+        drawn[word.strip()] = (pos, fill)
+
+    monkeypatch.setattr(renderer, "_draw_text_with_spacing", record)
+    image = Image.new("RGBA", (400, 400))
+    renderer.render(ImageDraw.Draw(image), image, text, 0, 0, width)
+    return drawn
+
+
+def test_a_right_aligned_table_column_puts_its_values_at_the_right_edge(monkeypatch):
+    renderer = sized_renderer()
+    cells = []
+    original = renderer._render_cell_content_with_pos
+
+    def record(draw, text, x, *args):
+        cells.append((text, x))
+        return original(draw, text, x, *args)
+
+    monkeypatch.setattr(renderer, "_render_cell_content_with_pos", record)
+    image = Image.new("RGBA", (400, 200))
+    renderer.render(ImageDraw.Draw(image), image, "| Buy | SCU |\n|---|---:|\n| Tin | 9 |\n| Gold | 1,234 |", 0, 0, 380)
+
+    x = dict(cells)
+    assert x["9"] > x["1,234"]  # both end at the right edge, the shorter starts further right
+    assert x["Tin"] == x["Gold"]  # the left column stays left
+
+
+def test_a_bar_block_draws_its_segments_to_scale_in_the_profiles_colours(monkeypatch):
+    renderer = sized_renderer()
+    renderer.set_colors((220, 220, 220), (0, 170, 255), (20, 20, 30), 255)
+    painted = []
+    original = markdown.glass.paint
+
+    def paint(image, mask, color, at=(0, 0)):
+        painted.append((mask.size, tuple(color[:3])))
+        return original(image, mask, color, at)
+
+    monkeypatch.setattr(markdown.glass, "paint", paint)
+    image = Image.new("RGBA", (400, 200))
+    renderer.render(ImageDraw.Draw(image), image, "```bar\nmax: 100\nHold | 50 accent | 25 text\n```", 0, 0, 380)
+
+    accent = [size for size, color in painted if color == (0, 170, 255)]
+    text = [size for size, color in painted if color == (220, 220, 220)]
+    track = max(size[0] for size, _ in painted)  # the track is the full bar
+    assert accent and text
+    assert abs(accent[0][0] - track / 2) <= 3 and abs(text[0][0] - track / 4) <= 3
+
+
+def test_a_steps_block_puts_the_route_in_one_row_even_when_it_is_too_wide(monkeypatch):
+    short = drawn_texts(sized_renderer(), monkeypatch, "```steps\ndone | A\ncurrent | B\njump | Jump\nnext | C\n```")
+    rows = [short[stop][0][1] for stop in ("A", "B", "C")]
+    assert max(rows) - min(rows) <= 2  # one row (the current stop is bold, centred a pixel apart)
+    assert short["A"][0][0] < short["B"][0][0] < short["C"][0][0]
+    assert "JUMP" not in short and "Jump" not in short  # a symbol, not a word
+
+    long_names = "```steps\ndone | " + "Long Station Name " * 2 + "\ncurrent | " + "Another Long Name " * 2 + "\n```"
+    wide = drawn_texts(sized_renderer(), monkeypatch, long_names)
+    ys = [pos[1] for pos, _ in wide.values()]
+    assert max(ys) - min(ys) <= 2
+
+
+def test_a_bold_value_in_a_right_aligned_column_stays_inside_the_table(monkeypatch):
+    renderer = sized_renderer()
+    cells = []
+    original = renderer._render_cell_content_with_pos
+
+    def record(draw, text, x, *args):
+        cells.append((text, x))
+        return original(draw, text, x, *args)
+
+    monkeypatch.setattr(renderer, "_render_cell_content_with_pos", record)
+    image = Image.new("RGBA", (400, 200))
+    renderer.render(ImageDraw.Draw(image), image,
+                    "| Sell | SCU | aUEC |\n|---|---:|---:|\n| **Taranite** | **62** | **1,821,000** |", 0, 0, 380)
+
+    x = dict(cells)["**1,821,000**"]
+    assert x + renderer._get_text_size("1,821,000", renderer.fonts["bold"])[0] <= 380 - 6  # inside the cell padding
+
+
+def test_a_gap_separates_pieces_and_leaves_none_under_the_bottom_one():
+    pieces = [Piece(("piece", i), lambda d, image, top: 20, gap=10) for i in range(2)]
+    layout = lay_out(PieceCache(), pieces, 100, 600, top=16, bottom=12)
+
+    assert layout.height == 16 + 20 + 10 + 20 + 12
+    assert [y for _, y, _ in layout.placed] == [16, 46]
+
+
+def test_a_tall_piece_that_ends_higher_once_drawn_whole_keeps_that_end():
+    # As an info item does: it can only trim to its ink when the whole of it fits the image
+    piece = render_piece(100, lambda d, image, top: 280 if image.height >= 300 else 300)
+    assert piece.height == 280
+
+
+def info_item(description: str) -> Image.Image:
+    overlay = make_overlay(FakeHudBackend())
+    props = {"width": 400, "content_padding": 16, "font_size": 16}
+    text, accent, bg = (240, 240, 240), (0, 170, 255), (30, 33, 43, 255)
+    overlay._window_renderer(props, text, accent, bg)
+    piece = overlay._info_item_piece("Trade run", {"title": "Trade run", "description": description}, None, 0.0,
+                                     props, overlay._style_key(props), text, accent, bg, separator=False)
+    return render_piece(400, piece.draw)
+
+
+@pytest.mark.parametrize("last_block", ["| Sell | SCU |\n|---|---:|\n| Gold | 4 |", "```stats\nPaid | 5,000\n```"])
+def test_an_info_item_ending_in_a_table_or_card_ends_close_under_it(last_block):
+    image = info_item("Stop 1 of 2\n\n" + last_block)
+    assert image.height - image.getchannel("A").getbbox()[3] == 6  # 4 under the ink, as text gets, and 2
+
+
+def test_an_info_item_ending_in_text_keeps_its_height_whatever_the_letters():
+    assert info_item("Stop 1 of 2\n\nLast stop").height == info_item("Stop 1 of 2\n\nLast gyp").height
+
+
+def test_route_legs_show_progress_and_a_jump_puts_a_gate_on_its_leg(monkeypatch):
+    renderer = sized_renderer()
+    renderer.set_colors((220, 220, 220), (0, 170, 255), (20, 20, 30), 255)
+    legs, gates = [], []
+    monkeypatch.setattr(renderer, "_draw_chevrons", lambda strip, start, end, center, leg: legs.append((start, leg)))
+    monkeypatch.setattr(renderer, "_draw_jump_gate", lambda strip, x, center, color: gates.append((x, color)))
+    drawn = drawn_texts(renderer, monkeypatch, "```steps\ndone | A\ncurrent | B\njump | Jump\nnext | C\nnext | D\n```")
+
+    assert [leg for _, leg in sorted(legs)] == ["flown", "next", "next", "ahead"]  # the jump leg in two halves
+    assert len(gates) == 1 and drawn["B"][0][0] < gates[0][0] < drawn["C"][0][0]
+    assert gates[0][1] == (0, 170, 255)  # on the leg to the next stop: the accent
+
+
+@pytest.mark.parametrize("current, left_faded, right_faded", [(0, False, True), (4, True, True), (7, True, False)])
+def test_a_route_too_wide_for_its_row_shows_the_current_stop_and_fades_where_it_goes_on(current, left_faded, right_faded):
+    stops = [("done" if i < current else "current" if i == current else "next") + f" | Station Number {i}"
+             for i in range(8)]
+    image = Image.new("RGBA", (380, 60))
+    sized_renderer().render(ImageDraw.Draw(image), image, "```steps\n" + "\n".join(stops) + "\n```", 0, 0, 380)
+    alpha = image.getchannel("A")
+
+    def edge(left: int) -> int:
+        return max(alpha.crop((left, 0, left + 8, 60)).getdata())
+
+    assert (edge(0) < 100) == left_faded and (edge(372) < 100) == right_faded
+    ring = [pixel for pixel in image.getdata() if pixel[3] > 200 and pixel[2] > 200 and pixel[0] < 60]
+    assert ring  # the current stop's accent icon, unfaded
+
+
+def test_a_stats_block_shows_values_under_their_labels_and_colours_accent_ones(monkeypatch):
+    renderer = sized_renderer()
+    renderer.set_colors((220, 220, 220), (0, 170, 255), (20, 20, 30), 255)
+    drawn = drawn_texts(renderer, monkeypatch, "```stats\nPaid | 5,000\nProfit | 2,000 | accent\n```")
+
+    assert drawn["5,000"][0][1] > drawn["Paid"][0][1]  # value below its label
+    assert drawn["Profit"][0][0] > drawn["Paid"][0][0]  # side by side
+    assert tuple(drawn["2,000"][1][:3]) == (0, 170, 255) and tuple(drawn["5,000"][1][:3]) == (220, 220, 220)
+
+
+def test_a_stats_line_without_a_bar_is_text_under_the_figures_in_the_card(monkeypatch):
+    renderer = sized_renderer()
+    words = {}
+    original = renderer._render_tokens
+
+    def record(draw, tokens, x, y, *args, **kwargs):
+        for token in tokens:
+            words[token.get("text", "").strip()] = (token["type"], y)
+        return original(draw, tokens, x, y, *args, **kwargs)
+
+    monkeypatch.setattr(renderer, "_render_tokens", record)
+    drawn = drawn_texts(renderer, monkeypatch, "```stats\nPaid | 5,000\n**Next:** Levski\n```")
+
+    assert words["Next:"][0] == "bold"  # inline markdown works in it
+    assert words["Next:"][1] > drawn["5,000"][0][1]  # under the figures
+
+
+def test_a_bar_shows_how_full_it_is(monkeypatch):
+    drawn = drawn_texts(sized_renderer(), monkeypatch, "```bar\nmax: 2200\nArriving | 48 text\nLeaving | 2200 accent\n```")
+
+    assert "48 / 2,200" in drawn and "2,200 / 2,200" in drawn
+    assert drawn["48 / 2,200"][0][0] > drawn["Arriving"][0][0]  # at the bar's right end
+
+
+def test_a_horizontal_rule_is_a_thin_line_in_a_shade_of_the_panel(monkeypatch):
+    renderer = sized_renderer()
+    renderer.set_colors((220, 220, 220), (0, 170, 255), (20, 20, 30), 200)
+    painted, dots = [], []
+    original_paint = markdown.glass.paint
+    monkeypatch.setattr(markdown.glass, "paint", lambda image, mask, color, at=(0, 0): painted.append((mask.size, tuple(color))) or original_paint(image, mask, color, at))
+    monkeypatch.setattr(ImageDraw.ImageDraw, "ellipse", lambda self, *args, **kwargs: dots.append(args))
+    image = Image.new("RGBA", (400, 100))
+    renderer.render(ImageDraw.Draw(image), image, "above\n\n---\n\nbelow", 0, 0, 380)
+
+    assert painted == [((380, 1), renderer.bg_shade(0.16))]  # follows the background and its transparency
+    assert dots == []  # no accent dots any more
+
+
+def test_other_code_blocks_still_render_as_code(monkeypatch):
+    calls = []
+    renderer = sized_renderer()
+    monkeypatch.setattr(renderer, "_render_code_block", lambda *args: calls.append(args[2]["lang"]) or 0)
+    image = Image.new("RGBA", (400, 200))
+    renderer.render(ImageDraw.Draw(image), image, "```python\nprint(1)\n```\n\n```stats\nA | 1\n```", 0, 0, 380)
+
+    assert calls == ["python"]
 
 
 def test_table_columns_follow_their_content():
