@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from api.commands import WebSocketCommandModel
+from api.enums import LogType
 
 
 class ConnectionManager:
@@ -25,6 +26,46 @@ class ConnectionManager:
             self.message_queue: list[WebSocketCommandModel] = []
             self._lock: asyncio.Lock = asyncio.Lock()
             self._send_locks: dict[int, asyncio.Lock] = {}
+            self._main_loop: asyncio.AbstractEventLoop | None = None
+
+    def set_main_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._main_loop = loop
+
+    async def _on_main_loop(self, coro) -> None:
+        """Run `coro` on the main loop. From another loop it is handed over
+        and the caller goes on at once, like Printr.print: a turn never waits
+        for the client, and a busy main loop cannot hold up a turn. The main
+        loop runs what it is handed in order.
+
+        The WebSockets and the locks here belong to the main loop, but each
+        turn and many skills run on loops of their own. A lock the main loop
+        holds raises RuntimeError when another loop waits for it; the send
+        then counted as failed and the socket was closed from the turn's
+        thread. On Windows that cancels the socket's pending read under the
+        main loop, which ended it ("invalid state")."""
+        loop = self._main_loop
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if loop is None or running is loop or loop.is_closed() or not loop.is_running():
+            await coro
+        else:
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            future.add_done_callback(self._log_failure)
+
+    @staticmethod
+    def _log_failure(future) -> None:
+        """Nobody awaits a handed-over message, so its error is logged here."""
+        if future.cancelled() or future.exception() is None:
+            return
+        from services.printr import Printr
+
+        Printr().print(
+            f"A client message failed on the main loop: {future.exception()!r}",
+            color=LogType.ERROR,
+            server_only=True,
+        )
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -87,6 +128,9 @@ class ConnectionManager:
     EPHEMERAL = ("core_state_changed", "sc_gamelog_state_changed")
 
     async def broadcast(self, command: WebSocketCommandModel) -> None:
+        await self._on_main_loop(self._broadcast(command))
+
+    async def _broadcast(self, command: WebSocketCommandModel) -> None:
         json_str = command.model_dump_json()
 
         async with self._lock:
@@ -124,10 +168,18 @@ class ConnectionManager:
         self, command: WebSocketCommandModel, websocket: WebSocket
     ) -> None:
         """Send a command to a specific client."""
+        await self._on_main_loop(self._send_to(command, websocket))
+
+    async def _send_to(
+        self, command: WebSocketCommandModel, websocket: WebSocket
+    ) -> None:
         if not await self._send_text(websocket, command.model_dump_json()):
             await self.disconnect(websocket)
 
     async def disconnect(self, websocket: WebSocket) -> None:
+        await self._on_main_loop(self._disconnect(websocket))
+
+    async def _disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
@@ -136,6 +188,9 @@ class ConnectionManager:
         await self._close(websocket)
 
     async def shutdown(self) -> None:
+        await self._on_main_loop(self._shutdown())
+
+    async def _shutdown(self) -> None:
         async with self._lock:
             websockets = list(self.active_connections)
             self.active_connections.clear()

@@ -11,6 +11,7 @@ import os
 import platform
 import signal
 import sys
+import threading
 import traceback
 from typing import Any, Literal, get_args, get_origin
 
@@ -68,6 +69,16 @@ if getattr(sys, "frozen", False):
         else:
             os.environ.pop("LD_LIBRARY_PATH", None)
 
+    # The bundle names this script plain "main.py". To print a traceback,
+    # linecache then looks for a main.py along sys.path and finds a skill's
+    # main.py, so the source lines shown for Core's frames came from a skill.
+    # An entry without a modification time is never checked again: no source
+    # line under Core's frames, the line number stays.
+    import linecache
+
+    _entry_script = sys._getframe(0).f_code.co_filename
+    linecache.cache[_entry_script] = (0, None, [], _entry_script)
+
 # sounddevice loads PortAudio when it is imported. A Linux system without it
 # used to die on that import in wingman_core with a traceback the client never
 # showed; the user only saw "Backend startup timed out". Say what is missing.
@@ -88,6 +99,12 @@ if platform.system() == "Linux":
             server_only=True,
         )
         sys.exit(1)
+
+# Before the first event loop exists: every loop after this one survives a
+# socket read another thread cancelled (Windows, see services/event_loop.py).
+from services import event_loop
+
+event_loop.install()
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -227,6 +244,7 @@ async def lifespan(_app: FastAPI):
     # executed before the application starts
     # WebSocket sends from worker threads have to be routed back to this loop
     WebSocketUser.set_main_loop(asyncio.get_running_loop())
+    connection_manager.set_main_loop(asyncio.get_running_loop())
     error_reporting.watch_event_loop(asyncio.get_running_loop())
     modify_openapi()
 
@@ -830,8 +848,11 @@ if __name__ == "__main__":
         asyncio.set_event_loop(loop)
 
     atexit.register(exit_handler)
+    stopping = False
 
     def signal_handler(sig, frame):
+        global stopping
+        stopping = True
         printr.print(
             "SIGINT/SIGTERM received! Initiating shutdown...",
             color=LogType.SYSTEM,
@@ -858,3 +879,15 @@ if __name__ == "__main__":
     except Exception as e:
         printr.print(f"Error starting application: {str(e)}", color=LogType.ERROR)
         printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        if not stopping:
+            # The loop is gone, but the threads of turns, skills and audio
+            # keep the process alive: Core would still run and answer nothing.
+            # End it so the client shows that Core stopped. os._exit skips the
+            # atexit handlers, so they run here first: exit_handler and the
+            # ones that stop llama-server and unhook keyboard and mouse. They
+            # get ten seconds; they must not keep the process alive in turn.
+            cleanup = threading.Thread(target=atexit._run_exitfuncs, daemon=True)
+            cleanup.start()
+            cleanup.join(timeout=10)
+            logging.shutdown()
+            os._exit(1)

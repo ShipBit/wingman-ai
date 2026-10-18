@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from typing import Any
 import secrets
+import threading
 import webbrowser
 
 from skills.skill_base import Skill, tool
@@ -104,8 +105,11 @@ class _Books:
         self._capture_task = None
         self._subscription = None
         self._dirty = asyncio.Event()
-        self._engine_lock = asyncio.Lock()
-        self._dashboard_lock = asyncio.Lock()  # Two Wingmen starting at once.
+        # A thread lock, taken in the worker thread: the capture runs on
+        # Core's loop and the tools on the loop of each turn, and an
+        # asyncio.Lock one loop holds raises when another waits for it.
+        self._engine_lock = threading.Lock()
+        self._dashboard_lock = threading.Lock()  # Two Wingmen starting at once.
 
     @classmethod
     async def acquire(cls, directory: Path, gamelog) -> "_Books":
@@ -129,8 +133,11 @@ class _Books:
 
     async def run(self, fn, *args, **kwargs):
         """Engine work runs off the event loop, one call at a time."""
-        async with self._engine_lock:
-            return await asyncio.to_thread(fn, *args, **kwargs)
+        return await asyncio.to_thread(self._locked, fn, *args, **kwargs)
+
+    def _locked(self, fn, *args, **kwargs):
+        with self._engine_lock:
+            return fn(*args, **kwargs)
 
     async def _open(self) -> None:
         from skills.sc_accountant.erp import ERP
@@ -151,8 +158,7 @@ class _Books:
             await asyncio.to_thread(self.server.stop)
             self.server = None
         if self.engine is not None:
-            async with self._engine_lock:
-                await asyncio.to_thread(self.engine.close)
+            await self.run(self.engine.close)
             self.engine = None
 
     async def _capture_loop(self) -> None:
@@ -183,10 +189,13 @@ class _Books:
 
     async def dashboard(self, port: int):
         """Start the dashboard once; later calls return the running one."""
-        async with self._dashboard_lock:
-            return await self._start_dashboard(port)
+        return await asyncio.to_thread(self._start_dashboard, port)
 
-    async def _start_dashboard(self, port: int):
+    def _start_dashboard(self, port: int):
+        with self._dashboard_lock:
+            return self._start_dashboard_locked(port)
+
+    def _start_dashboard_locked(self, port: int):
         if self.server is None:
             from skills.sc_accountant.erp_web import ERPServer
 
@@ -196,9 +205,9 @@ class _Books:
                 self.engine, port=port, share_on_lan=True, access_token=self._token()
             )
             try:
-                await asyncio.to_thread(server.start)
+                server.start()
             except Exception:
-                await asyncio.to_thread(server.stop)
+                server.stop()
                 raise
             self.server = server
         return self.server
