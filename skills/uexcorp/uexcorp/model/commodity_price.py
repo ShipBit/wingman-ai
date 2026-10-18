@@ -30,6 +30,8 @@ class CommodityPrice(DataModel):
             terminal_name: str | None = None, # string(255)
             terminal_code: str | None = None, # string(255)
             terminal_slug: str | None = None, # string(255)
+            container_sizes: str | None = None, # string(255)
+            quality: int | None = None, # int(11)
             load: bool = False,
     ):
         super().__init__("commodity_price")
@@ -57,6 +59,8 @@ class CommodityPrice(DataModel):
             "terminal_name": terminal_name,
             "terminal_code": terminal_code,
             "terminal_slug": terminal_slug,
+            "container_sizes": container_sizes,
+            "quality": quality,
             "last_import_run_id": None,
         }
         if load:
@@ -84,6 +88,7 @@ class CommodityPrice(DataModel):
             "buy_stock_in_scu_avg": self.get_scu_buy_avg(),
             "sell_demand_in_scu": self.get_scu_sell_stock(),
             "sell_demand_in_scu_avg": self.get_scu_sell_stock_avg(),
+            "container_sizes_in_scu": self.get_container_sizes(),
         }
 
     def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
@@ -117,6 +122,8 @@ class CommodityPrice(DataModel):
                 "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
                 "sell_demand_in_scu": self.get_scu_sell_stock(),
             })
+
+        information["container_sizes_in_scu"] = self.get_container_sizes()
 
         return information
 
@@ -202,6 +209,12 @@ class CommodityPrice(DataModel):
         if self.get_price_sell():
             return f"Sell{commodity} to {self.get_terminal_name()} for {self.get_price_sell()}"
         return f"Buy{commodity} from {self.get_terminal_name()} for {self.get_price_buy()}"
+
+    def get_container_sizes(self) -> str | None:
+        return self.data["container_sizes"]
+
+    def get_quality(self) -> int | None:
+        return self.data["quality"]
 
     def __str__(self):
         return self.get_ai_string()

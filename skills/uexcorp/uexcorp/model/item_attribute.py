@@ -19,6 +19,8 @@ class ItemAttribute(DataModel):
             unit: str | None = None,  # varchar(255)
             date_added: int | None = None, # int(11)
             date_modified: int | None = None, # int(11)
+            item_uuid: str | None = None,  # string(255)
+            item_wiki: str | None = None,  # string(255)
             load: bool = False,
     ):
         super().__init__("item_attribute")
@@ -34,6 +36,8 @@ class ItemAttribute(DataModel):
             "unit": unit,
             "date_added": date_added,
             "date_modified": date_modified,
+            "item_uuid": item_uuid,
+            "item_wiki": item_wiki,
             "last_import_run_id": None,
         }
         if load:
@@ -103,6 +107,12 @@ class ItemAttribute(DataModel):
 
     def get_date_modified_readable(self) -> datetime | None:
         return datetime.fromtimestamp(self.data["date_modified"])
+
+    def get_item_uuid(self) -> str | None:
+        return self.data["item_uuid"]
+
+    def get_item_wiki(self) -> str | None:
+        return self.data["item_wiki"]
 
     def __str__(self):
         return f"{self.data['item_name']} - {self.data['attribute_name']}: {self.data['value']} {self.data['unit']}"

@@ -186,7 +186,7 @@ class City(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
-        terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
+        terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
 
         information = {
             "name": self.get_name(),

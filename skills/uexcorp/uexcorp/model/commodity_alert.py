@@ -10,8 +10,8 @@ class CommodityAlert(DataModel):
             self,
             id_commodity: int|None = None, # int(11)
             id_terminal: int|None = None, # int(11)
-            price_buy: int|None = None, # int(11)
-            price_sell: int|None = None, # int(11)
+            price_buy: float|None = None, # float
+            price_sell: float|None = None, # float
             scu_buy: float|None = None, # float(11)
             scu_sell: float|None = None, # float(11)
             status_buy: int|None = None, # int(11)
@@ -68,10 +68,10 @@ class CommodityAlert(DataModel):
     def get_id_terminal(self) -> int | None:
         return self.data["id_terminal"]
 
-    def get_price_buy(self) -> int | None:
+    def get_price_buy(self) -> float | None:
         return self.data["price_buy"]
 
-    def get_price_sell(self) -> int | None:
+    def get_price_sell(self) -> float | None:
         return self.data["price_sell"]
 
     def get_scu_buy(self) -> float | None:

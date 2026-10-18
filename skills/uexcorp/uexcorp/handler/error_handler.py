@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import traceback
@@ -30,14 +31,22 @@ class ErrorHandler:
         header += f"\n======================================\n"
         return header
 
+    # One old file is kept: the log never grows past about twice this size
+    MAX_SIZE = 5 * 1024 * 1024
+
     def write(self, function: str, arguments: list|dict[str, any], error, write_traceback: bool = True):
-        with open(self.file, 'a') as f:
+        try:
+            if os.path.getsize(self.file) > self.MAX_SIZE:
+                os.replace(self.file, self.file + ".1")
+        except OSError:
+            pass
+        with open(self.file, "a", encoding="utf-8") as f:
             f.write(self.__get_error_header(function, arguments))
             f.write(str(error))
-            if traceback:
+            if write_traceback:
                 f.write(traceback.format_exc())
 
     def read(self):
-        with open(self.file, 'r') as f:
+        with open(self.file, "r", encoding="utf-8") as f:
             return f.read()
         

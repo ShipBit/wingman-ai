@@ -90,7 +90,11 @@ class Filter:
                     where_str += " OR " if is_or else " AND "
 
                 param_name = f"param_{uuid.uuid4().hex}"
-                if isinstance(value, bool):
+                if not value_is_field and operation in ("IN", "NOT IN") and not isinstance(value, list):
+                    value = [value]
+                if value is None:
+                    value = f"{field} {'IS NOT' if operation in ('!=', 'NOT IN') else 'IS'} NULL"
+                elif isinstance(value, bool):
                     self.add_bind(param_name, 1 if value else 0)
                     value = f"{field} {operation if operation is not None else '='} :{param_name}"
                 elif isinstance(value, list):
@@ -99,10 +103,13 @@ class Filter:
                         item_param_name = f"param_{uuid.uuid4().hex}"
                         self.add_bind(item_param_name, item)
                         placeholders.append(f":{item_param_name}")
-                    value = f"{field} {operation if operation is not None else 'IN'} ({','.join(placeholders)})"
+                    # a list compares against all its items: "=" / "!=" would be a (misused) row value in SQLite
+                    list_operation = {None: "IN", "=": "IN", "!=": "NOT IN"}.get(operation, operation)
+                    value = f"{field} {list_operation} ({','.join(placeholders)})"
                 elif isinstance(value, int):
                     self.add_bind(param_name, value)
-                    if value == 0:
+                    # NULL counts as 0, so it matches wherever 0 itself would
+                    if value == 0 and operation in (None, "=", "<=", ">="):
                         value = f"({field} {operation if operation is not None else '='} :{param_name} OR {field} IS NULL)"
                     else:
                         value = f"{field} {operation if operation is not None else '='} :{param_name}"
@@ -117,20 +124,15 @@ class Filter:
 
             return where_str
 
-        combined_where = "WHERE "
-        if len(self.__where) > 0:
-            combined_where += resolve_where_loop(self.__where)
-        if len(self.__grouped_where) > 0:
-            if len(self.__where) > 0:
-                combined_where += " AND (" if not self.__grouped_where[0]["is_or"] else " OR ("
+        # Bracket everything before each group: AND binds tighter than OR, so "x OR (a) AND (b)" would read as "x OR (a AND b)"
+        combined_where = resolve_where_loop(self.__where) if len(self.__where) > 0 else ""
+        for grouped_where in self.__grouped_where:
+            group = resolve_where_loop(grouped_where["where"])
+            if combined_where:
+                combined_where = f"({combined_where}) {'OR' if grouped_where['is_or'] else 'AND'} ({group})"
             else:
-                combined_where += "("
-            for i, grouped_where in enumerate(self.__grouped_where):
-                if i > 0:
-                    combined_where += " AND (" if not grouped_where["is_or"] else " OR ("
-                combined_where += resolve_where_loop(grouped_where["where"])
-                combined_where += ")"
-        return combined_where
+                combined_where = f"({group})"
+        return f"WHERE {combined_where}"
 
     def join(self, target_table, target_field, source_table, source_field):
         self.__joins.append((target_table, target_field, source_table, source_field))

@@ -1,4 +1,5 @@
 from datetime import datetime
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class CommodityRoute(DataModel):
@@ -80,6 +81,14 @@ class CommodityRoute(DataModel):
             destination_terminal_is_player_owned: int | None = None,
             destination_faction_name: str | None = None,
             date_added: int | None = None,
+            price_roi: float | None = None, # float
+            scu_reachable: int | None = None, # int(11)
+            container_sizes_origin: str | None = None, # string(255)
+            container_sizes_destination: str | None = None, # string(255)
+            game_version_origin: str | None = None, # string(255)
+            game_version_destination: str | None = None, # string(255)
+            container_size_min_origin: int | None = None, # int(11) # own property, derived from container_sizes_origin
+            container_size_min_destination: int | None = None, # int(11) # own property, derived from container_sizes_destination
             load: bool = False,
     ):
         super().__init__("commodity_route")
@@ -157,48 +166,52 @@ class CommodityRoute(DataModel):
             "destination_terminal_is_player_owned": destination_terminal_is_player_owned,
             "destination_faction_name": destination_faction_name,
             "date_added": date_added,
+            "price_roi": price_roi,
+            "scu_reachable": scu_reachable,
+            "container_sizes_origin": container_sizes_origin,
+            "container_sizes_destination": container_sizes_destination,
+            "game_version_origin": game_version_origin,
+            "game_version_destination": game_version_destination,
+            "container_size_min_origin": container_size_min_origin,
+            "container_size_min_destination": container_size_min_destination,
             "last_import_run_id": None,
         }
+        # Query-only value of the trade route tool, kept out of self.data so it is never persisted
+        self.scu_without_availability: int | None = None
         if load:
             if not self.data["id"]:
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
-    def get_data_for_ai(self) -> dict:
-        from skills.uexcorp.uexcorp.helper import Helper
+    def get_no_availability_note(self) -> str:
+        """Note for a route that would be a good option, but has no stock or demand left."""
+        reasons = []
+        if self.get_scu_origin() is not None and self.get_scu_origin() <= 0:
+            reasons.append(f"no stock left to buy at {self.get_origin_terminal_name()}")
+        if self.get_scu_destination() is not None and self.get_scu_destination() <= 0:
+            reasons.append(f"no demand left at {self.get_destination_terminal_name()}")
 
-        helper = Helper.get_instance()
+        potential = ""
+        if self.get_profit() and self.scu_without_availability:
+            potential = (
+                f" (about {compression.number(round(self.get_profit()))} aUEC profit"
+                f" for {compression.number(self.scu_without_availability)} SCU)"
+            )
+        return (
+            f"Normally {self.get_commodity_name()} from {self.get_origin_terminal_name()} to "
+            f"{self.get_destination_terminal_name()} would be a good option{potential}, "
+            f"but UEX data shows {' and '.join(reasons) or 'no availability'}."
+        )
 
-        data = {
-            "commodity": self.get_commodity_name(),
-            "buy_for": self.get_price_origin() * self.get_scu_origin(),
-            "buy_at": self.get_origin_terminal_name(),
-            "buy_volume_in_scu": self.get_scu_origin(),
-            "sell_for": self.get_price_destination() * self.get_scu_origin(),
-            "sell_at": self.get_destination_terminal_name(),
-            "estimated_profit": self.get_profit(),
-            "origin_star_system_name": self.get_origin_star_system_name(),
-            "origin_planet_name": self.get_origin_planet_name(),
-            "destination_star_system_name": self.get_destination_star_system_name(),
-            "destination_planet_name": self.get_destination_planet_name(),
-        }
-
-        if helper.get_handler_config().get_behavior_commodity_route_advanced_info():
-            data.update({
-                "distance_in_giga_meters": self.get_distance(),
-                "profit_margin": self.get_price_margin(),
-                "origin_orbit_name": self.get_origin_orbit_name(),
-                "origin_faction_name": self.get_origin_faction_name(),
-                "destination_orbit_name": self.get_destination_orbit_name(),
-                "destination_faction_name": self.get_destination_faction_name(),
-                "uex_score": self.get_score(),
-                "has_refuel_origin": self.get_has_refuel_origin(),
-                "has_refuel_destination": self.get_has_refuel_destination(),
-                "is_monitored_origin": self.get_is_monitored_origin(),
-                "is_monitored_destination": self.get_is_monitored_destination(),
-            })
-
-        return data
+    def set_data(self, data: dict):
+        super().set_data(data)
+        if "scu_without_availability" in data:
+            self.scu_without_availability = data["scu_without_availability"]
+        # Smallest container each terminal handles, for the ship container size route filter
+        sizes_origin = self.parse_int_list(self.data["container_sizes_origin"])
+        sizes_destination = self.parse_int_list(self.data["container_sizes_destination"])
+        self.data["container_size_min_origin"] = min(sizes_origin) if sizes_origin else None
+        self.data["container_size_min_destination"] = min(sizes_destination) if sizes_destination else None
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -418,6 +431,30 @@ class CommodityRoute(DataModel):
 
     def get_date_added_readable(self) -> datetime:
         return datetime.fromtimestamp(self.data["date_added"])
+
+    def get_price_roi(self) -> float | None:
+        return self.data["price_roi"]
+
+    def get_scu_reachable(self) -> int | None:
+        return self.data["scu_reachable"]
+
+    def get_container_sizes_origin(self) -> str | None:
+        return self.data["container_sizes_origin"]
+
+    def get_container_sizes_destination(self) -> str | None:
+        return self.data["container_sizes_destination"]
+
+    def get_game_version_origin(self) -> str | None:
+        return self.data["game_version_origin"]
+
+    def get_game_version_destination(self) -> str | None:
+        return self.data["game_version_destination"]
+
+    def get_container_size_min_origin(self) -> int | None:
+        return self.data["container_size_min_origin"]
+
+    def get_container_size_min_destination(self) -> int | None:
+        return self.data["container_size_min_destination"]
 
     def __str__(self):
         return str(self.data["code"])

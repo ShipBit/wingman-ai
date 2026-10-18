@@ -1,4 +1,5 @@
 import inspect
+import re
 from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
 from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
 from skills.uexcorp.uexcorp.data_access.orbit_data_access import OrbitDataAccess
@@ -80,6 +81,7 @@ class Validator:
                 return None
             values = [values]
 
+        unknown = []
         for value in values:
             if inspect.iscoroutinefunction(self.__method_validate):
                 validated, note = await self.__method_validate(value, **self.__config)
@@ -90,11 +92,21 @@ class Validator:
                 self.__helper.get_handler_tool().add_note(note)
 
             if validated is None:
-                return None
+                if not self.__multiple:
+                    return None
+                # One unknown name in a list must not fail the whole call: the others are used
+                unknown.append(str(value))
+                continue
 
             validated_values.append(validated)
 
         if self.__multiple:
+            if not validated_values:
+                return None
+            if unknown:
+                self.__helper.get_handler_tool().add_note(
+                    f"Not recognized and left out: {', '.join(unknown)}. The others were used; tell the user."
+                )
             return validated_values
         else:
             return validated_values[0]
@@ -113,22 +125,32 @@ class Validator:
         return definition
 
     def __validate_number(self, number: str | int, min: int | None = None, max: int | None = None) -> (int | None, str | None):
-        if not isinstance(number, int):
-            if isinstance(number, float):
-                number = int(number)
-            elif isinstance(number, str):
-                if number.isdigit():
-                    number = int(number)
-                else:
-                    return None, f"Number was not convertable to integer: {number}"
+        number = self.__to_int(number)
+        if number is None:
+            return None, "Number was not convertable to integer"
 
-        if min and number < min:
+        if min is not None and number < min:
             return None, f"Number must be greater than or equal to {min}"
 
-        if max and number > max:
+        if max is not None and number > max:
             return None, f"Number must be less than or equal to {max}"
 
         return number, None
+
+    @staticmethod
+    def __to_int(number: any) -> int | None:
+        if isinstance(number, bool):
+            return None
+        if isinstance(number, int):
+            return number
+        if isinstance(number, float):
+            return int(number)
+        if isinstance(number, str):
+            try:
+                return int(float(number.strip()))
+            except ValueError:
+                return None
+        return None
 
     def __definition_number(self, **kwargs) -> dict[str, any]:
         return {"type": "number"}
@@ -136,6 +158,9 @@ class Validator:
     def __validate_bool(self, boolean: str|bool) -> (bool | None, None):
         if isinstance(boolean, bool):
             return boolean, None
+
+        if not isinstance(boolean, str):
+            return None, "Invalid boolean value"
 
         if boolean.lower() == "true" or boolean == "1":
             return True, None
@@ -243,7 +268,101 @@ class Validator:
     def __definition_commodity(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}
 
+    # Every jump point has a gateway station on both sides: "Nyx Gateway (Stanton)" in Stanton,
+    # "Stanton Gateway (Nyx)" in Nyx. Without the system it is in, a gateway name is ambiguous, so
+    # gateways are never fuzzy matched: they need the system they lead to and the one they are in.
+    GATEWAY_NAME = re.compile(r"\bgateway \(\w+(?: system)?\)$", re.IGNORECASE)
+    GATEWAY_STATION_NAME = re.compile(r"^(\w+) gateway \((\w+)\)$", re.IGNORECASE)
+    GATEWAY_SEARCH = re.compile(r"gate\s*way|jump\s*point", re.IGNORECASE)
+
     async def __validate_location(self, name: str, for_trading: bool = False) -> (str | None, str | None):
+        name_collection = self.location_names(for_trading)
+
+        if self.GATEWAY_SEARCH.search(name or ""):
+            return self.__match_gateway(name, name_collection)
+
+        closest_match, options = await self.__helper.get_llm().find_closest_match(
+            name, [location for location in name_collection if not self.GATEWAY_NAME.search(location)],
+            same_place=lambda names: self.__same_terminals(names, for_trading),
+        )
+        if closest_match:
+            return closest_match, None
+
+        return None, f"Invalid location name, no match found for '{name}': Did you mean one of those?: {options}"
+
+    @staticmethod
+    def __same_terminals(names: list[str], for_trading: bool) -> str | None:
+        """The name for the place all names mean: their terminals are the same ("Admin - ARC-L4"
+        and "ARC-L4 Faint Glen Station"), or all sit at one station, city, outpost or point of
+        interest and one name covers them all ("HUR-L2 Faithful Dream Station" with its two
+        terminals, over "Admin - HUR-L2"). None for different places, also for a place and the
+        wider one around it ("Lorville" and "Hurston"). The first name wins a tie (it ranked higher)."""
+        found = []
+        for name in names:
+            terminal_data_access = TerminalDataAccess().add_filter_by_location_name_whitelist(name)
+            if for_trading:
+                terminal_data_access.add_filter_by_type("commodity")
+            found.append({terminal.get_id(): terminal for terminal in terminal_data_access.load()})
+        # A name without terminals is no place to compare (an empty set fits into every other one)
+        if not all(found):
+            return None
+        sets = [set(terminals) for terminals in found]
+        if any(terminals != sets[0] for terminals in sets[1:]):
+            every = {terminal_id: terminal for terminals in found for terminal_id, terminal in terminals.items()}
+            # Keyed by kind: station 5 and city 5 are different places
+            parents = {
+                ("station", terminal.get_id_space_station()) if terminal.get_id_space_station()
+                else ("city", terminal.get_id_city()) if terminal.get_id_city()
+                else ("outpost", terminal.get_id_outpost()) if terminal.get_id_outpost()
+                else ("poi", terminal.get_id_poi()) if terminal.get_id_poi()
+                else None
+                for terminal in every.values()
+            }
+            # Different terminals are one place only under one roof
+            if len(parents) != 1 or None in parents:
+                return None
+        for name, terminals in sorted(zip(names, sets), key=lambda pair: -len(pair[1])):
+            if all(other <= terminals for other in sets):
+                return name
+        return None
+
+    def __match_gateway(self, name: str, name_collection: list[str]) -> (str | None, str | None):
+        """ "Nyx Gateway in Stanton", "Stanton Gateway (Nyx)" or the game log's "Stanton-Nyx Jump Point"
+        (the station in the first system that leads to the second)."""
+        search = name.lower()
+        systems = [str(star_system) for star_system in StarSystemDataAccess().load()]
+        mentioned = sorted(
+            (system for system in systems if re.search(rf"\b{re.escape(system.lower())}\b", search)),
+            key=lambda system: search.index(system.lower()),
+        )
+        before_gateway = re.search(r"(\w+)\s*gate\s*way", search)
+        target = next((system for system in mentioned if before_gateway and system.lower() == before_gateway[1]), None)
+        origin = None
+        if target:
+            others = [system for system in mentioned if system != target]
+            origin = others[0] if len(others) == 1 else None
+        elif len(mentioned) == 2 and re.search(r"jump\s*point", search):
+            origin, target = mentioned
+
+        if target and origin:
+            for candidate in (f"{target} Gateway ({origin})", f"{target} Gateway ({origin} system)"):
+                match = next((location for location in name_collection if location.lower() == candidate.lower()), None)
+                if match:
+                    self.__helper.get_handler_debug().write(f"Gateway '{name}' is '{match}'.")
+                    return match, None
+
+        options = [
+            location for location in name_collection
+            if (station := self.GATEWAY_STATION_NAME.match(location)) and (target is None or station[1].lower() == target.lower())
+        ]
+        self.__helper.get_handler_debug().write(f"Gateway '{name}' needs the star system it is in.")
+        return None, (
+            f"'{name}' is ambiguous: every jump point has a gateway station in both star systems. "
+            f"Ask the user which star system the gateway is in, then use one of: {', '.join(options)}"
+        )
+
+    @staticmethod
+    def location_names(for_trading: bool = False) -> list[str]:
         name_collection = []
 
         star_systems = StarSystemDataAccess().add_filter_by_is_available(True).load()
@@ -297,11 +416,7 @@ class Validator:
             for outpost in outposts:
                 name_collection.append(str(outpost))
 
-        closest_match, options = await self.__helper.get_llm().find_closest_match(name, name_collection)
-        if closest_match:
-            return closest_match, None
-
-        return None, f"Invalid location name, no match found for '{name}': Did you mean one of those?: {options}"
+        return name_collection
 
     def __definition_location(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}
@@ -386,6 +501,8 @@ class Validator:
         return {"type": "string"}
 
     async def __validate_item_attribute(self, item_attribute_filter: dict) -> (dict | None, str | None):
+        if not isinstance(item_attribute_filter, dict):
+            item_attribute_filter = {}
         item_attribute_filter = {
             "attribute": item_attribute_filter["attribute"] if "attribute" in item_attribute_filter and isinstance(item_attribute_filter["attribute"], str) else None,
             "value": item_attribute_filter["value"] if "value" in item_attribute_filter and isinstance(item_attribute_filter["value"], str) else None,
@@ -416,31 +533,24 @@ class Validator:
         return {
             "type": "object",
             "properties": {
-                "attribute": {"type": "string"},
-                "value": {"type": "string"},
+                "attribute": {"type": "string", "description": "Stat name, e.g. \"Rate of Fire\""},
+                "value": {"type": "string", "description": "Value to compare with, e.g. \"200\""},
                 "operator": {"type": "string", "enum": self.OPERATORS},
             },
+            "required": ["attribute", "value", "operator"],
         }
 
-    def __validate_operation_int(self, value) -> ((int | None, str | None), str | None):
-        try:
-            operation = value.get("operation")
-            value = value.get("value")
-        except AttributeError:
-            return (None, None), "Invalid operation_int value. Must have 'operation' and 'value'."
+    def __validate_operation_int(self, value) -> (tuple[int, str] | None, str | None):
+        if not isinstance(value, dict):
+            return None, "Invalid operation_int value. Must have 'operation' and 'value'."
+        operation = value.get("operation")
+        number = self.__to_int(value.get("value"))
         if operation not in self.OPERATORS:
             return None, f"Invalid operation '{operation}', must be one of: {', '.join(self.OPERATORS)}"
+        if number is None:
+            return None, f"Value was not convertable to integer: {value.get('value')}"
 
-        if not isinstance(value, int):
-            if isinstance(value, float):
-                value = int(value)
-            elif isinstance(value, str):
-                if value.isdigit():
-                    value = int(value)
-                else:
-                    return (None, None), f"Value was not convertable to integer: {value}"
-
-        return (value, operation), None
+        return (number, operation), None
 
     def __definition_operation_int(self, **kwargs) -> dict[str, any]:
         return {
@@ -449,4 +559,5 @@ class Validator:
                 "operation": {"type": "string", "enum": self.OPERATORS},
                 "value": {"type": "number"},
             },
+            "required": ["operation", "value"],
         }

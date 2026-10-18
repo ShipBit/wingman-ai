@@ -49,6 +49,7 @@ class SpaceStation(DataModel):
             city_name: str | None = None,  # varchar(255)
             faction_name: str | None = None,  # varchar(255)
             jurisdiction_name: str | None = None,  # varchar(255)
+            is_jump_point: int | None = None,  # int(1)
             load: bool = False,
     ):
         super().__init__("space_station")
@@ -96,6 +97,7 @@ class SpaceStation(DataModel):
             "city_name": city_name,
             "faction_name": faction_name,
             "jurisdiction_name": jurisdiction_name,
+            "is_jump_point": is_jump_point,
             "last_import_run_id": None,
         }
         if load:
@@ -149,6 +151,8 @@ class SpaceStation(DataModel):
             properties.append("Decommissioned")
         if self.get_is_lagrange():
             properties.append("Lagrange")
+        if self.get_is_jump_point():
+            properties.append("Jump Point")
         if self.get_has_quantum_marker():
             properties.append("Quantum Marker")
         else:
@@ -345,6 +349,9 @@ class SpaceStation(DataModel):
 
     def get_jurisdiction_name(self) -> str | None:
         return self.data["jurisdiction_name"]
+
+    def get_is_jump_point(self) -> int | None:
+        return self.data["is_jump_point"]
 
     def __str__(self):
         return str(self.data["name"])

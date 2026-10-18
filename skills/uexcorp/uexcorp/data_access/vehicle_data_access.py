@@ -72,7 +72,9 @@ class VehicleDataAccess(DataAccess):
             "game_version",
             "date_added",
             "date_modified",
-            "company_name"
+            "company_name",
+            "is_quantum_capable",
+            "url_photo",
         ]
 
     def load(self, **params) -> list[Vehicle]:

@@ -341,3 +341,43 @@ def test_a_custom_copy_of_the_skill_moves_out_of_custom_skills(users_dir, screen
 
     assert not os.path.exists(custom)
     assert os.path.isfile(os.path.join(users_dir, "retired_skills", "hud", "main.py"))
+
+
+# ─────────────────────────────── UEX skill ─────────────────────────────── #
+
+
+def uex_wingman(prompt: str) -> dict:
+    return {"name": "Orionis", "skills": [
+        {"module": "skills.uexcorp.main", "prompt": prompt, "custom_properties": [
+            {"id": "commodity_route_default_count", "value": 3},
+            {"id": "add_fasterwhisper_hotwords", "value": True},
+        ]},
+        {"module": "skills.timer.main", "prompt": "### TIMER", "custom_properties": [{"id": "add_fasterwhisper_hotwords"}]},
+    ]}
+
+
+@pytest.fixture
+def old_uex_prompt(monkeypatch):
+    import hashlib
+
+    import services.migrations.migration_328_to_329 as module
+
+    prompt = "### UEXCORP API ACCESS\nOld default.\n"
+    monkeypatch.setattr(module, "_UEX_OLD_PROMPTS", {hashlib.sha256(prompt.strip().encode()).hexdigest()})
+    return prompt
+
+
+def test_a_saved_copy_of_the_old_uex_prompt_goes_so_the_new_one_applies(old_uex_prompt):
+    wingman = migration().migrate_wingman(uex_wingman(old_uex_prompt))
+
+    uex, timer = wingman["skills"]
+    assert "prompt" not in uex
+    assert [p["id"] for p in uex["custom_properties"]] == ["commodity_route_default_count"]
+    assert timer == uex_wingman("")["skills"][1]  # other skills are left alone
+
+
+def test_an_edited_uex_prompt_stays(old_uex_prompt):
+    wingman = migration().migrate_wingman(uex_wingman(old_uex_prompt + "Always answer in German.\n"))
+
+    assert wingman["skills"][0]["prompt"].endswith("Always answer in German.\n")
+    assert [p["id"] for p in wingman["skills"][0]["custom_properties"]] == ["commodity_route_default_count"]

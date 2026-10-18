@@ -1,64 +1,124 @@
+import importlib
+import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
-from skills.uexcorp.uexcorp.api.uex import Uex
+from skills.uexcorp.uexcorp.api.uex import Uex, UexApiError, UexClientError
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.helper import Helper
+    from skills.uexcorp.uexcorp.model.data_model import DataModel
+
+
+class _Dataset(NamedTuple):
+    table: str
+    bundle: str
+    name: str  # key inside the relay bundle
 
 
 class ImportHandler:
+    # Max wait on unload for a stopped import to finish its current request/DB writes
+    STOP_TIMEOUT = 30
+    # Bundles: fetched again once the relay has newer data (its Cache-Control max-age), plus a
+    # margin for the relay's own refresh, but never more often than every MIN_REFRESH seconds
+    RELAY_MARGIN = 60
+    MIN_REFRESH = 5 * 60
+    # A failed version check is not repeated by the import that follows it
+    VERSION_RETRY_PAUSE = 60
+    UNREACHABLE = "the UEX data source is unreachable"
+
+    # Every imported table and where the relay delivers it. Order inside a bundle = import order.
+    DATASETS = (
+        _Dataset("category", Uex.BUNDLE_LONG, Uex.CATEGORIES),
+        _Dataset("category_attribute", Uex.BUNDLE_LONG, Uex.CATEGORIES_ATTRIBUTES),
+        _Dataset("city", Uex.BUNDLE_LONG, Uex.CITIES),
+        _Dataset("commodity", Uex.BUNDLE_LONG, Uex.COMMODITIES),
+        _Dataset("commodity_status", Uex.BUNDLE_LONG, Uex.COMMODITIES_STATUS),
+        _Dataset("company", Uex.BUNDLE_LONG, Uex.COMPANIES),
+        _Dataset("faction", Uex.BUNDLE_LONG, Uex.FACTIONS),
+        _Dataset("item", Uex.BUNDLE_LONG, Uex.ITEMS),
+        _Dataset("item_attribute", Uex.BUNDLE_LONG, Uex.ITEMS_ATTRIBUTES),
+        _Dataset("jurisdiction", Uex.BUNDLE_LONG, Uex.JURISDICTIONS),
+        _Dataset("star_system", Uex.BUNDLE_LONG, Uex.STAR_SYSTEMS),
+        _Dataset("moon", Uex.BUNDLE_LONG, Uex.MOONS),
+        _Dataset("orbit", Uex.BUNDLE_LONG, Uex.ORBITS),
+        _Dataset("orbit_distance", Uex.BUNDLE_LONG, Uex.ORBITS_DISTANCES),
+        _Dataset("outpost", Uex.BUNDLE_LONG, Uex.OUTPOSTS),
+        _Dataset("planet", Uex.BUNDLE_LONG, Uex.PLANETS),
+        _Dataset("poi", Uex.BUNDLE_LONG, Uex.POI),
+        _Dataset("refinery_audit", Uex.BUNDLE_LONG, Uex.REFINERIES_AUDITS),
+        _Dataset("refinery_method", Uex.BUNDLE_LONG, Uex.REFINERIES_METHODS),
+        _Dataset("space_station", Uex.BUNDLE_LONG, Uex.SPACE_STATIONS),
+        _Dataset("terminal", Uex.BUNDLE_LONG, Uex.TERMINALS),
+        _Dataset("vehicle", Uex.BUNDLE_LONG, Uex.VEHICLES),
+        _Dataset("vehicle_purchase_price", Uex.BUNDLE_LONG, Uex.VEHICLES_PURCHASES_PRICES),
+        _Dataset("vehicle_rental_price", Uex.BUNDLE_LONG, Uex.VEHICLES_RENTALS_PRICES),
+        _Dataset("commodity_alert", Uex.BUNDLE_SHORT, Uex.COMMODITIES_ALERTS),
+        _Dataset("commodity_price", Uex.BUNDLE_SHORT, Uex.COMMODITIES_PRICES),
+        _Dataset("commodity_raw_price", Uex.BUNDLE_SHORT, Uex.COMMODITIES_RAW_PRICES),
+        _Dataset("fuel_price", Uex.BUNDLE_SHORT, Uex.FUEL_PRICES),
+        _Dataset("item_price", Uex.BUNDLE_SHORT, Uex.ITEMS_PRICES),
+    )
+    BUNDLES = (Uex.BUNDLE_LONG, Uex.BUNDLE_SHORT)
 
     def __init__(self, helper: "Helper"):
         self.__helper = helper
         self.__api = Uex(helper)
         self.active = True
-        self.__importers = {
-            "category": self.__import_data_category,
-            "category_attribute": self.__import_data_category_attribute,
-            "city": self.__import_data_city,
-            "commodity": self.__import_data_commodity,
-            "company": self.__import_data_company,
-            "faction": self.__import_data_faction,
-            "item": self.__import_data_item,
-            "jurisdiction": self.__import_data_jurisdiction,
-            "star_system": self.__import_data_star_system,
-            "moon": self.__import_data_moon,
-            "orbit": self.__import_data_orbit,
-            "orbit_distance": self.__import_data_orbit_distance,
-            "outpost": self.__import_data_outpost,
-            "planet": self.__import_data_planet,
-            "poi": self.__import_data_poi,
-            "refinery_method": self.__import_data_refinery_method,
-            "space_station": self.__import_data_space_station,
-            "terminal": self.__import_data_terminal,
-            "vehicle": self.__import_data_vehicle,
-            "commodity_status": self.__import_data_commodity_status,
-            "item_price": self.__import_data_item_price,
-            "item_attribute": self.__import_data_item_attribute,
-            "refinery_audit": self.__import_data_refinery_audit,
-            "fuel_price": self.__import_data_fuel_price,
-            "vehicle_purchase_price": self.__import_data_vehicle_purchase_price,
-            "vehicle_rental_price": self.__import_data_vehicle_rental_price,
-            "commodity_alert": self.__import_data_commodity_alert,
-            "commodity_price": self.__import_data_commodity_price,
-            "commodity_raw_price": self.__import_data_commodity_raw_price,
-            "commodity_route": self.__import_data_commodity_route,
-            "game_version": self.__import_data_game_version,
-        }
+        # Only one import at a time. The lock makes "check active + mark running" atomic
+        # against destroy(); __idle is set while no import runs, destroy() waits on it
+        # before the database gets closed.
+        self.__state_lock = threading.Lock()
+        self.__prepare_lock = threading.Lock()
+        self.__running = False
+        self.__completion_requested = False
+        self.__idle = threading.Event()
+        self.__idle.set()
         self.__common_data = {
             "last_import_run_id": 0,
         }
         self.__imported_percent: int = 0
-        self.__import_started: bool = False
+        # Progress steps: game version, every dataset, trade route derivation
+        self.__progress_steps = len(self.DATASETS) + 2
+        self.__progress_done = 0
+        self.__imported_tables: set[str] = set()  # tables replaced in the running import
+        # Why the last import brought no fresh data (None: it did), for tool answers and the user
+        self.__last_error: str | None = None
+        self.__relay_down_reported = False
+        self.__no_data_reported = False
+        self.__version_failed_at = 0.0
+        self.__round_errors: list[str] = []  # problems of the running import round
 
         self.generate_import_session()
         self.is_preload = False
 
     def prepare(self, preload: bool = False) -> None:
-        self.__helper.ensure_version_parity(True)
-        self.is_preload = preload
-        self.import_data(True)
-        self.is_preload = False
+        # Exclusive: the version check may recreate the database, never next to a running import
+        if self.is_running() or not self.__prepare_lock.acquire(blocking=False):
+            if not preload:
+                # The running (pre)load import counts as the real one and completes the skill setup
+                self.request_completion()
+            self.__helper.get_handler_debug().write("Import already running, skipped prepare.")
+            return
+        try:
+            if not self.active:
+                return
+            self.is_preload = preload
+            self.__helper.ensure_version_parity(True)
+            if not self.active:
+                return  # unloaded during the version check: the database is about to close
+            self.import_data(True)
+            self.is_preload = False
+        finally:
+            self.__prepare_lock.release()
+
+    def request_completion(self) -> None:
+        """The running (pre)load import should finish the skill setup (on_import_completed).
+        A separate flag, so the preload thread setting is_preload can never overwrite it."""
+        with self.__state_lock:
+            self.__completion_requested = True
+
+    def is_running(self) -> bool:
+        return self.__running
 
     def generate_import_session(self) -> int:
         self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
@@ -74,23 +134,39 @@ class ImportHandler:
             )
             return
 
-        self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
+        with self.__state_lock:
+            if not self.active:
+                return
+            if self.__running:
+                self.__helper.get_handler_debug().write("Import already running, skipped new import.")
+                return
+            self.__running = True
+            self.__idle.clear()
 
-        self.__helper.get_handler_debug().write(
-            "Importing UEX api data (may take a while) ..."
-        )
-        self.__helper.start_timer("import_total")
-        if not self.is_preload:
-            self.__helper.sync_fasterwhisper_hotwords(unload=True)
-        total_count = self.__import_data()
-        if not self.is_preload:
-            self.__helper.sync_fasterwhisper_hotwords()
+        try:
+            self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
+
+            self.__helper.get_handler_debug().write("Importing UEX data from the data relay ...")
+            self.__helper.start_timer("import_total")
+            total_count = self.__import_data()
+        finally:
+            with self.__state_lock:
+                self.__running = False
+                self.__idle.set()
+        if not self.active:
+            # Stopped by unload: the interrupted bundle is fetched again with the next start
+            self.__helper.get_handler_debug().write("Import stopped by unload, it continues with the next start.")
+            return
         if self.__helper.get_wingmen().settings.debug_mode:
             self.__helper.get_handler_debug().write(
-                f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
+                f"UEX data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
                 total_count > 0,
             )
-        if not self.is_preload:
+        with self.__state_lock:
+            completion_requested, self.__completion_requested = self.__completion_requested, False
+        # An import that brought no data (relay unreachable on a fresh install) completes nothing:
+        # the blacklists would be rewritten empty; the master loop retries it every minute
+        if (not self.is_preload or completion_requested) and self.has_data():
             self.__helper.on_import_completed(total_count)
 
     def get_common_data(self) -> dict[str, any]:
@@ -99,435 +175,266 @@ class ImportHandler:
     def get_version_uex(self, force_check: bool = False) -> str:
         from skills.uexcorp.uexcorp.model.game_version import GameVersion
 
-        self.__import_data_game_version(force_check)
+        try:
+            self.__import_data_game_version(force_check)
+        except UexApiError as e:
+            # Keep working with the last known version, the next check fetches it again
+            self.__helper.get_handler_debug().write(f"Game version check failed: {e}")
         return GameVersion(load=True).get_live()
 
     def get_imported_percent(self) -> int:
         return self.__imported_percent
 
+    def has_data(self) -> bool:
+        """Locations and prices are there: the tools can answer. False on a fresh install
+        (or a rebuilt database) until the first import got them."""
+        database = self.__helper.get_database()
+        try:
+            return all(
+                database.table_exists(table)
+                and database.execute_fetchall(f"SELECT EXISTS(SELECT 1 FROM {table})")[0][0]
+                for table in ("terminal", "commodity_price")
+            )
+        except Exception:
+            return False
+
+    def get_last_error(self) -> str | None:
+        return self.__last_error
+
+    def __advance(self, steps: int = 1) -> None:
+        self.__progress_done += steps
+        self.__imported_percent = min(int(self.__progress_done * 100 / self.__progress_steps), 99)
+
     def __import_data(self) -> int:
         total_count = 0
         self.__imported_percent = 0
-        self.__import_started = True
-        for importer in self.__importers.values():
-            if self.active:
-                total_count += int(importer() or 0)
-                self.__imported_percent = int(
-                    min(self.__imported_percent + (100 / len(self.__importers)), 100)
-                )
-        self.__imported_percent = 100
+        self.__progress_done = 0
+        self.__imported_tables = set()
+        errors = self.__round_errors = []
+        unreachable = False
+        try:
+            # First: an interrupted first import can only be continued if the game version is
+            # already stored, otherwise the next start's version parity check recreates the DB.
+            steps = [("game_version", self.__import_data_game_version, 1)]
+            steps += [
+                (f"{bundle} bundle", lambda bundle=bundle: self.__import_bundle(bundle), 0)
+                for bundle in self.BUNDLES
+            ]
+            steps.append(("commodity_route", self.__import_data_commodity_route, 1))
+            for name, importer, progress in steps:
+                if not self.active:
+                    break
+                # The relay is down: its other requests would only fail too (the trade legs are local)
+                if unreachable and name != "commodity_route":
+                    continue
+                try:
+                    total_count += int(importer() or 0)
+                except UexApiError as e:
+                    if not self.active:
+                        break  # cancelled by unload, not a failure
+                    # Not marked as imported, so the next import run (master loop) retries it
+                    errors.append(self.UNREACHABLE)
+                    # A rejected request (4xx) concerns that request only; anything else, the relay
+                    unreachable = unreachable or not isinstance(e, UexClientError)
+                    self.__helper.get_handler_debug().write(
+                        f"Import of {name} failed and will be retried with the next import run: {e}"
+                    )
+                except Exception as e:
+                    # Unexpected data or database errors must not stop the other steps either
+                    errors.append(str(e))
+                    self.__helper.get_handler_error().write(f"ImportHandler.{name}", [], e)
+                    self.__helper.get_handler_debug().write(
+                        f"Import of {name} failed unexpectedly and will be retried with the next import run: {e}"
+                    )
+                self.__advance(progress)
+        finally:
+            # Always done: the master loop only refreshes at 100 %
+            self.__imported_percent = 100
+        if self.active:
+            self.__report_outcome(errors)
         return total_count
 
-    def __import_data_category(self) -> bool | int:
+    def __report_outcome(self, errors: list[str]) -> None:
+        """One message per outage for the user (not one per request), and one when it is over."""
+        if not errors:
+            self.__last_error = None
+            if self.__no_data_reported or self.__relay_down_reported:
+                self.__helper.get_handler_debug().write("UEX data source reachable again, data is up to date.", True)
+            self.__no_data_reported = self.__relay_down_reported = False
+            return
+        self.__last_error = self.UNREACHABLE if self.UNREACHABLE in errors else errors[0]
+        if not self.has_data():
+            if not self.__no_data_reported:
+                self.__no_data_reported = True
+                self.__helper.get_handler_debug().write(
+                    f"UEX data could not be loaded ({self.__last_error}). Trading and location answers are "
+                    f"unavailable until it works, retrying every minute.", True
+                )
+        elif not self.__relay_down_reported:
+            self.__relay_down_reported = True
+            self.__helper.get_handler_debug().write(
+                f"UEX data could not be refreshed ({self.__last_error}). Working with the stored data, retrying in the background.",
+                True,
+            )
+
+    def __import_bundle(self, bundle: str) -> int:
+        """Fetches one relay bundle (if the stored one is outdated) and replaces its tables."""
         from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.category import Category
 
-        if not self.__helper.get_database().table_exists("category"):
-            return False
+        database = self.__helper.get_database()
+        datasets = [dataset for dataset in self.DATASETS if dataset.bundle == bundle and database.table_exists(dataset.table)]
+        state = ImportData(f"relay_{bundle}", load=True)
+        complete = all(ImportData(dataset.table, load=True).get_date_imported() for dataset in datasets)
+        if complete and not state.is_expired():
+            self.__advance(len(datasets))
+            return 0
 
-        category_import = ImportData("category", load=True)
-        if not category_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
+        self.__helper.start_timer(f"bundle_{bundle}")
+        try:
+            response = self.__api.fetch_bundle(bundle, state.get_etag() if complete else None)
+        except UexApiError:
+            # The relay is the only source: the stored tables stay as they are
+            self.__advance(len(datasets))
+            raise
+        now = self.__helper.get_timestamp()
+        lifetime = self.__get_bundle_lifetime(bundle)
 
+        unchanged = complete and (response.data is None or (response.etag and response.etag == state.get_etag()))
+        count = 0
+        failed = []
+        if unchanged:
+            self.__advance(len(datasets))
+            self.__helper.get_handler_debug().write(f"Relay {bundle} bundle unchanged, nothing to import.")
+        else:
+            for dataset in datasets:
+                if not self.active:
+                    return count  # bundle stays outdated: fetched again with the next start
+                try:
+                    count += self.__import_dataset(dataset, response.data)
+                except Exception as e:
+                    # The other tables still import; the whole bundle is fetched again next run.
+                    # The user hears of it once, with the round's other problems (__report_outcome)
+                    failed.append(dataset.table)
+                    self.__round_errors.append(f"{dataset.table}: {e}")
+                    if not isinstance(e, UexApiError):
+                        self.__helper.get_handler_error().write(f"ImportHandler.{dataset.table}", [], e)
+                    self.__helper.get_handler_debug().write(
+                        f"Import of {dataset.table} failed and will be retried with the next import run: {e}"
+                    )
+                self.__advance()
+
+        if failed:
+            state.set_date_expires(None)
+        else:
+            state.set_etag(response.etag)
+            state.set_date_expires(now + self.__get_refresh_in(response.max_age, lifetime))
+            if not unchanged:
+                state.set_date_imported(now)
+                state.set_dataset_count(count)
+                state.set_time_taken(self.__helper.end_timer(f"bundle_{bundle}"))
+        state.persist()
+        if not unchanged:
+            self.__helper.get_handler_debug().write(
+                f"Relay {bundle} bundle imported: {count} record(s), next refresh in {self.__get_refresh_in(response.max_age, lifetime)}s"
+                + (f", failed: {', '.join(failed)}" if failed else "")
+            )
+        return count
+
+    def __get_bundle_lifetime(self, bundle: str) -> int:
+        config = self.__helper.get_handler_config()
+        return config.get_cache_lifetime_long() if bundle == Uex.BUNDLE_LONG else config.get_cache_lifetime_short()
+
+    def __get_refresh_in(self, max_age: int | None, lifetime: int) -> int:
+        """Seconds until the bundle is fetched again: when the relay has newer data, capped by the lifetime."""
+        if max_age is None:
+            return lifetime
+        return min(lifetime, max(self.MIN_REFRESH, max_age + self.RELAY_MARGIN))
+
+    def __import_dataset(self, dataset: _Dataset, bundle_data: dict) -> int:
+        """Replaces one table with the dataset's rows in a single transaction."""
+        from skills.uexcorp.uexcorp.model.import_data import ImportData
+
+        if dataset.name not in bundle_data:
+            raise UexApiError(f"{dataset.name} missing in the relay {dataset.bundle} bundle")
         self.__helper.start_timer("import")
 
-        category_data = self.__api.fetch(self.__api.CATEGORIES)
-        if category_data:
-            for index, data in enumerate(category_data):
-                category = Category(data["id"])
+        models = self.__build_models(dataset, bundle_data[dataset.name])
+        columns = None
+        values = []
+        for model in models:
+            data = model.get_persist_data()
+            if columns is None:
+                columns = list(data)
+            values.append(tuple(data[column] for column in columns))
+        # Every table has this column; with no rows only the old ones are removed
+        self.__helper.get_database().replace_table(dataset.table, columns or ["last_import_run_id"], values)
 
-                # workaround for missing sqlite CONCAT function
-                if "name" in data and "section" in data:
-                    data["combined_name"] = f"{data['section']} {data['name']}"
-
-                category.set_data(data)
-                if category.get_section() == "Armor" and category.get_name() == "Set":
-                    category.data["is_game_related"] = 0
-                category.persist(index < len(category_data) - 1)
-
-        category_import.set_date_imported(self.__helper.get_timestamp())
-        category_import.set_dataset_count(len(category_data))
-        category_import.set_time_taken(self.__helper.end_timer("import"))
-        category_import.persist()
+        table_import = ImportData(dataset.table, load=True)
+        table_import.set_date_imported(self.__helper.get_timestamp())
+        table_import.set_dataset_count(len(values))
+        table_import.set_time_taken(self.__helper.end_timer("import"))
+        table_import.persist()
+        self.__imported_tables.add(dataset.table)
         self.__helper.get_handler_debug().write(
-            f"Category data imported: {category_import.get_dataset_count()} record(s) in {category_import.get_time_taken()}s"
+            f"{dataset.table} data imported: {len(values)} record(s) in {table_import.get_time_taken()}s"
         )
-        return len(category_data)
+        return len(values)
 
-    def __import_data_category_attribute(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.category_attribute import (
-            CategoryAttribute,
-        )
-
-        if not self.__helper.get_database().table_exists("category_attribute"):
-            return False
-
-        category_attribute_import = ImportData("category_attribute", load=True)
-        if not category_attribute_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        category_attribute_data = self.__api.fetch(self.__api.CATEGORIES_ATTRIBUTES)
-        if category_attribute_data:
-            for index, data in enumerate(category_attribute_data):
-                category_attribute = CategoryAttribute(data["id"])
-                category_attribute.set_data(data)
-                category_attribute.persist(index < len(category_attribute_data) - 1)
-
-        category_attribute_import.set_date_imported(self.__helper.get_timestamp())
-        category_attribute_import.set_dataset_count(len(category_attribute_data))
-        category_attribute_import.set_time_taken(self.__helper.end_timer("import"))
-        category_attribute_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Category Attribute data imported: {category_attribute_import.get_dataset_count()} record(s) in {category_attribute_import.get_time_taken()}s"
-        )
-        return len(category_attribute_data)
-
-    def __import_data_city(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.city import City
-
-        if not self.__helper.get_database().table_exists("city"):
-            return False
-
-        city_import = ImportData("city", load=True)
-        if not city_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        city_data = self.__api.fetch(self.__api.CITIES)
-        if city_data:
-            for index, data in enumerate(city_data):
-                city = City(data["id"])
-                city.set_data(data)
-                city.persist(index < len(city_data) - 1)
-
-        city_import.set_date_imported(self.__helper.get_timestamp())
-        city_import.set_dataset_count(len(city_data))
-        city_import.set_time_taken(self.__helper.end_timer("import"))
-        city_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"City data imported: {city_import.get_dataset_count()} record(s) in {city_import.get_time_taken()}s"
-        )
-        return len(city_data)
-
-    def __import_data_commodity(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.commodity import Commodity
-
-        if not self.__helper.get_database().table_exists("commodity"):
-            return False
-
-        commodity_import = ImportData("commodity", load=True)
-        if not commodity_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        commodity_data = self.__api.fetch(self.__api.COMMODITIES)
-        if commodity_data:
-            for index, data in enumerate(commodity_data):
-                commodity = Commodity(data["id"])
-                commodity.set_data(data)
-                commodity.persist(index < len(commodity_data) - 1)
-
-        commodity_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_import.set_dataset_count(len(commodity_data))
-        commodity_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity data imported: {commodity_import.get_dataset_count()} record(s) in {commodity_import.get_time_taken()}s"
-        )
-        return len(commodity_data)
-
-    def __import_data_commodity_alert(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
+    def __build_models(self, dataset: _Dataset, rows: any) -> list["DataModel"]:
         from skills.uexcorp.uexcorp.model.commodity_alert import CommodityAlert
-
-        if not self.__helper.get_database().table_exists("commodity_alert"):
-            return False
-
-        commodity_alert_import = ImportData("commodity_alert", load=True)
-        if not commodity_alert_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_short()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        commodity_alert_data = self.__api.fetch(self.__api.COMMODITIES_ALERTS)
-        if commodity_alert_data:
-            for index, data in enumerate(commodity_alert_data):
-                commodity_alert = CommodityAlert(data["id"])
-                commodity_alert.set_data(data)
-                commodity_alert.persist(index < len(commodity_alert_data) - 1)
-
-        commodity_alert_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_alert_import.set_dataset_count(len(commodity_alert_data))
-        commodity_alert_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_alert_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity Alert data imported: {commodity_alert_import.get_dataset_count()} record(s) in {commodity_alert_import.get_time_taken()}s"
-        )
-        return len(commodity_alert_data)
-
-    def __import_data_commodity_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.commodity_price import CommodityPrice
-
-        if not self.__helper.get_database().table_exists("commodity_price"):
-            return False
-
-        commodity_price_import = ImportData("commodity_price", load=True)
-        if not commodity_price_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_short()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        commodity_price_data = self.__api.fetch(self.__api.COMMODITIES_PRICES)
-        if commodity_price_data:
-            for index, data in enumerate(commodity_price_data):
-                commodity_price = CommodityPrice(data["id"])
-                commodity_price.set_data(data)
-                commodity_price.persist(index < len(commodity_price_data) - 1)
-
-        commodity_price_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_price_import.set_dataset_count(len(commodity_price_data))
-        commodity_price_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_price_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity Price data imported: {commodity_price_import.get_dataset_count()} record(s) in {commodity_price_import.get_time_taken()}s"
-        )
-        return len(commodity_price_data)
-
-    def __import_data_commodity_raw_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.commodity_raw_price import (
-            CommodityRawPrice,
-        )
-
-        if not self.__helper.get_database().table_exists("commodity_raw_price"):
-            return False
-
-        commodity_raw_price_import = ImportData("commodity_raw_price", load=True)
-        if not commodity_raw_price_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_short()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        commodity_raw_price_data = self.__api.fetch(self.__api.COMMODITIES_RAW_PRICES)
-        if commodity_raw_price_data:
-            for index, data in enumerate(commodity_raw_price_data):
-                commodity_raw_price = CommodityRawPrice(data["id"])
-                commodity_raw_price.set_data(data)
-                commodity_raw_price.persist(index < len(commodity_raw_price_data) - 1)
-
-        commodity_raw_price_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_raw_price_import.set_dataset_count(len(commodity_raw_price_data))
-        commodity_raw_price_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_raw_price_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity Raw Price data imported: {commodity_raw_price_import.get_dataset_count()} record(s) in {commodity_raw_price_import.get_time_taken()}s"
-        )
-        return len(commodity_raw_price_data)
-
-    def __import_data_commodity_status(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
         from skills.uexcorp.uexcorp.model.commodity_status import CommodityStatus
 
-        if not self.__helper.get_database().table_exists("commodity_status"):
-            return False
+        if dataset.table == "commodity_status":
+            if not isinstance(rows, dict):
+                raise UexApiError(f"Unexpected {dataset.name} format: {type(rows).__name__}")
+            models = []
+            for is_buy, key in ((True, "buy"), (False, "sell")):
+                for row in rows.get(key) or []:
+                    model = CommodityStatus(row["code"], is_buy)
+                    model.set_data(row)
+                    models.append(model)
+            return models
 
-        commodity_status_import = ImportData("commodity_status", load=True)
-        if not commodity_status_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
+        if not isinstance(rows, list):
+            raise UexApiError(f"Unexpected {dataset.name} format: {type(rows).__name__}")
 
-        self.__helper.start_timer("import")
+        if dataset.table == "commodity_alert":
+            models = []
+            for row in rows:
+                model = CommodityAlert()
+                model.set_data(row)
+                models.append(model)
+            return models
 
-        commodity_status_data = self.__api.fetch(self.__api.COMMODITIES_STATUS)
-        if commodity_status_data:
-            if "buy" in commodity_status_data:
-                for index, data in enumerate(commodity_status_data["buy"]):
-                    commodity_status = CommodityStatus(data["code"], True)
-                    commodity_status.set_data(data)
-                    commodity_status.persist(
-                        index < len(commodity_status_data["buy"]) - 1
-                    )
-            if "sell" in commodity_status_data:
-                for index, data in enumerate(commodity_status_data["sell"]):
-                    commodity_status = CommodityStatus(data["code"], False)
-                    commodity_status.set_data(data)
-                    commodity_status.persist(
-                        index < len(commodity_status_data["sell"]) - 1
-                    )
+        model_class = self.__get_model_class(dataset.table)
+        models = []
+        skipped = 0
+        for row in rows:
+            if not isinstance(row, dict) or row.get("id") is None:
+                # e.g. the relay lists empty API answers ({"status": "ok", "data": null}) as rows
+                skipped += 1
+                continue
+            model = model_class(row["id"])
+            model.set_data(row)
+            if dataset.table == "category":
+                self.__prepare_category(model, row)
+            models.append(model)
+        if skipped:
+            self.__helper.get_handler_debug().write(f"Skipped {skipped} {dataset.name} entries without an id.")
+        return models
 
-        commodity_status_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_status_import.set_dataset_count(len(commodity_status_data))
-        commodity_status_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_status_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity Status data imported: {commodity_status_import.get_dataset_count()} record(s) in {commodity_status_import.get_time_taken()}s"
-        )
-        return len(commodity_status_data)
+    @staticmethod
+    def __get_model_class(table: str) -> type:
+        module = importlib.import_module(f"skills.uexcorp.uexcorp.model.{table}")
+        return getattr(module, "".join(part.capitalize() for part in table.split("_")))
 
-    def __import_data_commodity_route(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.commodity_route import CommodityRoute
-        from skills.uexcorp.uexcorp.data_access.commodity_data_access import (
-            CommodityDataAccess,
-        )
-
-        if not self.__helper.get_database().table_exists("commodity_route"):
-            return False
-
-        commodity_route_import = ImportData("commodity_route", load=True)
-        if not commodity_route_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_short()
-        ):
-            return False
-
-        # Depends on commodity data
-        self.__import_data_commodity()
-
-        self.__helper.start_timer("import")
-
-        commodities = (
-            CommodityDataAccess()
-            .add_filter_has_buy_price()
-            .add_filter_has_sell_price()
-            .load()
-        )
-        commodity_ids = []
-        for commodity in commodities:
-            commodity_ids.append(commodity.get_id())
-
-        commodity_route_data = self.__api.fetch(
-            self.__api.COMMODITIES_ROUTES, {"id_commodity": commodity_ids}
-        )
-        if commodity_route_data:
-            for index, data in enumerate(commodity_route_data):
-                commodity_route = CommodityRoute(data["id"])
-                commodity_route.set_data(data)
-                commodity_route.persist(index < len(commodity_route_data) - 1)
-
-        commodity_route_import.set_date_imported(self.__helper.get_timestamp())
-        commodity_route_import.set_dataset_count(len(commodity_route_data))
-        commodity_route_import.set_time_taken(self.__helper.end_timer("import"))
-        commodity_route_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Commodity Route data imported: {commodity_route_import.get_dataset_count()} record(s) in {commodity_route_import.get_time_taken()}s"
-        )
-        return len(commodity_route_data)
-
-    def __import_data_company(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.company import Company
-
-        if not self.__helper.get_database().table_exists("company"):
-            return False
-
-        company_import = ImportData("company", load=True)
-        if not company_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        company_data = self.__api.fetch(self.__api.COMPANIES)
-        if company_data:
-            for index, data in enumerate(company_data):
-                company = Company(data["id"])
-                company.set_data(data)
-                company.persist(index < len(company_data) - 1)
-
-        company_import.set_date_imported(self.__helper.get_timestamp())
-        company_import.set_dataset_count(len(company_data))
-        company_import.set_time_taken(self.__helper.end_timer("import"))
-        company_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Company data imported: {company_import.get_dataset_count()} record(s) in {company_import.get_time_taken()}s"
-        )
-        return len(company_data)
-
-    def __import_data_faction(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.faction import Faction
-
-        if not self.__helper.get_database().table_exists("faction"):
-            return False
-
-        faction_import = ImportData("faction", load=True)
-        if not faction_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        faction_data = self.__api.fetch(self.__api.FACTIONS)
-        if faction_data:
-            for index, data in enumerate(faction_data):
-                faction = Faction(data["id"])
-                faction.set_data(data)
-                faction.persist(index < len(faction_data) - 1)
-
-        faction_import.set_date_imported(self.__helper.get_timestamp())
-        faction_import.set_dataset_count(len(faction_data))
-        faction_import.set_time_taken(self.__helper.end_timer("import"))
-        faction_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Faction data imported: {faction_import.get_dataset_count()} record(s) in {faction_import.get_time_taken()}s"
-        )
-        return len(faction_data)
-
-    def __import_data_fuel_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.fuel_price import FuelPrice
-
-        if not self.__helper.get_database().table_exists("fuel_price"):
-            return False
-
-        fuel_price_import = ImportData("fuel_price", load=True)
-        if not fuel_price_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        fuel_price_data = self.__api.fetch(self.__api.FUEL_PRICES)
-        if fuel_price_data:
-            for index, data in enumerate(fuel_price_data):
-                fuel_price = FuelPrice(data["id"])
-                fuel_price.set_data(data)
-                fuel_price.persist(index < len(fuel_price_data) - 1)
-
-        fuel_price_import.set_date_imported(self.__helper.get_timestamp())
-        fuel_price_import.set_dataset_count(len(fuel_price_data))
-        fuel_price_import.set_time_taken(self.__helper.end_timer("import"))
-        fuel_price_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Fuel Price data imported: {fuel_price_import.get_dataset_count()} record(s) in {fuel_price_import.get_time_taken()}s"
-        )
-        return len(fuel_price_data)
+    @staticmethod
+    def __prepare_category(category, row: dict) -> None:
+        # workaround for missing sqlite CONCAT function
+        if "name" in row and "section" in row:
+            category.data["combined_name"] = f"{row['section']} {row['name']}"
+        if category.get_section() == "Armor" and category.get_name() == "Set":
+            category.data["is_game_related"] = 0
 
     def __import_data_game_version(self, force_check: bool = False) -> bool | int:
         from skills.uexcorp.uexcorp.model.import_data import ImportData
@@ -541,646 +448,200 @@ class ImportHandler:
             self.__helper.get_handler_config().get_cache_lifetime_short()
         ):
             return False
+        # The version check right before an import failed: no second round of failing requests
+        if not force_check and time.monotonic() - self.__version_failed_at < self.VERSION_RETRY_PAUSE:
+            return False
 
         self.__helper.start_timer("import")
 
-        game_version_data = self.__api.fetch(self.__api.GAME_VERSIONS)
-        if game_version_data:
-            game_version = GameVersion()
-            game_version.set_data(game_version_data)
-            game_version.persist()
+        try:
+            game_version_data = self.__api.fetch_version()
+        except UexApiError:
+            self.__version_failed_at = time.monotonic()
+            raise
+        game_version = GameVersion()
+        game_version.set_data(game_version_data)
+        game_version.persist()
 
         game_version_import.set_date_imported(self.__helper.get_timestamp())
-        game_version_import.set_dataset_count(len(game_version_data))
+        game_version_import.set_dataset_count(1)
         game_version_import.set_time_taken(self.__helper.end_timer("import"))
         game_version_import.persist()
         self.__helper.get_handler_debug().write(
-            f"Game Version data imported: {game_version_import.get_dataset_count()} record(s) in {game_version_import.get_time_taken()}s"
+            f"Game Version data imported: {game_version.get_live()} in {game_version_import.get_time_taken()}s"
         )
-        return len(game_version_data)
+        return 1
 
-    def __import_data_item(self) -> bool | int:
+    # Ship-independent trade legs (buy at one terminal, sell at another), derived from our own
+    # price, terminal and orbit distance data instead of the UEX routes endpoint (~70 requests).
+    # Parent location flags come from the station/city/outpost/poi the terminal belongs to.
+    COMMODITY_ROUTE_SQL = """
+        SELECT
+            b.id_commodity, c.name AS commodity_name, c.code AS commodity_code, c.slug AS commodity_slug,
+            b.id_terminal AS id_terminal_origin, s.id_terminal AS id_terminal_destination,
+            b.price_buy AS price_origin, s.price_sell AS price_destination,
+            -- scu_sell 0 means "not reported" (most sell offers), not "no demand": UEX's own
+            -- routes treated it the same way (checked on 7,079 of 7,079 routes)
+            b.scu_buy AS scu_origin, NULLIF(s.scu_sell, 0) AS scu_destination,
+            b.status_buy AS status_origin, s.status_sell AS status_destination,
+            b.container_sizes AS container_sizes_origin, s.container_sizes AS container_sizes_destination,
+            MAX(b.date_modified, s.date_modified) AS date_added,
+            {terminal_columns_origin},
+            {terminal_columns_destination},
+            CASE WHEN o.id_orbit = d.id_orbit THEN 0 ELSE COALESCE(
+                (SELECT od.distance FROM orbit_distance od
+                 WHERE od.id_orbit_origin = o.id_orbit AND od.id_orbit_destination = d.id_orbit LIMIT 1),
+                (SELECT od.distance FROM orbit_distance od
+                 WHERE od.id_orbit_origin = d.id_orbit AND od.id_orbit_destination = o.id_orbit LIMIT 1)
+            ) END AS distance
+        FROM commodity_price b
+        JOIN commodity_price s ON s.id_commodity = b.id_commodity AND s.id_terminal != b.id_terminal
+        JOIN terminal o ON o.id = b.id_terminal
+        JOIN terminal d ON d.id = s.id_terminal
+        LEFT JOIN commodity c ON c.id = b.id_commodity
+        {parent_joins}
+        WHERE b.price_buy > 0 AND s.price_sell > b.price_buy
+          -- Terminals not available in the game are no stops (the tool's location filters agree)
+          AND o.is_available AND d.is_available
+    """
+
+    # Tables the trade legs are built from (prices, terminals, distances, parent locations)
+    COMMODITY_ROUTE_SOURCES = (
+        "commodity_price", "terminal", "orbit_distance", "space_station", "city", "outpost", "poi",
+    )
+
+    @staticmethod
+    def __commodity_route_sql() -> str:
+        def terminal_columns(alias: str, side: str) -> str:
+            def parent(field: str) -> str:
+                return (
+                    f"CASE WHEN {alias}.id_space_station THEN {alias}_ss.{field} WHEN {alias}.id_city THEN {alias}_ci.{field} "
+                    f"WHEN {alias}.id_outpost THEN {alias}_ou.{field} WHEN {alias}.id_poi THEN {alias}_po.{field} END"
+                )
+            return ", ".join([
+                f"{alias}.id_star_system AS id_star_system_{side}",
+                f"{alias}.id_planet AS id_planet_{side}",
+                f"{alias}.id_orbit AS id_orbit_{side}",
+                f"{alias}.id_faction AS id_faction_{side}",
+                f"{alias}.star_system_name AS {side}_star_system_name",
+                f"{alias}.planet_name AS {side}_planet_name",
+                f"{alias}.orbit_name AS {side}_orbit_name",
+                f"{alias}.faction_name AS {side}_faction_name",
+                f"{alias}.name AS {side}_terminal_name",
+                f"{alias}.code AS {side}_terminal_code",
+                f"{alias}.is_player_owned AS {side}_terminal_is_player_owned",
+                f"{alias}.game_version AS game_version_{side}",
+                # Facilities count if the terminal or its parent location has them (matches UEX 100%)
+                *(
+                    f"CASE WHEN {alias}.{field} OR {parent(field)} THEN 1 ELSE 0 END AS {field}_{side}"
+                    for field in ("has_loading_dock", "has_docking_port", "has_freight_elevator")
+                ),
+                f"{parent('is_monitored')} AS is_monitored_{side}",
+                f"{parent('has_refuel')} AS has_refuel_{side}",
+                f"{parent('has_cargo_center')} AS has_cargo_center_{side}",
+                f"{parent('has_quantum_marker')} AS has_quantum_marker_{side}",
+                f"CASE WHEN {alias}.id_space_station THEN 1 ELSE 0 END AS is_space_station_{side}",
+                f"CASE WHEN {alias}.id_city OR {alias}.id_outpost THEN 1 ELSE 0 END AS is_on_ground_{side}",
+            ])
+
+        parent_joins = "\n".join(
+            f"LEFT JOIN {table} {alias}_{short} ON {alias}_{short}.id = {alias}.{key}"
+            for alias in ("o", "d")
+            for table, short, key in (
+                ("space_station", "ss", "id_space_station"),
+                ("city", "ci", "id_city"),
+                ("outpost", "ou", "id_outpost"),
+                ("poi", "po", "id_poi"),
+            )
+        )
+        return ImportHandler.COMMODITY_ROUTE_SQL.format(
+            terminal_columns_origin=terminal_columns("o", "origin"),
+            terminal_columns_destination=terminal_columns("d", "destination"),
+            parent_joins=parent_joins,
+        )
+
+    def __import_data_commodity_route(self) -> bool | int:
         from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.item import Item
-        from skills.uexcorp.uexcorp.data_access.category_data_access import (
-            CategoryDataAccess,
-        )
+        from skills.uexcorp.uexcorp.model.commodity_route import CommodityRoute
 
-        if not self.__helper.get_database().table_exists("item"):
+        database = self.__helper.get_database()
+        if not database.table_exists("commodity_route"):
             return False
 
-        item_import = ImportData("item", load=True)
-        if not item_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
+        # Derived only once every source table is there (not marked otherwise, so the next import
+        # run derives them): a failed distance or location import would otherwise leave routes
+        # without distances or facilities. Derived again whenever any source table is newer.
+        sources = [ImportData(table, load=True) for table in self.COMMODITY_ROUTE_SOURCES]
+        if not all(source.get_date_imported() for source in sources):
+            return False
+        commodity_route_import = ImportData("commodity_route", load=True)
+        # Replaced in this run, or newer (a run whose derivation failed): timestamps are in
+        # seconds, so the first check catches a refresh within the second of the last derivation
+        sources_newer = bool(self.__imported_tables.intersection(self.COMMODITY_ROUTE_SOURCES)) or (
+            commodity_route_import.get_date_imported() or 0
+        ) < max(source.get_date_imported() for source in sources)
+        if not sources_newer and not commodity_route_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
         ):
             return False
 
         self.__helper.start_timer("import")
 
-        category_ids = []
-        categories = CategoryDataAccess().load()
-        for category in categories:
-            category_ids.append(category.get_id())
+        rows = [dict(row) for row in database.execute_fetchall(self.__commodity_route_sql())]
+        columns = None
+        values = []
+        for index, row in enumerate(rows):
+            price_origin, price_destination = row["price_origin"], row["price_destination"]
+            stock = row["scu_origin"] or 0
+            demand = row["scu_destination"]
+            tradeable = min(stock, demand) if demand else stock
+            row.update({
+                "code": f"{row['commodity_code']}-{row['origin_terminal_code']}-{row['destination_terminal_code']}",
+                "price_margin": (price_destination - price_origin) / price_destination * 100,
+                "price_roi": (price_destination - price_origin) / price_origin * 100,
+                "investment": price_origin * stock,
+                "profit": (price_destination - price_origin) * tradeable,
+            })
+            commodity_route = CommodityRoute(index + 1)
+            commodity_route.set_data(row)
+            data = commodity_route.get_persist_data()
+            if columns is None:
+                columns = list(data)
+            values.append(tuple(data[column] for column in columns))
+        # One transaction under the DB lock: route tool calls never see a half-built table
+        database.replace_table("commodity_route", columns or ["id"], values)
 
-        item_data = self.__api.fetch(self.__api.ITEMS, {"id_category": category_ids})
-        if item_data:
-            for index, data in enumerate(item_data):
-                item = Item(data["id"])
-                item.set_data(data)
-                item.persist(index < len(item_data) - 1)
-
-        item_import.set_date_imported(self.__helper.get_timestamp())
-        item_import.set_dataset_count(len(item_data))
-        item_import.set_time_taken(self.__helper.end_timer("import"))
-        item_import.persist()
+        commodity_route_import.set_date_imported(self.__helper.get_timestamp())
+        commodity_route_import.set_dataset_count(len(rows))
+        commodity_route_import.set_time_taken(self.__helper.end_timer("import"))
+        commodity_route_import.persist()
         self.__helper.get_handler_debug().write(
-            f"Item data imported: {item_import.get_dataset_count()} record(s) in {item_import.get_time_taken()}s"
+            f"Commodity Route data derived: {commodity_route_import.get_dataset_count()} trade leg(s) in {commodity_route_import.get_time_taken()}s"
         )
-        return len(item_data)
-
-    def __import_data_item_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.item_price import ItemPrice
-
-        if not self.__helper.get_database().table_exists("item_price"):
-            return False
-
-        item_price_import = ImportData("item_price", load=True)
-        if not item_price_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        item_price_data = self.__api.fetch(self.__api.ITEMS_PRICES)
-        if item_price_data:
-            for index, data in enumerate(item_price_data):
-                item_price = ItemPrice(data["id"])
-                item_price.set_data(data)
-                item_price.persist(index < len(item_price_data) - 1)
-
-        item_price_import.set_date_imported(self.__helper.get_timestamp())
-        item_price_import.set_dataset_count(len(item_price_data))
-        item_price_import.set_time_taken(self.__helper.end_timer("import"))
-        item_price_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Item Price data imported: {item_price_import.get_dataset_count()} record(s) in {item_price_import.get_time_taken()}s"
-        )
-        return len(item_price_data)
-
-    def __import_data_item_attribute(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.item_attribute import ItemAttribute
-        from skills.uexcorp.uexcorp.data_access.category_data_access import (
-            CategoryDataAccess,
-        )
-
-        if not self.__helper.get_database().table_exists("item_attribute"):
-            return False
-
-        item_attribute_import = ImportData("item_attribute", load=True)
-        if not item_attribute_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        # depends on categories
-        self.__import_data_category()
-
-        self.__helper.start_timer("import")
-
-        category_ids = []
-        categories = CategoryDataAccess().add_filter_by_is_game_related(True).load()
-        for category in categories:
-            category_ids.append(category.get_id())
-
-        item_attribute_data = self.__api.fetch(
-            self.__api.ITEMS_ATTRIBUTES, {"id_category": category_ids}
-        )
-        if item_attribute_data:
-            for index, data in enumerate(item_attribute_data):
-                item_attribute = ItemAttribute(data["id"])
-                item_attribute.set_data(data)
-                item_attribute.persist(index < len(item_attribute_data) - 1)
-
-        item_attribute_import.set_date_imported(self.__helper.get_timestamp())
-        item_attribute_import.set_dataset_count(len(item_attribute_data))
-        item_attribute_import.set_time_taken(self.__helper.end_timer("import"))
-        item_attribute_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Orbit Distance data imported: {item_attribute_import.get_dataset_count()} record(s) in {item_attribute_import.get_time_taken()}s"
-        )
-        return item_attribute_import.get_dataset_count()
-
-    def __import_data_jurisdiction(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-
-        if not self.__helper.get_database().table_exists("jurisdiction"):
-            return False
-
-        jurisdiction_import = ImportData("jurisdiction", load=True)
-        if not jurisdiction_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        jurisdiction_data = self.__api.fetch(self.__api.JURISDICTIONS)
-        if jurisdiction_data:
-            for index, data in enumerate(jurisdiction_data):
-                jurisdiction = Jurisdiction(data["id"])
-                jurisdiction.set_data(data)
-                jurisdiction.persist(index < len(jurisdiction_data) - 1)
-
-        jurisdiction_import.set_date_imported(self.__helper.get_timestamp())
-        jurisdiction_import.set_dataset_count(len(jurisdiction_data))
-        jurisdiction_import.set_time_taken(self.__helper.end_timer("import"))
-        jurisdiction_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Jurisdiction data imported: {jurisdiction_import.get_dataset_count()} record(s) in {jurisdiction_import.get_time_taken()}s"
-        )
-        return len(jurisdiction_data)
-
-    def __import_data_moon(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.moon import Moon
-
-        if not self.__helper.get_database().table_exists("moon"):
-            return False
-
-        moon_import = ImportData("moon", load=True)
-        if not moon_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        moon_data = self.__api.fetch(self.__api.MOONS)
-        if moon_data:
-            for index, data in enumerate(moon_data):
-                moon = Moon(data["id"])
-                moon.set_data(data)
-                moon.persist(index < len(moon_data) - 1)
-
-        moon_import.set_date_imported(self.__helper.get_timestamp())
-        moon_import.set_dataset_count(len(moon_data))
-        moon_import.set_time_taken(self.__helper.end_timer("import"))
-        moon_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Moon data imported: {moon_import.get_dataset_count()} record(s) in {moon_import.get_time_taken()}s"
-        )
-        return len(moon_data)
-
-    def __import_data_orbit(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.orbit import Orbit
-
-        if not self.__helper.get_database().table_exists("orbit"):
-            return False
-
-        orbit_import = ImportData("orbit", load=True)
-        if not orbit_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        orbit_data = self.__api.fetch(self.__api.ORBITS)
-        if orbit_data:
-            for index, data in enumerate(orbit_data):
-                orbit = Orbit(data["id"])
-                orbit.set_data(data)
-                orbit.persist(index < len(orbit_data) - 1)
-
-        orbit_import.set_date_imported(self.__helper.get_timestamp())
-        orbit_import.set_dataset_count(len(orbit_data))
-        orbit_import.set_time_taken(self.__helper.end_timer("import"))
-        orbit_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Orbit data imported: {orbit_import.get_dataset_count()} record(s) in {orbit_import.get_time_taken()}s"
-        )
-        return len(orbit_data)
-
-    def __import_data_orbit_distance(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.orbit_distance import OrbitDistance
-        from skills.uexcorp.uexcorp.data_access.star_system_data_access import (
-            StarSystemDataAccess,
-        )
-
-        if not self.__helper.get_database().table_exists("orbit_distance"):
-            return False
-
-        orbit_distance_import = ImportData("orbit_distance", load=True)
-        if not orbit_distance_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        # Depends on star_system data
-        self.__import_data_star_system()
-
-        self.__helper.start_timer("import")
-
-        star_system_ids = []
-        star_systems = StarSystemDataAccess().add_filter_by_is_available(True).load()
-        for star_system in star_systems:
-            star_system_ids.append(star_system.get_id())
-
-        orbit_distance_data = self.__api.fetch(
-            self.__api.ORBITS_DISTANCES, {"id_star_system": star_system_ids}
-        )
-        if orbit_distance_data:
-            for index, data in enumerate(orbit_distance_data):
-                orbit_distance = OrbitDistance(data["id"])
-                orbit_distance.set_data(data)
-                orbit_distance.persist(index < len(orbit_distance_data) - 1)
-
-        orbit_distance_import.set_date_imported(self.__helper.get_timestamp())
-        orbit_distance_import.set_dataset_count(len(orbit_distance_data))
-        orbit_distance_import.set_time_taken(self.__helper.end_timer("import"))
-        orbit_distance_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Orbit Distance data imported: {orbit_distance_import.get_dataset_count()} record(s) in {orbit_distance_import.get_time_taken()}s"
-        )
-        return len(orbit_distance_data)
-
-    def __import_data_outpost(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.outpost import Outpost
-
-        if not self.__helper.get_database().table_exists("outpost"):
-            return False
-
-        outpost_import = ImportData("outpost", load=True)
-        if not outpost_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        outpost_data = self.__api.fetch(self.__api.OUTPOSTS)
-        if outpost_data:
-            for index, data in enumerate(outpost_data):
-                outpost = Outpost(data["id"])
-                outpost.set_data(data)
-                outpost.persist(index < len(outpost_data) - 1)
-
-        outpost_import.set_date_imported(self.__helper.get_timestamp())
-        outpost_import.set_dataset_count(len(outpost_data))
-        outpost_import.set_time_taken(self.__helper.end_timer("import"))
-        outpost_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Outpost data imported: {outpost_import.get_dataset_count()} record(s) in {outpost_import.get_time_taken()}s"
-        )
-        return len(outpost_data)
-
-    def __import_data_planet(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.planet import Planet
-
-        if not self.__helper.get_database().table_exists("planet"):
-            return False
-
-        planet_import = ImportData("planet", load=True)
-        if not planet_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        planet_data = self.__api.fetch(self.__api.PLANETS)
-        if planet_data:
-            for index, data in enumerate(planet_data):
-                planet = Planet(data["id"])
-                planet.set_data(data)
-                planet.persist(index < len(planet_data) - 1)
-
-        planet_import.set_date_imported(self.__helper.get_timestamp())
-        planet_import.set_dataset_count(len(planet_data))
-        planet_import.set_time_taken(self.__helper.end_timer("import"))
-        planet_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Planet data imported: {planet_import.get_dataset_count()} record(s) in {planet_import.get_time_taken()}s"
-        )
-        return len(planet_data)
-
-    def __import_data_poi(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.poi import Poi
-
-        if not self.__helper.get_database().table_exists("poi"):
-            return False
-
-        poi_import = ImportData("poi", load=True)
-        if not poi_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        poi_data = self.__api.fetch(self.__api.POI)
-        if poi_data:
-            for index, data in enumerate(poi_data):
-                poi = Poi(data["id"])
-                poi.set_data(data)
-                poi.persist(index < len(poi_data) - 1)
-
-        poi_import.set_date_imported(self.__helper.get_timestamp())
-        poi_import.set_dataset_count(len(poi_data))
-        poi_import.set_time_taken(self.__helper.end_timer("import"))
-        poi_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"POI data imported: {poi_import.get_dataset_count()} record(s) in {poi_import.get_time_taken()}s"
-        )
-        return len(poi_data)
-
-    def __import_data_refinery_audit(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.refinery_audit import RefineryAudit
-
-        if not self.__helper.get_database().table_exists("refinery_audit"):
-            return False
-
-        refinery_audit_import = ImportData("refinery_audit", load=True)
-        if not refinery_audit_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        refinery_audit_data = self.__api.fetch(self.__api.REFINERIES_AUDITS)
-        if refinery_audit_data:
-            for index, data in enumerate(refinery_audit_data):
-                refinery_audit = RefineryAudit(data["id"])
-                refinery_audit.set_data(data)
-                refinery_audit.persist(index < len(refinery_audit_data) - 1)
-
-        refinery_audit_import.set_date_imported(self.__helper.get_timestamp())
-        refinery_audit_import.set_dataset_count(len(refinery_audit_data))
-        refinery_audit_import.set_time_taken(self.__helper.end_timer("import"))
-        refinery_audit_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Refinery Audit data imported: {refinery_audit_import.get_dataset_count()} record(s) in {refinery_audit_import.get_time_taken()}s"
-        )
-        return len(refinery_audit_data)
-
-    def __import_data_refinery_method(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.refinery_method import RefineryMethod
-
-        if not self.__helper.get_database().table_exists("refinery_method"):
-            return False
-
-        refinery_method_import = ImportData("refinery_method", load=True)
-        if not refinery_method_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        refinery_method_data = self.__api.fetch(self.__api.REFINERIES_METHODS)
-        if refinery_method_data:
-            for index, data in enumerate(refinery_method_data):
-                refinery_method = RefineryMethod(data["id"])
-                refinery_method.set_data(data)
-                refinery_method.persist(index < len(refinery_method_data) - 1)
-
-        refinery_method_import.set_date_imported(self.__helper.get_timestamp())
-        refinery_method_import.set_dataset_count(len(refinery_method_data))
-        refinery_method_import.set_time_taken(self.__helper.end_timer("import"))
-        refinery_method_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Refinery Method data imported: {refinery_method_import.get_dataset_count()} record(s) in {refinery_method_import.get_time_taken()}s"
-        )
-        return len(refinery_method_data)
-
-    def __import_data_space_station(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.space_station import SpaceStation
-
-        if not self.__helper.get_database().table_exists("space_station"):
-            return False
-
-        space_station_import = ImportData("space_station", load=True)
-        if not space_station_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        space_station_data = self.__api.fetch(self.__api.SPACE_STATIONS)
-        if space_station_data:
-            for index, data in enumerate(space_station_data):
-                space_station = SpaceStation(data["id"])
-                space_station.set_data(data)
-                space_station.persist(index < len(space_station_data) - 1)
-
-        space_station_import.set_date_imported(self.__helper.get_timestamp())
-        space_station_import.set_dataset_count(len(space_station_data))
-        space_station_import.set_time_taken(self.__helper.end_timer("import"))
-        space_station_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Space Station data imported: {space_station_import.get_dataset_count()} record(s) in {space_station_import.get_time_taken()}s"
-        )
-        return len(space_station_data)
-
-    def __import_data_star_system(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.star_system import StarSystem
-
-        if not self.__helper.get_database().table_exists("star_system"):
-            return False
-
-        star_system_import = ImportData("star_system", load=True)
-        if not star_system_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        star_system_data = self.__api.fetch(self.__api.STAR_SYSTEMS)
-        if star_system_data:
-            for index, data in enumerate(star_system_data):
-                star_system = StarSystem(data["id"])
-                star_system.set_data(data)
-                star_system.persist(index < len(star_system_data) - 1)
-
-        star_system_import.set_date_imported(self.__helper.get_timestamp())
-        star_system_import.set_dataset_count(len(star_system_data))
-        star_system_import.set_time_taken(self.__helper.end_timer("import"))
-        star_system_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Star System data imported: {star_system_import.get_dataset_count()} record(s) in {star_system_import.get_time_taken()}s"
-        )
-        return len(star_system_data)
-
-    def __import_data_terminal(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.terminal import Terminal
-
-        if not self.__helper.get_database().table_exists("terminal"):
-            return False
-
-        terminal_import = ImportData("terminal", load=True)
-        if not terminal_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        terminal_data = self.__api.fetch(self.__api.TERMINALS)
-        if terminal_data:
-            for index, data in enumerate(terminal_data):
-                terminal = Terminal(data["id"])
-                terminal.set_data(data)
-                terminal.persist(index < len(terminal_data) - 1)
-
-        terminal_import.set_date_imported(self.__helper.get_timestamp())
-        terminal_import.set_dataset_count(len(terminal_data))
-        terminal_import.set_time_taken(self.__helper.end_timer("import"))
-        terminal_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Terminal data imported: {terminal_import.get_dataset_count()} record(s) in {terminal_import.get_time_taken()}s"
-        )
-        return len(terminal_data)
-
-    def __import_data_vehicle(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-
-        if not self.__helper.get_database().table_exists("vehicle"):
-            return False
-
-        vehicle_import = ImportData("vehicle", load=True)
-        if not vehicle_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_long()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        vehicle_data = self.__api.fetch(self.__api.VEHICLES)
-        if vehicle_data:
-            for index, data in enumerate(vehicle_data):
-                vehicle = Vehicle(data["id"])
-                vehicle.set_data(data)
-                vehicle.persist(index < len(vehicle_data) - 1)
-
-        vehicle_import.set_date_imported(self.__helper.get_timestamp())
-        vehicle_import.set_dataset_count(len(vehicle_data))
-        vehicle_import.set_time_taken(self.__helper.end_timer("import"))
-        vehicle_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Vehicle data imported: {vehicle_import.get_dataset_count()} record(s) in {vehicle_import.get_time_taken()}s"
-        )
-        return len(vehicle_data)
-
-    def __import_data_vehicle_purchase_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.vehicle_purchase_price import (
-            VehiclePurchasePrice,
-        )
-
-        if not self.__helper.get_database().table_exists("vehicle_purchase_price"):
-            return False
-
-        vehicle_price_import = ImportData("vehicle_purchase_price", load=True)
-        if not vehicle_price_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        vehicle_price_data = self.__api.fetch(self.__api.VEHICLES_PURCHASES_PRICES)
-        if vehicle_price_data:
-            for index, data in enumerate(vehicle_price_data):
-                vehicle_price = VehiclePurchasePrice(data["id"])
-                vehicle_price.set_data(data)
-                vehicle_price.persist(index < len(vehicle_price_data) - 1)
-
-        vehicle_price_import.set_date_imported(self.__helper.get_timestamp())
-        vehicle_price_import.set_dataset_count(len(vehicle_price_data))
-        vehicle_price_import.set_time_taken(self.__helper.end_timer("import"))
-        vehicle_price_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Vehicle Price data imported: {vehicle_price_import.get_dataset_count()} record(s) in {vehicle_price_import.get_time_taken()}s"
-        )
-        return len(vehicle_price_data)
-
-    def __import_data_vehicle_rental_price(self) -> bool | int:
-        from skills.uexcorp.uexcorp.model.import_data import ImportData
-        from skills.uexcorp.uexcorp.model.vehicle_rental_price import (
-            VehicleRentalPrice,
-        )
-
-        if not self.__helper.get_database().table_exists("vehicle_rental_price"):
-            return False
-
-        vehicle_rental_import = ImportData("vehicle_rental_price", load=True)
-        if not vehicle_rental_import.needs_import(
-            self.__helper.get_handler_config().get_cache_lifetime_mid()
-        ):
-            return False
-
-        self.__helper.start_timer("import")
-
-        vehicle_rental_data = self.__api.fetch(self.__api.VEHICLES_RENTALS_PRICES)
-        if vehicle_rental_data:
-            for index, data in enumerate(vehicle_rental_data):
-                vehicle_rental = VehicleRentalPrice(data["id"])
-                vehicle_rental.set_data(data)
-                vehicle_rental.persist(index < len(vehicle_rental_data) - 1)
-
-        vehicle_rental_import.set_date_imported(self.__helper.get_timestamp())
-        vehicle_rental_import.set_dataset_count(len(vehicle_rental_data))
-        vehicle_rental_import.set_time_taken(self.__helper.end_timer("import"))
-        vehicle_rental_import.persist()
-        self.__helper.get_handler_debug().write(
-            f"Vehicle Rental data imported: {vehicle_rental_import.get_dataset_count()} record(s) in {vehicle_rental_import.get_time_taken()}s"
-        )
-        return len(vehicle_rental_data)
+        return len(rows)
 
     def destroy(self) -> None:
-        # Only wait for import if it was actually started
-        if self.__import_started and self.__imported_percent != 100:
+        """Stops a running import right away instead of waiting for it.
+
+        The interrupted bundle stays outdated, so the next start fetches it again."""
+        with self.__state_lock:
+            self.active = False  # no new import can start from here on
+        # Aborts retry waits and running downloads (checked per chunk)
+        self.__api.cancel()
+
+        # A prepare's version check uses the database too (before any import runs): wait for it
+        if self.__prepare_lock.acquire(timeout=self.STOP_TIMEOUT):
+            self.__prepare_lock.release()
+
+        if self.__idle.is_set():
+            return
+        self.__helper.get_handler_debug().write(
+            f"Stopping running import at {self.__imported_percent}% for unload, it continues with the next start ..."
+        )
+        # Wait for the import thread to stop before the database gets closed
+        if self.__idle.wait(self.STOP_TIMEOUT):
+            self.__helper.get_handler_debug().write("Import stopped.")
+        else:
             self.__helper.get_handler_debug().write(
-                f"UEX skill is tried to unload but import state is {self.__imported_percent}%."
+                f"Import did not stop within {self.STOP_TIMEOUT}s, unloading anyway.", True
             )
-            self.__helper.toast(
-                f"UEX: Waiting for import to complete before unloading ({self.__imported_percent}%)..."
-            )
-
-            # wait until import is completed but max 60s
-            time_spend = 0
-            while self.__imported_percent < 100 and time_spend < 60:
-                time.sleep(0.2)
-                time_spend += 0.2
-
-            if self.__imported_percent < 100:
-                self.__helper.get_handler_debug().write(
-                    f"UEX skill is tried to unload but import state is still {self.__imported_percent}%. Force unload."
-                )
-                self.__helper.toast(
-                    "UEX: Force continuing unloading skill due to import timeout."
-                )
-            else:
-                self.__helper.get_handler_debug().write(
-                    f"UEX skill is unloaded after import completed with {self.__imported_percent}%."
-                )
-                self.__helper.toast("UEX: Import completed, skill unloading continues.")
-        self.active = False

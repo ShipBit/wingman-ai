@@ -15,6 +15,8 @@ class CategoryAttribute(DataModel):
             category_name: str | None = None, # varchar(255)
             date_added: int | None = None, # int(11)
             date_modified: int | None = None, # int(11)
+            description: str | None = None, # string(255)
+            is_lower_better: int | None = None, # int(1)
             load: bool = False,
     ):
         super().__init__("category_attribute")
@@ -25,6 +27,8 @@ class CategoryAttribute(DataModel):
             "category_name": category_name,
             "date_added": date_added,
             "date_modified": date_modified,
+            "description": description,
+            "is_lower_better": is_lower_better,
             "last_import_run_id": None,
         }
         if load:
@@ -76,6 +80,12 @@ class CategoryAttribute(DataModel):
 
     def get_date_modified_readable(self) -> datetime | None:
         return datetime.fromtimestamp(self.data["date_modified"])
+
+    def get_description(self) -> str | None:
+        return self.data["description"]
+
+    def get_is_lower_better(self) -> int | None:
+        return self.data["is_lower_better"]
 
     def __str__(self):
         return str(self.data["name"])

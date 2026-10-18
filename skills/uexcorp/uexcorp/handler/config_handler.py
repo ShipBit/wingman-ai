@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from api.enums import WingmanInitializationErrorType
 from api.interface import WingmanInitializationError
 from services.file import get_writable_dir
+from skills.uexcorp.uexcorp.route_planner import RANKING_PROFIT_PER_STOP, RANKINGS
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 def get_tools() -> tuple[list, bool]:
     from skills.uexcorp.uexcorp.tool.commodity_information import CommodityInformation
     from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
+    from skills.uexcorp.uexcorp.tool.active_trade_route import ActiveTradeRoute
     from skills.uexcorp.uexcorp.tool.item_information import ItemInformation
     from skills.uexcorp.uexcorp.tool.location_information import LocationInformation
     from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
@@ -32,6 +34,7 @@ def get_tools() -> tuple[list, bool]:
         tools.append(CommodityRoute.TOOL_NAME)
         if CommodityRoute.REQUIRES_AUTHENTICATION:
             needs_authentication = True
+        tools.append(ActiveTradeRoute.TOOL_NAME)
 
         # if True or retrieve_custom_property_value("tool_item_information", errors):
         tools.append(ItemInformation.TOOL_NAME)
@@ -66,32 +69,26 @@ class ConfigHandler:
         self.__helper = helper
         self.__wingman: "WingmanContext | None" = None
         self.__fine_config_path: str = get_writable_dir(os.path.join(self.__helper.get_data_path(), "config"))
-        self.__api_url: str = "https://api.uexcorp.space/2.0"
-        self.__api_use_key: bool = False
-        self.__api_key: str | None = None
-        self.__api_timeout: int = 10
-        self.__api_retries: int = 2
+        self.__api_url: str = "https://data-relay.de/wingmanai/uex/v3"
+        self.__api_timeout: int = 10  # seconds per connect/read, not for the whole download
+        # Retries are part of the API client: Uex.MAX_RETRIES
 
-        self.__cache_lifetime_short: int = 60 * 60# 30 minutes
-        self.__cache_lifetime_mid: int = 24 * 60 * 60 # 24 hours
+        # Longest time a relay bundle is kept; usually refreshed earlier, when the relay has newer data.
+        # Short: prices and alerts (+ game version check), long: everything else. Trade routes are derived locally.
+        self.__cache_lifetime_short: int = 2 * 60 * 60 # 2 hours
         self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 # 14 days
 
-        tools, needs_authentication = get_tools()
+        tools, _ = get_tools()
         self.__property_retriever = None
         self.__behavior_enabled_tools: list[str] = tools
-        self.__behavior_enabled_tools_need_authentication: bool = needs_authentication
         self.__behavior_commodity_route_default_count: int = 1
         self.__behavior_commodity_route_use_estimated_availability: bool = True
         self.__behavior_commodity_route_advanced_info: bool = False
-        self.__behavior_use_fasterwhisper_hotwords: bool = False
+        self.__behavior_commodity_route_ranking: str = RANKING_PROFIT_PER_STOP
 
     async def validate(self, errors: list[WingmanInitializationError], retrieve_custom_property_value: callable) -> list[WingmanInitializationError]:
         self.__property_retriever = retrieve_custom_property_value
         try:
-            self.set_behavior_update_fasterwhisper_hotwords(
-                retrieve_custom_property_value("add_fasterwhisper_hotwords", errors)
-            )
-
             self.set_behavior_commodity_route_default_count(
                 retrieve_custom_property_value("commodity_route_default_count", errors)
             )
@@ -104,14 +101,8 @@ class ConfigHandler:
                 retrieve_custom_property_value("commodity_route_advanced_info", errors)
             )
 
-            if self.__behavior_enabled_tools_need_authentication:
-                api_key = await self.__helper.get_handler_secret().retrieve(
-                    requester="UEX config service",
-                    key="uex",
-                    prompt_if_missing=True
-                )
-                if api_key:
-                    self.set_api_key(api_key)
+            # Ranking and default stops are read on demand (getters): saved configs from before these
+            # options don't have them, and Core doesn't add new options to saved configs
 
         except Exception as e:
             self.__helper.get_handler_debug().write(f"Error while validating config: {e}", True)
@@ -127,6 +118,9 @@ class ConfigHandler:
         return errors
 
     def sync_blacklists(self):
+        # Without data the files would be rewritten as empty lists, losing the user's choices
+        if not self.__helper.get_handler_import() or not self.__helper.get_handler_import().has_data():
+            return
         self.__sync_commodity_blacklist()
         self.__sync_terminal_blacklist()
 
@@ -143,7 +137,7 @@ class ConfigHandler:
         # sync status from file to database
         if os.path.exists(file_path):
             try:
-                with open(file_path, "r") as file:
+                with open(file_path, "r", encoding="utf-8") as file:
                     commodity_data = yaml.safe_load(file)
 
                 if commodity_data:
@@ -173,12 +167,17 @@ class ConfigHandler:
                 }
             )
 
-        with open(file_path, 'w') as file:
-            file.write("# Only the 'is_blacklisted' value must be changed to 'true' or 'false'.")
-            file.write("\n# Blacklisted commodities ('is_blacklisted: true') will be ignored in trade route calculations.")
-            file.write("\n# If the yaml-format gets corrupted, the file will be deleted and recreated on the next start.")
-            file.write("\n# This would reset previous set commodity blacklists.\n\n")
-            file.write(yaml.dump(commodity_data))
+        try:
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write("# Only the 'is_blacklisted' value must be changed to 'true' or 'false'.")
+                file.write("\n# Blacklisted commodities ('is_blacklisted: true') will be ignored in trade route calculations.")
+                file.write("\n# If the yaml-format gets corrupted, the file will be deleted and recreated on the next start.")
+                file.write("\n# This would reset previous set commodity blacklists.\n\n")
+                file.write(yaml.dump(commodity_data))
+        except Exception as e:
+            # E.g. the file is open in an editor: the next import run writes it again
+            self.__helper.get_handler_debug().write(f"Error while writing commodity blacklist: {e}")
+            self.__helper.get_handler_error().write("ConfigHandler.__init_commodity_blacklist", [], e)
 
     def __sync_terminal_blacklist(self):
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
@@ -193,7 +192,7 @@ class ConfigHandler:
         # sync status from file to database
         if os.path.exists(file_path):
             try:
-                with open(file_path, "r") as file:
+                with open(file_path, "r", encoding="utf-8") as file:
                     terminal_data = yaml.safe_load(file)
 
                 for index, terminal in enumerate(terminal_data):
@@ -226,7 +225,7 @@ class ConfigHandler:
             )
 
         try:
-            with open(file_path, "w") as file:
+            with open(file_path, "w", encoding="utf-8") as file:
                 file.write("# Only the 'is_blacklisted' value must be changed to 'true' or 'false'.")
                 file.write("\n# Blacklisted terminals ('is_blacklisted: true') will be ignored in trade route calculations and buy/sell recommendations.")
                 file.write("\n# If the yaml-format gets corrupted, the file will be deleted and recreated on the next start.")
@@ -239,20 +238,11 @@ class ConfigHandler:
     def is_tool_enabled(self, tool_name: str) -> bool:
         return tool_name in self.__behavior_enabled_tools
 
-    def handle_secret_change(self, api_key: str):
-        self.set_api_key(api_key)
-
     def get_api_url(self) -> str:
         return self.__api_url
 
     def set_api_url(self, api_url: str):
         self.__api_url = api_url
-
-    def get_api_key(self) -> str | None:
-        return self.__api_key
-
-    def set_api_key(self, api_key: str):
-        self.__api_key = api_key
 
     def get_api_timeout(self) -> int:
         return self.__api_timeout
@@ -260,23 +250,11 @@ class ConfigHandler:
     def set_api_timeout(self, api_timeout: int):
         self.__api_timeout = api_timeout
 
-    def get_api_retries(self) -> int:
-        return self.__api_retries
-
-    def set_api_retries(self, api_retries: int):
-        self.__api_retries = api_retries
-
     def get_cache_lifetime_short(self) -> int:
         return self.__cache_lifetime_short
 
     def set_cache_lifetime_short(self, cache_timeout_general: int):
         self.__cache_lifetime_short = cache_timeout_general
-
-    def get_cache_lifetime_mid(self) -> int:
-        return self.__cache_lifetime_mid
-
-    def set_cache_lifetime_mid(self, cache_timeout_routes: int):
-        self.__cache_lifetime_mid = cache_timeout_routes
 
     def get_cache_lifetime_long(self) -> int:
         return self.__cache_lifetime_long
@@ -295,7 +273,20 @@ class ConfigHandler:
         return self.__behavior_commodity_route_default_count
 
     def set_behavior_commodity_route_default_count(self, default_count: int):
-        self.__behavior_commodity_route_default_count = default_count
+        # The same range as the tool's limit parameter
+        try:
+            self.__behavior_commodity_route_default_count = max(1, min(15, int(default_count)))
+        except (TypeError, ValueError):
+            self.__behavior_commodity_route_default_count = 1
+
+    def get_behavior_commodity_route_default_max_stops(self) -> int:
+        # Read on demand only: configs saved before this option don't have it and get 1
+        errors = []
+        value = self.__property_retriever("commodity_route_default_max_stops", errors) if self.__property_retriever else None
+        try:
+            return max(1, int(value)) if not errors and value is not None else 1
+        except (TypeError, ValueError):
+            return 1
 
     def get_behavior_commodity_route_use_estimated_availability(self) -> bool:
         # Before validate() (the skill never activated) only the stored value exists.
@@ -323,18 +314,16 @@ class ConfigHandler:
     def set_behavior_commodity_route_advanced_info(self, advanced_info: bool):
         self.__behavior_commodity_route_advanced_info = advanced_info
 
-    def get_behavior_use_fasterwhisper_hotwords(self) -> bool:
-        # Before validate() (the skill never activated) only the stored value exists.
-        if not self.__property_retriever:
-            return self.__behavior_use_fasterwhisper_hotwords
+    def get_behavior_commodity_route_ranking(self) -> str:
         errors = []
-        value = self.__property_retriever("add_fasterwhisper_hotwords", errors)
-        if not errors:
-            self.set_behavior_update_fasterwhisper_hotwords(value)
-        return self.__behavior_use_fasterwhisper_hotwords
+        value = self.__property_retriever("commodity_route_ranking", errors) if self.__property_retriever else None
+        if not errors and value is not None:
+            self.set_behavior_commodity_route_ranking(value)
+        return self.__behavior_commodity_route_ranking
 
-    def set_behavior_update_fasterwhisper_hotwords(self, update: bool):
-        self.__behavior_use_fasterwhisper_hotwords = update
+    def set_behavior_commodity_route_ranking(self, ranking: str | None):
+        # Unknown or missing values (e.g. config from before this option) fall back to the default
+        self.__behavior_commodity_route_ranking = ranking if ranking in RANKINGS else RANKING_PROFIT_PER_STOP
 
     def set_wingman(self, wingman: "WingmanContext"):
         self.__wingman = wingman

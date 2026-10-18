@@ -1,3 +1,5 @@
+import operator
+
 from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
@@ -7,8 +9,46 @@ class CommodityInformation(Tool):
     REQUIRES_AUTHENTICATION = False
     TOOL_NAME = "uex_get_commodity_information"
 
+    OPERATIONS = {
+        "=": operator.eq,
+        "!=": operator.ne,
+        ">=": operator.ge,
+        "<=": operator.le,
+        "<": operator.lt,
+        ">": operator.gt,
+    }
+
     def __init__(self):
         super().__init__()
+
+    @staticmethod
+    def __filter_by_prices(
+        commodity_data_access,
+        terminal_ids: list[int] | None,
+        buy_conditions: list[tuple[int, str]] | None = None,
+        sell_conditions: list[tuple[int, str]] | None = None,
+    ) -> None:
+        """Limit to commodities with a price row (at the given terminals) that meets all conditions."""
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+
+        commodity_price_data_access = CommodityPriceDataAccess()
+        if terminal_ids is not None:
+            commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
+        if buy_conditions:
+            commodity_price_data_access.add_filter_by_is_buyable(True)
+            for price, operation in buy_conditions:
+                commodity_price_data_access.add_filter_by_price_buy(price, operation=operation)
+        if sell_conditions:
+            commodity_price_data_access.add_filter_by_is_sellable(True)
+            for price, operation in sell_conditions:
+                commodity_price_data_access.add_filter_by_price_sell(price, operation=operation)
+        commodity_data_access.add_filter_by_id(list({
+            commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
+        }))
+
+    @classmethod
+    def __matches(cls, value: float | None, conditions: list[tuple[int, str]]) -> bool:
+        return value is not None and all(cls.OPERATIONS[operation](value, number) for number, operation in conditions)
 
     def execute(
         self,
@@ -25,18 +65,15 @@ class CommodityInformation(Tool):
         filter_base_profit_percent: list[(int, str)] | None = None,
     ) -> (str, str):
         from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
         from skills.uexcorp.uexcorp.model.terminal import Terminal
         from skills.uexcorp.uexcorp.helper import Helper
 
-        helper = Helper().get_instance()
+        helper = Helper.get_instance()
 
         commodity_data_access = CommodityDataAccess()
-        commodity_prices = []
-        terminal_ids = []
 
-        if filter_commodities is not None:
+        if filter_commodities:
             # if names are given, other filters are no longer needed
             commodity_data_access.add_filter_by_name(filter_commodities)
         else:
@@ -50,97 +87,45 @@ class CommodityInformation(Tool):
             if filter_is_legal is not None:
                 commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
 
-            if filter_location_whitelist is not None or filter_location_blacklist is not None:
+            # Locations limit the terminals that price filters look at, so "buy <= 150 at Lorville" means at Lorville
+            terminal_ids = None
+            if filter_location_whitelist or filter_location_blacklist:
                 terminal_data_access = TerminalDataAccess()
                 terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
-                # terminal_data_access.add_filter_by_is_available(True)
-
-                if filter_location_whitelist is not None:
+                if filter_location_whitelist:
                     terminal_data_access.add_filter_by_location_name_whitelist(filter_location_whitelist)
-
-                if filter_location_blacklist is not None:
+                if filter_location_blacklist:
                     terminal_data_access.add_filter_by_location_name_blacklist(filter_location_blacklist)
+                terminal_ids = [terminal.get_id() for terminal in terminal_data_access.load()]
 
-                for terminal in terminal_data_access.load():
-                    terminal_ids.append(terminal.get_id())
-
-                commodity_price_data_access = CommodityPriceDataAccess()
-                commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
-                commodity_prices = commodity_price_data_access.load()
-                commodity_data_access.add_filter_by_id([
-                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
-                ])
-
+            # Buy and sell conditions may match at different terminals (buy here, sell there)
             if filter_buy_price:
-                commodity_price_data_access = CommodityPriceDataAccess()
-                commodity_price_data_access.add_filter_by_is_buyable(True)
-                for price, operation in filter_buy_price:
-                    commodity_price_data_access.add_filter_by_price_buy(price, operation=operation)
-                commodity_prices = commodity_price_data_access.load(debug=True)
-                commodity_data_access.add_filter_by_id([
-                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
-                ])
-
+                self.__filter_by_prices(commodity_data_access, terminal_ids, buy_conditions=filter_buy_price)
             if filter_sell_price:
-                commodity_price_data_access = CommodityPriceDataAccess()
-                commodity_price_data_access.add_filter_by_is_sellable(True)
-                for price, operation in filter_sell_price:
-                    commodity_price_data_access.add_filter_by_price_sell(price, operation=operation)
-                commodity_prices = commodity_price_data_access.load(debug=True)
-                commodity_data_access.add_filter_by_id([
-                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
-                ])
+                self.__filter_by_prices(commodity_data_access, terminal_ids, sell_conditions=filter_sell_price)
+            if terminal_ids is not None and not filter_buy_price and not filter_sell_price:
+                self.__filter_by_prices(commodity_data_access, terminal_ids)
 
         commodities = commodity_data_access.load()
 
-        if commodities and filter_commodities is None:
-            if filter_profit_margin_percent:
-                temp_commodities = []
-                for percentage, operation in filter_profit_margin_percent:
-                    for commodity in commodities:
-                        if commodity.get_profit_margin_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
-                            try:
-                                if eval(f"{commodity.get_profit_margin_max()} {operation} {percentage}"):
-                                    temp_commodities.append(commodity)
-                            except Exception:
-                                self._helper.get_handler_debug().write("Unable to evaluate profit margin percentage filter.")
-                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_margin_max()} {operation} {percentage}")
-                                pass
-                commodities = temp_commodities
-
-            if filter_profit_absolute_per_scu:
-                temp_commodities = []
-                for absolute_per_scu, operation in filter_profit_absolute_per_scu:
-                    for commodity in commodities:
-                        if commodity.get_profit_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
-                            try:
-                                if eval(f"{commodity.get_profit_max()} {operation} {absolute_per_scu}"):
-                                    temp_commodities.append(commodity)
-                            except Exception:
-                                self._helper.get_handler_debug().write("Unable to evaluate profit absolute per SCU filter.")
-                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_max()} {operation} {absolute_per_scu}")
-                                pass
-                commodities = temp_commodities
-
-            if filter_base_profit_percent:
-                temp_commodities = []
-                for percentage, operation in filter_base_profit_percent:
-                    for commodity in commodities:
-                        if commodity.get_base_profit_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
-                            try:
-                                if eval(f"{commodity.get_base_profit_max()} {operation} {percentage}"):
-                                    temp_commodities.append(commodity)
-                            except Exception:
-                                self._helper.get_handler_debug().write("Unable to evaluate base profit percentage filter.")
-                                self._helper.get_handler_debug().write(f"eval: {commodity.get_base_profit_max()} {operation} {percentage}")
-                                pass
-                commodities = temp_commodities
+        if commodities and not filter_commodities:
+            # Several conditions on one value must all match
+            for conditions, get_value in (
+                (filter_profit_margin_percent, lambda commodity: commodity.get_profit_margin_max()),
+                (filter_profit_absolute_per_scu, lambda commodity: commodity.get_profit_max()),
+                (filter_base_profit_percent, lambda commodity: commodity.get_base_profit_max()),
+            ):
+                if conditions:
+                    commodities = [
+                        commodity for commodity in commodities
+                        if self.__matches(get_value(commodity), conditions)
+                    ]
 
             if filter_profit_margin_percent or filter_base_profit_percent:
-                commodities = sorted(commodities, key=lambda x: x.get_profit_margin_max(), reverse=True)
+                commodities = sorted(commodities, key=lambda x: x.get_profit_margin_max() or 0, reverse=True)
                 helper.get_handler_tool().add_note("Commodities are sorted by profit margin percentage DESC")
             elif filter_profit_absolute_per_scu:
-                commodities = sorted(commodities, key=lambda x: x.get_profit_max(), reverse=True)
+                commodities = sorted(commodities, key=lambda x: x.get_profit_max() or 0, reverse=True)
                 helper.get_handler_tool().add_note("Commodities are sorted by absolute profit per SCU DESC")
 
         if not commodities:
@@ -195,54 +180,68 @@ class CommodityInformation(Tool):
             "filter_commodities": Validator(
                 Validator.VALIDATE_COMMODITY,
                 multiple=True,
-                prompt="Provide one or multiple commodity names to filter by name. (e.g. \"Agricium\")",
+                prompt="Commodity names, e.g. [\"Agricium\", \"Laranite\"]. Shows where each can be bought and sold. If set, all other filters are ignored.",
             ),
             "filter_is_buyable": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only commodities with buy options are shown.",
+                prompt="If true, only commodities the player can buy somewhere.",
             ),
             "filter_is_sellable": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only commodities with sell options are shown.",
+                prompt="If true, only commodities the player can sell somewhere.",
             ),
             "filter_is_legal": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only legal commodities are shown, if false, only illegal commodities are shown.",
+                prompt="True = only legal commodities, false = only illegal (contraband) commodities. Leave out for both.",
             ),
             "filter_location_whitelist": Validator(
                 Validator.VALIDATE_LOCATION,
                 multiple=True,
-                prompt="Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. [\"Hurston\", \"Bloom\"])"
+                prompt="Only commodities that can be bought or sold at these locations (star system, planet, moon, station, city, outpost or terminal), e.g. [\"Hurston\", \"Bloom\"]. Price filters then only look at these locations."
+            ),
+            "filter_location_blacklist": Validator(
+                Validator.VALIDATE_LOCATION,
+                multiple=True,
+                prompt="Ignore these locations (star system, planet, moon, station, city, outpost or terminal), e.g. [\"Pyro\"]: only commodities traded elsewhere, and price filters skip these locations."
             ),
             "filter_buy_price": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
-                prompt="Filter for commodities for buy price. Multiples are combined by AND.",
+                prompt="Buy price per SCU in aUEC. Each entry is {operation, value}, e.g. [{\"operation\": \">=\", \"value\": 1000}]. Several entries must all match.",
             ),
             "filter_sell_price": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
-                prompt="Filter for commodities for sell price. Multiples are combined by AND.",
+                prompt="Sell price per SCU in aUEC. Each entry is {operation, value}, e.g. [{\"operation\": \">=\", \"value\": 1000}]. Several entries must all match.",
             ),
             "filter_profit_margin_percent": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
-                prompt="Filter for commodities for profit margin percentage. For 50%, use '50' NOT '0.5'. Multiples are combined by AND.",
+                prompt="Best profit margin in percent (profit divided by sell price). For 50% use 50, not 0.5. Each entry is {operation, value}, e.g. [{\"operation\": \">=\", \"value\": 50}].",
             ),
             "filter_base_profit_percent": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
-                prompt="Filter for commodities for base profit percentage. For 50%, use '50' NOT '0.5'. Multiples are combined by AND.",
+                prompt="Best base profit in percent (profit divided by buy price). For 50% use 50, not 0.5. Each entry is {operation, value}, e.g. [{\"operation\": \">=\", \"value\": 50}].",
             ),
             "filter_profit_absolute_per_scu": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
-                prompt="Filter for commodities for profit margin absolute per SCU. Multiples are combined by AND.",
+                prompt="Best profit per SCU in aUEC (best sell price minus best buy price). Each entry is {operation, value}, e.g. [{\"operation\": \">=\", \"value\": 500}].",
             ),
         }
 
     def get_description(self) -> str:
-        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters."
+        return (
+            "Look up commodities (trade goods like Laranite or Medical Supplies): where to buy and sell them, "
+            "prices per SCU, stock and demand, best profit per SCU. Use it for 'where can I buy/sell X' "
+            "or 'what can I trade at Y'. For a full route from A to B use uex_get_trade_routes instead. "
+            "Items like weapons or armor are not commodities: use uex_get_item_information."
+        )
 
     def get_prompt(self) -> str:
-        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, price AND the stock/demand status (e.g. 'high stock' for buy options, 'no demand' for sell options). If users gives specific buy or sell price and asks for profit margin, always use uex_calculate_profit function afterwards to calculate correct profit with user values."
+        return (
+            "Where to buy or sell a commodity, and what can be traded at a location. "
+            "Always name for each buy/sell option: terminal, price AND stock/demand status (e.g. 'high stock' when buying, 'no demand' when selling). "
+            "If the user gives own prices and asks for profit, call uex_calculate_profit afterwards."
+        )

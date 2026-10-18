@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from os import path
 from services.file import get_writable_dir
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 
 from skills.uexcorp.uexcorp.handler.config_handler import ConfigHandler
 from skills.uexcorp.uexcorp.database.database import Database
@@ -34,15 +33,21 @@ class Helper:
     @classmethod
     def destroy_instance(cls):
         if cls._instance is not None:
-            cls._instance.get_handler_import().destroy()
-            cls._instance.get_database().destroy()
-            cls._instance.sync_fasterwhisper_hotwords(unload=True)
+            cls._instance.stop()
+            if cls._instance.get_handler_import():
+                cls._instance.get_handler_import().destroy()
+            if cls._instance.get_database():
+                cls._instance.get_database().destroy()
         cls._instance = None
+
+    def stop(self):
+        """Ends waits of the background loop at once (unload)."""
+        self.__stop_event.set()
 
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_skill: str = 'v2.2.0-20260524'
+        self.__version_skill: str = 'v3.0.0-20261014'
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()
@@ -60,13 +65,11 @@ class Helper:
         self.__additional_context = []
         self.__threaded_execution: callable | None = None
         self.__is_ready = False
-        self.__secret_keeper = SecretKeeper()
-        self.__secret_keeper.secret_events.subscribe(
-            "secrets_saved", self.on_secret_changed
-        )
         self.__request_while_not_ready = False
         self.__data_pool_recreated = False
         self.__wingman = None
+        self.__owner: str | None = None  # name of the Wingman that activated the skill
+        self.__stop_event = threading.Event()
 
     def prepare(self, threaded_execution: callable, wingman: "WingmanContext"):
         from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
@@ -80,6 +83,18 @@ class Helper:
         self.__handler_import: ImportHandler = ImportHandler(self)
         self.__handler_tool: ToolHandler = ToolHandler(self)
         self.__llm: Llm = Llm(self)
+
+    def is_prepared(self) -> bool:
+        return self.__handler_import is not None
+
+    def get_owner(self) -> str | None:
+        return self.__owner
+
+    def claim(self, wingman: "WingmanContext"):
+        """The Wingman that activated the skill owns it: its context (HUD, System One) is used."""
+        self.__owner = wingman.name
+        self.__wingman = wingman
+        self.get_handler_config().set_wingman(wingman)
 
     def ensure_version_parity(self, force_check: bool = False):
         if force_check:
@@ -100,7 +115,7 @@ class Helper:
             self.__handler_debug.write(
                 f"Versions: Skill: {old_version_skill} -> {self.__version_skill} | UEX: {old_version_uex} -> {self.__version_uex}"
             )
-            self.set_ready(True)
+            self.set_ready(False)
             self.get_database().recreate_database()
             self.__data_pool_recreated = True
         elif force_check:
@@ -108,14 +123,13 @@ class Helper:
                 f"Version parity is still given. Skill: {old_version_skill} | UEX: {old_version_uex}"
             )
 
-    def on_secret_changed(self, secrets: dict[str, any]):
-        if "uex" in secrets:
-            self.__handler_config.handle_secret_change(secrets["uex"])
-
     def on_import_completed(self, imported_rows_count: int):
+        # Only called with data (ImportHandler.import_data)
         self.get_handler_config().sync_blacklists()
         self.__version_uex = self.get_handler_import().get_version_uex()
         self.set_ready(True)
+        # Location names are matched on almost every call: embed them now, not on the first voice request
+        self.run_in_thread(self.__warm_up_location_embeddings)
         if self.__data_pool_recreated:
             self.__data_pool_recreated = False
             self.__handler_debug.write(
@@ -123,93 +137,25 @@ class Helper:
                 True,
             )
 
-    def sync_fasterwhisper_hotwords(self, unload: bool = False):
-        if not self.get_handler_config().get_behavior_use_fasterwhisper_hotwords():
+    def __warm_up_location_embeddings(self):
+        from skills.uexcorp.uexcorp.tool.validator import Validator
+
+        if self.__stop_event.is_set():
             return
+        try:
+            self.start_timer("embeddings")
+            names = set(Validator.location_names(True)) | set(Validator.location_names(False))
+            if self.get_llm().embed_names(names):
+                self.__handler_debug.write(f"Location names embedded: {len(names)} in {self.end_timer('embeddings')}s")
+            else:
+                self.__handler_debug.write("No embedding model available, location names are matched without it.")
+        except Exception as e:
+            # After an unload the database is closed: nothing to tell the user
+            self.__handler_debug.write(f"Embedding location names failed: {e}", not self.__stop_event.is_set())
 
-        self.__handler_debug.write(
-            f"{'Unloading' if unload else 'Syncing'} UEX unique names with the hotword list..."
-        )
-        from skills.uexcorp.uexcorp.data_access.city_data_access import (
-            CityDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.commodity_data_access import (
-            CommodityDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.company_data_access import (
-            CompanyDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.item_data_acceess import (
-            ItemDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.moon_data_access import (
-            MoonDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.outpost_data_access import (
-            OutpostDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.planet_data_access import (
-            PlanetDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-        from skills.uexcorp.uexcorp.data_access.space_station_data_access import (
-            SpaceStationDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.star_system_data_access import (
-            StarSystemDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.terminal_data_access import (
-            TerminalDataAccess,
-        )
-        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import (
-            VehicleDataAccess,
-        )
-
-        data_access_instances = [
-            CityDataAccess(),
-            CommodityDataAccess(),
-            # CompanyDataAccess(),
-            # ItemDataAccess(),
-            MoonDataAccess(),
-            # OutpostDataAccess(),
-            PlanetDataAccess(),
-            # PoiDataAccess(),
-            SpaceStationDataAccess(),
-            StarSystemDataAccess(),
-            # TerminalDataAccess(),
-            VehicleDataAccess(),
-        ]
-
-        uex_hotwords = ["UEX"]
-        for data_access in data_access_instances:
-            data = data_access.load()
-            for item in data:
-                item_name = str(item).strip()
-                if item_name:
-                    uex_hotwords.append(item_name)
-        uex_hotwords = list(set(uex_hotwords)) # remove duplicates
-
-        stt = self.get_wingmen().stt
-        if unload:
-            hotword_change = -stt.remove_hotwords(uex_hotwords)
-        else:
-            hotword_change = stt.add_hotwords(uex_hotwords)
-        if hotword_change < 0:
-            self.__handler_debug.write(
-                f"Removed {abs(hotword_change)} UEX hotwords."
-            )
-        elif hotword_change > 0:
-            self.__handler_debug.write(
-                f"Synced {hotword_change} new UEX hotwords."
-            )
-        else:
-            self.__handler_debug.write(
-                "No new UEX hotwords to sync."
-            )
-
-    def wait(self, seconds: int):
-        """Blocking wait, for worker threads only."""
-        time.sleep(seconds)
+    def wait(self, seconds: float) -> bool:
+        """Blocking wait, for worker threads only. True when the skill was unloaded meanwhile."""
+        return self.__stop_event.wait(seconds)
 
     async def wait_async(self, seconds: float):
         await asyncio.sleep(seconds)
@@ -219,15 +165,8 @@ class Helper:
 
     def set_ready(self, ready: bool = True):
         self.__is_ready = ready
-
-        async def add_loaded_message():
-            await self.get_wingmen().conversation.add_assistant(
-                "UEX skill is now loaded and ready to use."
-            )
-
+        # The import already told the user the data is back ("reachable again"): no second notice
         if ready and self.get_request_while_not_ready():
-            self.__handler_debug.write("UEX functions are available now.", True)
-            self.run_in_thread(add_loaded_message)
             self.set_request_while_not_loaded(False)
 
     def is_loaded(self) -> bool:
@@ -284,9 +223,6 @@ class Helper:
     def get_handler_tool(self) -> "ToolHandler":
         return self.__handler_tool
 
-    def get_handler_secret(self) -> SecretKeeper:
-        return self.__secret_keeper
-
     def is_debug(self) -> bool:
         return self.__debug
 
@@ -308,8 +244,14 @@ class Helper:
     def get_timestamp(self) -> int:
         return int(datetime.datetime.now().timestamp())
 
+    MAX_CONTEXT_NOTES = 10
+
     def add_context(self, context: str):
+        # Name hints ("Use 'X' instead of 'Y'") go into every prompt: only the latest few, no repeats
+        if context in self.__additional_context:
+            self.__additional_context.remove(context)
         self.__additional_context.append(context)
+        del self.__additional_context[:-self.MAX_CONTEXT_NOTES]
         self.get_handler_debug().write(f"Added context: {context}")
 
     def get_context(self) -> str:

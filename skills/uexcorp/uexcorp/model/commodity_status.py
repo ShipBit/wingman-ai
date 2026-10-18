@@ -6,13 +6,15 @@ class CommodityStatus(DataModel):
 
     def __init__(
             self,
-            code: int, # int(11)
+            code: str, # string(255)
             is_buy: bool, # int(1)
             name: str | None = None, # string(255)
             name_short: str | None = None, # string(255)
             name_abbr: str | None = None, # string(255)
             percentage: str | None = None, # string(255)
             colors: str | None = None, # string(255)
+            percentage_start: float | None = None, # float
+            percentage_end: float | None = None, # float
             load: bool = False,
     ):
         super().__init__("commodity_status")
@@ -24,6 +26,8 @@ class CommodityStatus(DataModel):
             "percentage": percentage,
             "colors": colors,
             "is_buy": is_buy,
+            "percentage_start": percentage_start,
+            "percentage_end": percentage_end,
             "last_import_run_id": None,
         }
         if load:
@@ -95,6 +99,12 @@ class CommodityStatus(DataModel):
 
     def get_colors(self) -> str:
         return self.data["color_sell"]
+
+    def get_percentage_start(self) -> float | None:
+        return self.data["percentage_start"]
+
+    def get_percentage_end(self) -> float | None:
+        return self.data["percentage_end"]
 
     def __str__(self):
         return f"{self.get_name_short()} ({self.get_percentage()})"

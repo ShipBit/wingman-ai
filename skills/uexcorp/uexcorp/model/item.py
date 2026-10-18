@@ -30,6 +30,15 @@ class Item(DataModel):
         notification: dict | None = None,  # json // heads up about an item, such as known bugs, etc.
         date_added: int | None = None,  # int(11) // timestamp
         date_modified: int | None = None,  # int(11) // timestamp
+        size: str | None = None,  # string(255)
+        color: str | None = None,  # string(255)
+        color2: str | None = None,  # string(255)
+        wiki: str | None = None,  # string(255)
+        game_version: str | None = None,  # string(255)
+        screenshot: str | None = None,  # string(255)
+        quality: int | None = None,  # int(11)
+        is_commodity: int | None = None,  # int(1)
+        is_harvestable: int | None = None,  # int(1)
         load: bool = False,
     ):
         super().__init__("item")
@@ -53,6 +62,15 @@ class Item(DataModel):
             "notification": notification,
             "date_added": date_added,
             "date_modified": date_modified,
+            "size": size,
+            "color": color,
+            "color2": color2,
+            "wiki": wiki,
+            "game_version": game_version,
+            "screenshot": screenshot,
+            "quality": quality,
+            "is_commodity": is_commodity,
+            "is_harvestable": is_harvestable,
             "last_import_run_id": None,
         }
         if load:
@@ -221,6 +239,33 @@ class Item(DataModel):
 
     def get_date_modified_readable(self) -> datetime | None:
         return datetime.fromtimestamp(self.data["date_modified"])
+
+    def get_size(self) -> str | None:
+        return self.data["size"]
+
+    def get_color(self) -> str | None:
+        return self.data["color"]
+
+    def get_color2(self) -> str | None:
+        return self.data["color2"]
+
+    def get_wiki(self) -> str | None:
+        return self.data["wiki"]
+
+    def get_game_version(self) -> str | None:
+        return self.data["game_version"]
+
+    def get_screenshot(self) -> str | None:
+        return self.data["screenshot"]
+
+    def get_quality(self) -> int | None:
+        return self.data["quality"]
+
+    def get_is_commodity(self) -> bool | None:
+        return bool(self.data["is_commodity"])
+
+    def get_is_harvestable(self) -> bool | None:
+        return bool(self.data["is_harvestable"])
 
     def __str__(self):
         return str(self.data["name"])

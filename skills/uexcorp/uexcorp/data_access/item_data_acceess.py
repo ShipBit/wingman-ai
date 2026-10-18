@@ -31,6 +31,15 @@ class ItemDataAccess(DataAccess):
             "date_added",
             "date_modified",
             "last_import_run_id",
+            "size",
+            "color",
+            "color2",
+            "wiki",
+            "game_version",
+            "screenshot",
+            "quality",
+            "is_commodity",
+            "is_harvestable",
         ]
 
     def load(self, **params) -> list[Item]:

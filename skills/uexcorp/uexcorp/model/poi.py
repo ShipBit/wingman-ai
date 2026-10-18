@@ -53,6 +53,9 @@ class Poi(DataModel):
         city_name: str | None = None,  # string(255)
         faction_name: str | None = None,  # string(255)
         jurisdiction_name: str | None = None,  # string(255)
+        type: str | None = None,  # string(255)
+        subtype: str | None = None,  # string(255)
+        is_mining_related: int | None = None,  # int(1)
         load: bool = False,
     ):
         super().__init__("poi")
@@ -103,6 +106,9 @@ class Poi(DataModel):
             "city_name": city_name,
             "faction_name": faction_name,
             "jurisdiction_name": jurisdiction_name,
+            "type": type,
+            "subtype": subtype,
+            "is_mining_related": is_mining_related,
             "last_import_run_id": None,
         }
         if load:
@@ -169,13 +175,14 @@ class Poi(DataModel):
         from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
-        terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
+        terminals = TerminalDataAccess().add_filter_by_id_poi(self.get_id()).load()
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
         jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
 
         information = {
             "name": self.get_name(),
             "location_type": "Point of Interest",
+            "poi_type": self.get_type_label(),
             "located_at": {},
             "faction": faction.get_data_for_ai_minimal() if faction else None,
             "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
@@ -203,11 +210,12 @@ class Poi(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
-        terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
+        terminals = TerminalDataAccess().add_filter_by_id_poi(self.get_id()).load()
 
         information = {
             "name": self.get_name(),
             "location_type": "Point of Interest",
+            "poi_type": self.get_type_label(),
             "located_at": "",
             "faction": self.get_faction_name(),
             "jurisdiction": self.get_jurisdiction_name(),
@@ -368,6 +376,19 @@ class Poi(DataModel):
 
     def get_jurisdiction_name(self) -> str | None:
         return self.data["jurisdiction_name"]
+
+    def get_type(self) -> str | None:
+        return self.data["type"]
+
+    def get_subtype(self) -> str | None:
+        return self.data["subtype"]
+
+    def get_type_label(self) -> str | None:
+        # subtype is the more specific one (e.g. "Outpost" -> "Underground Facility (UGF)")
+        return self.get_subtype() or self.get_type()
+
+    def get_is_mining_related(self) -> int | None:
+        return self.data["is_mining_related"]
 
     def __str__(self):
         return str(self.data["name"])

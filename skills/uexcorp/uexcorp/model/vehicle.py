@@ -45,14 +45,14 @@ class Vehicle(DataModel):
             name_full: str | None = None,  # string(255)
             slug: str | None = None,  # string(255)
             uuid: str | None = None,  # string(255)
-            scu: int | None = None,  # int(11)
+            scu: float | None = None,  # float
             crew: str | None = None,  # string(10) // comma separated
-            mass: int | None = None,  # int(11)
-            width: int | None = None,  # int(11)
-            height: int | None = None,  # int(11)
-            length: int | None = None,  # int(11)
-            fuel_quantum: int | None = None,  # int(11) // SCU
-            fuel_hydrogen: int | None = None,  # int(11) // SCU
+            mass: float | None = None,  # float
+            width: float | None = None,  # float
+            height: float | None = None,  # float
+            length: float | None = None,  # float
+            fuel_quantum: float | None = None,  # float // SCU
+            fuel_hydrogen: float | None = None,  # float // SCU
             container_sizes: str | None = None,  # string // SCU, comma separated
             is_addon: int | None = None,  # int(1) // e.g. RSI Galaxy Refinery Module
             is_boarding: int | None = None,  # int(1)
@@ -99,6 +99,8 @@ class Vehicle(DataModel):
             date_added: int | None = None,  # int(11) // timestamp
             date_modified: int | None = None,  # int(11) // timestamp
             company_name: str | None = None,  # string(255) // manufacturer name
+            is_quantum_capable: int | None = None,  # int(1)
+            url_photo: str | None = None,  # string(255)
             load: bool = False,
     ):
         super().__init__("vehicle")
@@ -165,6 +167,8 @@ class Vehicle(DataModel):
             "date_added": date_added,
             "date_modified": date_modified,
             "company_name": company_name,
+            "is_quantum_capable": is_quantum_capable,
+            "url_photo": url_photo,
             "last_import_run_id": None,
         }
         if load:
@@ -186,6 +190,9 @@ class Vehicle(DataModel):
 
         if self.get_is_concept():
             additional_information.append("currently in concept phase, not flyable")
+        # Explicit 0 only (None = not imported); ground vehicles obviously can't, so only spaceships
+        if self.get_is_spaceship() and self.data["is_quantum_capable"] == 0:
+            additional_information.append("no quantum drive, cannot quantum travel")
         if self.get_is_docking():
             additional_information.append("has docking port")
         if self.get_is_emp():
@@ -290,32 +297,36 @@ class Vehicle(DataModel):
     def get_uuid(self) -> str | None:
         return self.data["uuid"]
 
-    def get_scu(self) -> int | None:
+    def get_scu(self) -> float | None:
         return self.data["scu"]
 
     def get_crew(self) -> str | None:
         return self.data["crew"]
 
-    def get_mass(self) -> int | None:
+    def get_mass(self) -> float | None:
         return self.data["mass"]
 
-    def get_width(self) -> int | None:
+    def get_width(self) -> float | None:
         return self.data["width"]
 
-    def get_height(self) -> int | None:
+    def get_height(self) -> float | None:
         return self.data["height"]
 
-    def get_length(self) -> int | None:
+    def get_length(self) -> float | None:
         return self.data["length"]
 
-    def get_fuel_quantum(self) -> int | None:
+    def get_fuel_quantum(self) -> float | None:
         return self.data["fuel_quantum"]
 
-    def get_fuel_hydrogen(self) -> int | None:
+    def get_fuel_hydrogen(self) -> float | None:
         return self.data["fuel_hydrogen"]
 
     def get_container_sizes(self) -> str | None:
         return self.data["container_sizes"]
+
+    def get_max_container_size(self) -> int | None:
+        sizes = self.parse_int_list(self.get_container_sizes())
+        return max(sizes) if sizes else None
 
     def get_is_addon(self) -> bool | None:
         return bool(self.data["is_addon"])
@@ -463,6 +474,12 @@ class Vehicle(DataModel):
 
     def get_company_name(self) -> str | None:
         return self.data["company_name"]
+
+    def get_is_quantum_capable(self) -> bool | None:
+        return bool(self.data["is_quantum_capable"])
+
+    def get_url_photo(self) -> str | None:
+        return self.data["url_photo"]
 
     def __str__(self):
         return str(self.get_name_full())

@@ -57,7 +57,10 @@ class PoiDataAccess(DataAccess):
             "outpost_name",
             "city_name",
             "faction_name",
-            "jurisdiction_name"
+            "jurisdiction_name",
+            "type",
+            "subtype",
+            "is_mining_related",
         ]
 
     def load(self, **params) -> list[Poi]:

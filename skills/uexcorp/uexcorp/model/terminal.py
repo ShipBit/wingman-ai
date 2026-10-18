@@ -64,6 +64,15 @@ class Terminal(DataModel):
             max_container_size: int | None = None,  # int(11)
 
             is_blacklisted: int | None = None,  # tinyint(1) # own property
+            fullname: str | None = None,  # string(255)
+            displayname: str | None = None,  # string(255)
+            contact_url: str | None = None,  # string(255)
+            game_version: str | None = None,  # string(255)
+            screenshot: str | None = None,  # string(255)
+            screenshot_author: str | None = None,  # string(255)
+            screenshot_full: str | None = None,  # string(255)
+            mcs: int | None = None,  # int(11)
+            is_jump_point: int | None = None,  # int(1)
             load: bool = False,
     ):
         super().__init__("terminal")
@@ -116,6 +125,15 @@ class Terminal(DataModel):
             "company_name": company_name,
             "max_container_size": max_container_size,
             "is_blacklisted": is_blacklisted,
+            "fullname": fullname,
+            "displayname": displayname,
+            "contact_url": contact_url,
+            "game_version": game_version,
+            "screenshot": screenshot,
+            "screenshot_author": screenshot_author,
+            "screenshot_full": screenshot_full,
+            "mcs": mcs,
+            "is_jump_point": is_jump_point,
             "last_import_run_id": None,
         }
         if load:
@@ -155,6 +173,8 @@ class Terminal(DataModel):
             extras.append("Loading Dock")
         if self.get_has_freight_elevator():
             extras.append("Freight Elevator")
+        if self.get_is_jump_point():
+            extras.append("Located at Jump Point")
         if self.get_is_blacklisted():
             extras.append("Blacklisted for trade recommendations through advanced uex skill configuration")
         if self.get_is_affinity_influenceable():
@@ -431,6 +451,33 @@ class Terminal(DataModel):
 
     def set_is_blacklisted(self, is_blacklisted: int):
         self.data["is_blacklisted"] = is_blacklisted
+
+    def get_fullname(self) -> str | None:
+        return self.data["fullname"]
+
+    def get_displayname(self) -> str | None:
+        return self.data["displayname"]
+
+    def get_contact_url(self) -> str | None:
+        return self.data["contact_url"]
+
+    def get_game_version(self) -> str | None:
+        return self.data["game_version"]
+
+    def get_screenshot(self) -> str | None:
+        return self.data["screenshot"]
+
+    def get_screenshot_author(self) -> str | None:
+        return self.data["screenshot_author"]
+
+    def get_screenshot_full(self) -> str | None:
+        return self.data["screenshot_full"]
+
+    def get_mcs(self) -> int | None:
+        return self.data["mcs"]
+
+    def get_is_jump_point(self) -> int | None:
+        return self.data["is_jump_point"]
 
     def __str__(self):
         return str(self.data["name"])

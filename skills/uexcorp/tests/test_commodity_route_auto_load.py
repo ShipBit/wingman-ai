@@ -35,8 +35,21 @@ class _NullHandler:
 
 
 class _FakeConfig:
+    def __init__(self):
+        self.use_estimated_availability = True
+        self.ranking = "profit_per_stop"
+
     def get_behavior_commodity_route_default_count(self) -> int:
         return 15
+
+    def get_behavior_commodity_route_default_max_stops(self) -> int:
+        return 1
+
+    def get_behavior_commodity_route_use_estimated_availability(self) -> bool:
+        return self.use_estimated_availability
+
+    def get_behavior_commodity_route_ranking(self) -> str:
+        return self.ranking
 
     def get_behavior_commodity_route_advanced_info(self) -> bool:
         return False
@@ -97,14 +110,38 @@ ROUTE_FUEL_TO_AUTO = 106
 
 
 def _parse_routes(payload: str) -> list[dict]:
+    """Decode a tool payload, expanding keys shortened via the compression legend."""
     data = json.loads(payload)
     if isinstance(data, dict) and LEGEND_KEY in data:
-        data = data.get("data") or []
+        legend = data[LEGEND_KEY]
+
+        def expand(value):
+            if isinstance(value, dict):
+                return {legend.get(key, key): expand(val) for key, val in value.items()}
+            if isinstance(value, list):
+                return [expand(item) for item in value]
+            return value
+
+        data = expand(data.get("data") or [])
     return data
 
 
 def _route_pairs(routes: list[dict]) -> set[tuple[str, str]]:
-    return {(route["buy_at"], route["sell_at"]) for route in routes}
+    """(first stop, last stop) terminal names of each route."""
+    return {(route["stops"][0]["terminal"], route["stops"][-1]["terminal"]) for route in routes}
+
+
+def _first_buys(route: dict) -> list[dict]:
+    return route["stops"][0].get("buy", [])
+
+
+def _buy_volume(route: dict) -> int:
+    """SCU bought at the first stop (all commodities)."""
+    return sum(buy["scu"] for buy in _first_buys(route))
+
+
+def _volume_note(route: dict) -> str | None:
+    return next((buy["volume_note"] for buy in _first_buys(route) if "volume_note" in buy), None)
 
 
 class CommodityRouteAutoLoadFilterTest(unittest.TestCase):
@@ -310,6 +347,13 @@ class CommodityRouteAutoLoadFilterTest(unittest.TestCase):
             )
         )
         self.assertEqual(auto_start, {("Auto City TDD", "Auto Station TDD")})
+
+    def test_unknown_ship_returns_note_instead_of_crashing(self) -> None:
+        payload, _instant = self._tool.execute(limit=15, used_ship="Not A Real Ship")
+        self.assertEqual(_parse_routes(payload), [])
+        self.assertTrue(
+            any("Not A Real Ship" in note and "not found" in note for note in self._helper.get_handler_tool().notes)
+        )
 
     def test_no_auto_load_commodity_terminals_returns_empty(self) -> None:
         self._db.execute(
