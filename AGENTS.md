@@ -9,7 +9,7 @@ When work is approved, create a PR in both repos. If you didn't change anything 
 
 ## Tests
 
-pytest, in `tests/`, sorted by area; CI runs them on every PR (`.github/workflows/tests.yml`, Linux). Run `python -m pytest` before you finish. `tests/` is public and never bundled: no backend internals, no client details, no names of testers, no network, no API keys. Helpers go in `tests/support.py`, fixtures in a `conftest.py`. Add a test for a bug fix or a behavior change; do not test library behavior or pin constants.
+pytest, in `tests/`, sorted by area; CI runs them on every PR (`.github/workflows/tests.yml`, Linux). Run `python -m pytest` before you finish. `tests/` is public and never bundled: no backend internals, no client details, no names of testers, no network, no API keys. Helpers go in `tests/support.py`, fixtures in a `conftest.py`. Add a test for a bug fix or a behavior change; do not test library behavior or pin constants. Every test runs and passes both on a developer's Mac and in CI on Linux, whatever else is on the machine: no tests that skip without a client checkout, an installed game or a tool, and none that read anything outside the repo and `tmp_path`.
 
 ## Logging — Never use bare `print()`
 
@@ -103,7 +103,7 @@ The version is written in seven places across Core and the Client. Do not edit t
 python scripts/bump_version.py 3.2.4
 ```
 
-That sets `LOCAL_VERSION` in `services/system_manager.py`, the six client spots (`package.json`, both places in `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`), and writes the skeleton migration `services/migrations/migration_<old>_to_<new>.py`. The chain loader scans that directory, so there is nothing to register. `python scripts/bump_version.py --check` reports disagreement and is what `tests/system/test_version_consistency.py` runs.
+That sets `LOCAL_VERSION` in `services/system_manager.py`, the six client spots (`package.json`, both places in `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`), and writes the skeleton migration `services/migrations/migration_<old>_to_<new>.py`. The chain loader scans that directory, so there is nothing to register. `python scripts/bump_version.py --check` reports disagreement; run it before a release.
 
 There are no frozen per-version config snapshots. A migration reads the user's own file and the *current* `templates/configs/`; fields no step adds are backfilled from the template at the end of the chain.
 
