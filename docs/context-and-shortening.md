@@ -94,7 +94,7 @@ touched. Over it:
 - **Text** is cut at a line boundary, plus a note.
 
 There is no summary. Measured on 62,000 tokens of real prose with three facts in
-it (`evals/FINDINGS-context-budget-2026-09-28.md`): the support model's summary
+it: the support model's summary
 kept none of them and made the pilot wait 25 seconds; the cut at 32,000 kept
 two.
 

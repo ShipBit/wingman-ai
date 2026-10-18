@@ -19,10 +19,11 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Hook-Based Skills](#hook-based-skills)
   - [Tool-Based Skills](#tool-based-skills)
   - [Combining Hooks and Tools](#combining-hooks-and-tools)
+  - [Command Actions](#command-actions)
 - [Skill Structure](#skill-structure)
   - [Required Files](#required-files)
   - [default_config.yaml - Skill Metadata](#default_configyaml---skill-metadata)
-  - [Custom Properties — Available Types](#custom-properties---available-types)
+  - [Custom Properties — Available Types](#custom-properties--available-types)
   - [Accessing Custom Properties](#accessing-custom-properties-in-your-skill)
 - [Creating a Skill](#creating-a-skill)
 - [Bundling Dependencies](#bundling-dependencies)
@@ -72,6 +73,7 @@ Before developing skills, you need a working Wingman AI Core dev environment:
 
 - **macOS**: Follow [Developing on macOS](../docs/develop-macos.md)
 - **Windows**: Follow [Developing on Windows](../docs/develop-windows.md)
+- **Linux**: Follow [Developing on Linux](../docs/develop-linux.md)
 
 These guides walk you through Python setup, virtual environment creation, dependency installation, and Visual Studio Code configuration. Once your dev environment is running (press `F5` to launch), you can start building skills.
 
@@ -106,6 +108,8 @@ Result: ImageGeneration's tools (generate_image) are now available
 
 AI calls: generate_image(prompt="...")
 ```
+
+The AI only sees the tools the user left switched on for that Wingman.
 
 **Benefits of this approach:**
 
@@ -144,14 +148,14 @@ class SkillManifest:
     name: str                          # Internal class name (e.g., 'FileManager')
     display_name: str                  # Human-readable name (e.g., 'File Manager')
     description: str                   # What the skill does — shown in the activation enum
-    tags: list[str]                    # Categorical tags like ['Utility', 'Image']
-    tool_names: list[str]              # Names of tools this skill provides
-    tool_summaries: list[str]          # One-line descriptions of each tool
+    tags: list[str] = field(default_factory=list)            # Categorical tags like ['Utility', 'Image']
+    tool_names: list[str] = field(default_factory=list)      # Names of tools this skill provides
+    tool_summaries: list[str] = field(default_factory=list)  # One-line descriptions of each tool
     is_auto_activated: bool = False    # Always active, hidden from progressive disclosure
     discovery_keywords: str = ""       # Optional keywords to enhance discovery
 ```
 
-Manifests are built automatically from your `default_config.yaml` and `@tool` decorators — you don't need to construct them manually. The `description`, `tags`, and `discovery_keywords` fields come from your config; `tool_names` and `tool_summaries` are extracted from your decorated tools at registration time.
+Manifests are built automatically from your `default_config.yaml` and `@tool` decorators — you don't need to construct them manually. The `description`, `tags`, and `discovery_keywords` fields come from your config; `tool_names` and `tool_summaries` are extracted from your decorated tools at registration time. Tools the user switched off for a Wingman are left out, and `discovery_keywords` is English only.
 
 ### Writing Good Discovery Metadata (CRITICAL!)
 
@@ -186,7 +190,7 @@ description:
 
 #### Discovery Keywords (`discovery_keywords` in default_config.yaml)
 
-Keywords are **optional but recommended** for any non-auto-activated skill. They enhance semantic matching by listing synonyms and variations of how users might request your skill's functionality.
+Keywords are **optional but recommended** for any non-auto-activated skill. Write them in English only; 5-10 keywords are usually enough. They enhance semantic matching by listing synonyms and variations of how users might request your skill's functionality.
 
 If you omit `discovery_keywords`, the AI relies solely on your `description` to find the skill. For simple, well-described skills this may be sufficient, but adding keywords significantly improves discovery.
 
@@ -487,8 +491,20 @@ async def on_play_to_user(self, text: str, sound_config: SoundConfig) -> str:
     return text
 
 async def prepare(self) -> None:
-    """Called once during initialization. Set up resources here."""
+    """Called once, when the skill is first activated (lazy). Set up resources here."""
     pass
+
+async def update_config(self, new_config: SkillConfig) -> None:
+    """Called when the user changes the skill's custom properties at runtime."""
+    pass
+
+async def secret_changed(self, secrets: dict) -> None:
+    """Called when a secret is changed."""
+    pass
+
+async def get_prompt(self) -> str | None:
+    """Extra system prompt text for this skill. Returns config.prompt by default."""
+    return await super().get_prompt()
 
 async def unload(self) -> None:
     """Called when skill is unloaded. Clean up resources here."""
@@ -519,7 +535,11 @@ async def is_waiting_response_needed(self, tool_name: str) -> bool:
 class AudioDeviceChanger(Skill):
     def __init__(self, config, settings, wingman):
         super().__init__(config, settings, wingman)
-        # Subscribe to audio events — keep the returned Subscription
+        self._sub = None
+
+    async def prepare(self) -> None:
+        await super().prepare()
+        # Subscribe to audio events here, not in __init__ — keep the returned Subscription
         self._sub = self.wingman.audio.on_playback_finished(self.playback_finished)
 
     async def on_play_to_user(self, text: str, sound_config: SoundConfig) -> str:
@@ -535,7 +555,8 @@ class AudioDeviceChanger(Skill):
 
     async def unload(self) -> None:
         await super().unload()
-        self._sub.unsubscribe()  # detach the callback
+        if self._sub:
+            self._sub.unsubscribe()  # detach the callback
 ```
 
 ### Tool-Based Skills
@@ -618,6 +639,25 @@ class Timer(Skill):
         await self._cleanup_all_timers()
 ```
 
+### Command Actions
+
+`@command_action` makes a skill method available in the user's command editor, so a command can call it. It is separate from `@tool`; a method can have both.
+
+```python
+from skills.skill_base import Skill, command_action
+
+class MySkill(Skill):
+    @command_action(label="Say hello", respond="speak")
+    def say_hello(self, name: str) -> str:
+        return f"Hello {name}"
+```
+
+- Signature: `@command_action(label=None, description=None, respond="ai")`
+- Parameters must be `str`, `int`, `float`, `bool` or `Literal[...]`
+- `respond="ai"`: the returned string goes to the AI, which voices it
+- `respond="speak"`: the returned string is spoken as is and also given to the AI
+- Returning `None` gives the plain "OK" acknowledgment
+
 ---
 
 ## Skill Structure
@@ -669,7 +709,7 @@ class YourSkillName(Skill):
         return errors
 
     async def prepare(self) -> None:
-        """Called once during initialization. Set up resources."""
+        """Called once, when the skill is first activated (lazy). Set up resources."""
         await super().prepare()
         # Initialize providers, subscribe to events, etc.
 
@@ -705,9 +745,9 @@ version: 1.0.0 # Your skill's own release, shown in error reports. Bump it when 
 platforms:
   - windows
 
-# Controls whether the skill appears in the activation enum by default.
-# Defaults to true if omitted. Set to false for specialized skills that
-# should only be activated when explicitly added to a Wingman's config.
+# Whether the skill is switched on as discoverable when a new Wingman is
+# created. Defaults to true if omitted. Set to false for specialized skills;
+# users can still enable them per Wingman.
 discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
@@ -909,6 +949,30 @@ custom_properties:
 
 ---
 
+#### `range_slider` - Two-Handle Range Slider
+
+Slider with a lower and an upper handle. The value is a list `[low, high]`. `options` hold `min`, `max` and `step`, as for `slider`.
+
+```yaml
+custom_properties:
+  - id: interval_range
+    name: Interval (sec)
+    value: [60, 600]
+    required: true
+    property_type: range_slider
+    options:
+      - label: 'min'
+        value: 60
+      - label: 'max'
+        value: 600
+      - label: 'step'
+        value: 10
+```
+
+**Use for:** Min/max pairs like intervals or counts. Read it as a `list` in the skill.
+
+---
+
 #### `color` - Color Picker
 
 Color picker for hex color values. Renders a visual color picker in the UI.
@@ -1007,10 +1071,12 @@ custom_properties:
 
 ```python
 VoiceSelection(
-    provider="openai",  # or "elevenlabs", "azure", etc.
+    provider="openai",  # a TtsProvider, see api/enums.py
     voice="alloy"       # voice ID/name for that provider
 )
 ```
+
+`subprovider` is optional. `voice` is a string for most providers. For ElevenLabs, XVASynth and Hume it is a config object (`ElevenlabsVoiceConfig`, `XVASynthVoiceConfig`, `HumeVoiceConfig`).
 
 **Multiple voices:** Set `options[0].value = true` to allow selecting multiple voices (returns `list[VoiceSelection]`)
 
@@ -1132,6 +1198,9 @@ def _get_my_setting(self):
 
    # Windows:
    # Copy skills/your_skill_name to %APPDATA%/ShipBit/WingmanAI/custom_skills/
+
+   # Linux:
+   cp -r skills/your_skill_name ~/.local/share/WingmanAI/custom_skills/
    ```
 
 5. **Package for distribution:**
@@ -1160,9 +1229,12 @@ Wingman AI uses PyInstaller to create standalone executables. Skills with custom
 
 ### Dependency Loading
 
-When a skill has a `dependencies/` directory, Wingman AI automatically adds it to `sys.path` before loading the skill. This allows the skill to import its bundled packages.
+Wingman AI adds the skill's packages to `sys.path` before loading it. Where they come from depends on how the skill is run:
 
-From `module_manager.py`:
+- **Run from source (and bundled skills):** `venv/lib/python3.11/site-packages` (Windows: `venv\Lib\site-packages`) inside the skill folder. Create the venv with Python 3.11, other versions are not picked up.
+- **Installed app (custom skills):** the `dependencies/` folder inside the skill folder.
+
+For custom skills, `module_manager.py` does this:
 
 ```python
 dependencies_dir = path.join(custom_skill_path, "dependencies")
@@ -1195,7 +1267,7 @@ python -m venv venv
 pip install your-package another-package
 ```
 
-**3. Implement and test your skill** (the skill will automatically use the venv when running from source)
+**3. Implement and test your skill** (when running from source, Wingman adds the venv's `site-packages` for Python 3.11 automatically)
 
 **4. Generate requirements.txt:**
 
@@ -1219,6 +1291,10 @@ rm -rf ~/Library/Application\ Support/WingmanAI/custom_skills/your_skill_name/ve
 # Windows (PowerShell):
 Copy-Item -Recurse skills\your_skill_name $env:APPDATA\ShipBit\WingmanAI\custom_skills\
 Remove-Item -Recurse $env:APPDATA\ShipBit\WingmanAI\custom_skills\your_skill_name\venv
+
+# Linux:
+cp -r skills/your_skill_name ~/.local/share/WingmanAI/custom_skills/
+rm -rf ~/.local/share/WingmanAI/custom_skills/your_skill_name/venv
 ```
 
 **7. Test with release version:**
@@ -1279,6 +1355,11 @@ Wingman AI loads skills from multiple locations with a specific priority order:
 2. **Custom skills** (user-created, persists across updates)
    - macOS: `~/Library/Application Support/WingmanAI/custom_skills/`
    - Windows: `%APPDATA%\ShipBit\WingmanAI\custom_skills\`
+   - Linux: `~/.local/share/WingmanAI/custom_skills/`
+
+Only the skill's settings entry is overridden by a later location. The Python code comes from the first place that has the folder: source tree, then the bundled skills, then `custom_skills`. A custom skill therefore needs its own folder name; it does not replace the code of a bundled skill with the same name. The old community skills `hud`, `sc_log_reader`, `sc_log_reader_2` and `sc_accountant` are ignored because Core replaced them.
+
+In dev mode, folders in `./skills/` that git does not track show up as local dev skills (the client cannot uninstall them).
 
 ### Source vs Working Directory
 
@@ -1293,7 +1374,7 @@ Wingman AI loads skills from multiple locations with a specific priority order:
 - Used by the installed/release version of Wingman AI
 - **NOT versioned** - persists across Wingman AI updates
 - Users install skills here
-- Custom skills can override built-in skills with the same name
+- Give a custom skill its own folder name, it does not replace a bundled skill with the same name
 
 ### Skill with Dependencies Structure
 
@@ -1324,6 +1405,7 @@ class YourSkill(Skill):
         self.output_dir = self.get_generated_files_dir()
         # macOS: ~/Library/Application Support/WingmanAI/generated_files/YourSkillName
         # Windows: %APPDATA%/ShipBit/WingmanAI/generated_files/YourSkillName
+        # Linux: ~/.local/share/WingmanAI/generated_files/YourSkillName
 ```
 
 This directory:
@@ -1351,6 +1433,10 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
 - [ ] Create `skills/your_skill_name/` directory
 - [ ] Create `main.py` with Skill class inheriting from `Skill`
 - [ ] Create `default_config.yaml` with all required fields:
+  - [ ] `api_version: 3` is set (without it the skill is treated as legacy and does not load)
+  - [ ] `version` is set
+  - [ ] `platforms` is set if the skill is not cross-platform
+  - [ ] `requires` is set if the skill needs the HUD or the Star Citizen log
   - [ ] `module` path is correct
   - [ ] `name` matches class name exactly
   - [ ] `display_name` is user-friendly
@@ -1367,6 +1453,9 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
 - [ ] Config values retrieved just-in-time (not cached in `validate()`)
 - [ ] `prepare()` implemented for initialization (if needed)
 - [ ] `unload()` implemented for cleanup (if needed)
+- [ ] Every `on(...)` / `on_playback_*` / `sc_gamelog.on` subscription is unsubscribed in `unload()`
+- [ ] No work at import time, no `print()`
+- [ ] Imports only from the [Allowed imports](AGENTS.md#allowed-imports) table
 - [ ] Tools use `@tool` decorator with type hints
 - [ ] Tool descriptions are clear and include "WHEN TO USE" guidance
 - [ ] Hooks are implemented correctly (if used)
@@ -1435,7 +1524,7 @@ The reference below lists every member, one line each. Gotchas (cap, interrupt, 
 | `.avatar_path` | **Read-only** local file path to this wingman's avatar image (PNG, `str`). Falls back to the default Wingman AI avatar if the user hasn't set a custom one; `None` if unavailable. |
 | `.config` | **Read-only** live view of the wingman config. Reads pass through to live values; any write raises `FacadeError`. Change things through a capability (`tts.set_voice`, `commands.*`, `audio.set_output_device`). |
 | `.language` | The language the user speaks, read fresh on every access. `.name` is the English name for prompts (`"German"`, `"Dutch"`), `.code` the ISO 639 code (`"de"`; `None` for an other language that has none), `.is_other` is True for a language beyond the seven Wingman supports end to end. Put `.name` into every `ai.generate` / `local_ai` prompt whose output the user hears or reads: those calls do not get the Wingman's system prompt, so nothing else tells the model the language. |
-| `.settings` | **Read-only** view of app settings. Writing raises `FacadeError`; change devices via `audio.set_output_device(...)`. |
+| `.settings` | **Read-only** view of app settings, with `.output_device` / `.input_device` shortcuts for `settings.audio.output` / `.input`. Writing raises `FacadeError`; change devices via `audio.set_output_device(...)`. |
 | `.run_in_thread(fn, *args)` | Start `fn` in its own thread and return at once (args spread **positionally**). If `fn` is a coroutine function it's run in a fresh event loop. For a background loop; to wait for one blocking call inside an `async def`, use `await asyncio.to_thread(fn, *args)`. |
 
 ### `self.wingman.ai` — main (cloud) model
@@ -1494,8 +1583,8 @@ Which provider transcribes is a global setting. A skill may add words the transc
 | --- | --- |
 | `.hotwords` | The hotwords this Wingman added (`list[str]`). |
 | `.add_hotwords(words)` / `.remove_hotwords(words)` | Add or remove names (ships, places, people) for this run. Never written to a file. Returns how many changed. |
-| `.remember_spelling(correct, heard=None)` | Put a spelling into the user's vocabulary in Settings, for good and for every provider. With `heard`, exactly that form is replaced. |
-| `.forget_spelling(word)` | Remove it again. |
+| `.remember_spelling(correct, heard=None)` | Put a spelling into the user's vocabulary in Settings, for good and for every provider. With `heard`, exactly that form is replaced. Returns `bool` (`False` if it was already there). |
+| `.forget_spelling(word)` | Remove it again. Returns the number of entries removed. |
 
 ### `self.wingman.system_one` — typed decisions
 
@@ -1503,7 +1592,7 @@ A fast, cheap model that picks from options you give it instead of writing text:
 does the user mean, how urgent is this, yes or no. About 300 ms. `.available` is `False` when the
 user switched it off or the plan lacks it; check it and fall back to `local_ai` or a rule.
 See [AGENTS.md — System One](AGENTS.md#system-one--ask-for-a-decision-not-a-sentence) for the
-API and the four rules that make its answers reliable.
+API and the four rules that make its answers reliable. The entry point is `await .decide(state, questions)` (`.decide_sync(...)` for threads).
 
 ### `self.wingman.commands` — user commands
 
@@ -1516,7 +1605,7 @@ API and the four rules that make its answers reliable.
 | `.add_category(name)` → `CommandCategory` | Create/return a category (idempotent by name). |
 | `.update_category(category)` / `.delete_category(id_or_name)` | Rename / remove a category. |
 | `.categories()` | All categories as `CommandCategory` objects. |
-| `.register_function(func, *, label=None, description=None, respond="ai", parameters=None)` | Register a bound skill method as a runtime command function (dynamic `@command_action`). |
+| `.register_function(func, *, label=None, description=None, respond="ai", parameters=None)` | Register a bound skill method as a runtime command function (dynamic `@command_action`). Returns the function name. |
 | `.unregister_function(name)` | Remove a previously registered runtime command function. |
 | `.add_skill_command(name, func, *, category=None, instant_phrases=None, respond="ai")` | One call: register `func`, build a command bound to it, categorize it. Call `save()`. |
 | `await .save()` | Persist the commands section to disk. Returns `True` on success. |
@@ -1557,9 +1646,9 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | Member | Description |
 | --- | --- |
 | `.available` | `bool` — persistent memory ready (needs local AI + config). |
-| `await .remember(content, **kw)` | Store a fact; auto-dedupes against similar entries. Returns the entry ID. |
-| `await .recall(query, **kw)` | Semantic search; returns matches sorted by relevance. |
-| `await .context(query, max_tokens=500)` | Pre-formatted memory string ready to inject into a prompt. |
+| `await .remember(content, *, entry_type=MemoryType.FACT)` | Store a fact; auto-dedupes against similar entries. Returns the entry ID. |
+| `await .recall(query, *, limit=5, entry_type=None)` | Semantic search; returns matches sorted by relevance. |
+| `await .context(query, max_tokens=500)` | The whole MEMORY block (every fact and the recent episodes), the text Core already puts in the system prompt. `query` and `max_tokens` are ignored. |
 | `await .update(entry_id, new_content)` | Update an entry by ID (re-embeds). |
 | `await .forget(query)` | Fuzzy delete: removes the closest semantic match. |
 | `await .forget_by_id(entry_id)` | Deterministic delete by ID. |
@@ -1623,7 +1712,8 @@ Anything you leave out comes from the user's HUD profile. The handle has
 on screen, for streaming), `add_info`, `remove_info`, `show_progress`,
 `show_timer`, `info_items()`, `clear()`, `set_loader(show)`, `hide()` and
 `show()` (a hidden group keeps every update), `update(**props)` (windows
-follow right away) and `delete()`. The shared chat and info panel have no
+follow right away) and `delete()`. All handle methods are awaited, including `info_items()`; only
+`self.wingman.hud.info_items()` is sync. The shared chat and info panel have no
 `clear` or `hide`: they belong to every Wingman.
 Core deletes the group when the skill unloads, and makes it again with its
 props if the HUD server restarts. See `skills/mic_status`.
@@ -1852,7 +1942,7 @@ The local model is Wingman's support model: a small, cheap LLM for text processi
 
 ```python
 async def generate(text: str, *, system: str = "", preset=None,
-                   temperature=None, top_p=None, top_k=None) -> str
+                   temperature=None, top_p=None, top_k=None, reasoning=None) -> str
 def generate_sync(text: str, *, system: str = "", ...) -> str
 ```
 
@@ -1862,6 +1952,9 @@ def generate_sync(text: str, *, system: str = "", ...) -> str
 | --------- | ----- | -------------------------------------------------------------- |
 | `text`    | `str` | The input text / user prompt                                   |
 | `system`  | `str` | Instructions for the model. If empty, a default prompt is used |
+| `preset`  | `SamplingPreset` | `PRECISE`, `BALANCED` or `CREATIVE` (from `services.skill_local_ai`). Pick one per call |
+| `temperature`, `top_p`, `top_k` | `float`, `float`, `int` | Optional overrides of the preset |
+| `reasoning` | `bool` | `True` lets the model think first. Only for background work |
 
 **Returns** a plain `str` — the model's response, or `""` if local AI is unavailable or an error occurs (error is logged to the client automatically).
 
@@ -1897,7 +1990,7 @@ When you have text that might exceed the model's context window (e.g., API respo
 
 ```python
 async def summarize(text: str, *, instruction: str = "", preset=None,
-                   temperature=None, top_p=None) -> str
+                   temperature=None, top_p=None, reasoning=None) -> str
 def summarize_sync(text: str, *, instruction: str = "", ...) -> str
 ```
 
@@ -1907,6 +2000,7 @@ def summarize_sync(text: str, *, instruction: str = "", ...) -> str
 | ------------- | ----- | --------------------------------------------------------------------------- |
 | `text`        | `str` | The text to summarize. Can be arbitrarily large                             |
 | `instruction` | `str` | Optional focus instruction (e.g., "Focus on combat stats and ship loadout") |
+| `preset`, `temperature`, `top_p`, `reasoning` | | Same as for `generate()` |
 
 If the text fits in the context window, it's processed in a single call (same as `generate()`). If it's too large, chunking and merging happen automatically. Returns a plain `str` (`""` if unavailable).
 
@@ -1979,7 +2073,7 @@ Persistent memory lets your skill remember facts about the user across conversat
 #### Remembering Facts
 
 ```python
-async def remember(content: str, **kw) -> int | None
+async def remember(content: str, *, entry_type=MemoryType.FACT) -> int | None
 ```
 
 **Automatic deduplication:** When you save a fact that's semantically similar (>90%) to an existing one, it **updates** the existing entry instead of creating a duplicate. This means you can safely call `remember()` repeatedly without worrying about duplicates.
@@ -1997,7 +2091,7 @@ await self.wingman.memory.remember("Player rank: Platinum 1")
 #### Recalling Memories
 
 ```python
-async def recall(query: str, **kw) -> list[MemorySearchResult]
+async def recall(query: str, *, limit: int = 5, entry_type=None) -> list[MemorySearchResult]
 ```
 
 Search memories by semantic similarity. Returns results sorted by relevance.
@@ -2007,7 +2101,7 @@ Search memories by semantic similarity. Returns results sorted by relevance.
 class MemorySearchResult:
     id: int                     # Entry ID (for update/delete)
     content: str                # The memory text
-    entry_type: str             # "fact" or "session_summary"
+    entry_type: str             # "fact" or "episode" ("session_summary" in older databases)
     source_wingman: str | None  # Which wingman stored this
     created_at: float           # Unix timestamp
 ```
@@ -2027,22 +2121,9 @@ for memory in results:
 async def context(query: str, max_tokens: int = 500) -> str
 ```
 
-Returns a **pre-formatted string** of relevant memories, ready to inject into a system prompt. Combines facts and recent session summaries, formatted with headers.
+Returns the whole MEMORY block: every fact and the recent episodes. It is the same text Core already puts in the system prompt, so you rarely need it. `query` and `max_tokens` are accepted for older skills and ignored. Use `recall()` for a targeted lookup.
 
-**Always returns a string** — empty on failure. Safe to concatenate directly.
-
-```python
-# Build context-aware prompts
-async def get_prompt(self) -> str | None:
-    """Inject relevant memories into the wingman's system prompt."""
-    if not self.wingman.memory.available:
-        return None
-
-    context = await self.wingman.memory.context("user preferences and history")
-    if context:
-        return f"What you remember about this user:\n{context}"
-    return None
-```
+**Always returns a string** — empty on failure. Safe to concatenate directly. Do not add it to your own `get_prompt()`: the Wingman would see the memories twice.
 
 #### Updating and Deleting Memories
 
@@ -2076,7 +2157,7 @@ await self.wingman.memory.forget("Cutlass Black")  # Finds and deletes closest m
 ```text
 self.wingman.local_ai                                # free local model + embeddings
 │   ├── .available                                   → bool    # local model ready?
-│   ├── .generate(text, *, system, preset, ...)      → str
+│   ├── .generate(text, *, system, preset, ...)      → str    # also temperature, top_p, top_k, reasoning
 │   ├── .generate_sync(text, *, system, ...)         → str
 │   ├── .summarize(text, *, instruction, ...)        → str
 │   ├── .summarize_sync(text, *, instruction, ...)   → str
@@ -2087,7 +2168,7 @@ self.wingman.memory                                  # local persistent memory
     ├── .available                                   → bool    # persistent memory ready?
     ├── .remember(content, **kw)                     → int | None
     ├── .recall(query, **kw)                         → list[MemorySearchResult]
-    ├── .context(query, max_tokens)                  → str
+    ├── .context(query, max_tokens)                  → str    # whole MEMORY block, args ignored
     ├── .update(entry_id, new_content)               → bool
     ├── .forget(query)                               → bool
     └── .forget_by_id(entry_id)                      → bool
@@ -2134,16 +2215,6 @@ class GameStatsTracker(Skill):
     def _get_api_base_url(self) -> str:
         errors = []
         return self.retrieve_custom_property_value("api_base_url", errors)
-
-    async def get_prompt(self) -> str | None:
-        """Inject remembered player facts into every conversation."""
-        if not self.wingman.memory.available:
-            return None
-
-        context = await self.wingman.memory.context("player stats and preferences")
-        if context:
-            return f"What you remember about this player:\n{context}"
-        return None
 
     @tool(
         description="""Fetch and remember a player's current game statistics.

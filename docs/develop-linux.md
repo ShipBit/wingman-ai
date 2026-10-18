@@ -71,17 +71,11 @@ source venv/bin/activate            # activate the virtual environment
 pip install -r requirements.txt     # install dependencies
 ```
 
-## Copy runtime dependencies
+`requirements.txt` installs one package (`pocket-tts`) from GitHub, so Git must be installed.
 
-The release version of Wingman AI bundles model files and binaries that are too large for git. For the full experience in your dev environment, you can copy these from an existing Wingman AI installation into your repository root:
+## Models
 
-| Directory | Purpose | What happens if you skip it |
-| --- | --- | --- |
-| `faster-whisper-models/` | Pre-downloaded speech recognition models | Models auto-download from HuggingFace on first use — can be slow. |
-| `pocket-tts-models/` | PocketTTS text-to-speech model weights | Models auto-download on first use. |
-| `pocket-tts-voices/` | Pre-packaged TTS voice samples | Voices auto-download on first use. |
-
-Copying these is optional — the app will download what it needs on first launch, but this avoids timeouts.
+Models (Parakeet, Pocket TTS, Silero VAD and others) are downloaded by Core on first use into the `models/` folder of the Wingman user data directory (`~/.local/share/WingmanAI/models` on Linux). If you already have a Wingman AI installation, the dev environment uses the same folder, so there is nothing to copy.
 
 ## torch: CPU build (recommended)
 
@@ -108,16 +102,12 @@ If it doesn't start, verify that:
 - All dependencies are installed (`pip install -r requirements.txt`)
 - The integrated terminal is running from the repository root directory
 
-## Setup whispercpp (optional)
+## Run the tests
 
-WhisperCPP is an alternative local STT provider. On Linux, it cannot be autostarted and must be run manually:
-
-1. Download the latest stable Linux release from the [whispercpp repository](https://github.com/ggerganov/whisper.cpp/releases) or build it from source
-2. Download a model (e.g. `ggml-base.bin`) and place it in your whispercpp models directory
-3. Start whispercpp on the host and port configured in Wingman AI — the client UI will show you the exact command
-4. Restart Wingman AI Core to connect to the running whispercpp instance
-
-Most developers use FasterWhisper (the default) and don't need whispercpp.
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ## Developing Skills
 

@@ -18,7 +18,8 @@ using the checklist + mapping table below.
 lifecycle hooks). `self.wingman` is *the runtime* (everything about the wingman/app, grouped
 into feature namespaces). No capability lives on both. If you reach for a runtime capability,
 it is under a feature noun on `self.wingman`: `ai`, `local_ai`, `tts`, `stt`, `audio`, `commands`,
-`tools`, `conversation`, `memory`, `secrets`, `skills`.
+`tools`, `conversation`, `memory`, `secrets`, `skills`, `ui`, `hud`, `settings`, `system_one`, `sc_gamelog`,
+`star_citizen`, `language`.
 
 ### The 5 breaking changes
 
@@ -62,9 +63,9 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > returned a `ChatCompletion`; you used to read `completion.choices[0].message.content`.
 > `ai.generate(...)` already gives you that text. If your code parsed JSON out of the
 > completion, parse it straight from the returned string. It returns `""` (empty string)
-> when the model gives nothing back — never `None` — and raises `FacadeError` only when the
-> input is over the cap. So a v2 retry loop that re-called on a bad/empty completion should
-> now: wrap the call in `try/except FacadeError` (cap errors won't fix themselves on retry —
+> when the model gives nothing back — never `None` — and raises `FacadeError` when the
+> input is too large (over the cap, over the subscription's per-request limit, or refused by the model as too long for its window). So a v2 retry loop that re-called on a bad/empty completion should
+> now: wrap the call in `try/except FacadeError` (size errors won't fix themselves on retry —
 > shorten instead) and treat an empty string as the "no answer, retry" case.
 
 > **`ai.generate` is capped.** The combined input (system + prompt + data, plus a flat
@@ -208,8 +209,8 @@ the old `self.threaded_execution` to a helper object (which then called it later
 `self.wingman.run_in_thread` instead — and check the helper's own call signature. `run_in_thread`
 takes `(fn, *args)` (args spread positionally); a helper that stored args as a tuple and called
 `stored_fn(fn, args_tuple)` must be updated to `stored_fn(fn, *args_tuple)`. Also rename any
-helper method still literally called `threaded_execution` (the lockdown gate flags that name
-anywhere in `skills/**`).
+helper method still literally called `threaded_execution`, so a reader does not mistake it for
+the removed API.
 
 **Stale comments and strings.** Search for the old names in comments/docstrings too (e.g. a
 comment mentioning `switch_tts_provider`). Update or delete them — leftover references read as

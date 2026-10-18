@@ -97,7 +97,7 @@ Before implementing, estimate the token cost of your skill:
 
 2. **Use `retrieve_secret()` for API keys and sensitive data.** Never put secrets in custom properties.
 
-3. **Use the `@tool` decorator** for all AI-callable functions. Include type hints (they auto-generate the OpenAI tool schema). Write clear but concise descriptions.
+3. **Use the `@tool` decorator** for all AI-callable functions. Signature: `@tool(name=None, description=None, summarize=True, wait_response=False)`. Include type hints (they auto-generate the OpenAI tool schema). Write clear but concise descriptions.
 
 4. **Always implement `unload()`** to clean up resources (unsubscribe events, close connections, cancel tasks).
 
@@ -225,7 +225,7 @@ custom_properties:
     hint: Help text for the user
     value: default
     required: true
-    property_type: string              # string|textarea|number|boolean|single_select|slider|color|audio_device|voice_selection|audio_files|directory|file (paths: always directory or file, never string)
+    property_type: string              # string|textarea|number|boolean|single_select|slider|color|audio_device|voice_selection|audio_files|directory|file|range_slider (paths: always directory or file, never string)
 ```
 
 ## Available Hooks
@@ -238,6 +238,10 @@ async def is_summarize_needed(self, tool_name: str) -> bool      # default True
 async def is_waiting_response_needed(self, tool_name: str) -> bool  # default False
 async def prepare(self) -> None
 async def unload(self) -> None
+async def validate(self) -> list[WingmanInitializationError]  # call super().validate() first
+async def update_config(self, new_config: SkillConfig) -> None  # custom properties changed
+async def secret_changed(self, secrets: dict) -> None
+async def get_prompt(self) -> str | None                      # extra system-prompt text; default config.prompt
 ```
 
 ## Key APIs
@@ -246,11 +250,14 @@ async def unload(self) -> None
 self.retrieve_custom_property_value(property_id, errors)  # Config value (just-in-time!)
 await self.wingman.secrets.retrieve(secret_name, errors)  # stored secret (prompts user if missing)
 self.wingman.config                                        # READ-ONLY view of the config
+self.wingman.name / .avatar_path                           # this Wingman's name and avatar file
 self.log.info(msg) / self.log.warning(msg) / self.log.error(msg)  # Logging (server_only=True skips the toast)
 self.get_generated_files_dir()                             # Persistent storage directory
 ```
 
 ### The facade — what you may read vs. change
+
+The list below is the short version. The complete list is in [README.md](README.md#the-selfwingman-facade-api).
 
 `self.wingman` is a **controlled facade** (`WingmanContext`). You can **read** almost everything,
 but you may only **change** things through sanctioned capabilities. Writing to config raises
@@ -267,10 +274,13 @@ await self.wingman.tts.speak(text, interrupt=True)      # say text; interrupt=Fa
 self.wingman.audio.is_playing                           # read playback state
 await self.wingman.audio.play(cfg) / .stop(cfg)         # play/stop your own audio
 sub = self.wingman.audio.on_playback_started(cb)        # returns a Subscription; sub.unsubscribe() in unload()
+sub = self.wingman.audio.on_playback_finished(cb)       # the same, when playback ends
 await self.wingman.audio.set_output_device(device_id)   # switch output device in-process
 self.wingman.commands.get(name) / .all() / await .save()  # read/edit/persist commands
 self.wingman.tools.has(name) / await .invoke(name, args)  # discover + invoke tools/commands -> ToolResult
 self.wingman.tools.source(name) / .all() / .servers()   # tool origin + enumerate callable functions / MCP servers
+self.wingman.tools.describe(name)                       # descriptor of one tool (params, origin)
+self.wingman.skills.active() / .has(name)               # which skills are active right now
 self.wingman.audio.mic_status                           # current MicStatus (listening/recording/...), None before the first
 sub = self.wingman.audio.on_mic_status_changed(cb)      # cb(status) on every change; sub.unsubscribe() in unload()
 self.wingman.stt.add_hotwords(["Hornet"]) / .remove_hotwords([...])  # names the transcript is corrected against (runtime only)
@@ -299,18 +309,21 @@ text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., m
 #   Over the cap -> FacadeError (or truncates if auto_shorten=True). Images are charged a flat
 #   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
 await self.wingman.ai.converse(msg)                     # reply WITH the Wingman's prompt + history; both turns join the conversation
-await self.wingman.ai.generate_image(prompt, aspect="square")  # data URL or URL, "" on failure
+await self.wingman.ai.generate_image(prompt, aspect="square", reference_images=[data_url])  # up to 4 reference images; data URL or URL, "" on failure
+self.wingman.ai.recent_user_images()                    # images the user sent lately (data URLs)
 
 # SUPPORT MODEL — small and cheap, runs in our cloud by default (or locally). Returns a str, "" when unavailable.
 text = await self.wingman.local_ai.generate(t, system="...", preset=SamplingPreset.PRECISE)
 summary = await self.wingman.local_ai.summarize(text, instruction="...")   # chunks large input itself
 #   Prefer it over ai.generate for background work (commentary, extraction, yes/no checks): it costs the user nothing.
+self.wingman.local_ai.available                         # support model ready? check before relying on it
 
 # CLIENT UI:
-await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill.welcome")
+await self.wingman.ui.show_dialog(title, text, image=data_url, once="MySkill.welcome")
 await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .remove_info(title)
 await self.wingman.hud.show_progress(title, current, maximum) / .show_timer(title, seconds)
 #   The chat and info panel all Wingmen share; their place and look come from the user's HUD profile.
+#   self.wingman.hud.available says whether the HUD is on.
 #   Returns False when the HUD is off (Windows, macOS, Linux with X11) or this Wingman's hud switch is off.
 icon = self.wingman.hud.group("mic", anchor="top_right", width=72)   # a group of your own
 await icon.add_info(" ", "![](icon.png)") / icon.update(x=40) / icon.delete()
@@ -378,7 +391,7 @@ if so.available:
     answers.probabilities("risk")                  # {"safe": 0.0, ... } keyed by label
 ```
 
-Four rules that come out of measuring it (`evals/FINDINGS-jev-2026-09-20.md`):
+Four rules that come out of measuring it:
 
 - **Ask everything in one `decide()`.** Questions are evaluated in parallel:
   eight cost 13 ms and 28% more tokens than one. Three calls for three
@@ -401,7 +414,7 @@ that case, so the skill silently takes the None branch unless you check.
 **Removed (do NOT use):** the raw LLM call (`self.llm_call(...)` / `actual_llm_call` — use `self.wingman.ai.generate`),
 `self.wingman.switch_tts_provider(...)` (runtime provider switching is not allowed; use `tts.set_voice`),
 the raw registries (`self.wingman.registry.*` — use `self.wingman.tools.*`), and writing to
-`self.wingman.config` / `self.settings` (read-only; use the capabilities above).
+`self.wingman.config` / `self.settings` (read-only; use the capabilities above). Any removed v2 member raises a `FacadeError` that names its replacement.
 
 ### Calling other skills & MCP servers
 
@@ -467,7 +480,7 @@ Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `star_citizen`, `
 | [thinking_sound](thinking_sound/) | Hook (auto) | Sound during processing |
 | [mic_status](mic_status/) | Hook (auto) | `audio.on_mic_status_changed`, `hud.group`, `requires: [hud_server]` |
 | [image_generation](image_generation/) | Tool | `@tool` with `wait_response` |
-| [timer](timer/) | Hook+Tool | State management, `unload()` cleanup |
+| [timer](timer/) | Tool | State management, `unload()` cleanup |
 | [vision_ai](vision_ai/) | Tool | Screen capture, discovery keywords |
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
