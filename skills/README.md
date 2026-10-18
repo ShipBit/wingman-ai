@@ -31,6 +31,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
 - [The `self.wingman` facade API](#the-selfwingman-facade-api)
   - [Dialogs in the client](#selfwingmanui--show-something-in-the-client)
   - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
+  - [Screenshots](#selfwingmanscreen--screenshots-on-every-os)
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
   - [Star Citizen's game folder](#selfwingmanstar_citizen--where-star-citizen-is-installed)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
@@ -1630,6 +1631,19 @@ If your skill is pointless without the HUD, declare `requires: [hud_server]`
 in its `default_config.yaml`. The client then keeps the skill off and tells the
 user to switch the HUD on first. A skill that only uses the HUD as an extra
 (like Star Citizen Events) leaves it out and relies on the `False` return.
+
+### `self.wingman.screen` — screenshots on every OS
+
+| Member | Description |
+| --- | --- |
+| `await .capture(display=1, region=None)` | A PIL image (RGB) of monitor `display` (1 = the first, 0 = all), or of `region` (`{"left", "top", "width", "height"}`). Raises `RuntimeError` with what the user has to do, e.g. allow Screen Recording on macOS. |
+| `.wayland` | `bool` — a Wayland session: the desktop picks the monitor. |
+
+Use it instead of capturing yourself (mss, PIL.ImageGrab): under Wayland a
+skill's own capture only sees XWayland windows and gives black for the rest.
+Core asks the desktop there: Spectacle on KDE, grim on Sway and Hyprland, the
+screenshot portal elsewhere (the desktop may ask the user once). See
+`skills/vision_ai` and `skills/auto_screenshot`.
 
 ### `self.wingman.star_citizen` — where Star Citizen is installed
 

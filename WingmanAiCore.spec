@@ -182,7 +182,11 @@ hiddenimports = [
     # Skills dependencies
     # api_request / audio_device_changer
     'aiohttp',
-    # vision_ai / auto_screenshot
+    # vision_ai / auto_screenshot (jeepney: the Wayland screenshot portal)
+    'jeepney',
+    'jeepney.io.blocking',
+    'jeepney.bus_messages',
+    'jeepney.wrappers',
     'PIL',
     'PIL.Image',
     'mss',
@@ -195,8 +199,10 @@ hiddenimports = [
     'pdfminer.six',
     'pdfminer.high_level',
     'cryptography',
-    # control_windows
+    # control_windows (clipboard: Windows; ApplicationServices, AppKit: macOS)
     'clipboard',
+    'ApplicationServices',
+    'AppKit',
     # msfs2020_control
     'SimConnect',
     'SimConnect.SimConnect',

@@ -2,16 +2,10 @@ import asyncio
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
-from mss import mss
-from PIL import Image
-
-try:
-    import pygetwindow as gw
-except (ImportError, NotImplementedError):
-    gw = None
 
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
+from skills.auto_screenshot.active_window import active_window_bbox
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
@@ -77,24 +71,9 @@ class AutoScreenshot(Skill):
 
         window_bbox = None
         try:
-            if gw is None:
-                raise RuntimeError("pygetwindow not available on this platform")
-            focused_window = await asyncio.to_thread(gw.getActiveWindow)
-
-            if focused_window:
-                window_bbox = {
-                    "top": focused_window.top,
-                    "left": focused_window.left,
-                    "width": focused_window.width,
-                    "height": focused_window.height,
-                }
-
+            window_bbox = await asyncio.to_thread(active_window_bbox)
             if self.settings.debug_mode:
-                self.log.info(
-                    f"Focused window {focused_window} bbox: {window_bbox}",
-                    server_only=True,
-                )
-
+                self.log.info(f"Active window bbox: {window_bbox}", server_only=True)
         except Exception as e:
             self.log.warning(
                 f"Window detection unavailable ({e}), using full screen capture.",
@@ -105,29 +84,17 @@ class AutoScreenshot(Skill):
             self._get_default_directory(),
             f"{self.wingman.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
         )
-        await asyncio.to_thread(
-            self._grab_and_save, window_bbox, self._get_display(), screenshot_file
-        )
+        try:
+            display = int(self._get_display())
+        except (TypeError, ValueError):
+            display = 1
+        try:
+            image = await self.wingman.screen.capture(display, window_bbox)
+        except RuntimeError as e:
+            return f"Could not take a screenshot: {e}"
+        await asyncio.to_thread(image.save, screenshot_file)
 
         if self.settings.debug_mode:
             self.log.info(f"Screenshot saved at: {screenshot_file}", server_only=True)
 
         return f"Screenshot saved to: {screenshot_file}"
-
-    @staticmethod
-    def _grab_and_save(window_bbox, display, screenshot_file: str) -> None:
-        with mss() as sct:
-            if window_bbox:
-                screenshot = sct.grab(window_bbox)
-            else:
-                try:
-                    display = int(display)
-                except (TypeError, ValueError):
-                    display = -1
-                if not 0 <= display < len(sct.monitors):
-                    display = 1 if len(sct.monitors) > 1 else 0
-                screenshot = sct.grab(sct.monitors[display])
-            image = Image.frombytes(
-                "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
-            )
-            image.save(screenshot_file)
