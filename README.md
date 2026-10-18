@@ -54,7 +54,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **Audio markups (aka "emotions")** that work with every supported TTS provider
 - **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
 - **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT)
-- **HUD overlay** (Windows): the conversation and an info panel your Wingmen share, laid out per game with HUD profiles you place by dragging them on screen ([docs/hud.md](docs/hud.md))
+- **HUD overlay** (Windows, macOS, Linux): the conversation and an info panel your Wingmen share, laid out per game with HUD profiles you place by dragging them on screen ([docs/hud.md](docs/hud.md))
 - **Command recording & execution** (keyboard & mouse)
   - **AI-powered**: The LLM decides when to execute commands based on user input. Users don't need to say exact phrases.
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
@@ -62,7 +62,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 - **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
 - **Persistent memory**: Wingmen remember facts about you across sessions, and you can ask them to forget them again
 - **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, or locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server
-- **HUD overlay** (Windows) that shows messages, panels, progress bars and timers on top of your game
+- **HUD overlay** that shows messages, panels, progress bars and timers on top of your game
 - **Star Citizen game log**: Wingman reads the game's log file and can react to missions, zones, injuries and trades
 - **Built-in Skills** - Internal Python modules that extend Wingman capabilities:
   - **File Manager**: Read, write, list, and search files
@@ -84,7 +84,7 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - **Star Citizen Events**: Your Wingman reacts in character to what happens in Star Citizen (from the game log)
   - **Star Citizen Accountant**: Tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
   - **Voice Changer**: Changes the voice of your Wingman automatically
-  - **HUD Overlay** and **Microphone Status**: Show information and the live mic state on the HUD (Windows)
+  - **HUD Overlay** and **Microphone Status**: Show information and the live mic state on the HUD
 - **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
   - Wingman AI is a full MCP client supporting remote and local MCP servers
   - Supports HTTP, STDIO, and SSE transports
@@ -206,7 +206,7 @@ If that doesn't work for some reason, try starting `Wingman AI Core.exe` manuall
 - Download the `.dmg` from [wingman-ai.com](https://www.wingman-ai.com) and move Wingman AI to your Applications folder.
 - It needs a Mac with Apple Silicon (M1 or newer) and macOS 14 (Sonoma) or newer.
 - On the first start, allow access to the microphone. For hotkeys and push-to-talk, also allow Accessibility in System Settings > Privacy & Security.
-- Not available on macOS: the HUD overlay, XVASynth and a few Windows-only skills.
+- Not available on macOS: XVASynth and a few Windows-only skills.
 
 You can also [run it from source](#develop-with-wingman-ai).
 
@@ -219,7 +219,8 @@ You can also [run it from source](#develop-with-wingman-ai).
   - Ubuntu, Debian: `sudo apt install libportaudio2 pipewire-alsa libfuse2t64`
   - Arch, CachyOS: `sudo pacman -S portaudio pipewire-alsa`
 - For hotkeys and push-to-talk, add yourself to the `input` group, then log out and back in: `sudo usermod -aG input $USER`. This works on X11 and Wayland.
-- Not available on Linux: the HUD overlay and XVASynth.
+- The HUD overlay needs an X display (X11, or XWayland in a Wayland session) and a compositor, which every desktop has.
+- Not available on Linux: XVASynth and a few Windows-only skills.
 
 If Wingman does not start, run the AppImage from a terminal. Core's messages, such as a missing PortAudio, are printed there.
 
