@@ -35,6 +35,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
   - [Star Citizen's game folder](#selfwingmanstar_citizen--where-star-citizen-is-installed)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
+  - [Threads and event loops](#threads-and-event-loops)
 - [Local AI API](#local-ai-api-selfwingmanlocal_ai)
   - [Overview](#overview)
   - [Checking Availability](#checking-availability)
@@ -1744,6 +1745,56 @@ else:
 MCP tool names are prefixed by the registry — use the name exactly as it appears in
 `self.wingman.tools.names()` / `.all()`.
 
+### Threads and event loops
+
+Core runs more than one asyncio event loop, each on its own thread:
+
+- **Core's main loop** holds the connection to the client, the API and the HUD.
+  `prepare()`, `unload()`, `update_config()` and Game.log events usually run here.
+- **Each turn** (the user says something, the Wingman answers) runs on a loop of
+  its own. Your tools and hooks run on the loop of the turn that called them.
+- **`self.wingman.run_in_thread(coro_fn)`** gives your coroutine a fresh loop on a
+  fresh thread, closed when it returns.
+
+The same skill instance is used from all of them. Everything on `self.wingman` and
+`self.log` is safe to call from any loop or thread. For your own code:
+
+1. **An asyncio object belongs to one loop.** `asyncio.Lock`, `Event`, `Queue`,
+   `Task`, `aiohttp.ClientSession`, `httpx.AsyncClient` and websocket connections
+   work only on the loop that created or first used them. Do not create one in
+   `prepare()` and use it from a tool or a background thread. A lock one loop holds
+   raises `RuntimeError: ... is bound to a different event loop` when another loop
+   waits for it. Open network clients per call
+   (`async with aiohttp.ClientSession() as session:`), or use a sync client like
+   `requests` inside `await asyncio.to_thread(...)`.
+2. **For a lock shared by tools, background loops and `prepare()`, use
+   `threading.Lock` and take it in the worker thread.** Never `with lock:` directly
+   in an `async def`: while it waits, the whole loop stands still.
+
+   ```python
+   import threading
+
+   self._db_lock = threading.Lock()
+
+   async def _db(self, fn, *args):
+       return await asyncio.to_thread(self._locked, fn, *args)
+
+   def _locked(self, fn, *args):
+       with self._db_lock:
+           return fn(*args)
+   ```
+
+3. **Never cancel a task or close a connection from another thread.** Not even in
+   `unload()`. Stop a background loop with a flag or a run id it checks on each
+   pass. If you must touch another loop, hand the work over:
+   `loop.call_soon_threadsafe(task.cancel)` or
+   `asyncio.run_coroutine_threadsafe(coro, loop)`. On Windows, a socket closed from
+   the wrong thread can stop the loop that owns it, and with Core's main loop the
+   whole Wingman stops answering.
+4. **Background threads end on their own.** `run_in_thread` threads are daemon
+   threads. Let them finish when your flag says so. Do not `join()` them without a
+   timeout in `unload()`.
+
 ---
 
 ## Local AI API (`self.wingman.local_ai`)
@@ -2269,7 +2320,7 @@ await self.wingman.secrets.retrieve(secret_name, errors)  # Get secret from Secr
 ### Best Practices
 
 1. **Never cache config values** - retrieve them just-in-time so UI changes take effect immediately
-2. **Never block the event loop** - wrap blocking calls in `await asyncio.to_thread(...)`; a sync `def` tool runs on the loop too
+2. **Never block the event loop** - wrap blocking calls in `await asyncio.to_thread(...)`; a sync `def` tool runs on the loop too. Keep asyncio objects on the loop that made them, see [Threads and event loops](#threads-and-event-loops)
 3. **Import only the facade** - see [Allowed imports](AGENTS.md#allowed-imports)
 4. **Always implement `unload()`** - clean up resources to prevent memory leaks
 5. **Use type hints** - they auto-generate tool schemas and improve code quality

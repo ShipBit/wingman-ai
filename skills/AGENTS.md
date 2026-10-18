@@ -107,13 +107,15 @@ Before implementing, estimate the token cost of your skill:
    ```
    Internal calls (yes/no checks, JSON extraction, matching) don't need it. If a user-written prompt may ask for another language on purpose (English radio chatter for a German user), add "unless the scenario asks for another language".
 
-6. **Never block Core's event loop.** Tools and hooks run on the loop that also plays audio and listens to the microphone. A sync `def` tool runs on that loop too. Wrap blocking calls (`requests`, SDK clients, file or image work, `keyboard`, `time.sleep`) in `await asyncio.to_thread(fn, *args)` and wait with `await asyncio.sleep(...)`. `aiohttp` needs no thread.
+6. **Never block an event loop.** Tools and hooks run on the loop of the turn that called them, `prepare()` and Game.log events usually on Core's main loop, which also serves the client and the HUD. A sync `def` tool runs on its loop too. Wrap blocking calls (`requests`, SDK clients, file or image work, `keyboard`, `time.sleep`) in `await asyncio.to_thread(fn, *args)` and wait with `await asyncio.sleep(...)`. `aiohttp` needs no thread.
 
 7. **Background loops must survive errors.** A loop started with `self.wingman.run_in_thread(...)` dies silently on the first exception. Put `try/except` around the work of each iteration, reset any "running" flag in `finally`, and check a flag or run id so `unload()` stops it.
 
-8. **Import only what the facade allows** (see [Allowed imports](#allowed-imports)). Everything else is Core-internal and changes without notice.
+8. **Keep asyncio objects on the loop that made them.** The same skill instance is used from Core's main loop, the loop of each turn and `run_in_thread` loops. An `asyncio.Lock`, `Event`, `Queue`, `Task`, `aiohttp.ClientSession` or `httpx.AsyncClient` stored on `self` breaks when another loop uses it. Open network clients per call, use `threading.Lock` taken inside `asyncio.to_thread` for shared locks, and never cancel a task or close a connection from another thread: on Windows that can stop Core's main loop. `self.wingman` and `self.log` are safe from any loop. Details and a lock example: [README — Threads and event loops](README.md#threads-and-event-loops).
 
-9. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
+9. **Import only what the facade allows** (see [Allowed imports](#allowed-imports)). Everything else is Core-internal and changes without notice.
+
+10. **Study existing skills** before writing new ones. Similar skills are good templates — check the [Example Skills](#example-skills) list below.
 
 ## Required Files
 
