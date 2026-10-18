@@ -309,7 +309,7 @@ await self.wingman.ui.show_dialog(title, markdown, image=data_url, once="MySkill
 await self.wingman.hud.show_message(title, text) / .add_info(title, text) / .remove_info(title)
 await self.wingman.hud.show_progress(title, current, maximum) / .show_timer(title, seconds)
 #   The chat and info panel all Wingmen share; their place and look come from the user's HUD profile.
-#   Returns False when the HUD is off (Windows and macOS only) or this Wingman's hud switch is off.
+#   Returns False when the HUD is off (Windows, macOS, Linux with X11) or this Wingman's hud switch is off.
 icon = self.wingman.hud.group("mic", anchor="top_right", width=72)   # a group of your own
 await icon.add_info(" ", "![](icon.png)") / icon.update(x=40) / icon.delete()
 #   also icon.info_items() / .clear() / .hide() / .show() / .set_loader(True) / .append_message(t);

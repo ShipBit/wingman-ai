@@ -71,6 +71,9 @@ class SystemCore(TypedDict):
     gpu_name: Optional[str]
     is_dev: bool
     """True when Core runs from source (not a bundled/frozen build)."""
+    hud_supported: bool
+    """The HUD can run here (hud_server.platform): Windows, macOS, Linux with
+    X11 or XWayland. The client shows the HUD settings only then."""
 
 
 class SystemInfo(BaseModel):
@@ -1508,7 +1511,7 @@ class HudProfilesState(BaseModel):
     preview_profile_id: Optional[str]
     """The profile shown as preview panels, None when no preview runs."""
     hud_available: bool
-    """The HUD server runs (switched on, Windows or macOS)."""
+    """The HUD server runs (switched on, on an OS the HUD supports)."""
 
 
 class CreateHudProfileRequest(BaseModel):

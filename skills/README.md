@@ -710,7 +710,7 @@ discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
 # the skill out and tells the user which setting to turn on first.
-# hud_server = the HUD (Windows and macOS), sc_gamelog = the Star Citizen log.
+# hud_server = the HUD (Windows, macOS, Linux with X11), sc_gamelog = the Star Citizen log.
 # Leave it out when your skill needs neither.
 requires:
   - sc_gamelog
@@ -1583,8 +1583,8 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 
 ### `self.wingman.hud` — the HUD overlay
 
-Core's HUD server draws the overlay, on an OS the HUD supports (Windows and
-macOS) and only when the user switched it on in the settings. All Wingmen share two containers, the chat and
+Core's HUD server draws the overlay, on an OS the HUD supports (Windows,
+macOS, Linux with X11) and only when the user switched it on in the settings. All Wingmen share two containers, the chat and
 the info panel; where they are and how they look comes from the user's HUD
 profile. Every call checks that the HUD runs and returns `False` when it does
 not. The shared containers also follow the Wingman's own HUD switches.

@@ -138,7 +138,7 @@ class HudService:
     @property
     def available(self) -> bool:
         """The HUD server runs: switched on in the settings, on an OS the HUD
-        supports (hud_server.platform; Windows and macOS)."""
+        supports (hud_server.platform)."""
         return self._server is not None and self._server.is_running
 
     @property

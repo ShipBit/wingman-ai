@@ -30,7 +30,9 @@ def test_the_os_is_recognised(monkeypatch, system, expected):
     assert current_os() == expected
 
 
-def test_linux_has_a_backend_that_keeps_the_hud_off():
+def test_linux_without_a_display_keeps_the_hud_off_and_says_why(monkeypatch):
+    monkeypatch.delenv("DISPLAY", raising=False)
+
     backend = create_backend(OsFamily.LINUX)
 
     assert not backend.supported

@@ -93,7 +93,7 @@ if platform.system() == "Windows":
 
 Skills declare OS support via `platforms` in `default_config.yaml` (`windows`, `darwin`, `linux`).
 
-The HUD keeps its OS code behind one bridge, `hud_server/platform/`: one window backend per OS, picked at runtime. Windows and macOS have one, Linux not yet; see [hud_server/README.md](hud_server/README.md#platforms).
+The HUD keeps its OS code behind one bridge, `hud_server/platform/`: one window backend per OS, picked at runtime. Windows, macOS and Linux (X11) have one; see [hud_server/README.md](hud_server/README.md#platforms).
 
 ## Version Bumps and Migrations
 

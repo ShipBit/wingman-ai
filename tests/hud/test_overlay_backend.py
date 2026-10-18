@@ -96,14 +96,16 @@ def test_dragging_a_preview_container_reports_its_new_area():
     }
 
 
-def test_the_overlay_does_not_start_where_the_os_has_no_backend():
-    overlay = make_overlay(create_backend(OsFamily.LINUX))
+def test_the_overlay_does_not_start_where_the_hud_cannot_run(monkeypatch):
+    monkeypatch.delenv("DISPLAY", raising=False)
+    backend = create_backend(OsFamily.LINUX)
+    overlay = make_overlay(backend)
 
     overlay.run()
 
     [report] = overlay_errors(overlay)
     assert report["context"] == "init"
-    assert "Linux" in report["error"]
+    assert backend.unsupported_reason in report["error"]
 
 
 def test_hovering_the_preview_leaves_its_picture_as_it_was():

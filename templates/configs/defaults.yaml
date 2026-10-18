@@ -60,7 +60,7 @@ prompts:
 
     {ttsprompt}
 persistent_memory: true
-# The shared HUD containers (needs the HUD server, Windows and macOS):
+# The shared HUD containers (needs the HUD server):
 # chat shows the conversation, info gives the Wingman the info panel tools.
 hud:
   chat: true

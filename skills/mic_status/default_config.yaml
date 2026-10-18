@@ -8,6 +8,7 @@ discoverable_by_default: false
 platforms:
   - windows
   - darwin
+  - linux
 requires:
   - hud_server
 tags:
