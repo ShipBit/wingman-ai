@@ -89,6 +89,21 @@ def test_activating_a_skill_exposes_its_tools_and_finds_the_skill_by_tool():
     assert registry.get_skill_for_tool("save_note") is notes
 
 
+def test_two_active_skills_sharing_a_tool_name_send_and_route_it_once():
+    # A bundled skill and an older custom copy of it, both switched on
+    bundled = FakeSkill("UEXCorp", ["uex_get_trade_routes"])
+    copy = FakeSkill("UEXCorpBeta", ["uex_get_trade_routes", "beta_only"])
+    registry = registry_with(copy, bundled)
+
+    run(registry.activate_skill("UEXCorpBeta"))
+    assert registry.active_skill_for_tool("uex_get_trade_routes") is copy  # the only active one
+
+    run(registry.activate_skill("UEXCorp"))
+    names = [name for name, _ in registry.get_active_tools()]
+    assert names.count("uex_get_trade_routes") == 1 and "beta_only" in names
+    assert registry.active_skill_for_tool("uex_get_trade_routes") is bundled  # same one every time
+
+
 def test_deactivating_hides_the_tools_again():
     registry = registry_with(FakeSkill("notes", ["save_note"]))
     run(registry.activate_skill("notes"))
