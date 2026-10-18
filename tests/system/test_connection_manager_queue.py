@@ -84,3 +84,31 @@ def test_a_turn_sends_on_the_main_loop_while_the_main_loop_holds_the_socket():
         main_loop.call_soon_threadsafe(main_loop.stop)
         main_thread.join(1)
         main_loop.close()
+
+
+def test_a_handed_over_message_that_fails_is_logged(monkeypatch):
+    from services.printr import Printr
+
+    logged = []
+    monkeypatch.setattr(Printr, "print", lambda self, text, **kwargs: logged.append(text))
+    manager = ConnectionManager()
+    main_loop = asyncio.new_event_loop()
+    main_thread = threading.Thread(target=main_loop.run_forever, daemon=True)
+    main_thread.start()
+
+    async def fails():
+        raise ValueError("not serializable")
+
+    try:
+        manager.set_main_loop(main_loop)
+        asyncio.run(manager._on_main_loop(fails()))
+        deadline = time.monotonic() + 1
+        while not logged and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        manager.set_main_loop(None)
+        main_loop.call_soon_threadsafe(main_loop.stop)
+        main_thread.join(1)
+        main_loop.close()
+
+    assert logged and "not serializable" in logged[0]

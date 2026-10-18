@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from api.commands import WebSocketCommandModel
+from api.enums import LogType
 
 
 class ConnectionManager:
@@ -50,7 +51,21 @@ class ConnectionManager:
         if loop is None or running is loop or loop.is_closed() or not loop.is_running():
             await coro
         else:
-            asyncio.run_coroutine_threadsafe(coro, loop)
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            future.add_done_callback(self._log_failure)
+
+    @staticmethod
+    def _log_failure(future) -> None:
+        """Nobody awaits a handed-over message, so its error is logged here."""
+        if future.cancelled() or future.exception() is None:
+            return
+        from services.printr import Printr
+
+        Printr().print(
+            f"A client message failed on the main loop: {future.exception()!r}",
+            color=LogType.ERROR,
+            server_only=True,
+        )
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()

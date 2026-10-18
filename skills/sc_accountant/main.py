@@ -109,7 +109,7 @@ class _Books:
         # Core's loop and the tools on the loop of each turn, and an
         # asyncio.Lock one loop holds raises when another waits for it.
         self._engine_lock = threading.Lock()
-        self._dashboard_lock = asyncio.Lock()  # Two Wingmen starting at once.
+        self._dashboard_lock = threading.Lock()  # Two Wingmen starting at once.
 
     @classmethod
     async def acquire(cls, directory: Path, gamelog) -> "_Books":
@@ -189,10 +189,13 @@ class _Books:
 
     async def dashboard(self, port: int):
         """Start the dashboard once; later calls return the running one."""
-        async with self._dashboard_lock:
-            return await self._start_dashboard(port)
+        return await asyncio.to_thread(self._start_dashboard, port)
 
-    async def _start_dashboard(self, port: int):
+    def _start_dashboard(self, port: int):
+        with self._dashboard_lock:
+            return self._start_dashboard_locked(port)
+
+    def _start_dashboard_locked(self, port: int):
         if self.server is None:
             from skills.sc_accountant.erp_web import ERPServer
 
@@ -202,9 +205,9 @@ class _Books:
                 self.engine, port=port, share_on_lan=True, access_token=self._token()
             )
             try:
-                await asyncio.to_thread(server.start)
+                server.start()
             except Exception:
-                await asyncio.to_thread(server.stop)
+                server.stop()
                 raise
             self.server = server
         return self.server
