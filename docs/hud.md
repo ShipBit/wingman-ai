@@ -114,8 +114,9 @@ scaled display it looks smaller. Dragging always matches what you see.
 On Linux the HUD needs an X display, which a Wayland session provides through
 XWayland, and a compositor for its transparent windows (every desktop has one).
 Games under Proton and most native games run on XWayland too, so the HUD sits
-above them. A native Wayland game in fullscreen can cover it, and the Steam
-Deck's game mode does not show it.
+above them. A native Wayland game in fullscreen may cover it. Under gamescope (the Steam Deck's and
+Bazzite's game mode) the HUD marks its windows as an overlay, the way MangoHud
+does; that only works when Wingman AI runs inside that gamescope session.
 
 ## Skills on the HUD
 

@@ -7,7 +7,9 @@ preview gives the window its input back.
 
 Wayland sessions run it through XWayland, which every desktop ships. Games
 under Proton and most native ones use XWayland too, so the HUD sits in the
-same X server as the game. A native Wayland game in fullscreen may cover it.
+same X server as the game. A native Wayland game in fullscreen may cover it,
+depending on how the compositor stacks override-redirect windows. Under gamescope the
+windows are marked as an external overlay, as MangoHud's are.
 
 Without DISPLAY (a Wayland session without XWayland, a server) the HUD stays
 off and says why. Without a compositor an ARGB window has no transparency:
@@ -245,6 +247,15 @@ class LinuxBackend(HudBackend):
         lib.XChangeProperty(
             self._display, xid, window_type, x11.XA_ATOM, 32, x11.PropModeReplace,
             ctypes.byref(notification), 1,
+        )
+        # gamescope (Steam Deck and Bazzite game mode) shows only the game and
+        # windows marked as an external overlay, the way MangoHud is shown.
+        # Other compositors ignore the property.
+        overlay = lib.XInternAtom(self._display, b"GAMESCOPE_EXTERNAL_OVERLAY", 0)
+        on = ctypes.c_ulong(1)
+        lib.XChangeProperty(
+            self._display, xid, overlay, x11.XA_CARDINAL, 32, x11.PropModeReplace,
+            ctypes.byref(on), 1,
         )
         window = _Window(
             xid=xid, gc=lib.XCreateGC(self._display, xid, 0, None),
