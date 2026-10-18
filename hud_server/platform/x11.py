@@ -215,6 +215,7 @@ def load() -> Optional[Libs]:
     _bind(x11, "XMoveResizeWindow", c_int, d, w, c_int, c_int, c_uint, c_uint)
     _bind(x11, "XStoreName", c_int, d, w, c_char_p)
     _bind(x11, "XInternAtom", c_ulong, d, c_char_p, c_int)
+    _bind(x11, "XGetSelectionOwner", c_ulong, d, c_ulong)
     _bind(x11, "XChangeProperty", c_int, d, w, c_ulong, c_ulong, c_int, c_int, c_void_p, c_int)
     _bind(x11, "XCreateGC", c_void_p, d, w, c_ulong, c_void_p)
     _bind(x11, "XFreeGC", c_int, d, c_void_p)

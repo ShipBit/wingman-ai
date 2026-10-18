@@ -13,7 +13,8 @@ windows are marked as an external overlay, as MangoHud's are.
 
 Without DISPLAY (a Wayland session without XWayland, a server) the HUD stays
 off and says why. Without a compositor an ARGB window has no transparency:
-`start` refuses then instead of drawing black boxes.
+on plain X11 `start` refuses then instead of drawing black boxes. A Wayland
+compositor always blends XWayland windows, so there is nothing to check.
 
 The HUD draws in X pixels. Desktop scaling (GNOME, KDE) does not apply to
 override-redirect windows, so on a scaled display the HUD looks smaller.
@@ -24,7 +25,6 @@ import os
 import shutil
 import subprocess
 import sys
-import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -51,6 +51,25 @@ RAISE_SECONDS = 1.0
 has no "always on top", and a game that comes to the front covers it."""
 
 _FONT_FALLBACK = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+_error_handler = None
+"""Xlib's handler for X errors is process-wide and outlives a backend, so the
+callback lives as long as the module."""
+
+
+def _ignore_x_errors():
+    # The default handler ends the process on any X error; a vanished
+    # window must not take Core with it
+    global _error_handler
+    if _error_handler is None:
+        from hud_server.platform import x11
+
+        _error_handler = x11.ErrorHandler(lambda display, event: 0)
+    return _error_handler
+
+
+def _wayland_session() -> bool:
+    return bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
 
 
 def _why_unsupported() -> Optional[str]:
@@ -108,9 +127,7 @@ class LinuxBackend(HudBackend):
         self._windows: dict[int, _Window] = {}
         self._cursors: dict[Cursor, int] = {}
         self._last_raise = 0.0
-        self._error_handler = None
         self._font_cache: dict[str, Optional[FontSet]] = {}
-        self._lock = threading.Lock()
 
     @property
     def _x(self):
@@ -132,21 +149,21 @@ class LinuxBackend(HudBackend):
         if not self._display:
             raise HudPlatformError(f"Could not open the X display {os.environ.get('DISPLAY')}.")
 
-        # The default handler ends the process on any X error; a vanished
-        # window must not take Core with it
-        def on_error(display, event):
-            return 0
-
-        self._error_handler = x11.ErrorHandler(on_error)
-        lib.XSetErrorHandler(self._error_handler)
+        lib.XSetErrorHandler(_ignore_x_errors())
 
         self._screen = lib.XDefaultScreen(self._display)
         self._root = lib.XRootWindow(self._display, self._screen)
         info = x11.XVisualInfo()
         if not lib.XMatchVisualInfo(self._display, self._screen, 32, x11.TrueColor, ctypes.byref(info)):
             self.stop()
+            raise HudPlatformError("The HUD needs a 32-bit visual for transparent windows, and this X display has none.")
+        # On plain X11 a compositing manager owns _NET_WM_CM_S<screen>
+        compositor = lib.XInternAtom(self._display, f"_NET_WM_CM_S{self._screen}".encode(), 0)
+        if not _wayland_session() and not lib.XGetSelectionOwner(self._display, compositor):
+            self.stop()
             raise HudPlatformError(
-                "The HUD needs a compositor for transparent windows, and this X display has none."
+                "The HUD needs a compositor for transparent windows, and this X display has none. "
+                "Start one (picom, for example) or turn compositing on in your desktop's settings."
             )
         self._visual = info.visual
         self._colormap = lib.XCreateColormap(self._display, self._root, self._visual, x11.AllocNone)
