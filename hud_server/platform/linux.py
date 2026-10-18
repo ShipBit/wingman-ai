@@ -441,8 +441,12 @@ class LinuxBackend(HudBackend):
             except Exception:
                 return _FONT_FALLBACK
 
+        normal = match(f"{family}:style=Regular")
+        if not os.path.exists(normal):
+            # No font found and no DejaVu either: Pillow's own fonts then
+            return None
         return FontSet(
-            normal=match(f"{family}:style=Regular"),
+            normal=normal,
             bold=match(f"{family}:style=Bold"),
             italic=match(f"{family}:style=Italic"),
             bold_italic=match(f"{family}:style=Bold Italic"),
