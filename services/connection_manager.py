@@ -30,8 +30,11 @@ class ConnectionManager:
     def set_main_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._main_loop = loop
 
-    async def _on_main_loop(self, coro) -> Any:
-        """Run `coro` on the main loop and wait for it from the caller's loop.
+    async def _on_main_loop(self, coro) -> None:
+        """Run `coro` on the main loop. From another loop it is handed over
+        and the caller goes on at once, like Printr.print: a turn never waits
+        for the client, and a busy main loop cannot hold up a turn. The main
+        loop runs what it is handed in order.
 
         The WebSockets and the locks here belong to the main loop, but each
         turn and many skills run on loops of their own. A lock the main loop
@@ -45,8 +48,9 @@ class ConnectionManager:
         except RuntimeError:
             running = None
         if loop is None or running is loop or loop.is_closed() or not loop.is_running():
-            return await coro
-        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(coro, loop))
+            await coro
+        else:
+            asyncio.run_coroutine_threadsafe(coro, loop)
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()

@@ -3,6 +3,7 @@ an old state arrives after it changed."""
 
 import asyncio
 import threading
+import time
 
 from api.commands import ScGameLogStateChangedCommand, ToastCommand
 from api.enums import ToastType
@@ -70,6 +71,10 @@ def test_a_turn_sends_on_the_main_loop_while_the_main_loop_holds_the_socket():
         turn_thread.start()
         turn_thread.join(2)
         on_main.result(2)
+        # The turn hands its message over and goes on; the main loop sends it.
+        deadline = time.monotonic() + 2
+        while len(socket.sent_on) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
 
         assert socket.sent_on == [main_thread, main_thread]
         assert not socket.closed

@@ -882,9 +882,11 @@ if __name__ == "__main__":
         if not stopping:
             # The loop is gone, but the threads of turns, skills and audio
             # keep the process alive: Core would still run and answer nothing.
-            # End it so the client shows that Core stopped. Shutdown gets ten
-            # seconds; it must not keep the process alive in its turn.
-            cleanup = threading.Thread(target=exit_handler, daemon=True)
+            # End it so the client shows that Core stopped. os._exit skips the
+            # atexit handlers, so they run here first: exit_handler and the
+            # ones that stop llama-server and unhook keyboard and mouse. They
+            # get ten seconds; they must not keep the process alive in turn.
+            cleanup = threading.Thread(target=atexit._run_exitfuncs, daemon=True)
             cleanup.start()
             cleanup.join(timeout=10)
             logging.shutdown()
