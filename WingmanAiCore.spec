@@ -195,8 +195,10 @@ hiddenimports = [
     'pdfminer.six',
     'pdfminer.high_level',
     'cryptography',
-    # control_windows
+    # control_windows (clipboard: Windows; ApplicationServices, AppKit: macOS)
     'clipboard',
+    'ApplicationServices',
+    'AppKit',
     # msfs2020_control
     'SimConnect',
     'SimConnect.SimConnect',

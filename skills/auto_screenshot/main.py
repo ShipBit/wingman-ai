@@ -5,13 +5,9 @@ from typing import TYPE_CHECKING
 from mss import mss
 from PIL import Image
 
-try:
-    import pygetwindow as gw
-except (ImportError, NotImplementedError):
-    gw = None
-
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
+from skills.auto_screenshot.active_window import active_window_bbox
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
@@ -77,24 +73,9 @@ class AutoScreenshot(Skill):
 
         window_bbox = None
         try:
-            if gw is None:
-                raise RuntimeError("pygetwindow not available on this platform")
-            focused_window = await asyncio.to_thread(gw.getActiveWindow)
-
-            if focused_window:
-                window_bbox = {
-                    "top": focused_window.top,
-                    "left": focused_window.left,
-                    "width": focused_window.width,
-                    "height": focused_window.height,
-                }
-
+            window_bbox = await asyncio.to_thread(active_window_bbox)
             if self.settings.debug_mode:
-                self.log.info(
-                    f"Focused window {focused_window} bbox: {window_bbox}",
-                    server_only=True,
-                )
-
+                self.log.info(f"Active window bbox: {window_bbox}", server_only=True)
         except Exception as e:
             self.log.warning(
                 f"Window detection unavailable ({e}), using full screen capture.",

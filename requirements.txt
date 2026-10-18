@@ -69,6 +69,8 @@ onnx-asr>=0.3.3
 onnxruntime-gpu>=1.30,<2.0; sys_platform == 'win32' or sys_platform == 'linux'
 onnxruntime>=1.19.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
+# Control Windows on macOS: other apps' windows through the Accessibility API
+pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'
 
 # Pocket-TTS
 # main ahead of 3.4: voice prompts end on a pause (#334), retrained 6L models (#344).
