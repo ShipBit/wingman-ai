@@ -1231,7 +1231,7 @@ Wingman AI uses PyInstaller to create standalone executables. Skills with custom
 
 Wingman AI adds the skill's packages to `sys.path` before loading it. Where they come from depends on how the skill is run:
 
-- **Run from source (and bundled skills):** `venv/lib/python3.11/site-packages` (Windows: `venv\Lib\site-packages`) inside the skill folder. Create the venv with Python 3.11, other versions are not picked up.
+- **Run from source (and bundled skills):** `venv/lib/python3.11/site-packages` (Windows: `venv\Lib\site-packages`) inside the skill folder. On macOS and Linux create the venv with Python 3.11: the path contains the version, other versions are not picked up. On Windows the path has no version.
 - **Installed app (custom skills):** the `dependencies/` folder inside the skill folder.
 
 For custom skills, `module_manager.py` does this:
@@ -1267,7 +1267,7 @@ python -m venv venv
 pip install your-package another-package
 ```
 
-**3. Implement and test your skill** (when running from source, Wingman adds the venv's `site-packages` for Python 3.11 automatically)
+**3. Implement and test your skill** (when running from source, Wingman adds the venv's `site-packages` automatically; Python 3.11 on macOS and Linux)
 
 **4. Generate requirements.txt:**
 

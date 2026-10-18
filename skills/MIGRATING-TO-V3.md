@@ -18,7 +18,7 @@ using the checklist + mapping table below.
 lifecycle hooks). `self.wingman` is *the runtime* (everything about the wingman/app, grouped
 into feature namespaces). No capability lives on both. If you reach for a runtime capability,
 it is under a feature noun on `self.wingman`: `ai`, `local_ai`, `tts`, `stt`, `audio`, `commands`,
-`tools`, `conversation`, `memory`, `secrets`, `skills`, `ui`, `hud`, `settings`, `system_one`, `sc_gamelog`,
+`tools`, `conversation`, `memory`, `secrets`, `skills`, `ui`, `hud`, `screen`, `settings`, `system_one`, `sc_gamelog`,
 `star_citizen`, `language`.
 
 ### The 5 breaking changes

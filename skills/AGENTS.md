@@ -480,7 +480,7 @@ Facade members are added over time (`ui`, `hud`, `sc_gamelog`, `star_citizen`, `
 | [thinking_sound](thinking_sound/) | Hook (auto) | Sound during processing |
 | [mic_status](mic_status/) | Hook (auto) | `audio.on_mic_status_changed`, `hud.group`, `requires: [hud_server]` |
 | [image_generation](image_generation/) | Tool | `@tool` with `wait_response` |
-| [timer](timer/) | Tool | State management, `unload()` cleanup |
+| [timer](timer/) | Hook+Tool | State management, `unload()` cleanup |
 | [vision_ai](vision_ai/) | Tool | Screen capture, discovery keywords |
 | [file_manager](file_manager/) | Tool | Multi-tool skill |
 | [spotify](spotify/) | Tool | External API integration |
