@@ -1693,6 +1693,12 @@ not. The shared containers also follow the Wingman's own HUD switches.
 | `.info_items()` | What the shared info panel shows now, oldest first: dicts with `title`, `text` and `added_by`. `[]` when the HUD is off. |
 | `.group(name, element="persistent", **props)` | A group of the skill's own, e.g. a status icon in a corner (see below). |
 
+Panel and message text is Markdown, with tables (`---:` aligns a column
+right), task lists and three data blocks: a fenced ` ```bar ` (labelled
+bars of segments, e.g. a cargo hold), ` ```steps ` (a route of done, current
+and next stops) and ` ```stats ` (figures side by side). They follow the
+user's HUD profile; their syntax is in `hud_server/README.md`, Data blocks.
+
 The info panel belongs to every Wingman: only remove panels your skill put
 there. Each panel remembers who added it; yours read as "added by the Your
 Skill skill of Computer" to the Wingmen, which read the panel with their
