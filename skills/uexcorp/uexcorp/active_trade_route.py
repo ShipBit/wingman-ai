@@ -133,30 +133,34 @@ class ActiveTradeRoute:
             stops = active["route"]["stops"]
             index = active["step"] - 1
             stop = stops[index]
-            entry = next((e for e in stop.get(side, []) if e["commodity"].lower() == commodity.strip().lower()), None)
-            if entry is None:
+            # One commodity can have two buys at a stop (part sold at one stop, the rest at another):
+            # the recorded amount fills them in order, the last takes what is left over
+            entries = [e for e in stop.get(side, []) if e["commodity"].lower() == commodity.strip().lower()]
+            if not entries:
                 planned = ", ".join(e["commodity"] for e in stop.get(side, [])) or "nothing"
                 return None, f"The plan has no {side} of {commodity} at {stop['terminal']} (planned: {planned}).", []
-            delta = int(scu) - entry["scu"]
-            entry.setdefault("planned_aUEC", entry["total_aUEC"])  # what UEX expected, for the HUD
-            entry.update(scu=int(scu), total_aUEC=round(total_price), recorded=True)
-            if scu:
-                entry["price_per_scu"] = round(total_price / scu, 2)
+            entry = entries[0]
             warnings = []
-            if side == "buy" and delta:
-                for later in stops[index + 1:]:
-                    sale = next((e for e in later.get("sell", []) if e["commodity"] == entry["commodity"]), None)
-                    if sale:
-                        if not sale.get("recorded"):
-                            sale.setdefault("planned_scu", sale["scu"])
-                            sale["scu"] = max(0, sale["scu"] + delta)
-                            sale["total_aUEC"] = round(sale["scu"] * sale["price_per_scu"])
-                            if sale["scu"] > sale["planned_scu"]:
-                                warnings.append(
-                                    f"{later['terminal']} was planned to take {sale['planned_scu']:,} SCU {sale['commodity']}, "
-                                    f"now {sale['scu']:,}: it may take less."
-                                )
-                        break
+            left = int(scu)
+            for number, part in enumerate(entries):
+                part_scu = left if number == len(entries) - 1 else min(left, part["scu"])
+                left -= part_scu
+                delta = part_scu - part["scu"]
+                part.setdefault("planned_aUEC", part["total_aUEC"])  # what UEX expected, for the HUD
+                part.update(scu=part_scu, total_aUEC=round(total_price * part_scu / scu) if scu else 0, recorded=True)
+                if scu:
+                    part["price_per_scu"] = round(total_price / scu, 2)
+                if side == "buy" and delta:
+                    sale_stop, sale = self.__sale_of(stops[index + 1:], part)
+                    if sale and not sale.get("recorded"):
+                        sale.setdefault("planned_scu", sale["scu"])
+                        sale["scu"] = max(0, sale["scu"] + delta)
+                        sale["total_aUEC"] = round(sale["scu"] * sale["price_per_scu"])
+                        if sale["scu"] > sale["planned_scu"]:
+                            warnings.append(
+                                f"{sale_stop['terminal']} was planned to take {sale['planned_scu']:,} SCU {sale['commodity']}, "
+                                f"now {sale['scu']:,}: it may take less."
+                            )
             aboard = {c["commodity"]: c["scu"] for c in self.cargo_on_arrival(active)}
             if side == "sell" and int(scu) > aboard.get(entry["commodity"], 0):
                 warnings.append(
@@ -179,6 +183,22 @@ class ActiveTradeRoute:
             )
             self.__save(state)
             return active, None, warnings
+
+    @staticmethod
+    def __sale_of(later_stops: list[dict], buy: dict) -> tuple[dict | None, dict | None]:
+        """The later stop and sell entry where a buy is sold: at its `sell_at` terminal, or (none
+        given) the next stop that sells the commodity."""
+        target = buy.get("sell_at")
+        first = (None, None)
+        for later in later_stops:
+            sale = next((e for e in later.get("sell", []) if e["commodity"] == buy["commodity"]), None)
+            if not sale:
+                continue
+            if not target or later.get("terminal") == target:
+                return later, sale
+            if first[0] is None:
+                first = (later, sale)
+        return first
 
     def get_last_ship(self) -> str | None:
         return self.__load().get("last_ship")

@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import threading
 import time
 from typing import TYPE_CHECKING
 from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
@@ -49,14 +50,23 @@ class ToolHandler:
             ProfitCalculation.TOOL_NAME: ProfitCalculation,
         }
         self.__notes = []
-        self.__lock = asyncio.Lock()
+        # A threading lock: every turn runs on its own event loop, and an asyncio.Lock that two
+        # loops wait on never wakes the second one (and refuses every later call)
+        self.__lock = threading.Lock()
 
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
-        # One call at a time: notes, timers and the parameter cache are shared
-        async with self.__lock:
+        # One call at a time: notes, timers and the parameter cache are shared. Polled, not
+        # acquired in a thread: a turn cancelled while waiting must not take the lock later
+        acquired = False
+        try:
+            while not (acquired := self.__lock.acquire(blocking=False)):
+                await asyncio.sleep(0.05)
             return await self.__execute_tool(tool_name, parameters)
+        finally:
+            if acquired:
+                self.__lock.release()
 
     async def __execute_tool(
         self, tool_name: str, parameters: dict[str, any]

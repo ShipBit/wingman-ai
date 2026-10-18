@@ -118,7 +118,9 @@ class ConfigHandler:
         return errors
 
     def sync_blacklists(self):
-        # Without data the files would be rewritten as empty lists, losing the user's choices
+        # Without data the files would be rewritten as empty lists, losing the user's choices.
+        # Runs before the helper is ready: a fresh import replaced the tables, and tools must
+        # not see them without the user's blacklists
         if not self.__helper.get_handler_import() or not self.__helper.get_handler_import().has_data():
             return
         self.__sync_commodity_blacklist()
@@ -126,9 +128,6 @@ class ConfigHandler:
 
     def __sync_commodity_blacklist(self):
         from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-
-        if not self.__helper.is_ready():
-            return False
 
         file_path = os.path.join(
             self.__fine_config_path, "commodity_blacklist.yaml"
@@ -181,9 +180,6 @@ class ConfigHandler:
 
     def __sync_terminal_blacklist(self):
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-
-        if not self.__helper.is_ready():
-            return False
 
         file_path = os.path.join(
             self.__fine_config_path, "terminal_blacklist.yaml"
