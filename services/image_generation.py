@@ -105,6 +105,33 @@ def reference_data_url(image_bytes: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
+SCREENSHOT_MAX_DIMENSION = 1280
+SCREENSHOT_MAX_CHARS = 250_000
+"""Wingman Pro takes 320,000 characters per request, images with their full
+base64. The rest is room for the prompt."""
+
+
+def screenshot_base64(image: Image.Image) -> str:
+    """A screenshot as base64 JPEG for a vision model: at most 1280 pixels on
+    the long side and at most 250,000 characters. A busy Discord screen as PNG
+    had 496,000 characters at 1000 pixels; JPEG keeps the text readable at a
+    fraction of that. Too big: lower quality first, then the size."""
+    image = image.convert("RGB")
+    dimension = SCREENSHOT_MAX_DIMENSION
+    while True:
+        scaled = image.copy()
+        scaled.thumbnail((dimension, dimension), Image.LANCZOS)
+        for quality in (85, 70, 55):
+            buffer = io.BytesIO()
+            scaled.save(buffer, format="JPEG", quality=quality)
+            encoded = base64.b64encode(buffer.getvalue()).decode()
+            if len(encoded) <= SCREENSHOT_MAX_CHARS:
+                return encoded
+        if dimension <= 480:
+            return encoded
+        dimension = int(dimension * 0.75)
+
+
 def reference_from_data_url(data_url: str) -> str:
     """A data URL from the client or the chat history, shrunk the same way."""
     match = DATA_URL_PATTERN.match(data_url)
