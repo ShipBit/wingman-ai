@@ -214,3 +214,43 @@ def test_saving_the_same_value_again_still_tells_the_wingmen(secrets_dir):
     asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
     asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
     assert len(published) == 2
+
+
+def _save_secret(handler, value, show_message):
+    from api.commands import SaveSecretCommand
+
+    command = SaveSecretCommand(
+        command="save_secret",
+        secret_name="wingman_pro",
+        secret_value=value,
+        show_message=show_message,
+    )
+    asyncio.run(handler.handle_secret(command, websocket=None))
+
+
+def test_the_client_resending_its_token_does_not_validate_the_wingmen_again(secrets_dir):
+    """The client sends its device token on every start. Each save made every
+    Wingman validate again and start a new gateway session."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    keeper = SecretKeeper()
+    published = []
+
+    async def listener(secrets):
+        published.append(dict(secrets))
+
+    keeper.secret_events.subscribe("secrets_saved", listener)
+    handler = _command_handler(keeper)
+    handler.source_name = "test"
+    handler.printr = MagicMock(print_async=AsyncMock())
+
+    _save_secret(handler, "token-1", show_message=False)
+    _save_secret(handler, "token-1", show_message=False)
+    assert len(published) == 1
+    # The client still learns that Core has the token.
+    assert len(SecretKeeper._connection_manager.sent) == 2
+
+    _save_secret(handler, "token-1", show_message=True)
+    _save_secret(handler, "token-2", show_message=False)
+    assert len(published) == 3
+    assert restart().secrets == {"wingman_pro": "token-2"}
