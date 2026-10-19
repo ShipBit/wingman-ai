@@ -1,8 +1,9 @@
+import re
 from os import path
 from typing import TYPE_CHECKING
-from edge_tts import Communicate
-from api.enums import TtsProvider
-from api.interface import EdgeTtsConfig, SoundConfig
+from edge_tts import Communicate, list_voices
+from api.enums import TtsProvider, TtsVoiceGender
+from api.interface import EdgeTtsConfig, SoundConfig, VoiceInfo
 from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
@@ -15,6 +16,67 @@ RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "edge_tts.mp3"
 
 printr = Printr()
+
+# Tags almost every Edge voice has: on a tile they would say nothing.
+COMMON_TAGS = {"Friendly", "Positive", "General", "Copilot"}
+
+
+async def get_edge_voices() -> list[VoiceInfo]:
+    """Every Edge voice, as Microsoft lists it right now."""
+    raw = await list_voices()
+    return edge_voice_infos(raw)
+
+
+def edge_voice_infos(raw: list[dict]) -> list[VoiceInfo]:
+    """Microsoft's voice list as picker tiles.
+
+    Edge has no language list per voice. A "Multilingual" voice speaks every
+    language, so it gets all languages of the list, its own first.
+    """
+    all_languages = sorted({v["Locale"].split("-")[0] for v in raw})
+    voices = []
+    for v in raw:
+        locale = v["Locale"]
+        own = locale.split("-")[0]
+        multilingual = "Multilingual" in v["ShortName"]
+        tag = v.get("VoiceTag") or {}
+        words = [
+            w.strip()
+            for w in tag.get("VoicePersonalities", []) + tag.get("ContentCategories", [])
+        ]
+        description = ", ".join(
+            dict.fromkeys(w for w in words if w and w not in COMMON_TAGS)
+        )
+        voices.append(
+            VoiceInfo(
+                id=v["ShortName"],
+                name=edge_voice_name(v["ShortName"], locale),
+                gender=edge_voice_gender(v.get("Gender")),
+                locale=locale,
+                languages=(
+                    [locale] + [l for l in all_languages if l != own]
+                    if multilingual
+                    else [locale]
+                ),
+                provider="edge_tts",
+                description=description or None,
+            )
+        )
+    return voices
+
+
+def edge_voice_name(short_name: str, locale: str) -> str:
+    """"en-US-AvaMultilingualNeural" -> "Ava Multilingual"."""
+    name = short_name[len(locale) + 1 :] if short_name.startswith(locale) else short_name
+    name = name.removesuffix("Neural")
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+
+
+def edge_voice_gender(gender: str | None) -> TtsVoiceGender:
+    try:
+        return TtsVoiceGender(gender)
+    except ValueError:
+        return TtsVoiceGender.UNKNOWN
 
 
 class Edge:

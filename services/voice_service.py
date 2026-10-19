@@ -12,7 +12,7 @@ from api.interface import (
     XVASynthTtsConfig,
     PocketTTSConfig,
 )
-from providers.edge import Edge
+from providers.edge import Edge, get_edge_voices
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
 from providers.inworld import Inworld
@@ -40,6 +40,7 @@ class VoiceService:
         self.audio_player = audio_player
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
+        self.edge_voices: list[VoiceInfo] = []
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -61,6 +62,13 @@ class VoiceService:
             methods=["GET"],
             path="/voices/inworld",
             endpoint=self.get_inworld_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/edge",
+            endpoint=self.get_edge_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -185,6 +193,16 @@ class VoiceService:
         inworld = Inworld(api_key=api_key, wingman_name="")
         result = await inworld.get_available_voices()
         return result
+
+    # GET /voices/edge
+    async def get_edge_voices(self) -> list[VoiceInfo]:
+        # Microsoft's list changes rarely: once per Core start is enough.
+        if not self.edge_voices:
+            try:
+                self.edge_voices = await get_edge_voices()
+            except Exception as e:
+                self.printr.toast_error(f"Edge TTS: \n{str(e)}")
+        return self.edge_voices
 
     # GET /voices/openai-compatible
     async def get_openai_compatible_voices(
