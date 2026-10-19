@@ -16,6 +16,8 @@ from services.wingman_default_voices import (
     default_voice_for,
     is_default_voice,
     load_default_voices,
+    restore_tts_sections,
+    restore_voice_defaults,
 )
 from tests.support import REPO_ROOT, FakeConfigManager, template
 
@@ -225,3 +227,48 @@ def test_the_edge_voice_follows_the_language(tmp_path):
     assert edge() == "de-DE-AmalaNeural"
     apply_default_voices(cm, app, "fr")
     assert edge() == "en-US-AvaMultilingualNeural"
+
+
+def test_restoring_voices_keeps_everything_else():
+    config = {
+        "name": "ATC",
+        "backstory": "mine",
+        "features": {"tts_provider": "elevenlabs", "conversation_provider": "openai"},
+        "wingman_pro": {"tts_provider": "inworld", "conversation_model": "x"},
+        "openai": {"tts_voice": "nova", "conversation_model": "gpt"},
+        "elevenlabs": {"voice": {"name": "Adam"}},
+        "sound": {"effects": ["AI"]},
+    }
+    template_config = {
+        "pocket_tts": {"voice": "en-barry"},
+        "sound": {"effects": ["LOW_QUALITY_RADIO"]},
+        "openai": {"tts_voice": "onyx"},
+    }
+
+    restored = restore_tts_sections(config, template_config)
+
+    assert restored == {
+        "name": "ATC",
+        "backstory": "mine",
+        "features": {"conversation_provider": "openai"},
+        "wingman_pro": {"conversation_model": "x"},
+        "openai": {"conversation_model": "gpt", "tts_voice": "onyx"},
+        "pocket_tts": {"voice": "en-barry"},
+        "sound": {"effects": ["LOW_QUALITY_RADIO"]},
+    }
+
+
+def test_a_restored_wingman_gets_the_voice_of_the_language(tmp_path):
+    app, cm, folder = setup(tmp_path, {"ATC": {"name": "ATC", "pocket_tts": {"voice": "eponine"}}})
+    shipped = tmp_path / "ATC.template.yaml"
+    shipped.write_text(yaml.safe_dump({"pocket_tts": {"voice": "azelma"}}), encoding="utf-8")
+
+    assert restore_voice_defaults(cm, app, str(folder / "ATC.yaml"), str(shipped), "de")
+    assert voice(folder, "ATC") == "de-julia"
+
+
+def test_a_wingman_of_its_own_inherits_the_default_voices_again(tmp_path):
+    app, cm, folder = setup(tmp_path, {"Mine": {"name": "Mine", "pocket_tts": {"voice": "eponine"}}})
+
+    assert restore_voice_defaults(cm, app, str(folder / "Mine.yaml"), None, "de")
+    assert voice(folder, "Mine") is None

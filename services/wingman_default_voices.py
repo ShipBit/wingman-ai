@@ -589,3 +589,67 @@ def _write(path: str, data: dict) -> None:
         os.replace(tmp, path)
     except OSError as e:
         Printr().print(f"Could not write {path}: {e}", server_only=True)
+
+
+# The sections that hold only voice settings. `openai`, `features` and
+# `wingman_pro` mix in other settings, so only their voice keys count.
+TTS_SECTIONS = (
+    "edge_tts",
+    "elevenlabs",
+    "hume",
+    "inworld",
+    "pocket_tts",
+    "xvasynth",
+    "openai_compatible_tts",
+    "sound",
+)
+TTS_KEYS = {"features": ("tts_provider",), "wingman_pro": ("tts_provider", "azure")}
+
+
+def restore_tts_sections(config: dict, template: dict) -> dict:
+    """``config`` with its voices and sound effects as ``template`` has them.
+    What the template leaves out, the config inherits from the defaults again.
+    Everything else stays as the user set it."""
+    config = copy.deepcopy(config)
+    for section in TTS_SECTIONS:
+        config.pop(section, None)
+        if section in template:
+            config[section] = copy.deepcopy(template[section])
+    for section, keys in TTS_KEYS.items():
+        own = dict(config.get(section) or {})
+        shipped = template.get(section) or {}
+        for key in keys:
+            own.pop(key, None)
+            if key in shipped:
+                own[key] = copy.deepcopy(shipped[key])
+        if own:
+            config[section] = own
+        else:
+            config.pop(section, None)
+    openai = {k: v for k, v in (config.get("openai") or {}).items() if not k.startswith("tts_")}
+    openai.update({k: v for k, v in (template.get("openai") or {}).items() if k.startswith("tts_")})
+    if openai:
+        config["openai"] = openai
+    else:
+        config.pop("openai", None)
+    return config
+
+
+def restore_voice_defaults(
+    config_manager: ConfigManager,
+    app_root: str,
+    path: str,
+    template_path: Optional[str],
+    language: str,
+) -> bool:
+    """The Wingman at ``path`` gets the voices and sound effects it shipped
+    with (``template_path``), or inherits the defaults' when it has no
+    template. A shipped Wingman then gets the default voices of ``language``.
+    Returns False when the config could not be written."""
+    config = config_manager.read_config(path) or {}
+    template = _read_yaml(template_path) if template_path else {}
+    if not config_manager.write_config(path, restore_tts_sections(config, template)):
+        return False
+    if template_path:
+        apply_default_voices(config_manager, app_root, language)
+    return True

@@ -37,6 +37,7 @@ from services.printr import Printr
 from services.pub_sub import PubSub
 from services.system_manager import SystemManager
 from services.tower import Tower
+from services.wingman_default_voices import restore_voice_defaults
 
 
 class ConfigService:
@@ -131,6 +132,13 @@ class ConfigService:
             methods=["POST"],
             path="/config/wingman/restore-defaults",
             endpoint=self.restore_wingman_defaults,
+            response_model=ConfigWithDirInfo,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/wingman/restore-voice-defaults",
+            endpoint=self.restore_wingman_voice_defaults,
             response_model=ConfigWithDirInfo,
             tags=tags,
         )
@@ -1525,6 +1533,31 @@ class ConfigService:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+        return await self.load_config(config_dir)
+
+    # POST /config/wingman/restore-voice-defaults
+    async def restore_wingman_voice_defaults(
+        self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
+    ) -> ConfigWithDirInfo:
+        """Only the voices and sound effects of a Wingman go back to ours: the
+        shipped ones with the default voice of the spoken language, or the
+        defaults' for a Wingman of the user's own. Everything else stays."""
+        template_path, _ = self.config_manager._resolve_wingman_template_yaml(
+            config_dir=config_dir, wingman_name=wingman_file.name
+        )
+        config_path = path.join(
+            self.config_manager.config_dir, config_dir.directory, wingman_file.file
+        )
+        if not path.isfile(config_path):
+            raise HTTPException(status_code=404, detail=f"No config for '{wingman_file.name}'.")
+        if not restore_voice_defaults(
+            self.config_manager,
+            self.config_manager.app_root_path,
+            config_path,
+            template_path,
+            self.config_manager.settings_config.spoken_language.value,
+        ):
+            raise HTTPException(status_code=500, detail=f"Could not save '{wingman_file.name}'.")
         return await self.load_config(config_dir)
 
     # POST /config/wingman/can-restore-defaults
