@@ -245,12 +245,15 @@ class VoiceService:
         /stop-playback unreachable until the preview ends. This mirrors how
         wingmen play TTS via threaded_execution.
 
-        Answers when the voice is done or stopped: the client shows Stop until
-        then. Providers without streaming (Edge, xVASynth) return as soon as
-        their audio starts, so wait for it here.
+        Answers when the voice is done, stopped or replaced by the next
+        preview: the client shows Stop until then. Providers without streaming
+        (Edge, xVASynth) return as soon as their audio starts, so wait for it
+        here.
         """
         await asyncio.to_thread(asyncio.run, playback)
-        while self.audio_player.is_playing:
+        player = self.audio_player
+        mine = player.playback_count
+        while player.is_playing and player.playback_count == mine:
             await asyncio.sleep(0.1)
 
     # POST /play/openai
