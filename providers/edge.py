@@ -2,6 +2,7 @@ import re
 from os import path
 from typing import TYPE_CHECKING
 from edge_tts import Communicate, list_voices
+from edge_tts.exceptions import NoAudioReceived
 from api.enums import TtsProvider, TtsVoiceGender
 from api.interface import EdgeTtsConfig, SoundConfig, VoiceInfo
 from providers.interfaces import TtsInterface, tts_provider
@@ -36,6 +37,8 @@ def edge_voice_infos(raw: list[dict]) -> list[VoiceInfo]:
     all_languages = sorted({v["Locale"].split("-")[0] for v in raw})
     voices = []
     for v in raw:
+        if not edge_can_speak(v["ShortName"]):
+            continue
         locale = v["Locale"]
         own = locale.split("-")[0]
         multilingual = "Multilingual" in v["ShortName"]
@@ -65,6 +68,15 @@ def edge_voice_infos(raw: list[dict]) -> list[VoiceInfo]:
     return voices
 
 
+def edge_can_speak(short_name: str) -> bool:
+    """edge-tts refuses some names Microsoft lists (the Inuktitut voices)."""
+    try:
+        Communicate(text=".", voice=short_name)
+        return True
+    except ValueError:
+        return False
+
+
 def edge_voice_name(short_name: str, locale: str) -> str:
     """"en-US-AvaMultilingualNeural" -> "Ava Multilingual"."""
     name = short_name[len(locale) + 1 :] if short_name.startswith(locale) else short_name
@@ -91,9 +103,17 @@ class Edge:
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
-        communicate, output_file = await self.__generate_speech(
-            text=text, voice=config.voice
-        )
+        try:
+            communicate, output_file = await self.__generate_speech(
+                text=text, voice=config.voice
+            )
+        except NoAudioReceived:
+            # Some voices never answer, others only for text in their own language.
+            printr.toast_error(
+                f"Edge TTS: The voice {config.voice} sent no audio for this text. "
+                "Try another voice."
+            )
+            return
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
         await audio_player.play_with_effects(

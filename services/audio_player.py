@@ -43,6 +43,9 @@ class AudioPlayer:
         self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
+        # Stopping a stream and closing it at the same time fails on macOS
+        # (AUHAL err -50): stop_playback stops, the playback thread closes.
+        self.stream_lock = Lock()
         self.raw_stream = None
         self.wingman_name = ""
         self.playback_events = PubSub()
@@ -167,7 +170,8 @@ class AudioPlayer:
         # stream fails on macOS ("cannot do in current context"). So close it
         # here, once it ran out or was stopped.
         done.wait()
-        stream.close()
+        with self.stream_lock:
+            stream.close()
         # A newer playback may own the player by now: leave its state alone.
         if self.stream is stream:
             self.stream = None
@@ -184,10 +188,11 @@ class AudioPlayer:
 
         stream, self.stream = self.stream, None
         if stream is not None:
-            try:
-                stream.stop()
-            except sd.PortAudioError:
-                pass  # ran out and closed in the meantime
+            with self.stream_lock:
+                try:
+                    stream.stop()
+                except sd.PortAudioError:
+                    pass  # ran out and closed in the meantime
 
         if self.raw_stream is not None:
             self.raw_stream.stop()
