@@ -115,7 +115,7 @@ from services.hud_service import HudService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
-from services.image_processing import process_image, validate_image_mime
+from services.image_processing import process_images, validate_image_mime
 from services.model_metadata import ModelMetadataService
 from services.audio import (
     AudioInput,
@@ -2607,16 +2607,15 @@ class WingmanCore(WebSocketUser):
                         detail="The configured conversation model does not support vision/images.",
                     )
 
-            processed_images = []
+            image_bytes = []
             for img_file in images:
                 if not validate_image_mime(img_file.content_type or ""):
                     raise HTTPException(
                         status_code=422,
                         detail=f"Unsupported image type: {img_file.content_type}. Allowed: PNG, JPEG, WebP, GIF.",
                     )
-                img_bytes = await img_file.read()
-                b64, mime = process_image(img_bytes)
-                processed_images.append((b64, mime))
+                image_bytes.append(await img_file.read())
+            processed_images = await asyncio.to_thread(process_images, image_bytes)
 
         def run_async_process():
             loop = asyncio.new_event_loop()

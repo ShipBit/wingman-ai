@@ -1,9 +1,8 @@
 import asyncio
-import base64
-import io
 from typing import TYPE_CHECKING
 from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.image_generation import vision_base64
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -59,7 +58,7 @@ class VisionAI(Skill):
         """
         return await self.analyse_screen(question)
 
-    async def analyse_screen(self, prompt: str, desired_image_width: int = 1000):
+    async def analyse_screen(self, prompt: str):
         function_response = ""
 
         # The screen through Core: under Wayland the desktop takes the shot
@@ -71,7 +70,7 @@ class VisionAI(Skill):
             image = await self.wingman.screen.capture(max(1, display))
         except RuntimeError as e:
             return f"Could not see the screen: {e}"
-        png_base64 = await asyncio.to_thread(self._to_base64, image, desired_image_width)
+        jpeg_base64 = await asyncio.to_thread(vision_base64, image)
 
         if self._get_show_screenshots():
             await self.printr.print_async(
@@ -80,53 +79,14 @@ class VisionAI(Skill):
                 source=LogSource.WINGMAN,
                 source_name=self.wingman.name,
                 skill_name=self.name,
-                additional_data={"image_base64": png_base64},
+                additional_data={"image_base64": jpeg_base64},
             )
 
         response_text = await self.wingman.ai.generate(
             prompt,
             system="You are a helpful ai assistant.",
-            image=f"data:image/png;base64,{png_base64}",
+            image=f"data:image/jpeg;base64,{jpeg_base64}",
         )
         function_response = response_text or ""
 
         return function_response
-
-    def _to_base64(self, image, desired_image_width: int) -> str:
-        aspect_ratio = image.height / image.width
-        new_height = int(desired_image_width * aspect_ratio)
-        resized_image = image.resize((desired_image_width, new_height))
-        return self.pil_image_to_base64(resized_image)
-
-    def pil_image_to_base64(self, pil_image):
-        """
-        Convert a PIL image to a base64 encoded string.
-
-        :param pil_image: PIL Image object
-        :return: Base64 encoded string of the image
-        """
-        # Create a bytes buffer to hold the image data
-        buffer = io.BytesIO()
-        # Save the PIL image to the bytes buffer in PNG format
-        pil_image.save(buffer, format="PNG")
-        # Get the byte data from the buffer
-
-        # Encode the byte data to Base64
-        base64_encoded_data = base64.b64encode(buffer.getvalue())
-        # Convert the base64 bytes to a string
-        base64_string = base64_encoded_data.decode("utf-8")
-
-        return base64_string
-
-    def convert_png_to_base64(self, png_data):
-        """
-        Convert raw PNG data to a base64 encoded string.
-
-        :param png_data: A bytes object containing the raw PNG data
-        :return: A base64 encoded string.
-        """
-        # Encode the PNG data to base64
-        base64_encoded_data = base64.b64encode(png_data)
-        # Convert the base64 bytes to a string
-        base64_string = base64_encoded_data.decode("utf-8")
-        return base64_string

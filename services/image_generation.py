@@ -105,6 +105,45 @@ def reference_data_url(image_bytes: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
+VISION_MAX_PIXELS = 1_150_000
+"""About 1430x800 on a 16:9 screen. A limit on the pixels, not the long side,
+so a 32:9 screen keeps its height: 2020x570 instead of 1280x360, where 14 px
+text shrank to 3.5 px. Claude resizes anything bigger to this anyway."""
+VISION_MAX_CHARS = 250_000
+"""Wingman Pro takes 320,000 characters per request, images with their full
+base64. The rest is room for the prompt."""
+
+
+def vision_base64(image: Image.Image, max_chars: int = VISION_MAX_CHARS) -> str:
+    """An image as base64 JPEG for a vision model: at most 1.15 megapixels and
+    at most `max_chars` characters. A busy Discord screen as PNG had 496,000
+    characters at 1000 pixels; JPEG keeps the text readable at a fraction of
+    that. Too big: lower quality first, then the size.
+    Transparency goes onto white."""
+    if image.mode in ("RGBA", "LA", "PA") or (
+        image.mode == "P" and "transparency" in image.info
+    ):
+        image = image.convert("RGBA")
+        background = Image.new("RGB", image.size, (255, 255, 255))
+        background.paste(image, mask=image.getchannel("A"))
+        image = background
+    else:
+        image = image.convert("RGB")
+    scale = min(1.0, (VISION_MAX_PIXELS / (image.width * image.height)) ** 0.5)
+    while True:
+        size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+        scaled = image if scale == 1.0 else image.resize(size, Image.LANCZOS)
+        for quality in (85, 70, 55):
+            buffer = io.BytesIO()
+            scaled.save(buffer, format="JPEG", quality=quality)
+            encoded = base64.b64encode(buffer.getvalue()).decode()
+            if len(encoded) <= max_chars:
+                return encoded
+        if size[0] * size[1] <= 200_000:
+            return encoded
+        scale *= 0.75
+
+
 def reference_from_data_url(data_url: str) -> str:
     """A data URL from the client or the chat history, shrunk the same way."""
     match = DATA_URL_PATTERN.match(data_url)

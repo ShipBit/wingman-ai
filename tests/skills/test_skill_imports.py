@@ -19,7 +19,7 @@ ALLOWED_PREFIXES = (
     "skills.skill_base",
     "services.skill_local_ai",       # SamplingPreset
     "services.benchmark",            # type hint of the legacy execute_tool
-    "services.image_generation",     # image helpers next to ai.generate_image
+    "services.image_generation",     # image helpers: generate_image, vision
     "wingmen.wingman_context",       # TYPE_CHECKING only
 )
 
