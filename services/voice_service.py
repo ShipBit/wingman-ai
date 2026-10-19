@@ -237,16 +237,21 @@ class VoiceService:
         )
         return voices
 
-    @staticmethod
-    async def _run_playback(playback):
+    async def _run_playback(self, playback):
         """Run a playback coroutine in a worker thread with its own event loop.
 
         Playback previews block their loop (audio pumping + drain), so running
         them on the API event loop would freeze the server and make POST
         /stop-playback unreachable until the preview ends. This mirrors how
         wingmen play TTS via threaded_execution.
+
+        Answers when the voice is done or stopped: the client shows Stop until
+        then. Providers without streaming (Edge, xVASynth) return as soon as
+        their audio starts, so wait for it here.
         """
         await asyncio.to_thread(asyncio.run, playback)
+        while self.audio_player.is_playing:
+            await asyncio.sleep(0.1)
 
     # POST /play/openai
     async def play_openai_tts(
