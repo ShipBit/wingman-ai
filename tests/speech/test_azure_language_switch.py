@@ -85,7 +85,7 @@ def test_german_moves_the_defaults_and_untouched_wingmen_to_azure(tmp_path):
     assert tts(read(folder, "Clippy")) == ("wingman_pro", "azure", "andrew")
     # A Wingman of the user's own without a voice follows the defaults.
     assert tts(read(folder, "Mine")) == (None, None, None)
-    assert tts(cm.read_config(cm.default_config_path)) == ("wingman_pro", "azure", "de-DE-KatjaNeural")
+    assert tts(cm.read_config(cm.default_config_path)) == ("wingman_pro", "azure", "zh-CN-XiaoyuMultilingualNeural")
     assert cm.default_config == "reloaded"
 
 

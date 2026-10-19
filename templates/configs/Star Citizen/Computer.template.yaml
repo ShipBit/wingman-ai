@@ -35,12 +35,12 @@ prompts:
     - Loyal to your pilot
 record_key: end
 inworld:
-  voice_id: Ashley
+  voice_id: Deborah
 wingman_pro:
   azure:
-    voice: en-US-JennyMultilingualNeural
+    voice: zh-CN-XiaoyuMultilingualNeural
 pocket_tts:
-  voice: fantine
+  voice: jane
 command_categories:
   - id: 8483a2f5-5273-435f-82ee-561c5a485317
     name: Vehicles - Seats and Operator Modes

@@ -136,11 +136,12 @@ def test_german_users_move_from_pocket_to_azure():
     defaults = m.migrate_defaults(dict(POCKET_DEFAULTS))
     assert defaults["features"]["tts_provider"] == "wingman_pro"
     assert defaults["wingman_pro"]["tts_provider"] == "azure"
-    assert defaults["wingman_pro"]["azure"]["voice"] == "de-DE-KatjaNeural"
+    assert defaults["wingman_pro"]["azure"]["voice"] == "zh-CN-XiaoyuMultilingualNeural"
     # A shipped Wingman on the German default voice switches; its Azure voice
     # follows the language at the next start (apply_default_voices).
     atc = shipped("ATC", "Star Citizen")
     atc["pocket_tts"]["voice"] = "de-julia"
+    atc["inworld"]["voice_id"] = "Edward"  # its 3.2.5 voice
     atc = m.migrate_wingman(atc)
     assert atc["features"]["tts_provider"] == "wingman_pro"
     assert atc["wingman_pro"]["tts_provider"] == "azure"
