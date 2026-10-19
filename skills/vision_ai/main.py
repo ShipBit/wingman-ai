@@ -2,7 +2,7 @@ import asyncio
 from typing import TYPE_CHECKING
 from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.image_generation import screenshot_base64
+from services.image_generation import vision_base64
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -70,7 +70,7 @@ class VisionAI(Skill):
             image = await self.wingman.screen.capture(max(1, display))
         except RuntimeError as e:
             return f"Could not see the screen: {e}"
-        jpeg_base64 = await asyncio.to_thread(screenshot_base64, image)
+        jpeg_base64 = await asyncio.to_thread(vision_base64, image)
 
         if self._get_show_screenshots():
             await self.printr.print_async(

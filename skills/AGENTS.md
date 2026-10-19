@@ -457,7 +457,7 @@ A skill imports from Core only:
 | `skills.skill_base` | `Skill`, `tool`, `command_action` |
 | `skills.<your_skill>.*` | your own modules (absolute imports, no `sys.path` changes) |
 | `services.skill_local_ai` | `SamplingPreset` |
-| `services.image_generation` | `reference_data_url`, `screenshot_base64` and the image file helpers next to `ai.generate_image` |
+| `services.image_generation` | `reference_data_url`, `vision_base64` and the image file helpers next to `ai.generate_image` |
 | `services.benchmark` | only the type hint of a legacy `execute_tool` override |
 | `wingmen.wingman_context` | under `TYPE_CHECKING`, for the `WingmanContext` hint |
 

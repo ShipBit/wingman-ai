@@ -105,19 +105,28 @@ def reference_data_url(image_bytes: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
-SCREENSHOT_MAX_DIMENSION = 1280
-SCREENSHOT_MAX_CHARS = 250_000
+VISION_MAX_DIMENSION = 1280
+VISION_MAX_CHARS = 250_000
 """Wingman Pro takes 320,000 characters per request, images with their full
 base64. The rest is room for the prompt."""
 
 
-def screenshot_base64(image: Image.Image) -> str:
-    """A screenshot as base64 JPEG for a vision model: at most 1280 pixels on
-    the long side and at most 250,000 characters. A busy Discord screen as PNG
+def vision_base64(image: Image.Image, max_chars: int = VISION_MAX_CHARS) -> str:
+    """An image as base64 JPEG for a vision model: at most 1280 pixels on the
+    long side and at most `max_chars` characters. A busy Discord screen as PNG
     had 496,000 characters at 1000 pixels; JPEG keeps the text readable at a
-    fraction of that. Too big: lower quality first, then the size."""
-    image = image.convert("RGB")
-    dimension = SCREENSHOT_MAX_DIMENSION
+    fraction of that. Too big: lower quality first, then the size.
+    Transparency goes onto white."""
+    if image.mode in ("RGBA", "LA", "PA") or (
+        image.mode == "P" and "transparency" in image.info
+    ):
+        image = image.convert("RGBA")
+        background = Image.new("RGB", image.size, (255, 255, 255))
+        background.paste(image, mask=image.getchannel("A"))
+        image = background
+    else:
+        image = image.convert("RGB")
+    dimension = VISION_MAX_DIMENSION
     while True:
         scaled = image.copy()
         scaled.thumbnail((dimension, dimension), Image.LANCZOS)
@@ -125,7 +134,7 @@ def screenshot_base64(image: Image.Image) -> str:
             buffer = io.BytesIO()
             scaled.save(buffer, format="JPEG", quality=quality)
             encoded = base64.b64encode(buffer.getvalue()).decode()
-            if len(encoded) <= SCREENSHOT_MAX_CHARS:
+            if len(encoded) <= max_chars:
                 return encoded
         if dimension <= 480:
             return encoded
