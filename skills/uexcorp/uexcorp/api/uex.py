@@ -1,15 +1,53 @@
-import requests
-import concurrent.futures
-from itertools import product
+import json
+import re
+import threading
+from dataclasses import dataclass
 from typing import Optional
 from typing import TYPE_CHECKING
+
+import requests
 
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.helper import Helper
 
 
-class Uex:
+class UexApiError(Exception):
+    """A request failed after all retries (or was cancelled). Raised instead of
+    returning empty data, so an import is never recorded as done when it failed."""
 
+
+class UexClientError(UexApiError):
+    """The relay rejected the request itself (HTTP 4xx except 429): retrying won't help."""
+
+
+@dataclass
+class RelayResponse:
+    data: Optional[dict]  # None: unchanged since the given ETag (HTTP 304)
+    etag: Optional[str]
+    max_age: Optional[int]  # seconds until the relay has newer data (Cache-Control), if sent
+
+
+class Uex:
+    """Client for the data relay, which caches the UEX API in two bundles.
+
+    One request per bundle replaces ~130 rate limited UEX API requests:
+    - long: locations, terminals, commodities, items, vehicles, ... (relay refresh every 2 weeks)
+    - short: commodity, fuel and item prices, commodity alerts (relay refresh every 2 hours)
+    - version: the current game version
+
+    The relay is the only data source: when it is down, the stored data stays in use.
+    """
+
+    MAX_RETRIES = 2
+    RATE_LIMIT_PAUSE = 60  # seconds, if a 429 response has no Retry-After header
+    MAX_RATE_LIMIT_PAUSE = 120
+    CHUNK_SIZE = 1024 * 1024
+
+    BUNDLE_LONG = 'long'
+    BUNDLE_SHORT = 'short'
+    VERSION = 'version'
+
+    # Datasets inside the bundles (named like the UEX API endpoints)
     CATEGORIES = 'categories'
     CATEGORIES_ATTRIBUTES = 'categories_attributes'
     CITIES = 'cities'
@@ -18,11 +56,9 @@ class Uex:
     COMMODITIES_PRICES = 'commodities_prices_all'
     COMMODITIES_RAW_PRICES = 'commodities_raw_prices_all'
     COMMODITIES_STATUS = 'commodities_status'
-    COMMODITIES_ROUTES = 'commodities_routes'
     COMPANIES = 'companies'
     FACTIONS = 'factions'
     FUEL_PRICES = 'fuel_prices_all'
-    GAME_VERSIONS = 'game_versions'
     ITEMS = 'items'
     ITEMS_ATTRIBUTES = 'items_attributes'
     ITEMS_PRICES = 'items_prices_all'
@@ -36,7 +72,6 @@ class Uex:
     REFINERIES_AUDITS = 'refineries_audits'
     REFINERIES_METHODS = 'refineries_methods'
     SPACE_STATIONS = 'space_stations'
-    GAME_VERSION = 'game_versions'
     VEHICLES = 'vehicles'
     VEHICLES_PURCHASES_PRICES = 'vehicles_purchases_prices_all'
     VEHICLES_RENTALS_PRICES = 'vehicles_rentals_prices_all'
@@ -49,97 +84,124 @@ class Uex:
     ):
         self.helper = helper
         self.session = None
+        self.__stop = threading.Event()
+
+    def cancel(self):
+        """Aborts waiting, retrying and downloading requests (skill unload)."""
+        self.__stop.set()
 
     def _get_headers(self) -> dict[str, str]:
-        headers = {
-            "Accept": "application/json, text/plain, */*",
-            "User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 12871.102.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36",
-            "Connection": "keep-alive",
+        return {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "User-Agent": "WingmanAI-UEXCorp-Skill",
         }
-        return headers
 
-    def fetch(
-        self,
-        endpoint: str,
-        get: Optional[dict[str, any]] = None,
-        params: Optional[dict[str, any]] = None,
-    ) -> list[dict[str, any]]|dict[str, any]:
-        results = []
-        if get and any(isinstance(value, list) for value in get.values()):
-            keys, values = zip(*((k, v if isinstance(v, list) else [v]) for k, v in get.items()))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_combination = {executor.submit(self.__actual_fetch, endpoint, dict(zip(keys, combination)), params): combination for combination in product(*values)}
-                for future in concurrent.futures.as_completed(future_to_combination):
-                    result = future.result()
-                    if isinstance(result, list):
-                        results.extend(result)
-                    elif isinstance(result, dict):
-                        results.append(result)
-        else:
-            results = self.__actual_fetch(endpoint, get, params)
-        return results
+    def fetch_bundle(self, bundle: str, etag: Optional[str] = None) -> RelayResponse:
+        """One bundle as {dataset name: rows}. With the ETag of the stored data, an unchanged
+        bundle is not downloaded again (data None)."""
+        response = self.__get(bundle, etag)
+        if response.data is not None and not isinstance(response.data, dict):
+            raise UexApiError(f"Unexpected {bundle} bundle format: {type(response.data).__name__}")
+        return response
 
-    def __actual_fetch(
-        self,
-        endpoint: str,
-        get: Optional[dict[str, any]] = None,
-        params: Optional[dict[str, any]] = None,
-    ) -> list[dict[str, any]]|dict[str, any]:
-        url = f"{self.helper.get_handler_config().get_api_url()}/{endpoint}"
-        if get:
-            url += "?"
-            for key, value in get.items():
-                url += f"{key}={value}&"
-            url = url[:-1]
+    def fetch_version(self) -> dict:
+        """The current game version, e.g. {"live": "4.10.2"}."""
+        data = self.__get(self.VERSION).data
+        if not isinstance(data, dict) or not data.get("live"):
+            raise UexApiError(f"Unexpected version response: {data!r}")
+        return data
 
-        if not self.helper.get_handler_config().get_api_url() or not endpoint:
-            self.helper.get_handler_debug().write(f"No API URL or endpoint provided -> {url}", True)
-            self.helper.get_handler_error().write("Api.fetch", [endpoint, params], f"No API URL or endpoint provided -> {url}", False)
-            return []
+    def __get(self, path: str, etag: Optional[str] = None) -> RelayResponse:
+        base_url = self.helper.get_handler_config().get_api_url()
+        if not base_url or not path:
+            raise UexApiError(f"No relay URL or path provided -> {base_url}/{path}")
+        url = f"{base_url.rstrip('/')}/{path}"
 
         if self.session is None:
-            self.helper.get_handler_debug().write(f"Init session for {self.helper.get_handler_config().get_api_url()} for future requests ...")
+            self.helper.get_handler_debug().write(f"Init session for {base_url} for future requests ...")
             self.session = requests.Session()
 
-        request_count = 1
-        max_retries = 2
-        timeout_error = False
-        requests_error = False
-        response_json = {}
+        headers = self._get_headers()
+        if etag:
+            headers["If-None-Match"] = etag
 
-        while request_count == 1 or (
-            request_count <= (max_retries + 1) and (timeout_error or requests_error)
-        ):
-            self.helper.get_handler_debug().write(f"Fetching data (request {request_count}/{max_retries+1}) from {url} ...")
-            requests_error = False
-            timeout_error = False
+        failed_attempts = 0
+        rate_limited_attempts = 0
+        while True:
+            if self.__stop.is_set():
+                raise UexApiError(f"Cancelled request to {url}")
+
+            self.helper.get_handler_debug().write(f"Fetching data (attempt {failed_attempts + rate_limited_attempts + 1}) from {url} ...")
+            response = None
             try:
                 response = self.session.get(
                     url,
-                    params=params,
                     timeout=self.helper.get_handler_config().get_api_timeout(),
-                    headers=self._get_headers(),
-                    stream = True
+                    headers=headers,
+                    stream=True,
                 )
-                response.raise_for_status()
-                # response.raw.chunked = True
-                response.encoding = "utf-8"
-                response_json = response.json()
-                if "status" not in response_json or response_json["status"] != "ok":
+                if response.status_code == 304:
+                    return RelayResponse(None, response.headers.get("ETag") or etag, self.__get_max_age(response))
+                if response.status_code == 429:
+                    rate_limited_attempts += 1
+                    if rate_limited_attempts > self.MAX_RETRIES:
+                        raise self.__error(path, UexApiError(f"Rate limited by relay after {self.MAX_RETRIES} pauses: {url}"))
+                    pause = self.__get_retry_after(response)
                     self.helper.get_handler_debug().write(
-                        f"Error while retrieving data from {url}. Status: is not \"ok\".",
-                        request_count > max_retries
+                        f"Relay rate limit hit at {url}, pausing for {pause}s ({rate_limited_attempts}/{self.MAX_RETRIES}).", True
                     )
-                    requests_error = True
-            except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as e:
-                self.helper.get_handler_debug().write(f"Error while retrieving data from {url}: {e}", request_count > max_retries)
-                self.helper.get_handler_error().write("Api.fetch", [endpoint, params], e)
-                requests_error = True
-                if isinstance(e, requests.exceptions.Timeout):
-                    timeout_error = True
-            request_count += 1
+                    if self.__stop.wait(pause):
+                        raise UexApiError(f"Cancelled request to {url}")
+                    continue
+                if 400 <= response.status_code < 500:
+                    # Rejected by the relay itself (e.g. 404): asking again gives the same answer
+                    raise self.__error(path, UexClientError(f"HTTP {response.status_code} for {url}"))
+                response.raise_for_status()
+                data = json.loads(self.__read(response, url))
+                return RelayResponse(data, response.headers.get("ETag"), self.__get_max_age(response))
+            except (requests.exceptions.RequestException, ValueError) as e:
+                # ValueError: invalid JSON (json.JSONDecodeError) or a broken download
+                error = e
+            finally:
+                # Streamed responses hold a pooled connection until closed, whatever the outcome
+                if response is not None:
+                    response.close()
 
-        if requests_error:
-            return []
+            failed_attempts += 1
+            # Log file only: the import tells the user once per outage (ImportHandler)
+            self.helper.get_handler_debug().write(
+                f"Error while retrieving data from {url} ({failed_attempts}/{self.MAX_RETRIES + 1}): {error}"
+            )
+            if failed_attempts > self.MAX_RETRIES:
+                # One short entry per failed request: during an outage this runs every minute
+                self.helper.get_handler_error().write("Api.fetch", [path], error, write_traceback=False)
+                raise UexApiError(f"Request to {url} failed: {error}")
+            # Short backoff before the retry (1s, 2s), aborted on unload
+            if self.__stop.wait(failed_attempts):
+                raise UexApiError(f"Cancelled request to {url}")
 
-        return response_json.get("data", [])
+    def __read(self, response: requests.Response, url: str) -> bytes:
+        """Downloads the body in chunks, so an unload can stop a large bundle mid-way."""
+        chunks = []
+        for chunk in response.iter_content(self.CHUNK_SIZE):
+            if self.__stop.is_set():
+                raise UexApiError(f"Cancelled request to {url}")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    def __error(self, path: str, error: UexApiError) -> UexApiError:
+        self.helper.get_handler_error().write("Api.fetch", [path], error, write_traceback=False)
+        self.helper.get_handler_debug().write(f"Error while retrieving data: {error}")
+        return error
+
+    def __get_retry_after(self, response: requests.Response) -> int:
+        try:
+            return min(self.MAX_RATE_LIMIT_PAUSE, max(1, int(response.headers.get("Retry-After", ""))))
+        except ValueError:
+            return self.RATE_LIMIT_PAUSE
+
+    @staticmethod
+    def __get_max_age(response: requests.Response) -> Optional[int]:
+        match = re.search(r"max-age=(\d+)", response.headers.get("Cache-Control", ""))
+        return int(match.group(1)) if match else None

@@ -41,15 +41,16 @@ class DataAccess :
         self.additional_cols.append((col, alias))
         return self
 
-    def __select(self, debug: bool = False) -> tuple[str, dict]:
+    def __select(self, debug: bool = False, columns: list[str] | None = None) -> tuple[str, dict]:
         def resolve_additional_cols() -> str:
             cols = ""
             for col, alias in self.additional_cols:
                 cols += f"{col} AS {alias}, " if alias else f"{col}, "
             return cols
 
+        table_cols = ", ".join(f"{self.table}.{col}" for col in columns) if columns else f"{self.table}.*"
         sql = f"""
-            SELECT {resolve_additional_cols()} {self.table}.*
+            SELECT {resolve_additional_cols()} {table_cols}
             FROM {self.table}
             {self.filter.resolve_joins()}
             {self.filter.resolve_where()}
@@ -74,8 +75,8 @@ class DataAccess :
         sql, bind = self.__select(debug)
         return self.database.execute_fetchmany(sql, bind, 1)
 
-    def _fetch_all(self, debug: bool = False) -> list[dict[str, any]]:
-        sql, bind = self.__select(debug)
+    def _fetch_all(self, debug: bool = False, columns: list[str] | None = None) -> list[dict[str, any]]:
+        sql, bind = self.__select(debug, columns)
         return self.database.execute_fetchall(sql, bind)
 
     def load_one(self) -> DataModel | None:

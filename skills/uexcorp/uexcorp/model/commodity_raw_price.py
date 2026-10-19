@@ -16,9 +16,11 @@ class CommodityRawPrice(DataModel):
             commodity_name: str | None = None, # string(255)
             commodity_code: str | None = None, # string(255)
             commodity_slug: str | None = None, # string(255)
-            terminal_name: int | None = None, # int(11)
-            terminal_code: int | None = None, # int(11)
-            terminal_slug: int | None = None, # int(11)
+            terminal_name: str | None = None, # string(255)
+            terminal_code: str | None = None, # string(255)
+            terminal_slug: str | None = None, # string(255)
+            price_buy: float | None = None, # float
+            price_buy_avg: float | None = None, # float
             load: bool = False,
     ):
         super().__init__("commodity_raw_price")
@@ -36,6 +38,8 @@ class CommodityRawPrice(DataModel):
             "terminal_name": terminal_name,
             "terminal_code": terminal_code,
             "terminal_slug": terminal_slug,
+            "price_buy": price_buy,
+            "price_buy_avg": price_buy_avg,
             "last_import_run_id": None,
         }
         if load:
@@ -112,6 +116,12 @@ class CommodityRawPrice(DataModel):
     def get_ai_string(self, show_commodity: bool = True) -> str:
         commodity = f" {self.get_commodity_name()}" if show_commodity else ""
         return f"Sell{commodity} to {self.get_terminal_name()} for {self.get_price_sell()} (raw)"
+
+    def get_price_buy(self) -> float | None:
+        return self.data["price_buy"]
+
+    def get_price_buy_avg(self) -> float | None:
+        return self.data["price_buy_avg"]
 
     def __str__(self):
         return self.get_ai_string()

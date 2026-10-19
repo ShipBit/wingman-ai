@@ -22,6 +22,8 @@ class ItemAttributeDataAccess(DataAccess):
             "unit",
             "date_added",
             "date_modified",
+            "item_uuid",
+            "item_wiki",
         ]
 
     def load(self, **params) -> list[ItemAttribute]:

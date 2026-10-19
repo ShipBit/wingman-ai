@@ -33,7 +33,10 @@ def render_piece(width: int, draw: DrawPiece, height_hint: int = 256) -> Image.I
         return image.crop((0, 0, width, max(1, end)))
     top = max(0, end - MAX_PIECE_HEIGHT)
     image = Image.new("RGBA", (width, end - top), (0, 0, 0, 0))
-    draw(ImageDraw.Draw(image), image, top)
+    redrawn = int(draw(ImageDraw.Draw(image), image, top))
+    # Drawn whole, it can tell where it really ends (a piece that trims to its ink)
+    if top == 0 and 0 < redrawn < end:
+        return image.crop((0, 0, width, redrawn))
     return image
 
 
@@ -43,7 +46,7 @@ class Piece:
     """Everything the piece's pixels depend on: same key, same image."""
     draw: DrawPiece
     gap: int = 0
-    """Space below the piece."""
+    """Space to the piece below it; none under the bottom one."""
     alpha: float = 1.0
     """Faded when the window is put together, so fading renders nothing."""
     slot: Optional[Hashable] = None
@@ -125,8 +128,9 @@ def lay_out(
     pieces = iter(newest_first)
     for piece in pieces:
         image = cache.image(piece, width)
+        # A gap is the space to the piece below: the newest has none
+        used += image.height + (piece.gap if chosen else 0)
         chosen.append((piece, image))
-        used += image.height + piece.gap
         if used >= limit:
             break
     more_above = next(pieces, None) is not None
@@ -144,15 +148,15 @@ def lay_out(
     if clipped:
         y = height - below
         tail_y = y
-        for piece, image in chosen:
-            y -= piece.gap + image.height
+        for index, (piece, image) in enumerate(chosen):
+            y -= image.height + (piece.gap if index else 0)
             placed.append((piece, image, y))
         placed.reverse()
     else:
         y = top
-        for piece, image in reversed(chosen):
+        for index, (piece, image) in enumerate(reversed(chosen)):
             placed.append((piece, image, y))
-            y += image.height + piece.gap
+            y += image.height + (piece.gap if index < len(chosen) - 1 else 0)
         tail_y = y
 
     signature = (height, clipped, tail_y, tuple((p.key, y, p.alpha) for p, _, y in placed))

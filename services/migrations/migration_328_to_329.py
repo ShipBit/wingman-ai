@@ -29,8 +29,14 @@ profiles in the settings (services/hud_service.py, docs/hud.md):
   retired_skills next to it, where it no longer loads.
   Info panels the skill saved are not carried over; they lived in a folder of
   the old version.
+
+The UEX skill was reworked. A Wingman's saved copy of its old default prompt
+goes, so the new prompt applies; a prompt the user edited stays. Its removed
+"Add UEX names as hotwords" setting goes too (Core warned about it on every
+start).
 """
 
+import hashlib
 import os
 import re
 import shutil
@@ -57,6 +63,36 @@ ACTIONS_BLOCK = (
     "nor a tool gave you.\n"
     "\n"
 )
+
+
+_UEX_MODULE = "skills.uexcorp.main"
+# sha256 of the stripped prompts the UEX skill shipped with before 3.2.9: a saved copy of one of
+# them is the old default, not the user's own text
+_UEX_OLD_PROMPTS = {
+    "c268bfd35e77a6e371f918392d0702178d65286703c10faa3d8ee0074247ea4e",
+    "1598704bb2e60a327686c7a35808d67d8dce8d530ad95acf90ba720e2c1c4958",
+}
+_UEX_REMOVED_PROPERTIES = {"add_fasterwhisper_hotwords"}
+
+
+def update_uex_skill(config: dict) -> list[str]:
+    """Drops the old default prompt and removed settings from a Wingman's UEX skill entry.
+    Returns what changed, for the log."""
+    changes = []
+    for entry in config.get("skills") or []:
+        if not isinstance(entry, dict) or entry.get("module") != _UEX_MODULE:
+            continue
+        prompt = entry.get("prompt")
+        if isinstance(prompt, str) and hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest() in _UEX_OLD_PROMPTS:
+            del entry["prompt"]
+            changes.append("the UEX skill's old default prompt (the new one applies)")
+        properties = entry.get("custom_properties")
+        if isinstance(properties, list):
+            kept = [p for p in properties if not (isinstance(p, dict) and p.get("id") in _UEX_REMOVED_PROPERTIES)]
+            if len(kept) != len(properties):
+                entry["custom_properties"] = kept
+                changes.append("the UEX skill's removed hotword setting")
+    return changes
 
 
 def update_system_prompt(prompt: str) -> str:
@@ -411,6 +447,8 @@ class Migration328To329(BaseMigration):
         old = self._update(old, old.get("name", "wingman"))
         if self._strip_skill(old):
             self.log("- removed the HUD skill, Core draws the HUD now")
+        for change in update_uex_skill(old):
+            self.log(f"- removed {change}")
         self._warn_dead_commands(old)
         old["hud"] = {"chat": True, "info": True}
         self.log("- shared chat and info panel on")

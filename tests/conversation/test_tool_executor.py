@@ -75,6 +75,9 @@ class FakeSkillRegistry(NoMeta):
     def deactivate_skill(self, name):
         self.deactivated.append(name)
 
+    def active_skill_for_tool(self, name):
+        return None  # no two skills share a tool name here: tool_skills decides
+
 
 class FakeCapabilityRegistry(NoMeta):
     def __init__(self, response=("Activated.", True)):

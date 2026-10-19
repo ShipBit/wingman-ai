@@ -60,6 +60,15 @@ class TerminalDataAccess(DataAccess):
             "company_name",
             "max_container_size",
             "is_blacklisted",
+            "fullname",
+            "displayname",
+            "contact_url",
+            "game_version",
+            "screenshot",
+            "screenshot_author",
+            "screenshot_full",
+            "mcs",
+            "is_jump_point",
         ]
 
     def load(self, **params) -> list[Terminal]:
@@ -78,19 +87,39 @@ class TerminalDataAccess(DataAccess):
         grouped_filter.where("outpost_name", location_names, is_or=True)
         grouped_filter.where("city_name", location_names, is_or=True)
         grouped_filter.where("name", location_names, is_or=True)
+        poi_ids = self.__get_poi_ids(location_names)
+        if poi_ids:
+            grouped_filter.where("id_poi", poi_ids, is_or=True)
         self.filter.apply_filter(grouped_filter)
         return self
 
     def add_filter_by_location_name_blacklist(self, location_names: str | list[str]) -> "TerminalDataAccess":
-        self.filter.where("star_system_name", location_names, "!=")
-        self.filter.where("planet_name", location_names, "!=")
-        self.filter.where("orbit_name", location_names, "!=")
-        self.filter.where("moon_name", location_names, "!=")
-        self.filter.where("space_station_name", location_names, "!=")
-        self.filter.where("outpost_name", location_names, "!=")
-        self.filter.where("city_name", location_names, "!=")
-        self.filter.where("name", location_names, "!=")
+        if isinstance(location_names, str):
+            location_names = [location_names]
+        table = self.filter.get_table()
+        for field in (
+            "star_system_name",
+            "planet_name",
+            "orbit_name",
+            "moon_name",
+            "space_station_name",
+            "outpost_name",
+            "city_name",
+            "name",
+        ):
+            # COALESCE: NULL NOT IN (...) is NULL in SQL and would drop terminals without that location level
+            self.filter.where(f"COALESCE({table}.{field}, '')", location_names, "NOT IN")
+        poi_ids = self.__get_poi_ids(location_names)
+        if poi_ids:
+            self.filter.where(f"COALESCE({table}.id_poi, 0)", poi_ids, "NOT IN")
         return self
+
+    @staticmethod
+    def __get_poi_ids(location_names: str | list[str]) -> list[int]:
+        # The terminal table has id_poi but no poi_name, so POI names are resolved to ids
+        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+
+        return [poi.get_id() for poi in PoiDataAccess().add_filter_by_name(location_names).load()]
 
     def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "TerminalDataAccess":
         self.filter.where("id_star_system", id_star_system)

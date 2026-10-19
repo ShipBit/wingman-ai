@@ -516,7 +516,8 @@ class ToolExecutor:
 
         # ── 7. Skill tool execution ─────────────────────────────────
         if function_name in tool_skills:
-            skill = tool_skills[function_name]
+            # Two skills can share a tool name: the call goes where the model's definition came from
+            skill = skill_registry.active_skill_for_tool(function_name) or tool_skills[function_name]
             display_name = skill_registry.get_skill_display_name(skill.name)
             tool_label = f"⚡ {display_name}: {function_name}"
 

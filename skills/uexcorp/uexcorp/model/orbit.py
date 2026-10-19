@@ -24,6 +24,11 @@ class Orbit(DataModel):
         star_system_name: str | None = None,  # varchar(255)
         faction_name: str | None = None,  # varchar(255)
         jurisdiction_name: str | None = None,  # varchar(255)
+            is_man_made: int | None = None,  # int(1)
+            is_asteroid: int | None = None,  # int(1)
+            is_planet: int | None = None,  # int(1)
+            is_star: int | None = None,  # int(1)
+            is_jump_point: int | None = None,  # int(1)
             load: bool = False,
     ):
         super().__init__("orbit")
@@ -45,6 +50,11 @@ class Orbit(DataModel):
             "star_system_name": star_system_name,
             "faction_name": faction_name,
             "jurisdiction_name": jurisdiction_name,
+            "is_man_made": is_man_made,
+            "is_asteroid": is_asteroid,
+            "is_planet": is_planet,
+            "is_star": is_star,
+            "is_jump_point": is_jump_point,
             "last_import_run_id": None,
         }
         if load:
@@ -72,6 +82,8 @@ class Orbit(DataModel):
             "planets_in_orbit": [planet.get_data_for_ai_minimal() for planet in planets],
             "star_system": star_system.get_data_for_ai_minimal() if star_system else None,
             "is_lagrange": self.get_is_lagrange(),
+            # only the few jump points carry it; False would repeat on every orbit
+            "is_jump_point": self.get_is_jump_point() or None,
             "faction": faction.get_data_for_ai_minimal() if faction else None,
             "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
         }
@@ -92,6 +104,7 @@ class Orbit(DataModel):
             "planets_in_orbit": [str(planet) for planet in planets],
             "star_system": self.get_star_system_name(),
             "is_lagrange": self.get_is_lagrange(),
+            "is_jump_point": self.get_is_jump_point() or None,
             "faction": self.get_faction_name() if self.get_faction_name() else None,
             "jurisdiction": self.get_jurisdiction_name() if self.get_jurisdiction_name() else None,
         }
@@ -154,6 +167,21 @@ class Orbit(DataModel):
 
     def get_jurisdiction_name(self) -> str | None:
         return self.data["jurisdiction_name"]
+
+    def get_is_man_made(self) -> bool | None:
+        return bool(self.data["is_man_made"])
+
+    def get_is_asteroid(self) -> bool | None:
+        return bool(self.data["is_asteroid"])
+
+    def get_is_planet(self) -> bool | None:
+        return bool(self.data["is_planet"])
+
+    def get_is_star(self) -> bool | None:
+        return bool(self.data["is_star"])
+
+    def get_is_jump_point(self) -> bool | None:
+        return bool(self.data["is_jump_point"])
 
     def __str__(self):
         return str(self.data["name"])

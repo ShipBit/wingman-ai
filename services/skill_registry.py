@@ -313,18 +313,32 @@ class SkillRegistry:
         manifest = self._manifests.get(skill_name)
         return manifest.display_name if manifest else skill_name
 
+    def _active_in_order(self) -> list["Skill"]:
+        # Sorted: two active skills with the same tool name (a bundled skill and a custom copy)
+        # always resolve to the same one, for its definition and for the call
+        all_active = self._active_skills | self._auto_activated_skills
+        return [self._skills[name] for name in sorted(all_active) if name in self._skills]
+
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
         Get tools from all active skills (both explicitly activated and auto-activated).
+        A tool name two active skills share comes from the first (active_skill_for_tool).
         """
         tools = []
-        # Combine manually activated and auto-activated skills
-        all_active = self._active_skills | self._auto_activated_skills
-        for skill_name in all_active:
-            skill = self._skills.get(skill_name)
-            if skill:
-                tools.extend(skill.get_enabled_tools())
+        seen = set()
+        for skill in self._active_in_order():
+            for tool_name, tool in skill.get_enabled_tools():
+                if tool_name not in seen:
+                    seen.add(tool_name)
+                    tools.append((tool_name, tool))
         return tools
+
+    def active_skill_for_tool(self, tool_name: str) -> Optional["Skill"]:
+        """The active skill whose tool definition the model got for this name, if any."""
+        for skill in self._active_in_order():
+            if any(name == tool_name for name, _ in skill.get_enabled_tools()):
+                return skill
+        return None
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:
         """

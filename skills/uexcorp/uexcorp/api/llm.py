@@ -1,6 +1,8 @@
+import asyncio
 import difflib
 import json
-from typing import TYPE_CHECKING
+import threading
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.helper import Helper
@@ -51,6 +53,8 @@ class Llm:
     ):
         self.__helper = helper
         self.__cache_search = {}
+        self.__name_vectors: dict[str, "np.ndarray"] = {}
+        self.__embedding_lock = threading.Lock()
 
     async def call(self, message_history: MessageHistory, expect_json: bool = False) -> str | dict[str, any] | list | None:
         answer = None
@@ -96,7 +100,53 @@ class Llm:
 
         return answer
 
-    # difflib hands over ten, but the substring pass after it is unbounded: a
+    # Embeddings (Core's local nomic model) find names difflib can't: other word order
+    # ("Stanton-Nyx Jump Point" -> "Nyx Gateway (Stanton)") or spacing ("Grim Hex" -> "GrimHEX").
+    # Measured on the 1,036 trading locations: the meant name was in the top two for every test
+    # term, ~3 s to embed the list once, a few ms per search after that.
+    EMBEDDING_CANDIDATES = 5
+    # Larger lists (e.g. all items) would take too long to embed
+    EMBEDDING_MAX_NAMES = 3000
+    EMBEDDING_BATCH = 64
+
+    def embed_names(self, names: list[str] | set[str]) -> bool:
+        """Embeds names not embedded yet. Blocking: call it from a thread. False without embedding model."""
+        import numpy as np
+
+        if len(names) > self.EMBEDDING_MAX_NAMES:
+            return False
+        local_ai = self.__helper.get_handler_config().get_wingman().local_ai
+        with self.__embedding_lock:
+            missing = [name for name in dict.fromkeys(names) if name and name not in self.__name_vectors]
+            for start in range(0, len(missing), self.EMBEDDING_BATCH):
+                chunk = missing[start:start + self.EMBEDDING_BATCH]
+                vectors = local_ai.embed_sync(chunk)
+                if not vectors or len(vectors) != len(chunk):
+                    return False
+                for name, vector in zip(chunk, vectors):
+                    vector = np.asarray(vector, dtype=np.float32)
+                    self.__name_vectors[name] = vector / (np.linalg.norm(vector) or 1.0)
+        return True
+
+    async def __embedding_matches(self, search: str, names: list[str] | set[str]) -> list[str]:
+        """Names closest in meaning to the search term, [] without embedding model."""
+        import numpy as np
+
+        try:
+            if not await asyncio.to_thread(self.embed_names, names):
+                return []
+            query = await self.__helper.get_handler_config().get_wingman().local_ai.embed([search])
+            if not query:
+                return []
+            query = np.asarray(query[0], dtype=np.float32)
+            candidates = [name for name in names if name in self.__name_vectors]
+            scores = np.stack([self.__name_vectors[name] for name in candidates]) @ query
+            return [candidates[i] for i in np.argsort(-scores)[:self.EMBEDDING_CANDIDATES]]
+        except Exception as e:
+            self.__helper.get_handler_debug().write(f"Embedding search failed for '{search}': {e}", True)
+            return []
+
+    # difflib hands over ten, the embeddings five, but the substring pass after it is unbounded: a
     # short search term can pull in hundreds. A choice takes 255 options, and
     # a list that long is not a disambiguation anyway.
     SYSTEM_ONE_MAX_OPTIONS = 60
@@ -106,20 +156,25 @@ class Llm:
     # very likely, prefer not to match at all"); here it is a number.
     SYSTEM_ONE_MIN_CONFIDENCE = 0.5
 
-    async def __system_one_match(self, search: str, close_matches: list[str]) -> str | None:
-        """The closest name, or None to let the main model decide as before.
+    # Not sure, but one name far ahead of the rest ('Leske': Levski 0.29, next 0.02): almost always the
+    # meant one. Used as a guess with a note and the other names, which saves asking the user first.
+    SYSTEM_ONE_GUESS_MIN = 0.15
+    SYSTEM_ONE_GUESS_LEAD = 5  # times the next name
 
-        None covers every way this does not produce an answer: the user
-        switched System One off, the plan has no access, the shortlist is too
-        long to ask about, the model was not sure enough, or it said none of
-        them fit. All of those fall through to the prompt below.
+    async def __system_one_match(
+        self, search: str, close_matches: list[str], same_place: Callable[[list[str]], str | None] | None = None
+    ) -> tuple[str | None, list[str] | None]:
+        """(closest name, None), or (None, its best guesses) when System One was not sure enough or
+        said none fit: then the user has to say which one, the main model would only guess.
+        (None, None) when it was not asked (switched off, no access, list too long, no answer),
+        so the main model decides as before.
         """
         if len(close_matches) > self.SYSTEM_ONE_MAX_OPTIONS:
-            return None
+            return None, None
         wingman = self.__helper.get_handler_config().get_wingman()
-        system_one = wingman.system_one
+        system_one = getattr(wingman, "system_one", None)
         if not system_one or not system_one.available:
-            return None
+            return None, None
 
         criteria = {name: None for name in close_matches}
         criteria["none_of_these"] = "none of the names above is what was meant"
@@ -141,18 +196,52 @@ class Llm:
                 )
             },
         )
+        if not answers.ok:
+            self.__helper.get_handler_debug().write(f"System One gave no answer for '{search}': {answers.error}", True)
+            return None, None
         picked = answers.choice("match", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
         if picked is None or picked == "none_of_these":
-            return None
+            probabilities = answers.probabilities("match")
+            ranked = sorted((name for name in probabilities if name != "none_of_these"), key=probabilities.get, reverse=True)
+            scores = ", ".join(f"{name} {probabilities[name]:.2f}" for name in ranked[:3])
+            first = probabilities.get(ranked[0], 0) if ranked else 0
+            second = probabilities.get(ranked[1], 0) if len(ranked) > 1 else 0
+            if first >= self.SYSTEM_ONE_GUESS_MIN and first >= self.SYSTEM_ONE_GUESS_LEAD * second:
+                self.__helper.get_handler_debug().write(
+                    f"System One guessed '{search}' is '{ranked[0]}': {scores} "
+                    f"(none of these {probabilities.get('none_of_these', 0):.2f}).",
+                    True,
+                )
+                others = ranked[1:4]
+                self.__helper.get_handler_tool().add_note(
+                    f"'{search}' was taken as '{ranked[0]}' (best guess). If the user meant something else, "
+                    "ask and search again" + (f", e.g. {', '.join(others)}." if others else ".")
+                )
+                return ranked[0], None
+            # Unsure between two names for the same place (a terminal and its station): no need to ask
+            place = same_place(ranked[:2]) if same_place and len(ranked) > 1 else None
+            if place:
+                self.__helper.get_handler_debug().write(
+                    f"System One not sure about '{search}' ({scores}), but '{ranked[0]}' and '{ranked[1]}' are the same place: '{place}'."
+                )
+                return place, None
+            self.__helper.get_handler_debug().write(
+                f"System One not sure about '{search}': {scores}"
+                f" (none of these {probabilities.get('none_of_these', 0):.2f}, needs {self.SYSTEM_ONE_MIN_CONFIDENCE})",
+                True,
+            )
+            return None, ranked[:3] or close_matches[:3]
         self.__helper.get_handler_debug().write(
             f"System One matched '{search}' to '{picked}' "
             f"(confidence {answers.confidence('match'):.2f}, {answers.seconds * 1000:.0f} ms)."
         )
-        return picked
+        return picked, None
 
     async def find_closest_match(
-        self, search: str | None, lst: list[str] | set[str]
+        self, search: str | None, lst: list[str] | set[str], same_place: Callable[[list[str]], str | None] | None = None
     ) -> (str | None, list[str] | set[str]):
+        """The name in lst meant by search. same_place(names) may return the one name that stands
+        for the place all of them mean, so the user isn't asked to choose between them."""
         if not search or search == "None":
             return None, None
 
@@ -169,7 +258,8 @@ class Llm:
             return search, None
 
         # make a list of possible matches
-        close_matches = difflib.get_close_matches(search, lst, n=10, cutoff=0.4)
+        close_matches = await self.__embedding_matches(search, lst)
+        close_matches.extend(item for item in difflib.get_close_matches(search, lst, n=10, cutoff=0.4) if item not in close_matches)
         close_matches.extend(item for item in lst if search.lower() in item.lower() and item not in close_matches)
         self.__helper.get_handler_debug().write(
             f"Creating a list of close matches for search term '{search}': {', '.join(close_matches)}"
@@ -188,7 +278,9 @@ class Llm:
         # collisions: 11/12 against difflib's own 10/12, ~500 ms against a full
         # main-model roundtrip. Off, or unavailable, and the prompt below runs
         # exactly as before.
-        picked = await self.__system_one_match(search, close_matches)
+        picked, guesses = await self.__system_one_match(search, close_matches, same_place)
+        if guesses:
+            return None, f"{', '.join(guesses)} (not sure which one, ask the user)"
         if picked is not None:
             self.__helper.add_context(f"Note for function parameters: Use '{picked}' instead of '{search}'.")
             self.__cache_search[checksum] = picked

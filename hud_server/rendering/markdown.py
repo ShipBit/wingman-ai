@@ -1022,7 +1022,11 @@ class MarkdownRenderer:
             elif t == 'paragraph':
                 current_y = self._render_paragraph(draw, block, x, current_y, width)
             elif t == 'code_block':
-                current_y = self._render_code_block(draw, canvas, block, x, current_y, width)
+                data_block = self.DATA_BLOCKS.get(block.get('lang', '').strip().lower())
+                if data_block:
+                    current_y = getattr(self, data_block)(draw, block, x, current_y, width)
+                else:
+                    current_y = self._render_code_block(draw, canvas, block, x, current_y, width)
             elif t == 'blockquote':
                 current_y = self._render_blockquote(draw, canvas, block, x, current_y, width)
             elif t == 'hr':
@@ -1379,20 +1383,10 @@ class MarkdownRenderer:
         return y + visible_h + 10
 
     def _render_hr(self, draw, x: int, y: int, width: int) -> int:
+        """A thin line in a shade of the panel: it follows the profile's background and its
+        transparency (was a fixed grey with accent dots at the ends and the centre)."""
         hr_y = y + 12
-        # Simple horizontal line with accent color
-        accent = self.colors['accent']
-
-        # Draw the main line
-        line_start_x = x
-        line_end_x = x + width
-        draw.line([(line_start_x, hr_y), (line_end_x, hr_y)], fill=(60, 66, 78), width=1)
-
-        # Decorative dots at the ends and center
-        dot_positions = [line_start_x, x + width // 2, line_end_x]
-        for dot_x in dot_positions:
-            draw.ellipse([dot_x - 2, hr_y - 2, dot_x + 2, hr_y + 2], fill=accent)
-
+        glass.paint(draw._image, Image.new("L", (max(1, width), 1), 255), self.bg_shade(0.16), (x, hr_y))
         return y + 24
 
     def _render_footnote_def(self, draw, block: Dict, x: int, y: int, width: int) -> int:
@@ -1493,11 +1487,17 @@ class MarkdownRenderer:
         # Parse rows (skip separator lines)
         rows = []
         row_line_indices = []  # Track which original line each row came from
+        aligns: List[str] = []  # From the separator row: ---: right, :---: center, else left
         for li, line in enumerate(lines):
             cells = [c.strip() for c in line.split('|')[1:-1]]
             if cells and not all(re.match(r'^[-:]+$', c.strip()) for c in cells if c.strip()):
                 rows.append(cells)
                 row_line_indices.append(li)
+            elif cells and not aligns:
+                aligns = [
+                    'center' if c.startswith(':') and c.endswith(':') else 'right' if c.endswith(':') else 'left'
+                    for c in cells
+                ]
 
         if not rows:
             return y
@@ -1570,9 +1570,17 @@ class MarkdownRenderer:
                 # Approximate: row_start + position within row
                 cell_start_approx = row_start_pos + sum(len(row[j]) + 1 for j in range(ci) if j < len(row))
 
+                # A right or center aligned column moves text that fits on one line
+                align = aligns[ci] if ci < len(aligns) else 'left'
+                offset = 0
+                if align != 'left':
+                    shown_w = self._inline_width(cell_text, current_font)
+                    if shown_w < content_w:
+                        offset = (content_w - shown_w) // (1 if align == 'right' else 2)
+
                 # Render cell with typewriter effect
                 self._render_cell_content_with_pos(
-                    text_draw, cell_text, cell_x + cell_padding, current_y + 5,
+                    text_draw, cell_text, cell_x + cell_padding + offset, current_y + 5,
                     content_w, line_h + 6, current_font, text_color,
                     cell_start_approx, typewriter_pos
                 )
@@ -1595,6 +1603,338 @@ class MarkdownRenderer:
 
         return last_visible_y + 10 if visible_rows > 0 else y
 
+    # ── Data blocks ──────────────────────────────────────────────────────
+    # Fenced code blocks with one of these languages draw a small figure instead of code:
+    #
+    #   ```bar                         ```steps               ```stats
+    #   max: 640                       done | HDMS-Ryder      Pay here | 5,177,981
+    #   Arriving | 618 text | 22 muted current | Rayari Kaltag Profit | 2,133,227 | accent
+    #   Leaving | 22 muted | 618 accent jump | Jump           ```
+    #   legend | text Sell | accent Buy next | Levski
+    #   ```                            ```
+    #
+    # Everything takes its look from the HUD profile: its fonts, its text and accent colour
+    # and its background (muted = text pulled towards the background). No settings of their own.
+
+    DATA_BLOCKS = {'bar': '_render_bar_block', 'steps': '_render_steps_block', 'stats': '_render_stats_block'}
+
+    @staticmethod
+    def _block_rows(code: str) -> List[List[str]]:
+        return [[cell.strip() for cell in line.split('|')] for line in code.split('\n') if line.strip()]
+
+    def _tone(self, name: str, mute: float = 0.55) -> Tuple[int, int, int]:
+        """A colour of the HUD profile by role: accent, text, or muted (text towards the background)."""
+        text = tuple(self.colors['text'][:3])
+        if name == 'accent':
+            return tuple(self.colors['accent'][:3])
+        if name == 'text':
+            return text
+        return glass.mix(text, self.colors.get('bg', (30, 33, 43)), mute)
+
+    def _label_color(self) -> Tuple[int, int, int]:
+        # Like the overlay's names and labels next to the text
+        return self._tone('muted', 0.35)
+
+    @staticmethod
+    def _centered_text_y(font, center_y: float, text: str = 'Ay') -> int:
+        """Where to draw `text` so its letters sit centred on center_y (fonts start below their y)."""
+        try:
+            top, bottom = font.getbbox(text)[1], font.getbbox(text)[3]
+        except Exception:
+            top, bottom = 0, 16
+        return int(round(center_y - (top + bottom) / 2))
+
+    def _render_bar_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """Labelled bars of coloured segments (e.g. a cargo hold), on a track that is the full `max`."""
+        canvas = draw._image
+        font = self.fonts['normal']
+        maximum, bars, legend = None, [], []
+        for cells in self._block_rows(block.get('code', '')):
+            head = cells[0]
+            if len(cells) == 1 and head.lower().startswith('max:'):
+                try:
+                    maximum = float(head.split(':', 1)[1])
+                except ValueError:
+                    pass
+            elif head.lower() == 'legend':
+                legend = [tuple(cell.split(None, 1)) for cell in cells[1:] if len(cell.split(None, 1)) == 2]
+            else:
+                segments = []
+                for cell in cells[1:]:
+                    parts = cell.split(None, 1)
+                    try:
+                        segments.append((float(parts[0]), parts[1] if len(parts) > 1 else 'accent'))
+                    except (ValueError, IndexError):
+                        continue
+                bars.append((head, segments))
+
+        row_h = self.line_height
+        bar_h = max(10, round(self.line_height / 2.6))
+        labels = [label for label, _ in bars if label]
+        label_w = max((self._get_text_size(label, font)[0] for label in labels), default=0)
+        label_w = label_w + 12 if label_w else 0
+
+        def amount(segments) -> str:
+            filled = sum(value for value, _ in segments)
+            return f"{filled:,.0f} / {maximum:,.0f}" if maximum else f"{filled:,.0f}"
+
+        # How full each bar is, at its right end
+        amounts = [amount(segments) for _, segments in bars]
+        amount_w = max((self._get_text_size(text, font)[0] for text in amounts), default=0) + 12
+        bar_x, bar_w = x + label_w, max(20, width - label_w - amount_w)
+        current_y = y + 2
+        for (label, segments), filled in zip(bars, amounts):
+            center = current_y + row_h / 2
+            if label:
+                self._draw_text_with_spacing(draw, (x, self._centered_text_y(font, center)), label,
+                                             self._label_color(), font)
+            text_w = self._get_text_size(filled, font)[0]
+            self._draw_text_with_spacing(draw, (x + width - text_w, self._centered_text_y(font, center, filled)),
+                                         filled, self._label_color(), font)
+            top = int(center - bar_h / 2)
+            glass.paint(canvas, glass.rounded_mask(bar_w, bar_h, 3), self.bg_shade(0.14), (bar_x, top))
+            total = maximum or sum(value for value, _ in segments) or 1
+            cursor = float(bar_x)
+            for value, tone in segments:
+                if value <= 0:
+                    continue
+                seg_w = min(max(3.0, value / total * bar_w), bar_x + bar_w - cursor)
+                if seg_w <= 0:
+                    break
+                glass.paint(canvas, glass.rounded_mask(int(round(seg_w)), bar_h, 2), self._tone(tone),
+                            (int(round(cursor)), top))
+                cursor += seg_w + 2
+            current_y += row_h
+
+        if legend:
+            swatch = max(8, bar_h)
+            cursor, line_top = bar_x, current_y
+            for tone, text in legend:
+                item_w = swatch + 6 + self._get_text_size(text, font)[0]
+                if cursor > bar_x and cursor + item_w > x + width:
+                    cursor, line_top = bar_x, line_top + row_h
+                center = line_top + row_h / 2
+                glass.paint(canvas, glass.rounded_mask(swatch, swatch, 2), self._tone(tone),
+                            (cursor, int(center - swatch / 2)))
+                self._draw_text_with_spacing(draw, (cursor + swatch + 6, self._centered_text_y(font, center)),
+                                             text, self._label_color(), font)
+                cursor += item_w + 16
+            current_y = line_top + row_h
+        return current_y + 8
+
+    def _render_steps_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """A route in one row: done, current and next stops, joined by chevrons pointing the way
+        (flown legs dimmed, the leg to the next stop in the accent colour); a `jump` between two
+        stops puts a jump gate on the leg between them. Too wide for the row: it scrolls to the
+        current stop and fades out on the sides where the route goes on."""
+        canvas = draw._image
+        normal, bold = self.fonts['normal'], self.fonts.get('bold', self.fonts['normal'])
+        stops, jumps = [], set()
+        for cells in self._block_rows(block.get('code', '')):
+            kind = cells[0].lower()
+            label = cells[1] if len(cells) > 1 else ''
+            if kind == 'jump':
+                jumps.add(len(stops))  # a gate on the leg before the next stop
+            else:
+                stops.append((kind if kind in ('done', 'current') else 'next', label))
+        if not stops:
+            return y
+
+        icon = max(10, int(self.fonts.get('_font_size', 16) * 0.85))
+        fonts = [bold if kind == 'current' else normal for kind, _ in stops]
+        widths = [icon + 6 + self._get_text_size(label, font)[0] for (_, label), font in zip(stops, fonts)]
+        gaps = list(range(1, len(stops)))
+        gate_w = self._jump_gate_size()[0]
+        min_gap = [48 + (gate_w + 24 if i in jumps else 0) for i in gaps]
+        row_h = self.line_height
+
+        # Drawn on a strip of its own, cut to the row's width when the route is wider
+        overflow = sum(widths) + sum(min_gap) > width
+        # Scrolling anyway: some air between the stops
+        extra = 16 if overflow else (width - sum(widths) - sum(min_gap)) / max(1, len(gaps))
+        strip_w = int(sum(widths) + sum(min_gap) + extra * len(gaps)) + 1 if overflow else width
+        pad = 4  # room for letters reaching past the line
+        strip = Image.new("RGBA", (strip_w, row_h + pad * 2), (0, 0, 0, 0))
+        pen = ImageDraw.Draw(strip)
+
+        def draw_icon(kind: str, left: float, center: float):
+            # Drawn 4x larger and scaled down: PIL's circles and lines have no anti-aliasing
+            scale = 4
+            size = icon * scale
+            image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            pen = ImageDraw.Draw(image)
+            if kind == 'done':
+                pen.ellipse([0, 0, size - 1, size - 1], fill=self._tone('muted') + (255,))
+                pen.line([(size * 0.27, size * 0.52), (size * 0.44, size * 0.69), (size * 0.74, size * 0.36)],
+                         fill=tuple(self.colors.get('bg', (30, 33, 43))[:3]) + (255,), width=max(scale, size // 8),
+                         joint="curve")
+            else:
+                ring = (self._tone('accent') if kind == 'current' else self._label_color()) + (255,)
+                stroke = max(2, icon // 6) * scale
+                pen.ellipse([stroke / 2, stroke / 2, size - 1 - stroke / 2, size - 1 - stroke / 2], outline=ring, width=stroke)
+                if kind == 'current':
+                    dot = size * 0.36
+                    pen.ellipse([size / 2 - dot / 2, size / 2 - dot / 2, size / 2 + dot / 2, size / 2 + dot / 2], fill=ring)
+            glass.put(strip, image.resize((icon, icon), Image.LANCZOS), (int(left), int(round(center - icon / 2))))
+
+        def label_color(kind: str):
+            return self._label_color() if kind == 'done' else tuple(self.colors['text'][:3])
+
+        center = pad + row_h / 2
+        cursor = 0.0
+        spans = []
+        for i, ((kind, label), font, item_w) in enumerate(zip(stops, fonts, widths)):
+            if i:
+                gap_w = min_gap[i - 1] + extra
+                previous = stops[i - 1][0]
+                leg = 'next' if previous == 'current' else 'flown' if kind in ('done', 'current') else 'ahead'
+                start, end = cursor + 6, cursor + gap_w - 6
+                if i in jumps:
+                    middle = (start + end) / 2
+                    self._draw_chevrons(strip, start, middle - gate_w / 2 - 5, center, leg)
+                    self._draw_chevrons(strip, middle + gate_w / 2 + 5, end, center, leg)
+                    self._draw_jump_gate(strip, middle, center, self._leg_color(leg))
+                else:
+                    self._draw_chevrons(strip, start, end, center, leg)
+                cursor += gap_w
+            draw_icon(kind, cursor, center)
+            self._draw_text_with_spacing(pen, (cursor + icon + 6, self._centered_text_y(font, center)),
+                                         label, label_color(kind), font)
+            spans.append((cursor, cursor + item_w))
+            cursor += item_w
+
+        if overflow:
+            # The current stop (else the next one) a third in, whole and clear of the fades
+            kinds = [kind for kind, _ in stops]
+            focus = kinds.index('current') if 'current' in kinds else kinds.index('next') if 'next' in kinds else len(stops) - 1
+            left, right = spans[focus]
+            fade = min(48, width // 6)
+            at = max(fade + 4, min(width / 3 - (right - left) / 2, width - fade - 4 - (right - left)))
+            offset = int(min(max(0, left - at), strip_w - width))
+            strip = strip.crop((offset, 0, offset + width, strip.height))
+            alpha = [255] * width
+            for i in range(fade):
+                level = int(255 * (i + 0.5) / fade)
+                if offset > 0:
+                    alpha[i] = min(alpha[i], level)
+                if offset + width < strip_w:
+                    alpha[width - 1 - i] = min(alpha[width - 1 - i], level)
+            ramp = Image.new("L", (width, 1))
+            ramp.putdata(alpha)
+            strip.putalpha(ImageChops.multiply(strip.getchannel("A"), ramp.resize(strip.size)))
+        glass.put(canvas, strip, (x, y - pad))
+        return y + row_h + 8
+
+    def _leg_color(self, leg: str) -> Tuple[int, int, int]:
+        """A route leg's colour: flown (the accent, dimmed), next (the accent) or ahead (muted)."""
+        if leg == 'flown':
+            return glass.mix(self._tone('accent'), self.colors.get('bg', (30, 33, 43)), 0.55)
+        if leg == 'next':
+            return self._tone('accent')
+        return self._tone('muted', 0.4)
+
+    def _draw_chevrons(self, strip: Image.Image, start: float, end: float, center: float, leg: str) -> None:
+        """A faint track from start to end with up to three chevrons in its middle, pointing right.
+        On the leg to the next stop they brighten towards it."""
+        if end - start < 4:
+            return
+        color = self._leg_color(leg)
+        track = self._tone('muted', 0.6) if leg == 'ahead' else color
+        glass.put(strip, glass.hairline(int(end - start), track + (110 if leg == 'ahead' else 150,)),
+                  (int(start), int(round(center))))
+        size = max(5, round(self.fonts.get('_font_size', 16) * 0.47))
+        step = size + 3
+        count = 3 if end - start >= 40 else 2 if end - start >= 24 else 1
+        glyph_w = size / 2 + 2
+        left = (start + end) / 2 - ((count - 1) * step + glyph_w) / 2
+        # Drawn 4x larger and scaled down, like the stop icons
+        scale = 4
+        for i in range(count):
+            alpha = 110 + 145 * (i + 1) / count if leg == 'next' else 230 if leg == 'flown' else 170
+            image = Image.new("RGBA", (int((glyph_w + 3) * scale), (size + 2) * scale), (0, 0, 0, 0))
+            ImageDraw.Draw(image).line(
+                [(scale, scale), ((1 + size / 2) * scale, (size / 2 + 1) * scale), (scale, (size + 1) * scale)],
+                fill=color + (int(alpha),), width=int(1.9 * scale), joint="curve")
+            image = image.resize((image.width // scale, image.height // scale), Image.LANCZOS)
+            glass.put(strip, image, (int(round(left + i * step)), int(round(center - (size + 2) / 2))))
+
+    def _jump_gate_size(self) -> Tuple[int, int]:
+        height = round(self.line_height * 0.75)
+        return round(height * 0.66), height
+
+    def _draw_jump_gate(self, strip: Image.Image, center_x: float, center: float, color: Tuple[int, int, int]) -> None:
+        """The jump symbol: an upright portal ring with a soft core."""
+        w, h = self._jump_gate_size()
+        scale = 4
+        W, H = w * scale, h * scale
+        image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        pen = ImageDraw.Draw(image)
+        core_w, core_h = W * 0.42, H * 0.56
+        pen.ellipse([W / 2 - core_w / 2, H / 2 - core_h / 2, W / 2 + core_w / 2, H / 2 + core_h / 2], fill=color + (90,))
+        stroke = 2 * scale
+        pen.ellipse([stroke / 2, stroke / 2, W - 1 - stroke / 2, H - 1 - stroke / 2], outline=color + (255,), width=stroke)
+        glass.put(strip, image.resize((w, h), Image.LANCZOS), (int(round(center_x - w / 2)), int(round(center - h / 2))))
+
+    def _render_stats_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """A card of figures side by side: a small label over each value; a third field `accent`
+        colours the value. A line without `|` is a full-width text line under the figures (markdown)."""
+        canvas = draw._image
+        normal = self.fonts['normal']
+        value_font = self.fonts.get('h4', self.fonts.get('bold', normal))
+        items, notes = [], []
+        for line in block.get('code', '').split('\n'):
+            if not line.strip():
+                continue
+            if '|' not in line:
+                notes.append(line.strip())
+                continue
+            cells = [cell.strip() for cell in line.split('|')]
+            items.append((cells[0], cells[1] if len(cells) > 1 else '', cells[2].lower() if len(cells) > 2 else 'text'))
+        if not items and not notes:
+            return y
+
+        # Content on a layer of its own: its height sizes the card behind it
+        pad_x, pad_y = 12, 10
+        inner_x, inner_w = x + pad_x, width - pad_x * 2
+        layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        pen = ImageDraw.Draw(layer)
+        current_y = y + pad_y
+        if items:
+            gap = 12
+            col_w = (inner_w - gap * (len(items) - 1)) / len(items)
+            _, text_h = self._get_text_size('Ay', normal)
+            label_line = text_h + 6
+            wrapped = [self._wrap_text(label, normal, int(col_w)) or [''] for label, _, _ in items]
+            label_rows = max(len(lines) for lines in wrapped)
+            for i, ((_, value, tone), lines) in enumerate(zip(items, wrapped)):
+                left = inner_x + i * (col_w + gap)
+                for row, line in enumerate(lines):
+                    self._draw_text_with_spacing(pen, (int(left), current_y + row * label_line), line,
+                                                 self._label_color(), normal)
+                color = self._tone('accent') if tone == 'accent' else tuple(self.colors['text'][:3])
+                self._draw_text_with_spacing(pen, (int(left), current_y + label_rows * label_line + 2), value,
+                                             color, value_font)
+            # Below the values' letters: a font draws them bbox[3] below its y, not just their height
+            try:
+                value_bottom = value_font.getbbox('Ay')[3]
+            except Exception:
+                value_bottom = self._get_text_size('Ay', value_font)[1]
+            current_y += label_rows * label_line + 2 + value_bottom + 4
+        divider_y = None
+        for i, note in enumerate(notes):
+            if i == 0 and items:
+                divider_y = current_y + 4
+                current_y += 12
+            current_y = self._render_tokens(pen, self.tokenize_inline(note), inner_x, current_y, inner_w) - 10 + 4
+        bottom = current_y + pad_y - 4
+
+        glass.paint(canvas, glass.rounded_mask(width, bottom - y, 8), self.bg_shade(0.05), (x, y))
+        glass.paint(canvas, glass.ring_mask(width, bottom - y, 8), self.bg_shade(0.1), (x, y))
+        if divider_y is not None:
+            glass.paint(canvas, Image.new("L", (inner_w, 1), 255), self.bg_shade(0.12), (inner_x, int(divider_y)))
+        canvas.alpha_composite(layer)
+        return bottom + 10
+
     TABLE_MIN_COLUMN = 40
 
     def _table_column_widths(self, rows: List[List[str]], num_cols: int, font, bold_font,
@@ -1607,8 +1947,8 @@ class MarkdownRenderer:
         for ci in range(num_cols):
             widest = 0
             for ri, row in enumerate(rows):
-                cell = re.sub(r"\*\*|__|~~|`", "", row[ci].strip()) if ci < len(row) else ''
-                widest = max(widest, self._get_text_size(cell, bold_font if ri == 0 else font)[0])
+                cell = row[ci].strip() if ci < len(row) else ''
+                widest = max(widest, self._inline_width(cell, bold_font if ri == 0 else font))
             natural.append(max(self.TABLE_MIN_COLUMN, widest + cell_padding * 2 + 4))
 
         if sum(natural) <= table_w:
@@ -1632,6 +1972,15 @@ class MarkdownRenderer:
         # Rounding: the last column takes what is left, so the table is exactly table_w wide
         widths[-1] = max(self.TABLE_MIN_COLUMN, table_w - sum(widths[:-1]))
         return widths
+
+    def _inline_width(self, text: str, base_font) -> int:
+        """How wide a line of inline markdown is drawn: each part in its own font (bold is wider)."""
+        styled = ('bold', 'italic', 'bold_italic', 'code')
+        return sum(
+            self._get_text_size(token.get('text', ''),
+                                self.fonts.get(token['type'], base_font) if token['type'] in styled else base_font)[0]
+            for token in self.tokenize_inline(text)
+        )
 
     def _render_cell_content_with_pos(self, draw, text: str, x: int, y: int, max_width: int,
                                       line_h: int, base_font, base_color: Tuple,

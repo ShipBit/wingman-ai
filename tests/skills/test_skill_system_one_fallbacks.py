@@ -9,6 +9,7 @@ the tool schema keeps its enum.
 
 import asyncio
 import sys
+import threading
 from os import path
 from types import SimpleNamespace
 
@@ -46,6 +47,8 @@ def _uex_llm(enabled: bool):
         add_context=lambda *a: None,
     )
     llm._Llm__cache_search = {}
+    llm._Llm__name_vectors = {}
+    llm._Llm__embedding_lock = threading.Lock()
     return llm
 
 
@@ -70,7 +73,8 @@ def test_uex_refuses_to_ask_about_an_unbounded_shortlist():
 
     llm = _uex_llm(True)
     huge = [f"Ship {i}" for i in range(Llm.SYSTEM_ONE_MAX_OPTIONS + 5)]
-    assert asyncio.run(llm._Llm__system_one_match("Ship", huge)) is None
+    # (None, None): System One was not asked, the main model decides as before
+    assert asyncio.run(llm._Llm__system_one_match("Ship", huge)) == (None, None)
 
 
 # ── HUD panel titles ────────────────────────────────────────────────

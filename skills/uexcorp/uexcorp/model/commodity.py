@@ -33,6 +33,21 @@ class Commodity(DataModel):
             date_modified: int|None = None, # int(11)
 
             is_blacklisted: int|None = None, # int(1) # own property
+            id_item: int|None = None, # int(11)
+            ids_star_systems: str|None = None, # string(255)
+            ids_planets: str|None = None, # string(255)
+            ids_moons: str|None = None, # string(255)
+            ids_poi: str|None = None, # string(255)
+            ids_orbits: str|None = None, # string(255)
+            uuid: str|None = None, # string(255)
+            is_extractable: int|None = None, # int(1)
+            is_pure: int|None = None, # int(1)
+            is_refinable: int|None = None, # int(1)
+            is_volatile_qt: int|None = None, # int(1)
+            is_volatile_time: int|None = None, # int(1)
+            is_inert: int|None = None, # int(1)
+            is_explosive: int|None = None, # int(1)
+            is_buggy: int|None = None, # int(1)
             load: bool = False,
     ):
         super().__init__("commodity")
@@ -62,6 +77,21 @@ class Commodity(DataModel):
             "date_added": date_added,
             "date_modified": date_modified,
             "is_blacklisted": is_blacklisted,
+            "id_item": id_item,
+            "ids_star_systems": ids_star_systems,
+            "ids_planets": ids_planets,
+            "ids_moons": ids_moons,
+            "ids_poi": ids_poi,
+            "ids_orbits": ids_orbits,
+            "uuid": uuid,
+            "is_extractable": is_extractable,
+            "is_pure": is_pure,
+            "is_refinable": is_refinable,
+            "is_volatile_qt": is_volatile_qt,
+            "is_volatile_time": is_volatile_time,
+            "is_inert": is_inert,
+            "is_explosive": is_explosive,
+            "is_buggy": is_buggy,
             "last_import_run_id": None,
         }
         if load:
@@ -96,10 +126,26 @@ class Commodity(DataModel):
             properties.append("legal")
         if self.get_is_fuel():
             properties.append("fuel")
+        properties.extend(self.get_hazards())
         if self.get_is_blacklisted():
             properties.append("Blacklisted for trade recommendations through advanced uex skill configuration")
 
         return properties
+
+    def get_hazards(self) -> list[str]:
+        # Cargo risks worth warning about wherever the commodity is traded.
+        hazards = []
+
+        if self.get_is_volatile_qt():
+            hazards.append("volatile during quantum travel")
+        if self.get_is_volatile_time():
+            hazards.append("becomes unstable over time")
+        if self.get_is_explosive():
+            hazards.append("explosive")
+        if self.get_is_buggy():
+            hazards.append("known bugs reported recently")
+
+        return hazards
 
     def get_data_for_ai(self) -> dict:
         from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
@@ -332,6 +378,51 @@ class Commodity(DataModel):
         if self.profit_calculated is False:
             self.__calculate_profit()
         return round(self.base_profit_max * 100, 2)
+
+    def get_id_item(self) -> int | None:
+        return self.data["id_item"]
+
+    def get_ids_star_systems(self) -> str | None:
+        return self.data["ids_star_systems"]
+
+    def get_ids_planets(self) -> str | None:
+        return self.data["ids_planets"]
+
+    def get_ids_moons(self) -> str | None:
+        return self.data["ids_moons"]
+
+    def get_ids_poi(self) -> str | None:
+        return self.data["ids_poi"]
+
+    def get_ids_orbits(self) -> str | None:
+        return self.data["ids_orbits"]
+
+    def get_uuid(self) -> str | None:
+        return self.data["uuid"]
+
+    def get_is_extractable(self) -> int | None:
+        return self.data["is_extractable"]
+
+    def get_is_pure(self) -> int | None:
+        return self.data["is_pure"]
+
+    def get_is_refinable(self) -> int | None:
+        return self.data["is_refinable"]
+
+    def get_is_volatile_qt(self) -> int | None:
+        return self.data["is_volatile_qt"]
+
+    def get_is_volatile_time(self) -> int | None:
+        return self.data["is_volatile_time"]
+
+    def get_is_inert(self) -> int | None:
+        return self.data["is_inert"]
+
+    def get_is_explosive(self) -> int | None:
+        return self.data["is_explosive"]
+
+    def get_is_buggy(self) -> int | None:
+        return self.data["is_buggy"]
 
     def __str__(self):
         return str(self.data["name"])

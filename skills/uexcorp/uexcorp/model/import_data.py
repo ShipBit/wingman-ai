@@ -11,6 +11,8 @@ class ImportData(DataModel):
             date_imported: int | None = None,  # int(11)
             dataset_count: int | None = None,  # int(11)
             time_taken: int | None = None,  # int(11)
+            date_expires: int | None = None,  # int(11), relay bundles: when the relay has newer data
+            etag: str | None = None,  # relay bundles: version of the stored data
             load: bool = False,
     ):
         super().__init__("imports")
@@ -19,6 +21,8 @@ class ImportData(DataModel):
             "date_imported": date_imported,
             "dataset_count": dataset_count,
             "time_taken": time_taken,
+            "date_expires": date_expires,
+            "etag": etag,
             "last_import_run_id": None,
         }
         if load:
@@ -34,19 +38,6 @@ class ImportData(DataModel):
             return True
 
         return (self.data["date_imported"] + persistence) < self.helper.get_timestamp()
-
-    def persist(self, skip_commit: bool = False) -> bool:
-        if super().persist(skip_commit):
-            if not self.data["last_import_run_id"]:
-                return True
-
-            self.helper.get_database().execute(
-                f"DELETE FROM {self.get_table()} WHERE last_import_run_id != {str(int(self.data['last_import_run_id'] or 0))}"
-            )
-            if not skip_commit:
-                self.helper.get_database().commit()
-            return True
-        return False
 
     def get_table(self) -> str:
         return self.data["table"]
@@ -71,6 +62,22 @@ class ImportData(DataModel):
 
     def set_time_taken(self, time_taken: int):
         self.data["time_taken"] = time_taken
+
+    def is_expired(self) -> bool:
+        """Relay bundles: True if never fetched or the relay has newer data by now."""
+        return not self.data["date_expires"] or self.data["date_expires"] <= self.helper.get_timestamp()
+
+    def get_date_expires(self) -> int | None:
+        return self.data["date_expires"]
+
+    def set_date_expires(self, date_expires: int | None):
+        self.data["date_expires"] = date_expires
+
+    def get_etag(self) -> str | None:
+        return self.data["etag"]
+
+    def set_etag(self, etag: str | None):
+        self.data["etag"] = etag
 
     def __str__(self):
         return str(self.data["table"])

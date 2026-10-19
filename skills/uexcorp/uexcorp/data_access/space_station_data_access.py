@@ -54,6 +54,7 @@ class SpaceStationDataAccess(DataAccess):
             "city_name",
             "faction_name",
             "jurisdiction_name",
+            "is_jump_point",
         ]
 
     def load(self, **params) -> list[SpaceStation]:

@@ -155,7 +155,7 @@ class Outpost(DataModel):
         from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
-        terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
+        terminals = TerminalDataAccess().add_filter_by_id_outpost(self.get_id()).load()
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
         jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
 
@@ -183,7 +183,7 @@ class Outpost(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
-        terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
+        terminals = TerminalDataAccess().add_filter_by_id_outpost(self.get_id()).load()
 
         information = {
             "name": self.get_name(),

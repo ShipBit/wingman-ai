@@ -7,14 +7,14 @@ class VehicleRentalPriceDataAccess(DataAccess):
             self,
     ):
         super().__init__(
-            table="vehicle_purchase_price",
+            table="vehicle_rental_price",
             model=VehicleRentalPrice
         )
         self.fields = [
             "id",
             "id_vehicle",
             "id_terminal",
-            "price_buy",
+            "price_rent",
             "date_added",
             "date_modified",
             "vehicle_name",
@@ -32,8 +32,8 @@ class VehicleRentalPriceDataAccess(DataAccess):
         self.filter.where("id_terminal", id_terminal)
         return self
 
-    def add_filter_by_price_buy(self, price_buy: float | list[float]) -> "VehicleRentalPriceDataAccess":
-        self.filter.where("price_buy", price_buy)
+    def add_filter_by_price_rent(self, price_rent: float | list[float]) -> "VehicleRentalPriceDataAccess":
+        self.filter.where("price_rent", price_rent)
         return self
 
     def add_filter_by_date_added(self, date_added: int | list[int]) -> "VehicleRentalPriceDataAccess":

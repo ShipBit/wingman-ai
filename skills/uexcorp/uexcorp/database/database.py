@@ -155,6 +155,24 @@ class Database:
                 raise e
             return True
 
+    def replace_table(self, table: str, columns: list[str], rows: list[tuple]) -> None:
+        """Replace all rows of a table in one transaction under the lock.
+
+        Other threads (e.g. tool queries) wait for the lock and then see either the
+        old or the new rows, never an empty or half-filled table.
+        """
+        # OR REPLACE: a dataset listing a row twice keeps the last one instead of failing
+        sql = f"INSERT OR REPLACE INTO `{table}` ({','.join(f'`{c}`' for c in columns)}) VALUES ({','.join(['?'] * len(columns))})"
+        with self._lock:
+            try:
+                self.cursor.execute(f"DELETE FROM `{table}`")
+                self.cursor.executemany(sql, rows)
+                self.connection.commit()
+            except Exception as e:
+                self.connection.rollback()
+                self.helper.get_handler_error().write("database.replace_table", [table, len(rows)], e)
+                raise e
+
     def commit(self) -> None:
         """Commit the current transaction (serialized against all DB access)."""
         with self._lock:

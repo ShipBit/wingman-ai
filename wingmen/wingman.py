@@ -95,6 +95,32 @@ def tool_names(tool_calls) -> list[str]:
     return names
 
 
+_duplicate_tools_reported: set[str] = set()
+
+
+def unique_tools(tools: list[dict]) -> list[dict]:
+    """One definition per function name. Two skills can register the same names (a bundled
+    skill and an old custom copy of it); providers reject a request that lists a name twice.
+    Calls are routed by name to one skill anyway."""
+    seen = set()
+    unique = []
+    for tool in tools:
+        name = (tool.get("function") or {}).get("name") if isinstance(tool, dict) else None
+        if name in seen:
+            if name not in _duplicate_tools_reported:
+                _duplicate_tools_reported.add(name)
+                printr.print(
+                    f"Tool '{name}' is provided twice (e.g. by a skill and a copy of it), using one.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+            continue
+        if name:
+            seen.add(name)
+        unique.append(tool)
+    return unique
+
+
 class Wingman:
     """Unified Wingman class.
 
@@ -1374,7 +1400,7 @@ class Wingman:
         if self.config.hud.info and HudService().available:
             tools.extend(HUD_TOOLS)
 
-        return tools
+        return unique_tools(tools)
 
     async def _show_on_hud(self, role: str, content, tool_calls) -> None:
         await HudService().on_conversation_message(self, role, content, tool_calls)

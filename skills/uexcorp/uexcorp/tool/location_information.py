@@ -1,7 +1,38 @@
+import json
+
 from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.model.data_model import DataModel
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
+
+
+def _drop_repeats(results: list[dict]) -> list[dict]:
+    """A parent several results share (the moon of seven outposts) in full once, then by name."""
+    seen = set()
+    for result in results:
+        for key, value in result.items():
+            if isinstance(value, dict) and value.get("name"):
+                marker = (key, json.dumps(value, sort_keys=True, default=str))
+                if marker in seen:
+                    result[key] = value["name"]
+                else:
+                    seen.add(marker)
+    return results
+
+
+def _trim_offerings(results: list[dict], per_kind: int) -> bool:
+    """Caps what each terminal offers (a shop can list hundreds of items). True if anything was cut."""
+    trimmed = False
+    for result in results:
+        offerings = result.get("offerings")
+        if not isinstance(offerings, dict):
+            continue
+        for kind, entries in list(offerings.items()):
+            if isinstance(entries, list) and len(entries) > per_kind:
+                offerings[kind] = entries[:per_kind]
+                offerings[f"{kind}_count"] = len(entries)
+                trimmed = True
+    return trimmed
 
 
 class LocationInformation(Tool):
@@ -17,6 +48,7 @@ class LocationInformation(Tool):
     LOCATION_TYPE_MOON = "moon"
     LOCATION_TYPE_CITY = "city"
     LOCATION_TYPE_TERMINAL = "terminal"
+    OFFERINGS_PER_KIND = 10
 
     def __init__(self):
         super().__init__()
@@ -39,7 +71,7 @@ class LocationInformation(Tool):
         self.__filter_location_types = filter_location_types or []
         self.__filter_is_monitored = is_monitored
         self.__filter_has_quantum_marker = has_quantum_marker
-        helper = Helper().get_instance()
+        helper = Helper.get_instance()
 
         locations = []
 
@@ -67,13 +99,23 @@ class LocationInformation(Tool):
         if not filter_location_types or self.LOCATION_TYPE_TERMINAL in filter_location_types:
             locations.extend(self.__get_terminals())
 
+        # Orbits (e.g. Lagrange points) have no location type, but filter_locations can name them
+        if filter_locations and not filter_location_types:
+            locations.extend(self.__get_orbits(locations))
+
         if not locations:
             helper.get_handler_tool().add_note(
                 "No matching locations found. Please check filter criteria."
             )
             return [], ""
         elif len(locations) <= 10:
-            locations = [location.get_data_for_ai() for location in locations]
+            locations = _drop_repeats([location.get_data_for_ai() for location in locations])
+            # One terminal is listed in full, several only with their first offerings
+            if len(locations) > 1 and _trim_offerings(locations, self.OFFERINGS_PER_KIND):
+                helper.get_handler_tool().add_note(
+                    f"Several terminals: their offerings show the first {self.OFFERINGS_PER_KIND} per kind "
+                    "(<kind>_count = all). Ask for one terminal to see everything it offers."
+                )
         elif len(locations) <= 20:
             locations = [location.get_data_for_ai_minimal() for location in locations]
             helper.get_handler_tool().add_note(
@@ -111,7 +153,8 @@ class LocationInformation(Tool):
             space_station_data_access.add_filter_by_name(self.__filter_locations)
         elif self.__filter_locations and (self.LOCATION_TYPE_SPACE_STATION in self.__filter_location_types or self.LOCATION_TYPE_GATEWAY in self.__filter_location_types):
             space_station_data_access.add_filter_by_location_name_whitelist(self.__filter_locations)
-        if self.LOCATION_TYPE_GATEWAY in self.__filter_location_types:
+        # Gateways are space stations, so with both types the stations must not be narrowed to gateways
+        if self.LOCATION_TYPE_GATEWAY in self.__filter_location_types and self.LOCATION_TYPE_SPACE_STATION not in self.__filter_location_types:
             space_station_data_access.add_filter_by_name("%Gateway%", operation="LIKE")
 
         return space_station_data_access.load()
@@ -176,6 +219,14 @@ class LocationInformation(Tool):
 
         return city_data_access.load()
 
+    def __get_orbits(self, found_locations: list[DataModel]) -> list[DataModel]:
+        from skills.uexcorp.uexcorp.data_access.orbit_data_access import OrbitDataAccess
+
+        # Planets and moons are orbits too, they are already covered by their own lookups
+        orbits = OrbitDataAccess().add_filter_by_name(self.__filter_locations).load()
+        found = {str(location) for location in found_locations}
+        return [orbit for orbit in orbits if str(orbit) not in found]
+
     def __get_terminals(self) -> list[DataModel]:
         from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
         from skills.uexcorp.uexcorp.model.terminal import Terminal
@@ -198,7 +249,7 @@ class LocationInformation(Tool):
             "filter_locations": Validator(
                 Validator.VALIDATE_LOCATION,
                 multiple=True,
-                prompt="Provide one or multiple location names to filter by name. (e.g. \"Hurston\" or \"Stanton\")",
+                prompt="Location names, e.g. [\"Hurston\"] or [\"Port Tressler\"]. Without filter_location_types: returns these locations themselves. With filter_location_types: returns locations of those types inside these locations.",
             ),
             "filter_location_types": Validator(
                 Validator.VALIDATE_ENUM,
@@ -216,7 +267,7 @@ class LocationInformation(Tool):
                         self.LOCATION_TYPE_TERMINAL,
                     ],
                 },
-                prompt="Provide one or multiple location types to receive. Works with unconnected location names, e.g. filter_locations: [\"Hurston\"], filter_location_types: [\"moon\"], to get all moons of Hurston."
+                prompt="Types of locations to return, e.g. filter_locations [\"Hurston\"] + filter_location_types [\"moon\"] = all moons of Hurston. \"terminal\" means commodity trading terminals."
             ),
 
             # Will be added later
@@ -225,7 +276,14 @@ class LocationInformation(Tool):
         }
 
     def get_description(self) -> str:
-        return "Gives back information about a locations, their related locations and, if available, it's shopping options and other services/properties."
+        return (
+            "Look up places in Star Citizen: star systems, planets, moons, space stations, gateways, cities, outposts, "
+            "points of interest and trading terminals. Returns what is there (sub-locations, terminals, services, "
+            "landing pads, faction). Use it for 'what is at X' or 'list all Y in Z'. Narrow filters give more details per location."
+        )
 
     def get_prompt(self) -> str:
-        return "Get all information's about all locations, filterable. When asked about a specific location or location type, prefer this over uex_get_trade_routes. Terminals/locations may also provide buy/sell/rent prices and options."
+        return (
+            "Information about places and what they offer. "
+            "Use it for questions about a location, not for trade routes."
+        )

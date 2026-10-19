@@ -590,8 +590,51 @@ Messages support rich Markdown formatting:
 - **Images**: `![alt](url)`
 - **Headers**: `# H1`, `## H2`, etc.
 - **Lists**: `- item` or `1. item`
-- **Blockquotes**: `> quote`
-- **Tables**: Standard Markdown table syntax
+- **Blockquotes**: `> quote` (bold and code keep their style inside)
+- **Tables**: Standard Markdown table syntax; columns size to their content, `---:` aligns a column right, `:---:` centres it
+- **Task lists**: `- [ ] open` / `- [x] done` (the checkbox replaces the bullet)
+- **Horizontal rule**: `---`, a thin line in a shade of the panel
+
+### Data blocks
+
+Fenced code blocks with one of these languages draw a small figure instead of code. They take
+their look from the HUD profile only (its fonts, text and accent colour, background); colours are
+roles: `accent`, `text`, or `muted` (the text pulled towards the background).
+
+````markdown
+```bar
+max: 640
+Arriving | 618 text | 22 muted
+Leaving | 22 muted | 618 accent
+legend | text Sell here | accent Buy here | muted Stays aboard
+```
+````
+
+Each line is a labelled bar of segments (`value role`), on a track that stands for `max` (without
+it, the sum of the segments). `legend` adds swatches with their meaning.
+
+````markdown
+```steps
+done | HDMS-Ryder
+current | Rayari Kaltag
+jump | Jump
+next | Levski
+```
+````
+
+A route in one row: `done`, `current` and `next` stops joined by chevrons pointing the way. Flown
+legs are dimmed, the leg to the next stop has the accent colour. A `jump` line between two stops puts
+a jump gate symbol on the leg between them (its text is not shown). Too wide for the row, it stays one line: it scrolls
+to the `current` stop (else the first `next` one) and fades out on the sides where the route goes on.
+
+````markdown
+```stats
+Pay here | 5,177,981
+Profit | 2,133,227 | accent
+```
+````
+
+Figures side by side, a small label over each value; a third field `accent` colours the value.
 
 ## Error Handling
 
