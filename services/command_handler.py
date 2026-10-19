@@ -110,8 +110,13 @@ class CommandHandler:
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):
         secret_name = command.secret_name
         secret_value = command.secret_value
-        self.secret_keeper.secrets[secret_name] = secret_value
-        await self.secret_keeper.save()
+        # The client sends its device token again on every start, without a
+        # message. Saving it would make every Wingman validate again for
+        # nothing. A user retrying a failed Wingman comes with a message.
+        unchanged = self.secret_keeper.secrets.get(secret_name) == secret_value
+        if not unchanged or command.show_message:
+            self.secret_keeper.secrets[secret_name] = secret_value
+            await self.secret_keeper.save()
         if secret_name == "wingman_pro":
             await self.connection_manager.broadcast(SubscriptionTokenSavedCommand())
 
