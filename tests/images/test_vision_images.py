@@ -8,7 +8,7 @@ from PIL import Image
 
 from services.image_generation import (
     VISION_MAX_CHARS,
-    VISION_MAX_DIMENSION,
+    VISION_MAX_PIXELS,
     vision_base64,
 )
 from services.image_processing import process_images
@@ -35,7 +35,17 @@ def test_screen_becomes_a_small_jpeg():
     image = _decode(vision_base64(screen))
 
     assert image.format == "JPEG"
-    assert image.size == (VISION_MAX_DIMENSION, 720)
+    assert image.width * image.height <= VISION_MAX_PIXELS
+    assert abs(image.width / image.height - 16 / 9) < 0.01
+
+
+def test_ultrawide_screen_keeps_its_height():
+    # At 1280 pixels wide a 32:9 screen was 360 high: its text was unreadable
+    screen = Image.new("RGB", (5120, 1440), (30, 40, 60))
+
+    image = _decode(vision_base64(screen))
+
+    assert image.height > 500
 
 
 def test_busy_screen_still_fits_the_request_limit():
