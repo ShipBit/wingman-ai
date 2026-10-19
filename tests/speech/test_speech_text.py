@@ -135,3 +135,13 @@ def test_a_list_as_it_applies_to_a_language():
 def test_an_other_language_gets_only_the_rules():
     rules = [Rule(written="aUEC", spoken="Credits")]
     assert say("5 aUEC, ca. 3 km", L.OTHER, rules=rules, presets=()) == "5 Credits, ca. 3 km"
+
+
+def test_german_voices_say_wingman_words_the_english_way():
+    rules = speech_text.preset_rules_for(ROOT, "wingman", L.DE)
+    assert {r.written: r.spoken for r in rules} == {
+        "online": "onlain",
+        "Online": "Onlain",
+        "Wingman": "Wingmähn",
+    }
+    assert speech_text.preset_rules_for(ROOT, "wingman", L.EN) == []

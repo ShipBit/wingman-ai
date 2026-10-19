@@ -31,12 +31,12 @@ prompts:
     - Occasional dry humor befitting a seasoned controller
 record_key: delete
 inworld:
-  voice_id: Edward
+  voice_id: Brian
 wingman_pro:
   azure:
-    voice: en-US-AndrewMultilingualNeural
+    voice: en-US-LewisMultilingualNeural
 pocket_tts:
-  voice: azelma
+  voice: en-barry
 sound:
   effects: [LOW_QUALITY_RADIO]
   play_beep_apollo: true

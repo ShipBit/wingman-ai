@@ -9,6 +9,7 @@ filler_responses: true
 pronunciation:
   rules: []
   presets:
+    - wingman
     - star_citizen
 cancel_tts_key: "shift+y"
 cancel_tts_joystick_button: null

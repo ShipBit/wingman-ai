@@ -30,7 +30,7 @@ def test_a_missing_section_comes_from_the_template_and_user_values_stay(tmp_path
     config = manager(tmp_path, lines).read_default_config()
 
     loaded = NestedConfig(**config)
-    assert loaded.wingman_pro.azure.voice == "en-US-JennyMultilingualNeural"
+    assert loaded.wingman_pro.azure.voice == "zh-CN-XiaoyuMultilingualNeural"
     assert loaded.wingman_pro.tts_provider.value == "azure"
     assert loaded.inworld.voice_id == "Clive"
     assert lines == [("defaults: added missing 'wingman_pro.azure' from the template", True)]

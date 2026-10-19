@@ -12,7 +12,7 @@ from api.interface import (
     XVASynthTtsConfig,
     PocketTTSConfig,
 )
-from providers.edge import Edge
+from providers.edge import Edge, get_edge_voices
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
 from providers.inworld import Inworld
@@ -40,6 +40,7 @@ class VoiceService:
         self.audio_player = audio_player
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
+        self.edge_voices: list[VoiceInfo] = []
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -61,6 +62,13 @@ class VoiceService:
             methods=["GET"],
             path="/voices/inworld",
             endpoint=self.get_inworld_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/edge",
+            endpoint=self.get_edge_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -186,6 +194,16 @@ class VoiceService:
         result = await inworld.get_available_voices()
         return result
 
+    # GET /voices/edge
+    async def get_edge_voices(self) -> list[VoiceInfo]:
+        # Microsoft's list changes rarely: once per Core start is enough.
+        if not self.edge_voices:
+            try:
+                self.edge_voices = await get_edge_voices()
+            except Exception as e:
+                self.printr.toast_error(f"Edge TTS: \n{str(e)}")
+        return self.edge_voices
+
     # GET /voices/openai-compatible
     async def get_openai_compatible_voices(
         self,
@@ -219,16 +237,24 @@ class VoiceService:
         )
         return voices
 
-    @staticmethod
-    async def _run_playback(playback):
+    async def _run_playback(self, playback):
         """Run a playback coroutine in a worker thread with its own event loop.
 
         Playback previews block their loop (audio pumping + drain), so running
         them on the API event loop would freeze the server and make POST
         /stop-playback unreachable until the preview ends. This mirrors how
         wingmen play TTS via threaded_execution.
+
+        Answers when the voice is done, stopped or replaced by the next
+        preview: the client shows Stop until then. Providers without streaming
+        (Edge, xVASynth) return as soon as their audio starts, so wait for it
+        here.
         """
         await asyncio.to_thread(asyncio.run, playback)
+        player = self.audio_player
+        mine = player.playback_count
+        while player.is_playing and player.playback_count == mine:
+            await asyncio.sleep(0.1)
 
     # POST /play/openai
     async def play_openai_tts(

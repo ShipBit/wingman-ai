@@ -4,15 +4,16 @@ Up to 3.2.3 ATC, Computer and Clippy spoke with English voices in every
 language, so a German Computer had an English accent. The list in
 templates/pocket_tts/default_voices.tsv names a voice recorded in each
 language (wingman, language, voice). A Wingman follows it while it still has
-a default voice: none, the one its template had up to 3.2.3 (language
-"legacy") or the one Wingman last gave it, noted in RECORD_FILE. A voice the
+a default voice: none, one its template has had (language "legacy",
+comma-separated) or the one Wingman last gave it, noted in RECORD_FILE. A voice the
 user picked is never replaced, even one that is another language's default.
 
 The subscription's Azure voice follows the language the same way, from
 templates/azure/default_voices.tsv (same format, plus a "*" row per Wingman
 for every language without one) and its own record, AZURE_RECORD_FILE. So
 does the Inworld voice, from templates/inworld/default_voices.tsv and
-INWORLD_RECORD_FILE; the subscription and an own Inworld key share it.
+INWORLD_RECORD_FILE; the subscription and an own Inworld key share it. And
+the Edge voice, from templates/edge/default_voices.tsv and EDGE_RECORD_FILE.
 
 Pocket TTS stays the default for English. For every other language a Wingman
 still on Pocket TTS with a default voice moves to the subscription's Azure
@@ -40,6 +41,9 @@ AZURE_RECORD_FILE = ".default_azure_voices.json"
 INWORLD_DEFAULTS_FILE = os.path.join("templates", "inworld", "default_voices.tsv")
 INWORLD_RECORD_FILE = ".default_inworld_voices.json"
 """In the configs folder: the Inworld voice Wingman last gave each Wingman."""
+EDGE_DEFAULTS_FILE = os.path.join("templates", "edge", "default_voices.tsv")
+EDGE_RECORD_FILE = ".default_edge_voices.json"
+"""In the configs folder: the Edge voice Wingman last gave each Wingman."""
 SWITCH_RECORD_FILE = ".azure_language_switch.json"
 """In the configs folder: what switch_to_azure_for_language moved to Azure,
 so a Wingman the user puts back on Pocket TTS is not moved a second time."""
@@ -52,17 +56,19 @@ SUBSCRIPTION_TTS_PROVIDER = ("wingman_pro", "tts_provider")
 POCKET_VOICE = ("pocket_tts", "voice")
 AZURE_VOICE = ("wingman_pro", "azure", "voice")
 INWORLD_VOICE = ("inworld", "voice_id")
+EDGE_VOICE = ("edge_tts", "voice")
 
 
-# The subscription's Azure voices a plan always includes: one female and one
-# male per main market (German, French, Spanish) and the two multilingual
-# ones for everything else. Same list as `plan_voices` for Free (2026-10-07).
-AZURE_FEMALE_VOICE = "en-US-JennyMultilingualNeural"
-AZURE_MALE_VOICE = "en-US-AndrewMultilingualNeural"
+# The subscription's Azure voices a plan always includes: one multilingual
+# female voice for every language, one male voice per main market (German,
+# French, Spanish) and a multilingual one for everything else. Same list as
+# `plan_voices` for Free (2026-10-19).
+AZURE_FEMALE_VOICE = "zh-CN-XiaoyuMultilingualNeural"
+AZURE_MALE_VOICE = "en-US-LewisMultilingualNeural"
 AZURE_VOICES_BY_LANGUAGE = {
-    "de": ("de-DE-KatjaNeural", "de-DE-ConradNeural"),
-    "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
-    "es": ("es-ES-ElviraNeural", "es-ES-AlvaroNeural"),
+    "de": (AZURE_FEMALE_VOICE, "de-DE-ConradNeural"),
+    "fr": (AZURE_FEMALE_VOICE, "fr-FR-HenriNeural"),
+    "es": (AZURE_FEMALE_VOICE, "es-ES-AlvaroNeural"),
 }
 
 # Male Inworld voices, lowercased. Inworld names carry no gender, so it is
@@ -79,6 +85,7 @@ INWORLD_MALE_VOICES = frozenset(
         "hendrik", "ignacio", "inigo", "joaquin", "josef", "kilian", "mateo",
         "mauricio", "maximiliano", "nacho", "reinhard", "ruben", "salvador", "sergio",
         "tobias", "étienne",
+        "brian", "cedric", "evan",
     }
 )
 
@@ -299,7 +306,8 @@ def rewrite_locked_voices(
 
 def load_default_voices(app_root: str, file: str = DEFAULTS_FILE) -> dict[str, dict[str, str]]:
     """{wingman file name: {language: voice}} from ``file`` (Pocket TTS by
-    default, AZURE_DEFAULTS_FILE or INWORLD_DEFAULTS_FILE for the others)."""
+    default, AZURE_DEFAULTS_FILE, INWORLD_DEFAULTS_FILE or EDGE_DEFAULTS_FILE
+    for the others)."""
     path = os.path.join(app_root, file)
     table: dict[str, dict[str, str]] = {}
     if not os.path.isfile(path):
@@ -321,9 +329,12 @@ def default_voice_for(table: dict[str, dict[str, str]], wingman: str, language: 
 
 
 def is_default_voice(current, voices: dict[str, str], recorded=None) -> bool:
-    """A Wingman still has a default voice: none of its own, the one it
-    shipped with ("legacy") or the one Wingman last gave it (``recorded``)."""
-    return not current or current in (voices.get("legacy"), recorded)
+    """A Wingman still has a default voice: none of its own, one it shipped
+    with ("legacy", comma-separated) or the one Wingman last gave it
+    (``recorded``)."""
+    if not current or current == recorded:
+        return True
+    return current in [v.strip() for v in (voices.get("legacy") or "").split(",")]
 
 
 def _get(config: dict, keys: tuple):
@@ -346,13 +357,14 @@ def _set(config: dict, keys: tuple, value) -> None:
 
 def apply_default_voices(config_manager: ConfigManager, app_root: str, language: str) -> list[str]:
     """Give every shipped Wingman that still has a default voice the one for
-    ``language``: its Pocket TTS voice, its subscription Azure voice and its
-    Inworld voice, each on its own. Returns "config/wingman" of each Wingman
+    ``language``: its Pocket TTS voice, its subscription Azure voice, its
+    Inworld voice and its Edge voice, each on its own. Returns "config/wingman" of each Wingman
     changed."""
     providers = [
         (POCKET_VOICE, load_default_voices(app_root, DEFAULTS_FILE), RECORD_FILE),
         (AZURE_VOICE, load_default_voices(app_root, AZURE_DEFAULTS_FILE), AZURE_RECORD_FILE),
         (INWORLD_VOICE, load_default_voices(app_root, INWORLD_DEFAULTS_FILE), INWORLD_RECORD_FILE),
+        (EDGE_VOICE, load_default_voices(app_root, EDGE_DEFAULTS_FILE), EDGE_RECORD_FILE),
     ]
     records = {
         record_file: _read(os.path.join(config_manager.config_dir, record_file))
@@ -577,3 +589,67 @@ def _write(path: str, data: dict) -> None:
         os.replace(tmp, path)
     except OSError as e:
         Printr().print(f"Could not write {path}: {e}", server_only=True)
+
+
+# The sections that hold only voice settings. `openai`, `features` and
+# `wingman_pro` mix in other settings, so only their voice keys count.
+TTS_SECTIONS = (
+    "edge_tts",
+    "elevenlabs",
+    "hume",
+    "inworld",
+    "pocket_tts",
+    "xvasynth",
+    "openai_compatible_tts",
+    "sound",
+)
+TTS_KEYS = {"features": ("tts_provider",), "wingman_pro": ("tts_provider", "azure")}
+
+
+def restore_tts_sections(config: dict, template: dict) -> dict:
+    """``config`` with its voices and sound effects as ``template`` has them.
+    What the template leaves out, the config inherits from the defaults again.
+    Everything else stays as the user set it."""
+    config = copy.deepcopy(config)
+    for section in TTS_SECTIONS:
+        config.pop(section, None)
+        if section in template:
+            config[section] = copy.deepcopy(template[section])
+    for section, keys in TTS_KEYS.items():
+        own = dict(config.get(section) or {})
+        shipped = template.get(section) or {}
+        for key in keys:
+            own.pop(key, None)
+            if key in shipped:
+                own[key] = copy.deepcopy(shipped[key])
+        if own:
+            config[section] = own
+        else:
+            config.pop(section, None)
+    openai = {k: v for k, v in (config.get("openai") or {}).items() if not k.startswith("tts_")}
+    openai.update({k: v for k, v in (template.get("openai") or {}).items() if k.startswith("tts_")})
+    if openai:
+        config["openai"] = openai
+    else:
+        config.pop("openai", None)
+    return config
+
+
+def restore_voice_defaults(
+    config_manager: ConfigManager,
+    app_root: str,
+    path: str,
+    template_path: Optional[str],
+    language: str,
+) -> bool:
+    """The Wingman at ``path`` gets the voices and sound effects it shipped
+    with (``template_path``), or inherits the defaults' when it has no
+    template. A shipped Wingman then gets the default voices of ``language``.
+    Returns False when the config could not be written."""
+    config = config_manager.read_config(path) or {}
+    template = _read_yaml(template_path) if template_path else {}
+    if not config_manager.write_config(path, restore_tts_sections(config, template)):
+        return False
+    if template_path:
+        apply_default_voices(config_manager, app_root, language)
+    return True

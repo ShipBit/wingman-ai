@@ -5,7 +5,7 @@ import os
 import wave
 from os import path
 from time import perf_counter
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import Callable
 import numpy as np
 import soundfile as sf
@@ -37,9 +37,15 @@ class AudioPlayer:
         on_playback_finished: Callable[[str], None],
     ) -> None:
         self.is_playing = False
+        # Counts every playback that starts, so a caller can tell whether the
+        # one still playing is still its own.
+        self.playback_count = 0
         self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
+        # Stopping a stream and closing it at the same time fails on macOS
+        # (AUHAL err -50): stop_playback stops, the playback thread closes.
+        self.stream_lock = Lock()
         self.raw_stream = None
         self.wingman_name = ""
         self.playback_events = PubSub()
@@ -150,15 +156,27 @@ class AudioPlayer:
         self.is_playing = True
 
         # Create and start the audio stream
-        self.stream = sd.OutputStream(
+        done = Event()
+        stream = sd.OutputStream(
             samplerate=sample_rate,
             channels=channels,
             blocksize=device_blocksize(sample_rate),
             callback=callback,
-            finished_callback=finished_callback,
+            finished_callback=done.set,
         )
-        self.stream.start()
-        sd.sleep(int(len(audio) / sample_rate * 1000))
+        self.stream = stream
+        stream.start()
+        # PortAudio reports the end on its audio thread, where closing the
+        # stream fails on macOS ("cannot do in current context"). So close it
+        # here, once it ran out or was stopped.
+        done.wait()
+        with self.stream_lock:
+            stream.close()
+        # A newer playback may own the player by now: leave its state alone.
+        if self.stream is stream:
+            self.stream = None
+            if finished_callback:
+                finished_callback()
 
     async def stop_playback(self):
         # The cancel hotkey calls this whether or not anything plays, and a held
@@ -168,9 +186,13 @@ class AudioPlayer:
             self.is_playing or self.stream is not None or self.raw_stream is not None
         )
 
-        if self.stream is not None:
-            self.stream.stop()
-            self.stream = None
+        stream, self.stream = self.stream, None
+        if stream is not None:
+            with self.stream_lock:
+                try:
+                    stream.stop()
+                except sd.PortAudioError:
+                    pass  # ran out and closed in the meantime
 
         if self.raw_stream is not None:
             self.raw_stream.stop()
@@ -243,9 +265,6 @@ class AudioPlayer:
             pass
 
         def finished_callback():
-            if self.stream is not None:
-                self.stream.close()
-                self.stream = None
             self.is_playing = False
             if self.event_queue is not None and callable(self.on_playback_finished):
                 finished_event = (self.on_playback_finished, wingman_name)
@@ -260,6 +279,7 @@ class AudioPlayer:
         playback_thread.start()
 
         self.is_playing = True
+        self.playback_count += 1
         self.wingman_name = wingman_name
 
         await self.notify_playback_started(wingman_name)
@@ -607,6 +627,7 @@ class AudioPlayer:
 
             self.raw_stream = stream
             self.is_playing = True
+            self.playback_count += 1
             # stop_playback() reports "finished" with self.wingman_name, so it
             # must track the raw-stream playback too, not just start_playback().
             self.wingman_name = wingman_name
