@@ -564,266 +564,450 @@ class ATSTelemetry(Skill):
             # Convert percentages
             # A capacity of 0 (no truck yet, or no AdBlue tank) has no percentage.
             if data["fuelCapacity"]:
-                enhanced_data["currentFuelPercentage"] = (
-                    str(round((data["fuel"] / data["fuelCapacity"]) * 100))
-                    + " percent of fuel remaining."
-                )
+                try:
+                    enhanced_data["currentFuelPercentage"] = (
+                        str(round((data["fuel"] / data["fuelCapacity"]) * 100))
+                        + " percent of fuel remaining."
+                    )
+                except (ZeroDivisionError, Exception) as e:
+                    self.log.error(f"Could not calculate currentFuelPercentage: {e}", server_only=True)
+                    enhanced_data["currentFuelPercentage"] = "unknown"
             if data["adblueCapacity"]:
-                enhanced_data["currentAdbluePercentage"] = (
-                    str(round((data["adblue"] / data["adblueCapacity"]) * 100))
-                    + " percent of adblue remaining."
+                try:
+                    enhanced_data["currentAdbluePercentage"] = (
+                        str(round((data["adblue"] / data["adblueCapacity"]) * 100))
+                        + " percent of adblue remaining."
+                    )
+                except (ZeroDivisionError, Exception) as e:
+                    self.log.error(f"Could not calculate currentAdbluePercentage: {e}", server_only=True)
+                    enhanced_data["currentAdbluePercentage"] = "unknown"
+
+            try:
+                scs_truck_damage = await self.get_damage_percentage(data)
+                enhanced_data["truckDamageRounded"] = (
+                    str(math.floor(scs_truck_damage)) + " percent truck damage"
                 )
-            scs_truck_damage = await self.get_damage_percentage(data)
-            enhanced_data["truckDamageRounded"] = (
-                str(math.floor(scs_truck_damage)) + " percent truck damage"
-            )
-            scs_trailer_one_damage = await self.get_damage_percentage_trailer(data)
-            enhanced_data["wearTrailerRounded"] = (
-                str(math.floor(scs_trailer_one_damage)) + " percent trailer damage"
-            )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate truckDamageRounded: {e}", server_only=True)
+                enhanced_data["truckDamageRounded"] = "unknown"
+
+            try:
+                scs_trailer_one_damage = await self.get_damage_percentage_trailer(data)
+                enhanced_data["wearTrailerRounded"] = (
+                    str(math.floor(scs_trailer_one_damage)) + " percent trailer damage"
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate wearTrailerRounded: {e}", server_only=True)
+                enhanced_data["wearTrailerRounded"] = "unknown"
 
             # Convert times
-            days_hours_and_minutes = await self.convert_minutes_to_days_hours_minutes(
-                data["time_abs"]
-            )
-            if use_metric:
-                enhanced_data["gameTime"] = await self.convert_to_clock_time(
-                    days_hours_and_minutes, 24
+            try:
+                days_hours_and_minutes = await self.convert_minutes_to_days_hours_minutes(
+                    data["time_abs"]
                 )
-            else:
-                enhanced_data["gameTime"] = await self.convert_to_clock_time(
-                    days_hours_and_minutes, 12
-                )
+                if use_metric:
+                    enhanced_data["gameTime"] = await self.convert_to_clock_time(
+                        days_hours_and_minutes, 24
+                    )
+                else:
+                    enhanced_data["gameTime"] = await self.convert_to_clock_time(
+                        days_hours_and_minutes, 12
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate gameTime: {e}", server_only=True)
+                enhanced_data["gameTime"] = "unknown"
 
-            job_start_days_hours_and_minutes = (
-                await self.convert_minutes_to_days_hours_minutes(
-                    data["jobStartingTime"]
-                )
-            )
-            if use_metric:
-                enhanced_data["jobStartingTime"] = await self.convert_to_clock_time(
-                    job_start_days_hours_and_minutes, 24
-                )
-            else:
-                enhanced_data["jobStartingTime"] = await self.convert_to_clock_time(
-                    job_start_days_hours_and_minutes, 12
-                )
-
-            job_finish_days_hours_and_minutes = (
-                await self.convert_minutes_to_days_hours_minutes(
-                    data["jobFinishedTime"]
-                )
-            )
-            if use_metric:
-                enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
-                    job_finish_days_hours_and_minutes, 24
-                )
-            else:
-                enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
-                    job_finish_days_hours_and_minutes, 12
-                )
-
-            next_rest_stop_time_array = (
-                await self.convert_minutes_to_days_hours_minutes(data["restStop"])
-            )
-            enhanced_data["nextRestStopTime"] = (
-                await self.process_time_difference_array(next_rest_stop_time_array)
-            )
-
-            route_time_in_days_hours_minutes = (
-                await self.convert_seconds_to_days_hours_minutes(data["routeTime"])
-            )
-            enhanced_data["routeTime"] = await self.process_time_difference_array(
-                route_time_in_days_hours_minutes
-            )
-            route_expiration = await self.convert_minutes_to_days_hours_minutes(
-                data["time_abs_delivery"] - data["time_abs"]
-            )
-            enhanced_data["jobExpirationTimeInDaysHoursMinutes"] = (
-                await self.process_time_difference_array(route_expiration)
-            )
-            enhanced_data["isWorldOfTrucksContract"] = (
-                await self.is_world_of_trucks_contract(data)
-            )
-
-            if enhanced_data["isWorldOfTrucksContract"]:
-                _job_ended_time = await self.get_days_hours_minutes_and_seconds(
-                    data["jobFinishedTime"]
-                )
-                _job_started_time = await self.get_days_hours_minutes_and_seconds(
-                    data["jobStartingTime"]
-                )
-                time_to_complete_route_array = (
+            try:
+                job_start_days_hours_and_minutes = (
                     await self.convert_minutes_to_days_hours_minutes(
-                        data["jobFinishedTime"] - data["jobStartingTime"]
+                        data["jobStartingTime"]
                     )
                 )
-                real_life_time_to_complete_route = (
+                if use_metric:
+                    enhanced_data["jobStartingTime"] = await self.convert_to_clock_time(
+                        job_start_days_hours_and_minutes, 24
+                    )
+                else:
+                    enhanced_data["jobStartingTime"] = await self.convert_to_clock_time(
+                        job_start_days_hours_and_minutes, 12
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobStartingTime: {e}", server_only=True)
+                enhanced_data["jobStartingTime"] = "unknown"
+
+            try:
+                job_finish_days_hours_and_minutes = (
                     await self.convert_minutes_to_days_hours_minutes(
-                        data["jobDeliveredDeliveryTime"]
+                        data["jobFinishedTime"]
                     )
                 )
-                enhanced_data["realLifeTimeToCompleteWorldofTrucksJob"] = (
-                    await self.process_time_difference_array(
-                        real_life_time_to_complete_route
+                if use_metric:
+                    enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
+                        job_finish_days_hours_and_minutes, 24
                     )
-                )
-            else:
-                time_to_complete_route_array = (
-                    await self.convert_minutes_to_days_hours_minutes(
-                        data["jobDeliveredDeliveryTime"]
+                else:
+                    enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
+                        job_finish_days_hours_and_minutes, 12
                     )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobFinishedTime: {e}", server_only=True)
+                enhanced_data["jobFinishedTime"] = "unknown"
+
+            try:
+                next_rest_stop_time_array = (
+                    await self.convert_minutes_to_days_hours_minutes(data["restStop"])
                 )
-            enhanced_data["gameTimeLapsedToCompleteJob"] = (
-                await self.process_time_difference_array(time_to_complete_route_array)
-            )
+                enhanced_data["nextRestStopTime"] = (
+                    await self.process_time_difference_array(next_rest_stop_time_array)
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate nextRestStopTime: {e}", server_only=True)
+                enhanced_data["nextRestStopTime"] = "unknown"
+
+            try:
+                route_time_in_days_hours_minutes = (
+                    await self.convert_seconds_to_days_hours_minutes(data["routeTime"])
+                )
+                enhanced_data["routeTime"] = await self.process_time_difference_array(
+                    route_time_in_days_hours_minutes
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate routeTime: {e}", server_only=True)
+                enhanced_data["routeTime"] = "unknown"
+
+            try:
+                route_expiration = await self.convert_minutes_to_days_hours_minutes(
+                    data["time_abs_delivery"] - data["time_abs"]
+                )
+                enhanced_data["jobExpirationTimeInDaysHoursMinutes"] = (
+                    await self.process_time_difference_array(route_expiration)
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobExpirationTimeInDaysHoursMinutes: {e}", server_only=True)
+                enhanced_data["jobExpirationTimeInDaysHoursMinutes"] = "unknown"
+
+            try:
+                enhanced_data["isWorldOfTrucksContract"] = (
+                    await self.is_world_of_trucks_contract(data)
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate isWorldOfTrucksContract: {e}", server_only=True)
+                enhanced_data["isWorldOfTrucksContract"] = False
+
+            try:
+                if enhanced_data["isWorldOfTrucksContract"]:
+                    _job_ended_time = await self.get_days_hours_minutes_and_seconds(
+                        data["jobFinishedTime"]
+                    )
+                    _job_started_time = await self.get_days_hours_minutes_and_seconds(
+                        data["jobStartingTime"]
+                    )
+                    time_to_complete_route_array = (
+                        await self.convert_minutes_to_days_hours_minutes(
+                            data["jobFinishedTime"] - data["jobStartingTime"]
+                        )
+                    )
+                    real_life_time_to_complete_route = (
+                        await self.convert_minutes_to_days_hours_minutes(
+                            data["jobDeliveredDeliveryTime"]
+                        )
+                    )
+                    enhanced_data["realLifeTimeToCompleteWorldofTrucksJob"] = (
+                        await self.process_time_difference_array(
+                            real_life_time_to_complete_route
+                        )
+                    )
+                else:
+                    time_to_complete_route_array = (
+                        await self.convert_minutes_to_days_hours_minutes(
+                            data["jobDeliveredDeliveryTime"]
+                        )
+                    )
+                enhanced_data["gameTimeLapsedToCompleteJob"] = (
+                    await self.process_time_difference_array(time_to_complete_route_array)
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate gameTimeLapsedToCompleteJob / realLifeTimeToCompleteWorldofTrucksJob: {e}", server_only=True)
+                enhanced_data["gameTimeLapsedToCompleteJob"] = "unknown"
+                enhanced_data["realLifeTimeToCompleteWorldofTrucksJob"] = "unknown"
 
             # Convert weights
-            tons = data["cargoMass"] / 1000.0
-            enhanced_data["cargoMassInTons"] = (
-                str(tons) + " t" if data["trailer"][0]["attached"] else ""
-            )
-            if use_metric:
-                enhanced_data["cargoMass"] = (
-                    str(round(data["cargoMass"])) + " kg"
-                    if data["trailer"][0]["attached"]
-                    else ""
+            try:
+                tons = data["cargoMass"] / 1000.0
+                enhanced_data["cargoMassInTons"] = (
+                    str(tons) + " t" if data["trailer"][0]["attached"] else ""
                 )
-            else:
-                enhanced_data["cargoMass"] = (
-                    str(round(data["cargoMass"] * 2.20462)) + " lb"
-                    if data["trailer"][0]["attached"]
-                    else ""
-                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate cargoMassInTons: {e}", server_only=True)
+                enhanced_data["cargoMassInTons"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["cargoMass"] = (
+                        str(round(data["cargoMass"])) + " kg"
+                        if data["trailer"][0]["attached"]
+                        else ""
+                    )
+                else:
+                    enhanced_data["cargoMass"] = (
+                        str(round(data["cargoMass"] * 2.20462)) + " lb"
+                        if data["trailer"][0]["attached"]
+                        else ""
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate cargoMass: {e}", server_only=True)
+                enhanced_data["cargoMass"] = "unknown"
 
             # Convert distances
-            route_distance_km = data["routeDistance"] / 1000
-            route_distance_miles = route_distance_km * 0.621371
+            try:
+                route_distance_km = data["routeDistance"] / 1000
+                route_distance_miles = route_distance_km * 0.621371
+                if use_metric:
+                    enhanced_data["routeDistance"] = (
+                        str(math.floor(route_distance_km)) + " kilometers"
+                    )
+                else:
+                    enhanced_data["routeDistance"] = (
+                        str(math.floor(route_distance_miles)) + " miles"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate routeDistance: {e}", server_only=True)
+                enhanced_data["routeDistance"] = "unknown"
 
-            if use_metric:
-                enhanced_data["routeDistance"] = (
-                    str(math.floor(route_distance_km)) + " kilometers"
-                )
-                enhanced_data["truckOdometer"] = (
-                    str(round(data["truckOdometer"])) + " kilometers"
-                )
-                enhanced_data["truckFuelRange"] = (
-                    str(round(data["fuelRange"])) + " kilometers"
-                )
-                enhanced_data["plannedDistance"] = (
-                    str(round(data["plannedDistanceKm"])) + " kilometers"
-                )
-                enhanced_data["jobDeliveredDistance"] = (
-                    str(round(data["jobDeliveredDistanceKm"])) + " kilometers"
-                )
-            else:
-                enhanced_data["routeDistance"] = (
-                    str(math.floor(route_distance_miles)) + " miles"
-                )
-                enhanced_data["truckOdometer"] = (
-                    str(round(data["truckOdometer"] * 0.621371)) + " miles"
-                )
-                enhanced_data["truckFuelRange"] = (
-                    str(round(data["fuelRange"] * 0.621371)) + " miles"
-                )
-                enhanced_data["plannedDistance"] = (
-                    str(round(data["plannedDistanceKm"] * 0.621371)) + " miles"
-                )
-                enhanced_data["jobDeliveredDistance"] = (
-                    str(round(data["jobDeliveredDistanceKm"] * 0.621371)) + " miles"
-                )
+            try:
+                if use_metric:
+                    enhanced_data["truckOdometer"] = (
+                        str(round(data["truckOdometer"])) + " kilometers"
+                    )
+                else:
+                    enhanced_data["truckOdometer"] = (
+                        str(round(data["truckOdometer"] * 0.621371)) + " miles"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate truckOdometer: {e}", server_only=True)
+                enhanced_data["truckOdometer"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["truckFuelRange"] = (
+                        str(round(data["fuelRange"])) + " kilometers"
+                    )
+                else:
+                    enhanced_data["truckFuelRange"] = (
+                        str(round(data["fuelRange"] * 0.621371)) + " miles"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate truckFuelRange: {e}", server_only=True)
+                enhanced_data["truckFuelRange"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["plannedDistance"] = (
+                        str(round(data["plannedDistanceKm"])) + " kilometers"
+                    )
+                else:
+                    enhanced_data["plannedDistance"] = (
+                        str(round(data["plannedDistanceKm"] * 0.621371)) + " miles"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate plannedDistance: {e}", server_only=True)
+                enhanced_data["plannedDistance"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["jobDeliveredDistance"] = (
+                        str(round(data["jobDeliveredDistanceKm"])) + " kilometers"
+                    )
+                else:
+                    enhanced_data["jobDeliveredDistance"] = (
+                        str(round(data["jobDeliveredDistanceKm"] * 0.621371)) + " miles"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobDeliveredDistance: {e}", server_only=True)
+                enhanced_data["jobDeliveredDistance"] = "unknown"
 
             # Add currency symbol to income, fines, payments
-            enhanced_data["jobIncome"] = await self.get_currency(data["jobIncome"])
-            enhanced_data["fineAmount"] = await self.get_currency(data["fineAmount"])
-            enhanced_data["tollgatePayAmount"] = await self.get_currency(
-                data["tollgatePayAmount"]
-            )
-            enhanced_data["ferryPayAmount"] = await self.get_currency(
-                data["ferryPayAmount"]
-            )
-            enhanced_data["trainPayAmount"] = await self.get_currency(
-                data["trainPayAmount"]
-            )
-            enhanced_data["jobDeliveredRevenue"] = await self.get_currency(
-                data["jobDeliveredRevenue"]
-            )
-            enhanced_data["jobCancelledPenalty"] = await self.get_currency(
-                data["jobCancelledPenalty"]
-            )
+            try:
+                enhanced_data["jobIncome"] = await self.get_currency(data["jobIncome"])
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobIncome: {e}", server_only=True)
+                enhanced_data["jobIncome"] = "unknown"
+
+            try:
+                enhanced_data["fineAmount"] = await self.get_currency(data["fineAmount"])
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate fineAmount: {e}", server_only=True)
+                enhanced_data["fineAmount"] = "unknown"
+
+            try:
+                enhanced_data["tollgatePayAmount"] = await self.get_currency(
+                    data["tollgatePayAmount"]
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate tollgatePayAmount: {e}", server_only=True)
+                enhanced_data["tollgatePayAmount"] = "unknown"
+
+            try:
+                enhanced_data["ferryPayAmount"] = await self.get_currency(
+                    data["ferryPayAmount"]
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate ferryPayAmount: {e}", server_only=True)
+                enhanced_data["ferryPayAmount"] = "unknown"
+
+            try:
+                enhanced_data["trainPayAmount"] = await self.get_currency(
+                    data["trainPayAmount"]
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate trainPayAmount: {e}", server_only=True)
+                enhanced_data["trainPayAmount"] = "unknown"
+
+            try:
+                enhanced_data["jobDeliveredRevenue"] = await self.get_currency(
+                    data["jobDeliveredRevenue"]
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobDeliveredRevenue: {e}", server_only=True)
+                enhanced_data["jobDeliveredRevenue"] = "unknown"
+
+            try:
+                enhanced_data["jobCancelledPenalty"] = await self.get_currency(
+                    data["jobCancelledPenalty"]
+                )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate jobCancelledPenalty: {e}", server_only=True)
+                enhanced_data["jobCancelledPenalty"] = "unknown"
 
             # Convert temperatures
-            if use_metric:
-                enhanced_data["brakeTemperature"] = (
-                    str(round(data["brakeTemperature"])) + " degrees Celsius"
-                )
-                enhanced_data["oilTemperature"] = (
-                    str(round(data["oilTemperature"])) + " degrees Celsius"
-                )
-                enhanced_data["waterTemperature"] = (
-                    str(round(data["waterTemperature"])) + " degrees Celsius"
-                )
-            else:
-                enhanced_data["brakeTemperature"] = (
-                    str(round(data["brakeTemperature"] * 1.8 + 32))
-                    + " degrees Fahrenheit"
-                )
-                enhanced_data["oilTemperature"] = (
-                    str(round(data["oilTemperature"] * 1.8 + 32))
-                    + " degrees Fahrenheit"
-                )
-                enhanced_data["waterTemperature"] = (
-                    str(round(data["waterTemperature"] * 1.8 + 32))
-                    + " degrees Fahrenheit"
-                )
+            try:
+                if use_metric:
+                    enhanced_data["brakeTemperature"] = (
+                        str(round(data["brakeTemperature"])) + " degrees Celsius"
+                    )
+                else:
+                    enhanced_data["brakeTemperature"] = (
+                        str(round(data["brakeTemperature"] * 1.8 + 32))
+                        + " degrees Fahrenheit"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate brakeTemperature: {e}", server_only=True)
+                enhanced_data["brakeTemperature"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["oilTemperature"] = (
+                        str(round(data["oilTemperature"])) + " degrees Celsius"
+                    )
+                else:
+                    enhanced_data["oilTemperature"] = (
+                        str(round(data["oilTemperature"] * 1.8 + 32))
+                        + " degrees Fahrenheit"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate oilTemperature: {e}", server_only=True)
+                enhanced_data["oilTemperature"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["waterTemperature"] = (
+                        str(round(data["waterTemperature"])) + " degrees Celsius"
+                    )
+                else:
+                    enhanced_data["waterTemperature"] = (
+                        str(round(data["waterTemperature"] * 1.8 + 32))
+                        + " degrees Fahrenheit"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate waterTemperature: {e}", server_only=True)
+                enhanced_data["waterTemperature"] = "unknown"
 
             # Convert volumes
-            if use_metric:
-                enhanced_data["fuelTankSize"] = (
-                    "Fuel tank can hold " + str(round(data["fuelCapacity"])) + " liters"
-                )
-                enhanced_data["fuelRemaining"] = (
-                    str(round(data["fuel"])) + " liters of fuel remaining"
-                )
-                enhanced_data["fuelConsumption"] = (
-                    str(data["fuelAvgConsumption"]) + " liters per kilometer"
-                )
-                enhanced_data["adblueTankSize"] = (
-                    "Adblue tank can hold "
-                    + str(round(data["adblueCapacity"]))
-                    + " liters"
-                )
-                enhanced_data["adblueRemaining"] = (
-                    str(round(data["adblue"])) + " liters of adblue remaining"
-                )
-                enhanced_data["refuelAmount"] = (
-                    str(round(data["refuelAmount"])) + " liters"
-                )
-            else:
-                enhanced_data["fuelTankSize"] = (
-                    "Fuel tank can hold "
-                    + str(round(data["fuelCapacity"] * 0.26417205))
-                    + " gallons"
-                )
-                enhanced_data["fuelRemaining"] = (
-                    str(round(data["fuel"] * 0.26417205)) + " gallons of fuel remaining"
-                )
-                enhanced_data["fuelConsumption"] = (
-                    str(round(data["fuelAvgConsumption"] * 2.35214583))
-                    + " miles per gallon"
-                )
-                enhanced_data["adblueTankSize"] = (
-                    "Adblue tank can hold "
-                    + str(round(data["adblueCapacity"] * 0.26417205))
-                    + " gallons"
-                )
-                enhanced_data["adblueRemaining"] = (
-                    str(round(data["adblue"] * 0.26417205))
-                    + " gallons of adblue remaining"
-                )
-                enhanced_data["refuelAmount"] = (
-                    str(round(data["refuelAmount"] * 0.26417205)) + " gallons"
-                )
+            try:
+                if use_metric:
+                    enhanced_data["fuelTankSize"] = (
+                        "Fuel tank can hold " + str(round(data["fuelCapacity"])) + " liters"
+                    )
+                else:
+                    enhanced_data["fuelTankSize"] = (
+                        "Fuel tank can hold "
+                        + str(round(data["fuelCapacity"] * 0.26417205))
+                        + " gallons"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate fuelTankSize: {e}", server_only=True)
+                enhanced_data["fuelTankSize"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["fuelRemaining"] = (
+                        str(round(data["fuel"])) + " liters of fuel remaining"
+                    )
+                else:
+                    enhanced_data["fuelRemaining"] = (
+                        str(round(data["fuel"] * 0.26417205)) + " gallons of fuel remaining"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate fuelRemaining: {e}", server_only=True)
+                enhanced_data["fuelRemaining"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["fuelConsumption"] = (
+                        str(data["fuelAvgConsumption"]) + " liters per kilometer"
+                    )
+                else:
+                    enhanced_data["fuelConsumption"] = (
+                        str(round(data["fuelAvgConsumption"] * 2.35214583))
+                        + " miles per gallon"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate fuelConsumption: {e}", server_only=True)
+                enhanced_data["fuelConsumption"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["adblueTankSize"] = (
+                        "Adblue tank can hold "
+                        + str(round(data["adblueCapacity"]))
+                        + " liters"
+                    )
+                else:
+                    enhanced_data["adblueTankSize"] = (
+                        "Adblue tank can hold "
+                        + str(round(data["adblueCapacity"] * 0.26417205))
+                        + " gallons"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate adblueTankSize: {e}", server_only=True)
+                enhanced_data["adblueTankSize"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["adblueRemaining"] = (
+                        str(round(data["adblue"])) + " liters of adblue remaining"
+                    )
+                else:
+                    enhanced_data["adblueRemaining"] = (
+                        str(round(data["adblue"] * 0.26417205))
+                        + " gallons of adblue remaining"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate adblueRemaining: {e}", server_only=True)
+                enhanced_data["adblueRemaining"] = "unknown"
+
+            try:
+                if use_metric:
+                    enhanced_data["refuelAmount"] = (
+                        str(round(data["refuelAmount"])) + " liters"
+                    )
+                else:
+                    enhanced_data["refuelAmount"] = (
+                        str(round(data["refuelAmount"] * 0.26417205)) + " gallons"
+                    )
+            except (ZeroDivisionError, Exception) as e:
+                self.log.error(f"Could not calculate refuelAmount: {e}", server_only=True)
+                enhanced_data["refuelAmount"] = "unknown"
 
             return enhanced_data
 
