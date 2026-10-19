@@ -5,6 +5,10 @@ in particular ("online", "Wingman" in German). It is switched on for every
 user once, like the Star Citizen list was. A user who switches it off later
 keeps it off: this step runs only once.
 
+Computer gets the AI sound effect by default. A shipped Wingman without sound
+effects of its own takes its template's, so an untouched Computer gets it
+too. One with effects the user set keeps them.
+
 Every `migrate_*` method is optional: the base class returns the config
 unchanged, so an empty migration is a valid one. Override only what you need.
 """
@@ -19,6 +23,14 @@ class Migration329To3210(BaseMigration):
 
     old_version = "3_2_9"
     new_version = "3_2_10"
+
+    def migrate_wingman(self, old: dict) -> dict:
+        template = self.shipped_template()
+        if not template or "sound" in old or "sound" not in template:
+            return old
+        old["sound"] = dict(template["sound"])
+        self.log(f"- {old.get('name') or template.get('name')}: sound effects of its template")
+        return old
 
     def migrate_settings(self, old: dict) -> dict:
         pronunciation = old.get("pronunciation")

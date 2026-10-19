@@ -41,6 +41,8 @@ wingman_pro:
     voice: zh-CN-XiaoyuMultilingualNeural
 pocket_tts:
   voice: jane
+sound:
+  effects: [AI]
 command_categories:
   - id: 8483a2f5-5273-435f-82ee-561c5a485317
     name: Vehicles - Seats and Operator Modes
