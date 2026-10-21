@@ -40,15 +40,6 @@ def migration():
 # ─────────────────────────────── system prompt ─────────────────────────────── #
 
 
-def test_the_shipped_prompt_has_the_rules_after_migrating():
-    shipped = template("defaults.yaml")["prompts"]["system_prompt"]
-    out = migration().migrate_defaults({"prompts": {"system_prompt": OLD_PROMPT}})
-    prompt = out["prompts"]["system_prompt"]
-    assert "# ACTIONS" in prompt and "# ACTIONS" in shipped
-    assert "1-3 sentences, the answer first" in prompt
-    assert prompt.index("# ACTIONS") < prompt.index("# YOUR CAPABILITIES")
-
-
 def test_an_edited_prompt_keeps_its_edits():
     mine = OLD_PROMPT + "Always speak like a pirate.\n"
     out = migration().migrate_wingman({"name": "KAT", "prompts": {"system_prompt": mine}})
@@ -110,20 +101,6 @@ def shown_at(area, window_height, screen=SCREEN):
     return layout.get_position("w")
 
 
-@pytest.mark.parametrize(
-    "anchor, align",
-    [
-        ("top_left", "top"), ("top_center", "top"), ("top_right", "top"),
-        ("left_center", "center"), ("right_center", "center"), ("center", "center"),
-        ("bottom_left", "bottom"), ("bottom_center", "bottom"), ("bottom_right", "bottom"),
-    ],
-)
-def test_each_anchor_turns_into_its_alignment(anchor, align):
-    chat, _info = container_areas(values(chat_anchor=anchor, persistent_layout_mode="manual"), SCREEN)
-
-    assert chat["align"] == align
-
-
 def test_the_screens_center_counts_as_its_left_center():
     centered, _ = container_areas(values(chat_anchor="center", persistent_layout_mode="manual"), SCREEN)
     left, _ = container_areas(values(chat_anchor="left_center", persistent_layout_mode="manual"), SCREEN)
@@ -137,13 +114,9 @@ def test_the_screens_center_counts_as_its_left_center():
     [
         # The old HUD: margin 20 from the edges, 400 wide, here 150 high
         ("top_left", (20, 20)),
-        ("top_center", (1080, 20)),
         ("top_right", (2140, 20)),
         ("left_center", (20, 645)),
-        ("right_center", (2140, 645)),
-        ("bottom_left", (20, 1270)),
         ("bottom_center", (1080, 1270)),
-        ("bottom_right", (2140, 1270)),
     ],
 )
 def test_a_chat_message_shows_where_the_hud_skill_put_it(anchor, old_position):

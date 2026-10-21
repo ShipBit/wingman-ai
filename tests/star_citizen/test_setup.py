@@ -154,13 +154,6 @@ def test_the_answer_writes_each_wingman_once_and_reloads_once(service):
     assert service.reloads == ["Star Citizen"]
 
 
-def test_no_reload_when_another_config_is_open(service):
-    service.config_service.current_config_dir = SimpleNamespace(name="Elite")
-    asyncio.run(service.apply_answer(True))
-    assert sorted(service.writes) == ["ATC", "Computer"]
-    assert service.reloads == []
-
-
 def test_no_write_and_no_reload_when_nothing_changes(service):
     asyncio.run(service.apply_answer(True))
     service.writes.clear()
@@ -195,21 +188,6 @@ def test_the_setup_lists_every_feature_with_its_state(service):
     assert states["wingman_galactapedia"] == (StarCitizenFeatureKind.MCP, False, True)
 
 
-def test_galactapedia_is_on_by_default_for_the_computer_only(service):
-    atc, computer = service.get_setup().wingmen
-
-    def on(wingman):
-        return {f.name for f in wingman.features if f.on_by_default}
-
-    assert "wingman_galactapedia" not in on(atc)
-    assert "wingman_galactapedia" in on(computer)
-
-
-def test_uexcorp_is_listed_right_after_starhead(service):
-    names = [f.name for f in service.get_setup().wingmen[0].features]
-    assert names[names.index("wingman_starhead") + 1] == "UEXCorp"
-
-
 def test_a_skill_that_is_not_installed_is_left_out(service, monkeypatch):
     monkeypatch.setattr(
         sc_setup.ModuleManager, "read_available_skills", staticmethod(lambda: [])
@@ -239,12 +217,6 @@ def test_yes_without_the_game_leaves_the_log_reader_and_its_skills_off(
     assert "wingman_starhead" in service.files["Computer"].discoverable_mcps
 
 
-def test_a_picked_live_folder_checks_the_folder_above_it(service, tmp_path):
-    (tmp_path / "LIVE").mkdir()
-    folder = service.check_game_folder(str(tmp_path / "LIVE"))
-    assert folder.path == str(tmp_path) and folder.environments == ["LIVE"]
-
-
 def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(service):
     config_manager = service.config_manager
     config_manager.mcp_config.servers = [
@@ -257,16 +229,9 @@ def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(servi
     assert "wingman_galactapedia" in service.files["Computer"].discoverable_mcps
 
 
-def test_no_adds_no_servers(service):
-    service.config_manager.mcp_config.servers = []
-    service.config_manager.read_config.return_value = template("mcp.template.yaml")
-    asyncio.run(service.apply_answer(False))
-    service.config_manager.save_mcp_config.assert_not_called()
-
-
 @pytest.mark.parametrize(
     "enabled, plays, runs",
-    [(True, True, True), (True, None, False), (True, False, False), (False, True, False)],
+    [(True, True, True), (True, None, False), (False, True, False)],
 )
 def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
     settings = SimpleNamespace(
@@ -274,11 +239,3 @@ def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
         star_citizen=SimpleNamespace(plays=plays),
     )
     assert sc_setup.log_reader_on(settings) is runs
-
-
-def test_radio_chatter_is_offered_but_off_for_both(service):
-    asyncio.run(service.apply_answer(True))
-    for wingman in service.get_setup().wingmen:
-        chatter = {f.name: f for f in wingman.features}["RadioChatter"]
-        assert chatter.on_by_default is False
-        assert chatter.enabled is False

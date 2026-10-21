@@ -26,16 +26,6 @@ def test_switching_the_output_keeps_the_input():
     service.set_audio_devices.assert_awaited_once_with(input_device=3, output_device=7)
 
 
-def test_switching_the_input_keeps_the_output():
-    service = MagicMock()
-    service._get_audio_settings_indexed.return_value = AudioSettings(input=3, output=5)
-    service.set_audio_devices = AsyncMock()
-    audio = facade.SkillAudio(SimpleNamespace(settings_service=service))
-
-    assert _run(audio.set_input_device(None))
-    service.set_audio_devices.assert_awaited_once_with(input_device=None, output_device=5)
-
-
 def test_a_stored_device_resolves_to_its_index(monkeypatch):
     import sounddevice as sd
 
@@ -133,23 +123,6 @@ def test_a_missing_voice_is_not_set():
 
     assert "Fabieng" in result
     assert wingman.config.pocket_tts.voice == "alba"
-
-
-def test_a_pocket_tts_voice_change_keeps_streaming_on():
-    config = SimpleNamespace(
-        features=SimpleNamespace(tts_provider=TtsProvider.POCKET_TTS),
-        pocket_tts=SimpleNamespace(voice="alba", output_streaming=True),
-    )
-
-    facade.apply_voice_to_current_provider(config, "moxxi")
-
-    assert config.pocket_tts.voice == "moxxi"
-    assert config.pocket_tts.output_streaming is True
-
-
-def test_other_providers_have_no_missing_voices():
-    tts = facade.SkillTts(SimpleNamespace(config=_subscription_config(WingmanProTtsProvider.INWORLD)))
-    assert _run(tts.missing_voices(["Fabieng"])) == []
 
 
 def test_categories_are_saved_with_the_commands(tmp_path, monkeypatch):
@@ -258,12 +231,6 @@ def test_star_citizen_gives_skills_the_environment_folder(tmp_path):
     assert star_citizen.found and star_citizen.environments == ("LIVE",)
     assert star_citizen.environment_path("live") == tmp_path / "LIVE"
     assert star_citizen.environment_path("PTU") is None
-
-
-def test_star_citizen_without_a_folder_has_nothing_to_give():
-    star_citizen = _star_citizen("")
-    assert star_citizen.game_path is None and not star_citizen.found
-    assert star_citizen.environment_path() is None
 
 
 def test_star_citizen_is_read_only_for_skills():

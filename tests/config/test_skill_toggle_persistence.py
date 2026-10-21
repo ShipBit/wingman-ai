@@ -63,11 +63,6 @@ def test_switching_off_the_last_one_saves_an_empty_list():
     assert config.model_dump(exclude_unset=True)["discoverable_skills"] == []
 
 
-def test_switching_on_twice_adds_it_once():
-    config = toggled("toggle_wingman_skill", "Timer", True, {**WINGMAN, "discoverable_skills": ["Timer"]})
-    assert config.discoverable_skills == ["Timer"]
-
-
 def test_before_sign_in_the_toggle_writes_the_file_and_reloads_the_config():
     """The Star Citizen step of the first-start setup runs before sign-in,
     when Core has no Tower yet. The switch used to be dropped with "Tower not

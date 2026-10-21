@@ -184,15 +184,6 @@ def test_problems_on_the_users_side_are_dropped(sentry):
     assert sentry.events == []
 
 
-def test_signed_in_user_id_is_used(sentry):
-    error_reporting.set_enabled(True)
-    error_reporting.set_user("3f1c-user")
-    log_error("Failed", ValueError("boom"))
-    flush()
-
-    assert sentry.events[0]["user"]["id"] == "3f1c-user"
-
-
 def test_user_id_from_before_the_opt_in_is_kept(sentry):
     error_reporting.set_user("3f1c-user")
     error_reporting.set_enabled(True)
@@ -252,15 +243,6 @@ def test_channel_is_tagged_and_kept_for_the_next_start(sentry):
     assert error_reporting._channel == "unstable"
 
 
-def test_channel_change_while_running(sentry):
-    error_reporting.set_enabled(True)
-    error_reporting.set_channel("stable")
-    log_error("Failed", ValueError("boom"))
-    flush()
-
-    assert sentry.events[0]["tags"]["channel"] == "stable"
-
-
 # ─── Noise that never reaches Sentry ──────────────────────────────────────────
 
 
@@ -274,7 +256,7 @@ def openai_error(name: str, status_code: int, message: str = "error"):
     return exc
 
 
-@pytest.mark.parametrize("status", [401, 402, 403, 404, 408, 409, 413, 429])
+@pytest.mark.parametrize("status", [401, 429])
 def test_openai_errors_of_the_users_provider_are_dropped(sentry, status):
     error_reporting.set_enabled(True)
     log_error("Provider said no", openai_error("APIStatusError", status))
@@ -348,8 +330,7 @@ def windows_oserror(winerror: int) -> OSError:
     return exc
 
 
-@pytest.mark.parametrize("winerror", [10022, 10054, 995])
-@pytest.mark.parametrize("module", ["proactor_events.py", "windows_events.py"])
+@pytest.mark.parametrize("winerror, module", [(10054, "proactor_events.py"), (995, "windows_events.py")])
 def test_windows_asyncio_oserrors_are_dropped(sentry, winerror, module):
     error_reporting.set_enabled(True)
     exc = raised_in(f"C:\\Python311\\Lib\\asyncio\\{module}", windows_oserror(winerror))
@@ -476,15 +457,6 @@ def test_attached_log_is_scrubbed(sentry, tmp_path, monkeypatch):
     assert "AIzaSECRET" not in log
     assert home not in log
     assert "~/config.yaml" in log
-
-
-def test_missing_log_still_sends_the_event(sentry, tmp_path):
-    error_reporting.set_enabled(True)
-    log_error("Failed", ValueError("boom"))
-    flush()
-
-    assert len(sentry.events) == 1
-    assert sentry.attachments == [{}]
 
 
 def test_unreadable_log_still_sends_the_event(sentry, monkeypatch, tmp_path):

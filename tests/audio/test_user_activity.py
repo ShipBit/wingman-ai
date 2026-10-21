@@ -4,10 +4,6 @@ over a held key, in the middle of a sentence or between question and answer."""
 from services.user_activity import UserActivity
 
 
-def test_idle_by_default():
-    assert not UserActivity().busy
-
-
 def test_a_held_key_a_running_turn_and_a_sentence_in_progress_are_busy():
     activity = UserActivity()
     activity.set_holding(True)

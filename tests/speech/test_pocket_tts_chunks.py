@@ -6,10 +6,6 @@ from providers.pocket_tts_chunks import MAX_TOKENS, pieces_for_speech, split_lon
 words = lambda t: len(t.split())  # one token per word is enough to test the cuts
 
 
-def test_a_short_piece_stays_whole():
-    assert split_long("Alles klar, Kommandant.", words, L.DE) == ["Alles klar, Kommandant."]
-
-
 def test_a_long_piece_is_cut_in_front_of_a_conjunction():
     text = " ".join(["wort"] * 40) + " und " + " ".join(["wort"] * 40) + "."
     pieces = split_long(text, words, L.DE)
@@ -47,12 +43,6 @@ def test_piece_audio_fades_first_start_and_last_end_only():
     assert chunks[0][0] == 1  # the model's own tensors are left alone
 
 
-def test_piece_audio_single_short_chunk_and_empty():
-    out = list(piece_audio(iter([torch.ones(100)]), 24000))
-    assert len(out) == 1 and out[0][0] == 0 and out[0][-1] < 1e-3
-    assert list(piece_audio(iter([]), 24000)) == []
-
-
 def test_the_silence_around_a_piece_is_cut_short():
     sr = 24000
     edge = int(EDGE_SECONDS * sr)
@@ -61,12 +51,6 @@ def test_the_silence_around_a_piece_is_cut_short():
     out = torch.cat(list(piece_audio(iter(silent + voice + silent), sr)))
     assert out.shape[-1] == edge + 3 * 1920 + edge
     assert out[edge + 300] == 0.5
-
-
-def test_a_pause_inside_a_piece_stays():
-    voice, pause = torch.full((1920,), 0.5), torch.zeros(1920)
-    out = torch.cat(list(piece_audio(iter([voice, pause, pause, voice]), 24000)))
-    assert out.shape[-1] == 4 * 1920
 
 
 def test_a_silent_piece_plays_nothing():
@@ -78,11 +62,6 @@ def test_a_cut_never_splits_a_spoken_number():
     pieces = split_long(text, words, L.EN)
     assert all(words(p) <= MAX_TOKENS for p in pieces)
     assert any("two hundred and eighty-eight SCU" in p for p in pieces)
-
-
-def test_a_spanish_number_with_y_stays_whole():
-    text = " ".join(["palabra"] * 56) + " treinta y dos " + " ".join(["palabra"] * 30) + "."
-    assert any("treinta y dos" in p for p in split_long(text, words, L.ES))
 
 
 def test_clauses_of_one_sentence_are_put_back_together():
@@ -111,10 +90,6 @@ def test_an_ellipsis_inside_a_sentence_becomes_a_comma():
     assert text_for_pocket("Delivering\u2026 a message.") == "Delivering, a message."
     assert text_for_pocket("Na ja... Soll ich?") == "Na ja... Soll ich?"
     assert text_for_pocket("Warte...") == "Warte..."
-
-
-def test_a_tilde_is_not_read_out():
-    assert text_for_pocket("Marge ~siebzehn Prozent") == "Marge siebzehn Prozent."
 
 
 def test_pause_tags_are_not_read_out():

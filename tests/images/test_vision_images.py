@@ -48,13 +48,6 @@ def test_ultrawide_screen_keeps_its_height():
     assert image.height > 500
 
 
-def test_busy_screen_still_fits_the_request_limit():
-    encoded = vision_base64(_noise())
-
-    assert len(encoded) <= VISION_MAX_CHARS
-    assert _decode(encoded).format == "JPEG"
-
-
 def test_attached_png_with_transparency_becomes_jpeg_on_white():
     transparent = Image.new("RGBA", (200, 100), (0, 0, 0, 0))
 

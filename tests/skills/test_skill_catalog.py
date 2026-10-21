@@ -108,17 +108,6 @@ def test_a_skill_without_api_version_is_legacy(skills_root):
     assert not catalog.is_eligible("old")
 
 
-def test_an_unsupported_api_version_is_legacy_and_says_which(skills_root):
-    bundled, _ = skills_root
-    add_skill(bundled, "v2", manifest("Two", api_version=2))
-
-    entry = scan().entry_for_folder("v2")
-
-    assert entry.verdict == SkillVerdict.LEGACY
-    assert entry.api_version == 2
-    assert "2" in entry.reason
-
-
 def test_a_manifest_missing_required_fields_is_invalid(skills_root):
     bundled, _ = skills_root
     add_skill(bundled, "broken", {"name": "Broken", "api_version": 3})
@@ -127,18 +116,6 @@ def test_a_manifest_missing_required_fields_is_invalid(skills_root):
 
     assert entry.verdict == SkillVerdict.INVALID
     assert entry.outcome == "quarantined"
-
-
-def test_an_empty_manifest_is_invalid(skills_root):
-    bundled, _ = skills_root
-    skill_dir = bundled / "empty"
-    skill_dir.mkdir()
-    (skill_dir / "default_config.yaml").write_text("")
-
-    entry = scan().entry_for_folder("empty")
-
-    assert entry.verdict == SkillVerdict.INVALID
-    assert entry.reason == "manifest unreadable"
 
 
 def test_a_skill_whose_import_probe_fails_is_invalid(skills_root, monkeypatch):

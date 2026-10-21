@@ -23,7 +23,6 @@ from scipy.optimize import Bounds, LinearConstraint, milp
 
 from skills.uexcorp.uexcorp.route_planner import (
     RANKING_PROFIT_PER_DISTANCE,
-    RANKING_PROFIT_PER_STOP,
     RANKING_TOTAL_PROFIT,
     STOP_OVERHEAD_GM,
     UNKNOWN_DISTANCE_GM,

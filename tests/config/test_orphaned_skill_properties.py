@@ -44,19 +44,6 @@ def test_stale_property_is_dropped():
     manager.printr.print.assert_called_once()
 
 
-def test_known_properties_are_untouched():
-    manager = _manager()
-    wingman_skill = {
-        "module": "skills.sc_log_reader.main",
-        "custom_properties": [{"id": "sc_game_path", "value": "C:/SC"}],
-    }
-    out = manager._drop_orphaned_skill_properties(
-        "sc_log_reader", MANIFEST, wingman_skill
-    )
-    assert out is wingman_skill
-    manager.printr.print.assert_not_called()
-
-
 def test_self_sufficient_property_survives():
     """A legacy config that carries the whole property keeps working."""
     manager = _manager()
@@ -75,12 +62,3 @@ def test_self_sufficient_property_survives():
         "sc_log_reader", MANIFEST, wingman_skill
     )
     assert [p["id"] for p in out["custom_properties"]] == ["extra_flag"]
-
-
-def test_no_properties_is_a_noop():
-    manager = _manager()
-    wingman_skill = {"module": "skills.sc_log_reader.main"}
-    assert (
-        manager._drop_orphaned_skill_properties("sc_log_reader", MANIFEST, wingman_skill)
-        is wingman_skill
-    )

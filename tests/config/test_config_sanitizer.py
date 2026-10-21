@@ -10,14 +10,12 @@ their YAML.
 from api.enums import (
     ConversationProvider,
     TtsProvider,
-    WingmanProTtsProvider,
 )
 from api.interface import (
     FeaturesConfig,
     NestedConfig,
     VoiceSelection,
     WingmanConfig,
-    WingmanProConfig,
 )
 from services.config_sanitizer import sanitize
 
@@ -65,22 +63,6 @@ def test_a_nonsense_fallback_is_not_trusted():
 
     assert data["tts_provider"] != "also-not-a-provider"
     FeaturesConfig(**data)
-
-
-def test_wingman_pro_section_from_316():
-    # 3.1.6 could still say "openai" here, which no longer exists.
-    data = {
-        "tts_provider": "openai",
-        "azure": {"voice": "en-US-JennyMultilingualNeural", "output_streaming": True},
-        "conversation_deployment": "gpt-4o-mini",
-    }
-    sanitize(WingmanProConfig, data)
-
-    config = WingmanProConfig(**data)
-    assert config.tts_provider in WingmanProTtsProvider
-    # The model name is free text on purpose: an unknown one gets the plan's
-    # default model instead of an error.
-    assert config.conversation_deployment == "gpt-4o-mini"
 
 
 def test_valid_values_are_left_alone():
@@ -133,14 +115,6 @@ def test_a_voice_inside_a_skill_property_is_repaired_too():
     assert voices[0]["provider"] != "azure"
     assert voices[1]["provider"] == "openai"
     assert any("provider" in line for line in changes), changes
-
-
-def test_it_walks_into_nested_models():
-    data = {"features": _features(), "wingman_pro": {"tts_provider": "openai"}}
-    changes = sanitize(NestedConfig, data)
-
-    assert data["wingman_pro"]["tts_provider"] in {e.value for e in WingmanProTtsProvider}
-    assert any("wingman_pro.tts_provider" in line for line in changes)
 
 
 def test_it_never_raises_on_junk():

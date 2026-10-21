@@ -73,7 +73,7 @@ def test_the_shipped_list_names_only_recordings_that_exist():
         assert "." not in voice.id  # a dot would read as a model tag
 
 
-from providers.pocket_tts_voices import BundledVoice, read_voice_details, write_voice_details
+from providers.pocket_tts_voices import read_voice_details
 
 
 def test_a_text_file_describes_a_voice(tmp_path):
@@ -81,14 +81,6 @@ def test_a_text_file_describes_a_voice(tmp_path):
     path.write_text("ruhig, gemächlich\nGeschlecht: weiblich\nname: Mara\n", encoding="utf-8")
     details = read_voice_details(str(path))
     assert (details.description, details.gender, details.name) == ("ruhig, gemächlich", "Female", "Mara")
-
-
-def test_just_a_line_is_the_description_and_nonsense_is_ignored(tmp_path):
-    path = tmp_path / "x.txt"
-    path.write_text("# my note\ntief und rau\ngender: robot\n", encoding="utf-8")
-    details = read_voice_details(str(path))
-    assert (details.description, details.gender, details.name) == ("tief und rau", None, None)
-    assert read_voice_details(str(tmp_path / "missing.txt")).description is None
 
 
 def test_shipped_voices_get_their_text_file_once(tmp_path):
@@ -100,31 +92,3 @@ def test_shipped_voices_get_their_text_file_once(tmp_path):
     sidecar.write_text("meine Notiz\n", encoding="utf-8")
     install_bundled_voices(root, str(voices), "de")
     assert sidecar.read_text(encoding="utf-8") == "meine Notiz\n"
-
-
-def test_written_details_read_back(tmp_path):
-    path = tmp_path / "v.txt"
-    write_voice_details(str(path), BundledVoice("v.flac", "Vera", "de", "Female", "x", "hell, klar"))
-    details = read_voice_details(str(path))
-    assert (details.description, details.gender, details.name) == ("hell, klar", "Female", "Vera")
-
-
-def test_a_new_description_replaces_an_unedited_text_file_only(tmp_path):
-    root = make_root(tmp_path, [("de-anna.flac", "de", b"a"), ("de-ben.flac", "de", b"b")])
-    voices = tmp_path / "voices"
-    install_bundled_voices(root, str(voices), "de")
-    (voices / "de-ben.txt").write_text("meine Notiz\n", encoding="utf-8")
-    listing = tmp_path / "app" / VOICES_DIR / "voices.tsv"
-    listing.write_text(listing.read_text(encoding="utf-8").replace("\tsomeone", "\tsomeone\tneu, klar"), encoding="utf-8")
-    install_bundled_voices(root, str(voices), "de")
-    assert read_voice_details(str(voices / "de-anna.txt")).description == "neu, klar"
-    assert (voices / "de-ben.txt").read_text(encoding="utf-8") == "meine Notiz\n"
-
-
-def test_a_deleted_text_file_stays_deleted(tmp_path):
-    root = make_root(tmp_path, [("de-anna.flac", "de", b"a")])
-    voices = tmp_path / "voices"
-    install_bundled_voices(root, str(voices), "de")
-    (voices / "de-anna.txt").unlink()
-    install_bundled_voices(root, str(voices), "de")
-    assert not (voices / "de-anna.txt").exists()

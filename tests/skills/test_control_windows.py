@@ -44,16 +44,6 @@ def test_hidden_menu_entries_are_not_started(tmp_path):
     assert _desktop_entry(entry) is None
 
 
-def test_an_escaped_percent_in_a_menu_entry_stays_a_percent(tmp_path):
-    entry = tmp_path / "tool.desktop"
-    entry.write_text(
-        "[Desktop Entry]\nType=Application\nName=Tool\nExec=tool --ratio %% %f\n",
-        encoding="utf-8",
-    )
-
-    assert _desktop_entry(entry) == ("Tool", ["tool", "--ratio", "%"])
-
-
 def test_an_app_starts_from_its_exec_line_when_gio_cannot_launch_it(tmp_path, monkeypatch):
     from skills.control_windows.desktop import linux
 

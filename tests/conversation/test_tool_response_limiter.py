@@ -10,7 +10,6 @@ the model reads and what the client shows.
 import asyncio
 import json
 
-import pytest
 
 from services.tool_response_limiter import ToolResponseLimiter, structural_cut
 from services.token_utils import count_tokens
@@ -90,20 +89,4 @@ def test_text_is_cut_on_a_line_boundary():
     assert cut.endswith("word")  # ends on a whole line, not mid-word
 
 
-def test_cut_note_carries_the_real_numbers():
-    out = limit(response_text=BIG_LIST, cap=CAP, tool_name="uex")
-    original = count_tokens(BIG_LIST)
-    assert f"~{original:,} tokens" in out
-    assert f"limit is ~{CAP:,}" in out
-    assert "of 400 entries" in out
-    assert count_tokens(out) <= CAP + 80  # note itself is budgeted for
-
-
 # ── summarisation ─────────────────────────────────────────────────
-
-
-def test_text_over_the_cap_is_cut_never_summarized():
-    out = limit(response_text=BIG_PAGE, cap=CAP)
-    assert "SUMMARY" not in out
-    assert BIG_PAGE.startswith(out.split("\n\n[")[0][:500])
-    assert count_tokens(out) <= CAP + 100

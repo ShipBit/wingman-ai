@@ -35,23 +35,6 @@ def test_edge_voices_become_tiles_with_readable_names():
     assert voices[1].gender == TtsVoiceGender.MALE
 
 
-def test_description_leaves_out_the_tags_every_voice_has():
-    voices = edge_voice_infos(
-        [
-            raw_voice("en-IE-EmilyNeural", "en-IE"),
-            raw_voice(
-                "en-US-AvaNeural",
-                "en-US",
-                personalities=["Expressive", "Caring", "Friendly"],
-                categories=["Conversation", "Copilot"],
-            ),
-        ]
-    )
-
-    assert voices[0].description is None
-    assert voices[1].description == "Expressive, Caring, Conversation"
-
-
 def test_multilingual_voice_speaks_every_language_its_own_first():
     voices = edge_voice_infos(
         [

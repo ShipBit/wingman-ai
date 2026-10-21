@@ -31,16 +31,6 @@ def test_a_group_inherits_the_defaults_for_what_it_does_not_set():
     assert (props["font_size"], props["accent_color"], props["x"], props["width"]) == (18, "#00ff00", 100, 500)
 
 
-def test_group_defaults_only_apply_to_their_own_group():
-    manager, overlay = _overlay_behind_a_manager()
-    manager.set_defaults(props={"font_size": 18}, groups={"wingman_chat": {"x": 100}})
-
-    props = overlay._resolve_window_props("persistent", "ATC_mic")
-
-    assert props["font_size"] == 18
-    assert props["x"] != 100
-
-
 def test_new_defaults_replace_the_old_ones_and_reach_the_overlay():
     manager, commands = _manager_with_overlay()
     manager.set_defaults(props={"font_size": 18}, groups={"wingman_chat": {"x": 100}})

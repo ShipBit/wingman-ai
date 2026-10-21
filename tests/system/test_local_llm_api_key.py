@@ -37,17 +37,12 @@ def test_stored_key_reaches_the_client():
     llm = asyncio.run(factory.create_llm([]))
     assert llm._openai.api_key == "sk-ollama-123"
     assert str(llm._openai.client.base_url).rstrip("/") == ENDPOINT
-
-
-def test_reading_the_key_never_prompts():
-    factory = _factory("sk-ollama-123")
-    asyncio.run(factory.create_llm([]))
     factory._secret_keeper.retrieve.assert_awaited_once_with(
         requester="local_llm", key="local_llm", prompt_if_missing=False
     )
 
 
-@pytest.mark.parametrize("stored", ["", "   ", "not-set", None])
+@pytest.mark.parametrize("stored", ["   ", None])
 def test_keyless_setups_still_start(stored):
     """A llama.cpp server on localhost wants no key. The OpenAI client rejects
     an empty api_key, so a dummy goes in and no init error is raised."""

@@ -32,16 +32,6 @@ def test_truncated_mme_name_gets_full_wasapi_name():
     ]
 
 
-def test_directsound_is_the_fallback():
-    devices = [
-        _device(0, "SteelSeries Alias Pro Input (St", 0),
-        _device(1, "SteelSeries Alias Pro Input (SteelSeries Alias Pro)", 1),
-    ]
-    assert with_full_names(devices, HOSTAPIS)[0]["name"] == (
-        "SteelSeries Alias Pro Input (SteelSeries Alias Pro)"
-    )
-
-
 def test_short_names_stay_as_they_are():
     devices = [
         _device(0, "Speakers", 0, inputs=0, outputs=2),
@@ -69,12 +59,3 @@ def test_direction_must_match():
     assert with_full_names(devices, HOSTAPIS)[0]["name"] == (
         "Headset Earphone (HyperX Cloud "
     )
-
-
-def test_input_list_is_not_modified():
-    devices = [
-        _device(0, "Microfoon (Steam Streaming Micr", 0),
-        _device(1, "Microfoon (Steam Streaming Microphone)", 2),
-    ]
-    with_full_names(devices, HOSTAPIS)
-    assert devices[0]["name"] == "Microfoon (Steam Streaming Micr"

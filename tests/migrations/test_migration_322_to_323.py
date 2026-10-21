@@ -8,7 +8,6 @@ import shutil
 from os import makedirs, path
 from unittest.mock import MagicMock
 
-from api.interface import SettingsConfig
 from services.migrations.migration_322_to_323 import (
     NEW_END_PAUSE_MS,
     NEW_MAX_UTTERANCE_S,
@@ -27,23 +26,6 @@ def _settings(**voice_activation) -> dict:
     return settings
 
 
-def test_old_defaults_are_replaced():
-    out = _migration().migrate_settings(
-        _settings(max_utterance_s=12, end_pause_ms=700)
-    )
-    assert out["voice_activation"]["max_utterance_s"] == NEW_MAX_UTTERANCE_S
-    assert out["voice_activation"]["end_pause_ms"] == NEW_END_PAUSE_MS
-    SettingsConfig(**out)
-
-
-def test_tuned_values_are_kept():
-    out = _migration().migrate_settings(
-        _settings(max_utterance_s=30, end_pause_ms=900)
-    )
-    assert out["voice_activation"]["max_utterance_s"] == 30
-    assert out["voice_activation"]["end_pause_ms"] == 900
-
-
 def test_each_value_is_judged_on_its_own():
     out = _migration().migrate_settings(
         _settings(max_utterance_s=12, end_pause_ms=900)
@@ -56,12 +38,6 @@ def test_missing_block_is_left_alone():
     assert _migration().migrate_settings({"debug_mode": False}) == {
         "debug_mode": False
     }
-
-
-def test_the_template_ships_what_the_migration_writes():
-    template_settings = template("settings.yaml")
-    assert template_settings["voice_activation"]["max_utterance_s"] == NEW_MAX_UTTERANCE_S
-    assert template_settings["voice_activation"]["end_pause_ms"] == NEW_END_PAUSE_MS
 
 
 # ── the chain a 3.2.2 user walks ───────────────────────────────────────

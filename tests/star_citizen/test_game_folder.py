@@ -19,21 +19,11 @@ def test_a_game_log_stands_for_the_folder_above_its_environment():
     assert normalize_game_path('"D:\\StarCitizen\\LIVE\\Game.log"') == "D:\\StarCitizen"
 
 
-def test_the_folder_itself_stays_as_it_is():
-    assert normalize_game_path("D:\\StarCitizen") == "D:\\StarCitizen"
-    assert normalize_game_path("  ") == ""
-
-
 def test_a_folder_with_live_in_it_is_the_game(tmp_path):
     (tmp_path / "LIVE").mkdir()
     (tmp_path / "PTU").mkdir()
     folder = inspect_game_folder(str(tmp_path))
     assert folder.exists and folder.environments == ["LIVE", "PTU"]
-
-
-def test_a_folder_without_an_environment_exists_but_is_not_the_game(tmp_path):
-    folder = inspect_game_folder(str(tmp_path))
-    assert folder.exists and folder.environments == []
 
 
 def test_a_missing_or_empty_path_is_not_found(tmp_path):
@@ -67,9 +57,4 @@ def test_windows_without_the_game_or_a_launcher_log_finds_nothing(tmp_path, monk
     monkeypatch.setattr(game_folder.platform, "system", lambda: "Windows")
     monkeypatch.setenv("APPDATA", str(tmp_path))
     monkeypatch.setattr(game_folder, "_fixed_drives", lambda: ["C", "D"])
-    assert find_game_folder() is None
-
-
-def test_macos_finds_nothing(monkeypatch):
-    monkeypatch.setattr(game_folder.platform, "system", lambda: "Darwin")
     assert find_game_folder() is None

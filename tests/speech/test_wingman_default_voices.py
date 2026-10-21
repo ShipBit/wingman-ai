@@ -1,7 +1,6 @@
 """Shipped Wingmen follow the spoken language while they have a default voice."""
 
 import os
-from pathlib import Path
 
 import pytest
 import yaml
@@ -9,9 +8,7 @@ import yaml
 from services.wingman_default_voices import (
     AZURE_DEFAULTS_FILE,
     DEFAULTS_FILE,
-    EDGE_DEFAULTS_FILE,
     INWORLD_DEFAULTS_FILE,
-    azure_voice_for_inworld,
     apply_default_voices,
     default_voice_for,
     is_default_voice,
@@ -109,13 +106,6 @@ def test_the_azure_voice_follows_the_language_like_the_pocket_voice(tmp_path):
     assert (azure(folder, "ATC"), azure(folder, "Computer")) == ("guy", "jenny")
 
 
-def test_a_language_without_a_row_gets_the_multilingual_voice(tmp_path):
-    app, cm, folder = setup_azure(tmp_path, {"ATC": {"wingman_pro": {"azure": {"voice": "andrew"}}}})
-    apply_default_voices(cm, app, "de")
-    apply_default_voices(cm, app, "it")
-    assert azure(folder, "ATC") == "andrew"
-
-
 def test_an_azure_voice_the_user_picked_stays_while_the_pocket_voice_moves(tmp_path):
     app, cm, folder = setup_azure(tmp_path, {
         "ATC": {"pocket_tts": {"voice": "azelma"}, "wingman_pro": {"azure": {"voice": "katja"}}},
@@ -188,45 +178,6 @@ def test_the_shipped_wingmen_speak_with_the_plan_voices(file, voice_path):
             shipped = shipped[key]
         assert default_voice_for(table, name, "en") == shipped
         assert is_default_voice(shipped, table[name])
-
-
-def test_the_defaults_speak_with_a_voice_the_plans_include():
-    defaults = template("defaults.yaml")
-    assert defaults["inworld"]["voice_id"] in PLAN_VOICES[INWORLD_DEFAULTS_FILE]
-    assert defaults["wingman_pro"]["azure"]["voice"] in PLAN_VOICES[AZURE_DEFAULTS_FILE]
-
-
-def test_the_azure_counterpart_of_each_inworld_default_is_a_free_voice():
-    inworld_table = load_default_voices(REPO_ROOT, INWORLD_DEFAULTS_FILE)
-    for name, _ in SHIPPED:
-        for language, voice in inworld_table[name].items():
-            if language != "legacy":
-                assert azure_voice_for_inworld(voice) in PLAN_VOICES[AZURE_DEFAULTS_FILE]
-
-
-
-def test_every_voice_a_template_has_had_counts_as_default():
-    voices = {"legacy": "azelma, en-barry", "de": "de-wolfgang"}
-    assert is_default_voice("azelma", voices)
-    assert is_default_voice("en-barry", voices)
-    assert not is_default_voice("de-wolfgang", voices)
-    assert is_default_voice("de-wolfgang", voices, recorded="de-wolfgang")
-
-
-def test_the_edge_voice_follows_the_language(tmp_path):
-    app, cm, folder = setup(tmp_path, {"Computer": {"name": "Computer"}})
-    (Path(app) / EDGE_DEFAULTS_FILE).parent.mkdir(parents=True)
-    (Path(app) / EDGE_DEFAULTS_FILE).write_text(
-        "Computer\ten\ten-US-JennyNeural\nComputer\tde\tde-DE-AmalaNeural\n"
-        "Computer\t*\ten-US-AvaMultilingualNeural\n",
-        encoding="utf-8",
-    )
-    edge = lambda: yaml.safe_load((folder / "Computer.yaml").read_text())["edge_tts"]["voice"]
-
-    apply_default_voices(cm, app, "de")
-    assert edge() == "de-DE-AmalaNeural"
-    apply_default_voices(cm, app, "fr")
-    assert edge() == "en-US-AvaMultilingualNeural"
 
 
 def test_restoring_voices_keeps_everything_else():

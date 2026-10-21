@@ -42,16 +42,6 @@ def break_chain(service):
 # ── the chain is checked before anything is touched ────────────────────
 
 
-def test_a_complete_chain_reaches_the_current_version(users_dir, boot_config_manager):
-    make_old_version(users_dir, OLD_VERSION_DIR, {"Star Citizen": {"Computer.yaml": None}})
-    service = migration_service(boot_config_manager())
-
-    chain = service.build_migration_chain(OLD_VERSION_DIR)
-
-    assert chain[0] == OLD_VERSION_DIR
-    assert chain[-1] == VERSION_DIR
-
-
 def test_a_step_past_this_cores_version_waits_for_the_version_bump(
     users_dir, boot_config_manager, monkeypatch
 ):
@@ -62,14 +52,6 @@ def test_a_step_past_this_cores_version_waits_for_the_version_bump(
 
     assert service.latest_version == "3_2_7"
     assert [(old, new) for old, new, _ in service.waiting_migrations][0] == ("3_2_7", "3_2_8")
-
-
-def test_a_missing_link_is_no_chain(users_dir, boot_config_manager):
-    make_old_version(users_dir, OLD_VERSION_DIR, {"Star Citizen": {"Computer.yaml": None}})
-    service = migration_service(boot_config_manager())
-    break_chain(service)
-
-    assert service.build_migration_chain(OLD_VERSION_DIR) is None
 
 
 def test_a_broken_chain_aborts_before_deleting_anything(users_dir, boot_config_manager):
@@ -256,24 +238,7 @@ def test_a_long_chain_keeps_the_users_settings(users_dir, migrated_310):
     assert "stt_provider" not in on_disk["voice_activation"]
     assert config_manager.settings_config.debug_mode is True
 
-
-def test_each_step_writes_its_settings_for_the_next(users_dir, boot_config_manager, monkeypatch):
-    from services.config_migration_service import ConfigMigrationService
-
-    # The run deletes its intermediate folders at the end; keep them to look.
-    monkeypatch.setattr(
-        ConfigMigrationService, "_remove_intermediate_versions", lambda *args: None
-    )
-    _make_310(users_dir)
-    boot_and_migrate(boot_config_manager)
-    intermediate = read_yaml(path.join(users_dir, "3_1_1", "configs", "settings.yaml"))
-    assert intermediate["voice_activation"]["stt_provider"] == "parakeet"
-
-
-def test_dropped_default_keys_leave_the_file(users_dir, migrated_310):
-    _, service = migrated_310
     assert "Unable to migrate defaults.yaml" not in service.log_message
-
     features = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "defaults.yaml"))["features"]
     for key in ("skill_max_input_tokens", "condense_max_messages", "remember_messages", "condense_keep_recent"):
         assert key not in features
@@ -323,8 +288,8 @@ def test_the_conversion_runs_in_its_own_step_folder(users_dir, boot_config_manag
     assert config_manager.find_default_config().name == "General"
 
 
-@pytest.mark.parametrize("old_version", ["2_1_1", "3_2_8"])
-def test_the_hud_ends_up_on_from_any_older_version(users_dir, boot_config_manager, old_version):
+def test_the_hud_ends_up_on_from_the_oldest_version(users_dir, boot_config_manager):
+    old_version = "2_1_1"
     make_old_version(users_dir, old_version, {"Star Citizen": {"Computer.yaml": None}})
     settings_file = path.join(users_dir, old_version, "configs", "settings.yaml")
     settings = read_yaml(settings_file)

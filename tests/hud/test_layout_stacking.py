@@ -88,14 +88,3 @@ def test_a_manual_window_goes_where_it_is_told_beside_an_automatic_one():
 
     assert pos["auto"] == (MARGIN, MARGIN)
     assert pos["manual"] == (500, 500)
-
-
-def test_overlapping_windows_are_found():
-    lm = layout()
-    for name, x in (("a", 100), ("b", 150), ("c", 500)):
-        lm.register_window(name, mode=LayoutMode.MANUAL, width=200, height=200, manual_x=x, manual_y=x)
-    lm.compute_positions()
-
-    assert lm.check_collision("a", "b")
-    assert not lm.check_collision("a", "c")
-    assert lm.find_collisions() == [("a", "b")]

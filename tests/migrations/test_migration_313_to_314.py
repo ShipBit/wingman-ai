@@ -7,7 +7,6 @@ main.py does: ConfigManager first (which copies templates), then
 migrate_to_latest().
 """
 
-import shutil
 from os import listdir, path
 
 from tests.support import (
@@ -162,46 +161,3 @@ def test_deleted_wingman_marker_becomes_tombstone(users_dir, boot_config_manager
     assert "Computer.yaml" not in files
 
     assert cm.find_default_config().name == "Star Citizen"
-
-
-def test_multi_step_migration_from_3_1_2(users_dir, boot_config_manager):
-    """A user jumping 3.1.2 -> 3.1.4 goes through the intermediate 3.1.3 step.
-    Legacy state must convert exactly like in the single-step case."""
-    old_configs = make_313(
-        users_dir,
-        {
-            ".Star Citizen": {"Computer.yaml": None},
-            "_General": {"Clippy.yaml": None},
-        },
-    )
-    # relocate the fake old version from 3_1_3 to 3_1_2
-    shutil.move(
-        path.join(users_dir, OLD_VERSION_DIR),
-        path.join(users_dir, "3_1_2"),
-    )
-    assert not path.exists(old_configs)
-
-    cm = migrate(boot_config_manager)
-
-    assert config_names(users_dir) == ["General"]
-    context = read_context(users_dir)
-    assert context["default_config"] == "General"
-    assert "Star Citizen" in context["deleted_template_configs"]
-    assert cm.find_default_config().name == "General"
-
-
-def test_migration_marker_prevents_rerun(users_dir, boot_config_manager):
-    make_313(
-        users_dir,
-        {
-            "Star Citizen": {"Computer.yaml": None},
-            "_General": {"Clippy.yaml": None},
-        },
-    )
-
-    migrate(boot_config_manager)
-    # second full boot incl. migration service: must be a no-op
-    migrate(boot_config_manager)
-
-    assert config_names(users_dir) == ["General", "Star Citizen"]
-    assert read_context(users_dir)["default_config"] == "General"

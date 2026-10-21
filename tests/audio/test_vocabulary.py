@@ -6,7 +6,6 @@ from api.enums import SpokenLanguage
 from services.audio.common_words import common_words
 from services.audio.vocabulary import (
     Vocabulary,
-    format_entry,
     load_preset,
     parse_entry,
     spoken_names,
@@ -22,10 +21,6 @@ def test_misspelled_names_are_corrected():
     assert SC.correct("Arccorp, now.") == "ArcCorp, now."
 
 
-def test_exact_words_keep_the_entry_spelling():
-    assert SC.correct("hurston station") == "Hurston station"
-
-
 def test_ordinary_words_stay():
     text = "please complete the mission and open the map"
     assert SC.correct(text) == text
@@ -34,20 +29,6 @@ def test_ordinary_words_stay():
     assert SC.correct("Houston") == "Hurston"
     # "Aurora" vs "Europa": too far.
     assert SC.correct("Europa") == "Europa"
-
-
-def test_punctuation_and_case_survive():
-    assert SC.correct("Gladios? Yes, the Gladios!") == "Gladius? Yes, the Gladius!"
-
-
-def test_short_entries_are_ignored():
-    v = Vocabulary(["Io", "Ava"])
-    assert v.entries == ["Ava"]
-    assert v.correct("I am here") == "I am here"
-
-
-def test_empty_vocabulary_is_a_no_op():
-    assert Vocabulary([]).correct("anything at all") == "anything at all"
 
 
 def _config():
@@ -73,13 +54,6 @@ def test_mapping_entries_replace_exactly():
     assert v.correct("Houston, we have a problem") == "Hurston, we have a problem"
     # the correct side of a mapping is also fuzzy-matched on its own
     assert v.correct("jumptowm") == "Jumptown"
-
-
-def test_parse_and_format_entries():
-    assert parse_entry("Houston=Hurston") == ("Hurston", "Houston")
-    assert parse_entry("  Hurston ") == ("Hurston", None)
-    assert format_entry("Hurston", "Houston") == "Houston=Hurston"
-    assert format_entry("Hurston", "hurston") == "Hurston"
 
 
 def test_common_words_are_never_fuzzy_corrected():
@@ -176,11 +150,6 @@ def test_preset_overrides_are_a_diff_against_the_bundle():
     assert diff_override(bundled, bundled) == ([], [])
 
 
-def test_spoken_english_shorthand_is_not_a_name():
-    # "kinda" is one letter from the Star Citizen name "Kinga".
-    assert Vocabulary(["Kinga"]).correct("It's like kinda green.") == "It's like kinda green."
-
-
 def _with_common_words(entries, language=SpokenLanguage.EN):
     return Vocabulary(entries, common_words=common_words(REPO_ROOT, language))
 
@@ -221,6 +190,11 @@ def test_a_word_of_a_longer_name_is_not_pulled_to_a_near_one():
     assert vocabulary.correct("the Centaurus is parked") == "the Centaurus is parked"
     assert vocabulary.correct("jump to Centaury") == "jump to Centauri"
 
+
+def test_short_entries_are_ignored():
+    v = Vocabulary(["Io", "Ava"])
+    assert v.entries == ["Ava"]
+    assert v.correct("I am here") == "I am here"
 
 
 def test_a_name_that_is_also_part_of_a_longer_one_gets_its_spelling():

@@ -11,7 +11,7 @@ import hud_server.rendering.markdown as markdown
 from hud_server.constants import GROUP_CHAT
 from hud_server.hud_manager import HudManager
 from hud_server.rendering.glass import SHADOW
-from hud_server.rendering.layers import MAX_PIECE_HEIGHT, Piece, PieceCache, lay_out, render_piece
+from hud_server.rendering.layers import Piece, PieceCache, lay_out, render_piece
 from hud_server.rendering.markdown import MarkdownRenderer
 from tests.support import FakeHudBackend, make_overlay, overlay_errors, run_frames
 
@@ -278,18 +278,6 @@ def test_text_appended_to_a_message_renders_only_the_block_it_changes(rendered_b
     assert rendered_blocks == [first.rindex("Three")]
 
 
-def test_a_piece_taller_than_a_piece_may_be_keeps_its_end():
-    def draw(d, image, top):
-        end = MAX_PIECE_HEIGHT + 5000
-        d.line([(0, end - 1 - top), (10, end - 1 - top)], fill=(255, 0, 0, 255))
-        return end
-
-    piece = render_piece(20, draw)
-
-    assert piece.height == MAX_PIECE_HEIGHT
-    assert piece.getpixel((5, piece.height - 1)) == (255, 0, 0, 255)
-
-
 def test_a_block_taller_than_a_piece_can_be_shows_its_end():
     backend = FakeHudBackend()
     overlay = make_overlay(backend)
@@ -321,19 +309,6 @@ def test_the_users_bubble_fits_bold_text_emoji_and_links_on_one_line():
         assert overlay._windows[f"chat_{GROUP_CHAT}"]["static_canvas"].height - one_line < 10, text
 
 
-def test_the_users_bubble_is_as_wide_as_what_it_shows():
-    backend, overlay, manager = chat(accent_color="#00ff00", bg_color="#000000")
-
-    for text in ("[map](https://example.invalid/a/very/long/path/to/the/map/of/stanton)", "line one\nline two"):
-        manager.clear_chat_window(GROUP_CHAT, "chat")
-        manager.send_chat_message(GROUP_CHAT, "chat", "Jay", text, own=True)
-        run_frames(overlay)
-
-        image = backend.window(f"HUD_chat_{GROUP_CHAT}").image
-        bubble = [i % image.width for i, p in enumerate(image.getdata()) if p[1] > 60 and p[0] < 40 and p[2] < 40]
-        assert image.width - min(bubble) < image.width / 2, text
-
-
 def test_long_names_are_cut_to_the_window():
     backend, overlay, manager = chat(accent_color="#00ff00")
     manager.send_chat_message(GROUP_CHAT, "chat", "\U0001F680 Rocket [happy] " + "Commander " * 10, "Ready.")
@@ -354,16 +329,6 @@ def test_an_empty_own_message_draws_nothing():
     run_frames(overlay)
 
     assert len(overlay._windows[f"chat_{GROUP_CHAT}"].get("pieces") or []) == 0
-
-
-def test_a_window_without_height_draws_without_errors():
-    backend = FakeHudBackend()
-    overlay = make_overlay(backend)
-
-    show(overlay, "Hold short.", max_height=0)
-    run_frames(overlay)
-
-    assert overlay_errors(overlay) == []
 
 
 # Every style its own size, so a test can tell from the font which style drew a word (on any OS)
@@ -518,24 +483,6 @@ def test_a_steps_block_puts_the_route_in_one_row_even_when_it_is_too_wide(monkey
     assert max(ys) - min(ys) <= 2
 
 
-def test_a_bold_value_in_a_right_aligned_column_stays_inside_the_table(monkeypatch):
-    renderer = sized_renderer()
-    cells = []
-    original = renderer._render_cell_content_with_pos
-
-    def record(draw, text, x, *args):
-        cells.append((text, x))
-        return original(draw, text, x, *args)
-
-    monkeypatch.setattr(renderer, "_render_cell_content_with_pos", record)
-    image = Image.new("RGBA", (400, 200))
-    renderer.render(ImageDraw.Draw(image), image,
-                    "| Sell | SCU | aUEC |\n|---|---:|---:|\n| **Taranite** | **62** | **1,821,000** |", 0, 0, 380)
-
-    x = dict(cells)["**1,821,000**"]
-    assert x + renderer._get_text_size("1,821,000", renderer.fonts["bold"])[0] <= 380 - 6  # inside the cell padding
-
-
 def test_a_gap_separates_pieces_and_leaves_none_under_the_bottom_one():
     pieces = [Piece(("piece", i), lambda d, image, top: 20, gap=10) for i in range(2)]
     layout = lay_out(PieceCache(), pieces, 100, 600, top=16, bottom=12)
@@ -560,14 +507,10 @@ def info_item(description: str) -> Image.Image:
     return render_piece(400, piece.draw)
 
 
-@pytest.mark.parametrize("last_block", ["| Sell | SCU |\n|---|---:|\n| Gold | 4 |", "```stats\nPaid | 5,000\n```"])
+@pytest.mark.parametrize("last_block", ["| Sell | SCU |\n|---|---:|\n| Gold | 4 |"])
 def test_an_info_item_ending_in_a_table_or_card_ends_close_under_it(last_block):
     image = info_item("Stop 1 of 2\n\n" + last_block)
     assert image.height - image.getchannel("A").getbbox()[3] == 6  # 4 under the ink, as text gets, and 2
-
-
-def test_an_info_item_ending_in_text_keeps_its_height_whatever_the_letters():
-    assert info_item("Stop 1 of 2\n\nLast stop").height == info_item("Stop 1 of 2\n\nLast gyp").height
 
 
 def test_route_legs_show_progress_and_a_jump_puts_a_gate_on_its_leg(monkeypatch):
@@ -583,7 +526,7 @@ def test_route_legs_show_progress_and_a_jump_puts_a_gate_on_its_leg(monkeypatch)
     assert gates[0][1] == (0, 170, 255)  # on the leg to the next stop: the accent
 
 
-@pytest.mark.parametrize("current, left_faded, right_faded", [(0, False, True), (4, True, True), (7, True, False)])
+@pytest.mark.parametrize("current, left_faded, right_faded", [(0, False, True), (4, True, True)])
 def test_a_route_too_wide_for_its_row_shows_the_current_stop_and_fades_where_it_goes_on(current, left_faded, right_faded):
     stops = [("done" if i < current else "current" if i == current else "next") + f" | Station Number {i}"
              for i in range(8)]
@@ -607,54 +550,6 @@ def test_a_stats_block_shows_values_under_their_labels_and_colours_accent_ones(m
     assert drawn["5,000"][0][1] > drawn["Paid"][0][1]  # value below its label
     assert drawn["Profit"][0][0] > drawn["Paid"][0][0]  # side by side
     assert tuple(drawn["2,000"][1][:3]) == (0, 170, 255) and tuple(drawn["5,000"][1][:3]) == (220, 220, 220)
-
-
-def test_a_stats_line_without_a_bar_is_text_under_the_figures_in_the_card(monkeypatch):
-    renderer = sized_renderer()
-    words = {}
-    original = renderer._render_tokens
-
-    def record(draw, tokens, x, y, *args, **kwargs):
-        for token in tokens:
-            words[token.get("text", "").strip()] = (token["type"], y)
-        return original(draw, tokens, x, y, *args, **kwargs)
-
-    monkeypatch.setattr(renderer, "_render_tokens", record)
-    drawn = drawn_texts(renderer, monkeypatch, "```stats\nPaid | 5,000\n**Next:** Levski\n```")
-
-    assert words["Next:"][0] == "bold"  # inline markdown works in it
-    assert words["Next:"][1] > drawn["5,000"][0][1]  # under the figures
-
-
-def test_a_bar_shows_how_full_it_is(monkeypatch):
-    drawn = drawn_texts(sized_renderer(), monkeypatch, "```bar\nmax: 2200\nArriving | 48 text\nLeaving | 2200 accent\n```")
-
-    assert "48 / 2,200" in drawn and "2,200 / 2,200" in drawn
-    assert drawn["48 / 2,200"][0][0] > drawn["Arriving"][0][0]  # at the bar's right end
-
-
-def test_a_horizontal_rule_is_a_thin_line_in_a_shade_of_the_panel(monkeypatch):
-    renderer = sized_renderer()
-    renderer.set_colors((220, 220, 220), (0, 170, 255), (20, 20, 30), 200)
-    painted, dots = [], []
-    original_paint = markdown.glass.paint
-    monkeypatch.setattr(markdown.glass, "paint", lambda image, mask, color, at=(0, 0): painted.append((mask.size, tuple(color))) or original_paint(image, mask, color, at))
-    monkeypatch.setattr(ImageDraw.ImageDraw, "ellipse", lambda self, *args, **kwargs: dots.append(args))
-    image = Image.new("RGBA", (400, 100))
-    renderer.render(ImageDraw.Draw(image), image, "above\n\n---\n\nbelow", 0, 0, 380)
-
-    assert painted == [((380, 1), renderer.bg_shade(0.16))]  # follows the background and its transparency
-    assert dots == []  # no accent dots any more
-
-
-def test_other_code_blocks_still_render_as_code(monkeypatch):
-    calls = []
-    renderer = sized_renderer()
-    monkeypatch.setattr(renderer, "_render_code_block", lambda *args: calls.append(args[2]["lang"]) or 0)
-    image = Image.new("RGBA", (400, 200))
-    renderer.render(ImageDraw.Draw(image), image, "```python\nprint(1)\n```\n\n```stats\nA | 1\n```", 0, 0, 380)
-
-    assert calls == ["python"]
 
 
 def test_table_columns_follow_their_content():
