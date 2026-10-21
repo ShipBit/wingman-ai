@@ -75,7 +75,7 @@ pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'
 jeepney>=0.8; sys_platform == 'linux'
 
 # Pocket-TTS
-pocket-tts==4.0.0
+pocket-tts==4.0.1
 num2words==0.5.14 # numbers spelled out before Pocket TTS reads them (services/spoken_numbers.py)
 torch==2.8.0 # don't upgrade!
 torchaudio==2.8.0 # don't upgrade!
