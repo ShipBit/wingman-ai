@@ -42,7 +42,7 @@ def _wingman():
     player = FakePlayer()
     wingman = SimpleNamespace(
         _unloaded=False,
-        name="Angel",
+        name="Bob",
         skills=[],
         audio_player=player,
         config=SimpleNamespace(
