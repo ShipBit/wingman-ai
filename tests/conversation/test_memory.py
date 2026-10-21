@@ -1,5 +1,5 @@
-"""Persistent memory: the fact filter, checkpoints, episodes and the MEMORY
-block.
+"""Persistent memory: the fact filter, checkpoints, episodes, open entries
+and the MEMORY block.
 
 A checkpoint hands the stored facts, the episode so far and the new messages
 to the support model and takes back the whole list. The block in the system
@@ -112,9 +112,11 @@ def test_a_goal_with_a_number_is_not_mistaken_for_a_status(service):
 # ── the checkpoint call ────────────────────────────────────────────
 
 
-def answer(facts, episode=None):
+def answer(facts, episode=None, opened=(), closed=()):
     return json.dumps({
         "facts": [{"kind": "possession", "text": f} for f in facts],
+        "opened": list(opened),
+        "closed": [{"entry": e, "outcome": o} for e, o in closed],
         "episode": episode or {"happened": "", "memorable": "", "open": ""},
     })
 
@@ -292,7 +294,7 @@ def test_the_block_holds_every_fact_and_the_recent_episodes_with_age(service, mo
     assert "- Owns a Cutlass Black" in block and "- Friend is named Marcus" in block
     assert block.index("5 days ago: Mining with Marcus.") < block.index("yesterday: Took a bounty.")
     assert "Only the last one is current" in block
-    assert service.block_stats() == (2, 2)
+    assert service.block_stats() == (2, 0, 2)
 
 
 def test_the_current_session_and_old_episodes_stay_out_of_the_block(service):
@@ -347,3 +349,201 @@ def test_the_fact_cap_drops_the_stalest(service, monkeypatch):
     kept = [e.content for e in service.get_all(entry_type="fact")]
     assert len(kept) == 3
     assert "Fact number 0" not in kept and "Fact number 1" not in kept
+
+
+# ── open entries ───────────────────────────────────────────────────
+
+
+def open_of(svc):
+    return sorted(e.content for e in svc.get_all(entry_type="open"))
+
+
+def done_of(svc):
+    return sorted(e.content for e in svc.get_all(entry_type="done"))
+
+
+def age(svc, content, days, column="updated_at"):
+    with svc._lock:
+        svc._db.execute(
+            f"UPDATE memory_entries SET {column} = ? WHERE content = ?",
+            (time.time() - days * 86400, content),
+        )
+        svc._db.commit()
+    svc._block = None
+
+
+def test_tracking_the_same_thing_twice_keeps_one_entry(service):
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+
+    assert open_of(service) == ["Accepted a cargo mission to Lorville"]
+
+
+def test_an_open_entry_never_merges_into_a_fact(service):
+    service._add_memory_impl("fact", "Wants to buy an Idris")
+    service._add_memory_impl("open", "Wants to buy an Idris")
+
+    assert facts_of(service) == ["Wants to buy an Idris"]
+    assert open_of(service) == ["Wants to buy an Idris"]
+
+
+@pytest.mark.parametrize("description", [
+    "Accepted a cargo mission to Lorville.",        # its own words, a period added
+    "accepted a cargo mission to lorville",         # another case
+    "cargo mission to Lorville",                    # part of it
+])
+def test_closing_finds_the_entry_in_the_models_words(service, description):
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+    service._add_memory_impl("open", "Plans to mine on Daymar on Saturday")
+
+    closed = service._close_open_impl(description, "Delivered the cargo to Lorville.")
+
+    assert closed.content == "Delivered the cargo to Lorville."
+    assert open_of(service) == ["Plans to mine on Daymar on Saturday"]
+    assert done_of(service) == ["Delivered the cargo to Lorville."]
+
+
+def test_closing_something_never_tracked_closes_nothing(service):
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+
+    assert service._close_open_impl("Bounty on Kessler", "Killed Kessler.") is None
+    assert open_of(service) == ["Accepted a cargo mission to Lorville"]
+
+
+def test_a_description_that_fits_two_entries_closes_neither_by_guessing(service):
+    service._add_memory_impl("open", "Cargo mission to Lorville")
+    service._add_memory_impl("open", "Cargo mission to Area18")
+
+    assert service._close_open_impl("cargo mission", "Done.") is None
+    assert len(open_of(service)) == 2
+
+
+def test_closing_without_an_outcome_keeps_the_entry_text(service):
+    service._add_memory_impl("open", "Promised to help Marcus with his hauling run")
+
+    service._close_open_impl("Promised to help Marcus with his hauling run")
+
+    assert done_of(service) == ["Promised to help Marcus with his hauling run"]
+
+
+def test_the_block_shows_open_and_recently_finished(service):
+    service._add_memory_impl("open", "Accepted a bounty on Kessler")
+    service._add_memory_impl("open", "Cargo mission to Lorville")
+    service._close_open_impl("Cargo mission to Lorville", "Delivered the cargo to Lorville.")
+
+    block = service.memory_block()
+
+    assert "- Accepted a bounty on Kessler (from earlier today)" in block
+    assert "earlier today: Delivered the cargo to Lorville." in block
+    assert block.index("Open, taken on") < block.index("Recently finished")
+    assert service.block_stats() == (0, 1, 0)
+
+
+def test_finished_entries_leave_the_block_after_a_while(service):
+    service._add_memory_impl("done", "Delivered the cargo to Lorville.")
+    age(service, "Delivered the cargo to Lorville.", pm.DONE_MAX_AGE_DAYS + 1)
+
+    assert service.memory_block() == ""
+
+
+def test_an_open_entry_untouched_too_long_is_dropped_on_the_next_write(service):
+    service._add_memory_impl("open", "Plans to visit Pyro someday")
+    age(service, "Plans to visit Pyro someday", pm.OPEN_MAX_AGE_DAYS + 1)
+
+    service._add_memory_impl("open", "Accepted a bounty on Kessler")
+
+    assert open_of(service) == ["Accepted a bounty on Kessler"]
+
+
+def test_the_open_cap_drops_the_stalest(service, monkeypatch):
+    monkeypatch.setattr(pm, "MAX_OPEN", 2)
+    for i in range(3):
+        service._add_memory_impl("open", f"Open thing number {i}")
+        time.sleep(0.01)
+
+    assert open_of(service) == ["Open thing number 1", "Open thing number 2"]
+
+
+def test_a_checkpoint_sees_the_open_list_and_opens_and_closes(service):
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+    service.local_ai_service.answer = answer(
+        [],
+        opened=["Accepted a bounty on Kessler"],
+        closed=[("Accepted a cargo mission to Lorville", "Delivered the cargo to Lorville.")],
+    )
+
+    outcome = service.checkpoint_sync(turns(3) + [
+        {"role": "user", "content": "Fracht in Lorville abgeliefert. Und ich nehm das Kopfgeld auf Kessler."},
+    ])
+
+    assert "OPEN:\n- Accepted a cargo mission to Lorville" in service.local_ai_service.support_calls[0]
+    assert open_of(service) == ["Accepted a bounty on Kessler"]
+    assert done_of(service) == ["Delivered the cargo to Lorville."]
+    assert outcome["opened"] == ["Accepted a bounty on Kessler"]
+    assert outcome["closed"] == ["Delivered the cargo to Lorville."]
+
+
+def test_a_checkpoint_answer_without_open_changes_leaves_the_list_alone(service):
+    """An older prompt or a model that drops the keys must not close anything."""
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+    service.local_ai_service.answer = json.dumps({"facts": [], "episode": {"happened": "", "memorable": ""}})
+
+    service.checkpoint_sync(turns(4))
+
+    assert open_of(service) == ["Accepted a cargo mission to Lorville"]
+
+
+def test_tidying_facts_never_touches_open_entries(service):
+    service._add_memory_impl("fact", "Name is Sam")
+    service._add_memory_impl("open", "Accepted a cargo mission to Lorville")
+    service.local_ai_service.answer = answer(
+        ["Name is Sam"], closed=[("Accepted a cargo mission to Lorville", "Done.")]
+    )
+
+    asyncio.run(service.consolidate())
+
+    assert open_of(service) == ["Accepted a cargo mission to Lorville"]
+
+
+def unit(*xs):
+    n = sum(x * x for x in xs) ** 0.5
+    return [x / n for x in xs]
+
+
+@pytest.mark.parametrize("query_vector, closes", [
+    (unit(0.8, 0.2, 0.0), "Accepted a cargo mission to Lorville"),  # clearly the cargo one
+    (unit(0.5, 0.5, 0.2), None),                                    # as close to both
+    (unit(0.2, 0.2, 1.0), None),                                    # close to neither
+])
+def test_closing_by_meaning_needs_a_clear_winner(service, query_vector, closes):
+    vectors = {
+        "Accepted a cargo mission to Lorville": unit(1.0, 0.0, 0.0),
+        "Accepted a bounty on Kessler": unit(0.0, 1.0, 0.0),
+        "the delivery": query_vector,
+        "Done.": unit(0.0, 0.0, 1.0),
+    }
+    service.local_ai_service.embed = lambda texts: [vectors[t] for t in texts]
+    for text in ("Accepted a cargo mission to Lorville", "Accepted a bounty on Kessler"):
+        service._add_memory_impl("open", text)
+
+    closed = service._close_open_impl("the delivery", "Done.")
+
+    still_open = {"Accepted a cargo mission to Lorville", "Accepted a bounty on Kessler"} - {closes}
+    assert (closed is not None) == (closes is not None)
+    assert open_of(service) == sorted(still_open)
+
+
+def test_a_checkpoint_never_closes_an_entry_the_session_did_not_name(service):
+    """Small models closed "swap the quantum drive" in a session about
+    selling a ship."""
+    service._add_memory_impl("open", "Wants to swap the quantum drive of the Cutlass")
+    service.local_ai_service.answer = answer(
+        [], closed=[("Wants to swap the quantum drive of the Cutlass", "Dropped, the ship was sold.")]
+    )
+
+    outcome = service.checkpoint_sync(turns(3) + [
+        {"role": "user", "content": "Ich hab die Aurora verkauft und mir eine Freelancer geholt."},
+    ])
+
+    assert open_of(service) == ["Wants to swap the quantum drive of the Cutlass"]
+    assert outcome["closed"] == []

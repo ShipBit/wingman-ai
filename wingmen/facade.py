@@ -570,6 +570,16 @@ class SkillMemory:
     async def recall(self, query: str, **kw):
         return await self._la.recall_memory(query, **kw)
 
+    async def track(self, content: str):
+        """Keep something the user took on and has not finished (a mission, a
+        plan) on the Open list until it is closed. Returns the entry ID."""
+        from services.skill_local_ai import MemoryType
+
+        return await self._la.remember_fact(content, entry_type=MemoryType.OPEN)
+
+    async def close(self, entry: str, outcome: str = "") -> bool:
+        return await self._la.close_open(entry, outcome)
+
     async def context(self, query: str, max_tokens: int = 500) -> str:
         return await self._la.memory_context(query, max_tokens=max_tokens)
 

@@ -1723,8 +1723,10 @@ Free, runs locally. Returns `None`/empty when unavailable — check `.available`
 | --- | --- |
 | `.available` | `bool` — persistent memory ready (needs local AI + config). |
 | `await .remember(content, *, entry_type=MemoryType.FACT)` | Store a fact; auto-dedupes against similar entries. Returns the entry ID. |
+| `await .track(content)` | Put something the user took on and has not finished (a mission, a plan) on the Open list. Returns the entry ID. Wingman 3.2.10 or later. |
+| `await .close(entry, outcome="")` | Close the open entry `entry` describes; `outcome` becomes its text. Returns `bool`. Wingman 3.2.10 or later. |
 | `await .recall(query, *, limit=5, entry_type=None)` | Semantic search; returns matches sorted by relevance. |
-| `await .context(query, max_tokens=500)` | The whole MEMORY block (every fact and the recent episodes), the text Core already puts in the system prompt. `query` and `max_tokens` are ignored. |
+| `await .context(query, max_tokens=500)` | The whole MEMORY block (facts, open and finished entries, recent episodes), the text Core already puts in the system prompt. `query` and `max_tokens` are ignored. |
 | `await .update(entry_id, new_content)` | Update an entry by ID (re-embeds). |
 | `await .forget(query)` | Fuzzy delete: removes the closest semantic match. |
 | `await .forget_by_id(entry_id)` | Deterministic delete by ID. |
@@ -2170,6 +2172,16 @@ await self.wingman.memory.remember("Player rank: Platinum 1")
 
 **Returns** the entry ID (`int`) on success, or `None` on failure.
 
+#### Open entries
+
+Something the user took on and has not finished goes on the Open list: the wingman sees it in every session until it is closed, then for two weeks as finished. The chat model does this itself with its memory tools; a skill that learns of it another way (a game log, an API) does it with `track()` and `close()`.
+
+```python
+await self.wingman.memory.track("Accepted the mission 'Medical Supplies to Lorville'")
+# later, when the game reports it done
+await self.wingman.memory.close("Medical Supplies to Lorville", "Delivered the medical supplies to Lorville.")
+```
+
 #### Recalling Memories
 
 ```python
@@ -2183,7 +2195,7 @@ Search memories by semantic similarity. Returns results sorted by relevance.
 class MemorySearchResult:
     id: int                     # Entry ID (for update/delete)
     content: str                # The memory text
-    entry_type: str             # "fact" or "episode" ("session_summary" in older databases)
+    entry_type: str             # "fact", "open", "done" or "episode" ("session_summary" in older databases)
     source_wingman: str | None  # Which wingman stored this
     created_at: float           # Unix timestamp
 ```
@@ -2203,7 +2215,7 @@ for memory in results:
 async def context(query: str, max_tokens: int = 500) -> str
 ```
 
-Returns the whole MEMORY block: every fact and the recent episodes. It is the same text Core already puts in the system prompt, so you rarely need it. `query` and `max_tokens` are accepted for older skills and ignored. Use `recall()` for a targeted lookup.
+Returns the whole MEMORY block: every fact, the open and recently finished entries, and the recent episodes. It is the same text Core already puts in the system prompt, so you rarely need it. `query` and `max_tokens` are accepted for older skills and ignored. Use `recall()` for a targeted lookup.
 
 **Always returns a string** — empty on failure. Safe to concatenate directly. Do not add it to your own `get_prompt()`: the Wingman would see the memories twice.
 

@@ -415,3 +415,58 @@ def test_a_correction_that_was_not_stored_keeps_the_old_fact():
         persistent_memory_service=memory,
     )
     assert forgotten == []
+
+
+class FakeOpenMemory:
+    def __init__(self, stored_id=1, closes=None):
+        self.stored_id = stored_id
+        self.closes = closes
+        self.added = []
+        self.closed = []
+
+    async def add_memory(self, entry_type, content):
+        self.added.append((entry_type, content))
+        return self.stored_id
+
+    async def close_open(self, entry, outcome=""):
+        self.closed.append((entry, outcome))
+        if self.closes is None:
+            return None
+        return SimpleNamespace(content=outcome or entry)
+
+
+def test_track_stores_an_open_entry():
+    memory = FakeOpenMemory()
+    response, *_ = dispatch(
+        "memory_track", {"text": "Accepted a cargo mission to Lorville."},
+        persistent_memory_service=memory,
+    )
+    assert memory.added == [("open", "Accepted a cargo mission to Lorville.")]
+    assert "Accepted a cargo mission to Lorville." in response
+
+
+def test_track_without_the_memory_model_says_nothing_was_kept():
+    response, *_ = dispatch(
+        "memory_track", {"text": "Accepted a cargo mission to Lorville."},
+        persistent_memory_service=FakeOpenMemory(stored_id=None),
+    )
+    assert "nothing was stored" in response
+
+
+def test_close_reports_the_outcome():
+    memory = FakeOpenMemory(closes=True)
+    response, *_ = dispatch(
+        "memory_close",
+        {"entry": "cargo mission to Lorville", "outcome": "Delivered the cargo to Lorville."},
+        persistent_memory_service=memory,
+    )
+    assert memory.closed == [("cargo mission to Lorville", "Delivered the cargo to Lorville.")]
+    assert "Delivered the cargo to Lorville." in response
+
+
+def test_closing_nothing_open_says_so():
+    response, *_ = dispatch(
+        "memory_close", {"entry": "bounty on Kessler", "outcome": "Done."},
+        persistent_memory_service=FakeOpenMemory(),
+    )
+    assert "No open entry matches" in response

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 from api.enums import LogType
 from services.benchmark import Benchmark
+from services.persistent_memory import MEMORY_TOOL_NAMES
 from services.printr import Printr
 from services.tool_response_limiter import ToolResponseLimiter
 from services.context_budget import DEFAULT_WINDOW, ContextBudget
@@ -292,7 +293,7 @@ class ToolExecutor:
 
         # ── 1. Persistent memory tools ──────────────────────────────
         if (
-            function_name in ("memory_remember", "memory_recall", "memory_forget")
+            function_name in MEMORY_TOOL_NAMES
             and persistent_memory_service
         ):
             if function_name == "memory_remember":
@@ -337,6 +338,51 @@ class ToolExecutor:
                             color=LogType.MEMORY,
                             source_name=self._wingman_name,
                         )
+
+            elif function_name == "memory_track":
+                text = (function_args.get("text") or "").strip()
+                stored_id = (
+                    await persistent_memory_service.add_memory(entry_type="open", content=text)
+                    if text
+                    else None
+                )
+                if not text:
+                    function_response = "Nothing to keep track of -- no text provided."
+                elif stored_id is None:
+                    function_response = (
+                        "Memory is not available right now, nothing was stored. "
+                        "Tell the user you cannot keep this for later."
+                    )
+                else:
+                    function_response = f'Open until it is done: "{text}"'
+                    await printr.print_async(
+                        f"Memory open: {text}",
+                        color=LogType.MEMORY,
+                        source_name=self._wingman_name,
+                    )
+
+            elif function_name == "memory_close":
+                entry = (function_args.get("entry") or "").strip()
+                outcome = (function_args.get("outcome") or "").strip()
+                closed = (
+                    await persistent_memory_service.close_open(entry, outcome)
+                    if entry
+                    else None
+                )
+                if not entry:
+                    function_response = "No entry provided to close."
+                elif closed is None:
+                    function_response = (
+                        "No open entry matches that. Nothing was closed; if this was "
+                        "never tracked, there is nothing to do."
+                    )
+                else:
+                    function_response = f'Closed: "{closed.content}"'
+                    await printr.print_async(
+                        f"Memory done: {closed.content}",
+                        color=LogType.MEMORY,
+                        source_name=self._wingman_name,
+                    )
 
             elif function_name == "memory_recall":
                 query = function_args.get("query", "")

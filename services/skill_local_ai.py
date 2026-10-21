@@ -93,6 +93,8 @@ class MemoryType(str, Enum):
     """Type-safe enum for memory entry types."""
 
     FACT = "fact"
+    OPEN = "open"  # taken on, not finished; shown until closed or stale
+    DONE = "done"  # a closed open entry, as its outcome
     EPISODE = "episode"
     SESSION_SUMMARY = "session_summary"  # older databases
 
@@ -612,6 +614,18 @@ class SkillLocalAI:
             return True
         except Exception as e:
             self._log_error_sync("forget_memory_by_id_sync", e)
+            return False
+
+    async def close_open(self, entry: str, outcome: str = "") -> bool:
+        """Close the open entry ``entry`` describes; ``outcome`` replaces its
+        text. Returns True if one was closed."""
+        mem = self._wingman.persistent_memory_service
+        if mem is None:
+            return False
+        try:
+            return await mem.close_open(entry, outcome) is not None
+        except Exception as e:
+            await self._log_error("close_open", e)
             return False
 
     async def memory_forget(self, query: str) -> bool:
