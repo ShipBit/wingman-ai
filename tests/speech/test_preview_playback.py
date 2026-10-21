@@ -56,7 +56,7 @@ def _spoken(text, as_written):
     settings = SimpleNamespace(
         spoken_language=SpokenLanguage.DE,
         pronunciation=PronunciationSettings(
-            rules=[PronunciationRule(written="Zool", spoken="Xul")], presets=[]
+            rules=[PronunciationRule(written="aUEC", spoken="Alpha U E C")], presets=[]
         ),
     )
     service = SimpleNamespace(config_manager=SimpleNamespace(settings_config=settings))
@@ -64,8 +64,8 @@ def _spoken(text, as_written):
 
 
 def test_a_preview_says_the_text_with_the_users_rules():
-    assert _spoken("Hallo Zool.", as_written=False) == "Hallo Xul."
+    assert _spoken("Fünf aUEC.", as_written=False) == "Fünf Alpha U E C."
 
 
 def test_the_pronunciation_editor_hears_the_word_as_written():
-    assert _spoken("Zool", as_written=True) == "Zool"
+    assert _spoken("aUEC", as_written=True) == "aUEC"
