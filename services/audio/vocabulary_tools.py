@@ -14,9 +14,10 @@ VOCABULARY_TOOLS: list[dict] = [
             "name": "vocabulary_remember",
             "description": (
                 "Teach the speech recognition how a name or special word is really spelled. "
-                "Use it when the user says something like 'that's spelled X' or 'from now on "
-                "write Y as X', and when you notice the transcript garbled a name you know. "
-                "The spelling applies to every future transcript."
+                "Only when the user asks for it, e.g. 'that's spelled X' or 'from now on "
+                "write Y as X'. Never on your own, not even when the transcript seems to "
+                "garble a name you know: the user may use another name on purpose, and the "
+                "spelling applies to every Wingman and every future transcript."
             ),
             "parameters": {
                 "type": "object",
@@ -74,10 +75,8 @@ def run_vocabulary_tool(
         fixed = fix_memories(persistent_memory_service, correct, heard) if heard else 0
         tail = f" {fixed} memories were corrected too." if fixed else ""
         if not added:
-            return f"'{correct}' is already in the speech vocabulary.{tail}"
-        if heard:
-            return f"From now on '{heard}' is written as '{correct}'.{tail}"
-        return f"'{correct}' is in the speech vocabulary now."
+            return f"'{correct}' is already in the hotwords.{tail}"
+        return added_message(correct, heard) + tail
     if name == "vocabulary_forget":
         word = str(args.get("word") or "").strip()
         if not word:
@@ -85,6 +84,14 @@ def run_vocabulary_tool(
         removed = settings_service.remove_vocabulary([word])
         return f"Removed '{word}' from the speech vocabulary." if removed else f"'{word}' was not in the speech vocabulary."
     return "Unknown vocabulary tool."
+
+
+def added_message(correct: str, heard: str | None) -> str:
+    """The line the user sees in the chat when a Wingman or a skill adds a
+    spelling: it changes every transcript, so it must never go unnoticed."""
+    if heard and heard.lower() != correct.lower():
+        return f"Added to the hotwords in Settings: from now on '{heard}' is written '{correct}'."
+    return f"Added to the hotwords in Settings: '{correct}'."
 
 
 def fix_memories(persistent_memory_service, correct: str, heard: str) -> int:
