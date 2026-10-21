@@ -1162,10 +1162,17 @@ class SkillStt:
         service = getattr(self._wingman, "settings_service", None)
         if service is None:
             return False
+        from api.enums import LogType
         from services.audio.vocabulary import format_entry
-        from services.audio.vocabulary_tools import fix_memories
+        from services.audio.vocabulary_tools import added_message, fix_memories
+        from services.printr import Printr
 
         added = bool(service.add_vocabulary([format_entry(correct, heard)]))
+        if added:
+            # It changes every transcript of every Wingman: the user sees it.
+            Printr().print(
+                added_message(correct, heard), color=LogType.INFO, source_name=self._wingman.name
+            )
         if heard:
             fix_memories(getattr(self._wingman, "persistent_memory_service", None), correct, heard)
         return added

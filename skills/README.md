@@ -1585,7 +1585,7 @@ Which provider transcribes is a global setting. A skill may add words the transc
 | --- | --- |
 | `.hotwords` | The hotwords this Wingman added (`list[str]`). |
 | `.add_hotwords(words)` / `.remove_hotwords(words)` | Add or remove names (ships, places, people) for this run. Never written to a file. Returns how many changed. |
-| `.remember_spelling(correct, heard=None)` | Put a spelling into the user's vocabulary in Settings, for good and for every provider. With `heard`, exactly that form is replaced. Returns `bool` (`False` if it was already there). |
+| `.remember_spelling(correct, heard=None)` | Put a spelling into the user's vocabulary in Settings, for good and for every provider. With `heard`, exactly that form is replaced. The user sees a line in the chat for every new entry, since it changes every transcript. Only call it when the user asked for the spelling. Returns `bool` (`False` if it was already there). |
 | `.forget_spelling(word)` | Remove it again. Returns the number of entries removed. |
 
 ### `self.wingman.system_one` — typed decisions

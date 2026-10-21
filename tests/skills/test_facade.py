@@ -253,3 +253,26 @@ def test_the_history_gives_skills_dicts_also_for_the_models_answers():
 
     assert [m.get("role") for m in history] == ["user", "assistant"]
     assert history[1]["content"] == "Timer set."
+
+
+def test_a_spelling_a_skill_adds_is_shown_to_the_user(monkeypatch):
+    from services.printr import Printr
+
+    shown = []
+    monkeypatch.setattr(Printr, "print", lambda self, text, **kw: shown.append((text, kw.get("source_name"))))
+    vocabulary = []
+
+    def add(entries):
+        new = [e for e in entries if e not in vocabulary]
+        vocabulary.extend(new)
+        return new
+
+    wingman = SimpleNamespace(name="Bob", settings_service=SimpleNamespace(add_vocabulary=add))
+    stt = facade.SkillStt(wingman)
+
+    assert stt.remember_spelling("Hurston", heard="Houston")
+    assert not stt.remember_spelling("Hurston", heard="Houston")
+
+    assert len(shown) == 1
+    text, source = shown[0]
+    assert "Houston" in text and "Hurston" in text and source == "Bob"
