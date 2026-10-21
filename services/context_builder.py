@@ -165,10 +165,12 @@ class ContextBuilder:
                 memory_block = persistent_memory_service.memory_block()
                 if memory_block and not self._memory_loaded_notified:
                     self._memory_loaded_notified = True
-                    facts, episodes = persistent_memory_service.block_stats()
+                    facts, open_count, episodes = persistent_memory_service.block_stats()
                     parts = []
                     if facts:
                         parts.append(f"{facts} {'fact' if facts == 1 else 'facts'}")
+                    if open_count:
+                        parts.append(f"{open_count} open")
                     if episodes:
                         parts.append(f"{episodes} {'session' if episodes == 1 else 'sessions'}")
                     await printr.print_async(
@@ -210,15 +212,24 @@ class ContextBuilder:
             context += (
                 "\n\n# PERSISTENT MEMORY\n"
                 "You have persistent memory. What you know about the user from earlier "
-                "sessions is listed in the MEMORY section above (if any). "
-                "Call `memory_remember` right away when the user tells you something that should "
-                "still hold next month: how to address them, which language to answer in, a "
-                "standing instruction, what they own, who they play with, what they like or "
-                "dislike, a goal. Do not store where they are, what they are doing right now, a "
-                "status, or a mood. Use `memory_recall` only when the user asks what you know "
-                "about them, and `memory_forget` when they ask you to forget something. Never "
-                "call a memory tool for a question about the world or the game. Everything else "
-                "said in a session is picked up automatically."
+                "sessions is listed in the MEMORY section above (if any). You decide what is "
+                "worth keeping; do not wait to be asked. Call the tool in the same turn as "
+                "your answer, the moment it happens:\n"
+                "- `memory_remember` for something about the user that should still hold next "
+                "month: how to address them, which language to answer in, a standing "
+                "instruction, what they own, who they play with, what they like or dislike, a "
+                "goal.\n"
+                "- `memory_track` for something the user took on and has not finished, that "
+                "could still matter next session: a mission, contract or job accepted, a plan "
+                "for later, an appointment, something to come back to.\n"
+                "- `memory_close` as soon as an open entry is finished, failed or dropped.\n"
+                "If your backstory names more things worth keeping, keep those too. Never store "
+                "where they are, a status, a mood, or a command you carry out right away (a "
+                "jump, a flight, a landing, a purchase). Use "
+                "`memory_recall` only when the user asks what you know about them, and "
+                "`memory_forget` when they ask you to forget something. Never call a memory "
+                "tool for a question about the world or the game. Everything else said in a "
+                "session is picked up automatically."
             )
 
         self._last_compiled_context = context

@@ -1,20 +1,28 @@
 """Persistent memory: what a wingman knows about the user across sessions.
 
-Two kinds of memory, kept apart because they age differently:
+Four kinds of memory, kept apart because they age differently:
 
 ``fact``     timeless statements about the user ("Owns a Cutlass Black"). A
              newer statement replaces an older one that contradicts it; the
              list is rewritten as a whole at every checkpoint.
-``episode``  one entry per session: what happened, what was memorable, what
-             is still open. Never rewritten after the session ends, only
-             aged out. The three most recent go into the system prompt with
-             their age, so the model knows which one is current.
+``open``     something the user took on and has not finished: a mission, a
+             job, a plan, an appointment, a promise to come back to. Lives
+             across sessions until it is closed or goes untouched for
+             OPEN_MAX_AGE_DAYS.
+``done``     an ``open`` entry that was closed, rewritten as its outcome.
+             Shown for DONE_MAX_AGE_DAYS so the wingman can refer back to it.
+``episode``  one entry per session: what happened and what was memorable.
+             Never rewritten after the session ends, only aged out. The
+             three most recent go into the system prompt with their age, so
+             the model knows which one is current.
 
 Writes happen at checkpoints: every CHECKPOINT_TURNS user turns or
 CHECKPOINT_SECONDS, at the end of a session (unload, reset, IDLE_SECONDS
-without a user turn), and through the ``memory_remember`` tool. One support
-call per checkpoint gets the stored facts, the episode so far and the new
-messages, and returns the list as it should be from now on.
+without a user turn), and through the memory tools in the moment the chat
+model decides something is worth keeping. One support call per checkpoint
+gets the stored facts, the open entries, the episode so far and the new
+messages, returns the fact list as it should be from now on, and opens and
+closes entries the chat model missed.
 
 Reads do not search. Every fact (capped) and the recent episodes go into the
 system prompt as one block that only changes at checkpoints, so the
@@ -95,6 +103,37 @@ _TRANSIENT_FACT_RE = re.compile(
 )
 
 EPISODE_TYPES = ("episode", "session_summary")
+
+# Words of an open entry that say nothing about which one it is. A checkpoint
+# may close an entry only when the new messages hold one of its other words.
+_GENERIC_ENTRY_WORDS = frozenset("""
+    accepted accept took take plans plan planned wants want wanted with next week
+    session mission missions contract contracts job the that this from for near
+    once after before some about user their them will have has more into also
+    going until complete completed done tomorrow today later again
+""".split())
+
+# The tools the chat model gets while memory is on; get_tool_definitions
+# describes them.
+MEMORY_TOOL_NAMES = frozenset(
+    {"memory_remember", "memory_track", "memory_close", "memory_recall", "memory_forget"}
+)
+
+# Open entries a wingman keeps at most; the ones untouched longest go first.
+# An open entry nobody mentioned for OPEN_MAX_AGE_DAYS was dropped without a
+# word and is removed.
+MAX_OPEN = 15
+OPEN_MAX_AGE_DAYS = 45
+# Closed entries stay visible this long, at most DONE_IN_PROMPT of them.
+DONE_MAX_AGE_DAYS = 14
+DONE_IN_PROMPT = 5
+# How close a description has to come to an open entry to close it, and how
+# far ahead of the next one. Measured on Nomic: the right entry scored
+# 0.75-0.84 for "the Lorville delivery", "Kessler bounty", "Idris raid"; a
+# vague "the mission" reached 0.65 and "Cargo run to Area18" 0.57 on an
+# unrelated cargo mission.
+CLOSE_SIMILARITY_THRESHOLD = 0.7
+CLOSE_MARGIN = 0.05
 
 
 @dataclass
@@ -217,8 +256,8 @@ class PersistentMemoryService:
         embedding = embeddings[0]
 
         with self._lock:
-            if entry_type == "fact":
-                existing = self._find_duplicate(embedding)
+            if entry_type in ("fact", "open"):
+                existing = self._find_duplicate(embedding, entry_type)
                 if existing:
                     self._update_entry(existing.id, content, embedding)
                     return existing.id
@@ -238,6 +277,8 @@ class PersistentMemoryService:
             self._db.commit()
             if entry_type in EPISODE_TYPES:
                 self._enforce_episode_cap()
+            elif entry_type in ("open", "done"):
+                self._enforce_open_caps()
             self._block = None
             return cursor.lastrowid
 
@@ -246,6 +287,120 @@ class PersistentMemoryService:
         if not embeddings or not embeddings[0]:
             return
         self._update_entry(entry_id, new_content, embeddings[0])
+
+    # ── open entries ───────────────────────────────────────────────
+
+    def _find_open(self, description: str) -> MemoryEntry | None:
+        """The open entry a description points at: the same words first,
+        then one containing the other, then the closest by meaning if it is
+        close enough. The chat model and the support model both name an entry
+        in their own words, rarely the stored ones."""
+        entries = self.get_all(entry_type="open")
+        wanted = description.strip().lower().rstrip(".")
+        if not entries or not wanted:
+            return None
+        for e in entries:
+            if e.content.strip().lower().rstrip(".") == wanted:
+                return e
+        contained = [
+            e for e in entries
+            if wanted in e.content.lower() or e.content.lower().rstrip(".") in wanted
+        ]
+        if len(contained) == 1:
+            return contained[0]
+        if contained:
+            return None  # fits more than one: closing a guess loses the other
+        embeddings = self.local_ai_service.embed([description])
+        if not embeddings or not embeddings[0]:
+            return None
+        with self._lock:
+            rows = {
+                r[0]: _deserialize_embedding(r[1])
+                for r in self._db.execute(
+                    """SELECT id, embedding FROM memory_entries
+                       WHERE collection = ? AND entry_type = 'open' AND embedding IS NOT NULL""",
+                    (self.collection,),
+                ).fetchall()
+            }
+        scored = sorted(
+            ((_cosine_similarity(embeddings[0], emb), e) for e in entries if (emb := rows.get(e.id))),
+            key=lambda x: x[0], reverse=True,
+        )
+        if not scored or scored[0][0] < CLOSE_SIMILARITY_THRESHOLD:
+            return None
+        if len(scored) > 1 and scored[0][0] - scored[1][0] < CLOSE_MARGIN:
+            return None  # two about as close: a guess
+        return scored[0][1]
+
+    def _close_open_impl(self, description: str, outcome: str = "") -> MemoryEntry | None:
+        """Turn the open entry a description points at into a done entry that
+        reads as its outcome. Returns the done entry, or None when no open
+        entry matches."""
+        entry = self._find_open(description)
+        if not entry:
+            return None
+        content = outcome.strip() or entry.content
+        embeddings = self.local_ai_service.embed([content])
+        if not embeddings or not embeddings[0]:
+            return None
+        now = time.time()
+        with self._lock:
+            self._db.execute(
+                """UPDATE memory_entries
+                   SET entry_type = 'done', content = ?, embedding = ?, updated_at = ?
+                   WHERE id = ?""",
+                (content, _serialize_embedding(embeddings[0]), now, entry.id),
+            )
+            self._db.commit()
+            self._enforce_open_caps()
+        self._block = None
+        entry.entry_type, entry.content, entry.updated_at = "done", content, now
+        return entry
+
+    def _enforce_open_caps(self) -> None:
+        """Open entries: at most MAX_OPEN, none untouched for longer than
+        OPEN_MAX_AGE_DAYS. Done entries: none older than DONE_MAX_AGE_DAYS."""
+        now = time.time()
+        with self._lock:
+            self._db.execute(
+                """DELETE FROM memory_entries WHERE collection = ? AND (
+                       (entry_type = 'open' AND updated_at < ?)
+                       OR (entry_type = 'done' AND updated_at < ?))""",
+                (
+                    self.collection,
+                    now - OPEN_MAX_AGE_DAYS * 86400,
+                    now - DONE_MAX_AGE_DAYS * 86400,
+                ),
+            )
+            rows = self._db.execute(
+                """SELECT id FROM memory_entries
+                   WHERE collection = ? AND entry_type = 'open'
+                   ORDER BY updated_at DESC""",
+                (self.collection,),
+            ).fetchall()
+            if len(rows) > MAX_OPEN:
+                to_delete = [r[0] for r in rows[MAX_OPEN:]]
+                self._db.execute(
+                    f"DELETE FROM memory_entries WHERE id IN ({','.join('?' * len(to_delete))})",
+                    to_delete,
+                )
+            self._db.commit()
+
+    def open_entries(self, now: float | None = None) -> list[MemoryEntry]:
+        """Open entries, oldest first; a stale one is gone from here before
+        the next write deletes it."""
+        cutoff = (now or time.time()) - OPEN_MAX_AGE_DAYS * 86400
+        rows = [e for e in self.get_all(entry_type="open") if e.updated_at >= cutoff]
+        rows.sort(key=lambda e: e.created_at)
+        return rows
+
+    def done_entries(self, now: float | None = None) -> list[MemoryEntry]:
+        """Recently closed entries for the prompt, oldest first."""
+        now = now or time.time()
+        cutoff = now - DONE_MAX_AGE_DAYS * 86400
+        rows = [e for e in self.get_all(entry_type="done") if e.updated_at >= cutoff]
+        rows.sort(key=lambda e: e.updated_at)
+        return rows[-DONE_IN_PROMPT:]
 
     # ── search (tools, forget, memory tab) ─────────────────────────
 
@@ -440,9 +595,15 @@ class PersistentMemoryService:
         )
 
     def _checkpoint_input(self, facts: list[MemoryEntry], episode: str,
-                          earlier: str, transcript: str) -> str:
+                          earlier: str, transcript: str,
+                          open_entries: list[MemoryEntry] | None = None) -> str:
         listing = "\n".join(f"{i + 1}. {e.content}" for i, e in enumerate(facts)) or "(none)"
-        parts = [f"STORED FACTS:\n{listing}", f"EPISODE SO FAR:\n{episode or '(none)'}"]
+        open_listing = "\n".join(f"- {e.content}" for e in open_entries or []) or "(none)"
+        parts = [
+            f"STORED FACTS:\n{listing}",
+            f"OPEN:\n{open_listing}",
+            f"EPISODE SO FAR:\n{episode or '(none)'}",
+        ]
         if earlier:
             parts.append(f"EARLIER IN THIS SESSION, CONDENSED:\n{earlier}")
         parts.append(f"NEW MESSAGES:\n{transcript or '(none)'}")
@@ -468,6 +629,8 @@ class PersistentMemoryService:
 
         transcript, user_turns = self.conversation_text(messages)
         outcome = {"before": 0, "after": 0, "changed": False, "episode": "", "skipped": ""}
+        if not tidy_only:
+            outcome.update(opened=[], closed=[])
 
         if not tidy_only and user_turns == 0 and not conversation_summary:
             outcome["skipped"] = "nothing new"
@@ -478,6 +641,7 @@ class PersistentMemoryService:
 
         facts = self.get_all(entry_type="fact")
         facts.sort(key=lambda e: e.updated_at)  # oldest first: "newer wins" reads top down
+        open_entries = self.open_entries()
         current = self._current_episode()
         episode_so_far = current.content if current else ""
         before = len(facts)
@@ -485,22 +649,24 @@ class PersistentMemoryService:
 
         system_prompt = get_prompt("extract-memories")
         budget = self.local_ai_service.get_token_budget(system_prompt)
-        fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "")
+        fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "", open_entries)
         room = budget.max_input_tokens - count_tokens(fixed)
         if room < 200:
             # A local model with a window too small for its own fact list:
             # the newest facts stay as they are, the rest is what fits.
             listing_budget = max(0, budget.max_input_tokens - 600)
-            while facts and count_tokens(self._checkpoint_input(facts, episode_so_far, "", "")) > listing_budget:
+            while facts and count_tokens(self._checkpoint_input(facts, episode_so_far, "", "", open_entries)) > listing_budget:
                 facts = facts[:-1]
-            fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "")
+            fixed = self._checkpoint_input(facts, episode_so_far, conversation_summary, "", open_entries)
             room = max(200, budget.max_input_tokens - count_tokens(fixed))
         chunks = self._split(transcript, room) if transcript else [""]
 
         data = None
         last_episode = None
         for i, chunk in enumerate(chunks):
-            text = self._checkpoint_input(facts, episode_so_far, conversation_summary if i == 0 else "", chunk)
+            text = self._checkpoint_input(
+                facts, episode_so_far, conversation_summary if i == 0 else "", chunk, open_entries
+            )
             result = self.local_ai_service.support(
                 text=text, system_prompt=system_prompt, preset=SamplingPreset.PRECISE,
             )
@@ -527,6 +693,8 @@ class PersistentMemoryService:
             if not tidy_only:
                 last_episode = data.get("episode") or data.get("summary") or ""
                 episode_so_far = self.episode_text(last_episode) or episode_so_far
+                self._apply_open_changes(data, outcome, f"{conversation_summary if i == 0 else ''}\n{chunk}")
+                open_entries = self.open_entries()
             if [e.content for e in facts] != cleaned:
                 self._replace_facts(facts, cleaned)
                 outcome["changed"] = True
@@ -566,6 +734,46 @@ class PersistentMemoryService:
             chunks.append(remaining[:split_at])
             remaining = remaining[split_at:].lstrip()
         return chunks or [""]
+
+    @staticmethod
+    def _talked_about(entry: str, transcript: str) -> bool:
+        """Do the messages name the entry: one of its own words, not a
+        generic one, appears in them? Names carry over between languages
+        ("Kessler", "Crusader"), so a German session still matches."""
+        said = transcript.lower()
+        words = {w.lower() for w in re.findall(r"[^\W\d_]{4,}|\d+", entry)}
+        return any(w in said for w in words - _GENERIC_ENTRY_WORDS)
+
+    def _apply_open_changes(self, data: dict, outcome: dict, transcript: str = "") -> None:
+        """Open and close what the chat model did not, from a checkpoint
+        answer. Changes, not a rewritten list: a small model that loses an
+        open entry from a list it had to repeat would close it unseen. A
+        close needs the messages to name the entry: small models closed
+        "swap the quantum drive" in a session about selling a ship."""
+        for item in data.get("closed") or []:
+            if isinstance(item, dict):
+                entry = str(item.get("entry") or item.get("text") or "").strip()
+                result = str(item.get("outcome") or "").strip()
+            else:
+                entry, result = str(item).strip(), ""
+            if not entry:
+                continue
+            target = self._find_open(entry)
+            if target is None:
+                continue
+            if not self._talked_about(target.content, transcript):
+                log_memory_event(
+                    "close_refused", self.wingman_name, entry=target.content, outcome=result
+                )
+                continue
+            if self._close_open_impl(target.content, result):
+                outcome["closed"].append(result or target.content)
+        for item in data.get("opened") or []:
+            text = (item.get("text") or "") if isinstance(item, dict) else item
+            if not isinstance(text, str) or len(text.strip()) <= 5:
+                continue
+            if self._add_memory_impl("open", text.strip()) is not None:
+                outcome["opened"].append(text.strip())
 
     def _replace_facts(self, old: list[MemoryEntry], new: list[str]) -> None:
         """Swap the fact list atomically, the old one saved to memory_backups.
@@ -676,15 +884,28 @@ class PersistentMemoryService:
         if self._block is not None:
             return self._block
         facts = self.prompt_facts()
+        open_entries = self.open_entries()
+        done = self.done_entries()
         episodes = self.episodes()
-        if not facts and not episodes:
+        if not facts and not open_entries and not done and not episodes:
             self._block = ""
             return ""
+        now = time.time()
         parts = ["# MEMORY", "What you know about the user from earlier sessions."]
         if facts:
             parts.append("\nFacts:\n" + "\n".join(f"- {e.content}" for e in facts))
+        if open_entries:
+            parts.append(
+                "\nOpen, taken on and not finished yet. Close one with `memory_close` "
+                "when the user finishes or drops it:\n"
+                + "\n".join(f"- {e.content} (from {age_label(e.created_at, now)})" for e in open_entries)
+            )
+        if done:
+            parts.append(
+                "\nRecently finished:\n"
+                + "\n".join(f"- {age_label(e.updated_at, now)}: {e.content}" for e in done)
+            )
         if episodes:
-            now = time.time()
             parts.append(
                 "\nRecent sessions, oldest first. Only the last one is current; the "
                 "earlier ones are past events the user may want to talk about.\n"
@@ -693,9 +914,10 @@ class PersistentMemoryService:
         self._block = "\n".join(parts)
         return self._block
 
-    def block_stats(self) -> tuple[int, int]:
-        """(facts, episodes) the block holds; for the one line in the log."""
-        return len(self.prompt_facts()), len(self.episodes())
+    def block_stats(self) -> tuple[int, int, int]:
+        """(facts, open entries, episodes) the block holds; for the one line
+        in the log."""
+        return len(self.prompt_facts()), len(self.open_entries()), len(self.episodes())
 
     # ── forget ─────────────────────────────────────────────────────
 
@@ -747,6 +969,10 @@ class PersistentMemoryService:
     async def consolidate(self) -> dict:
         """Rewrite the fact list with no new messages: the memory tab's button."""
         return await asyncio.to_thread(self._checkpoint_impl, [], "", False, True)
+
+    async def close_open(self, description: str, outcome: str = "") -> MemoryEntry | None:
+        """Close the open entry a description points at. See ``_close_open_impl``."""
+        return await asyncio.to_thread(self._close_open_impl, description, outcome)
 
     async def forget_by_query(
         self, query_text: str, entry_type: str | None = None, keep_id: int | None = None
@@ -845,6 +1071,35 @@ class PersistentMemoryService:
             {
                 "type": "function",
                 "function": {
+                    "name": "memory_track",
+                    "description": "Keep something the user took on and has not finished, so you can pick it up in a later session: a mission, contract or job they accepted, a plan or goal for later, an appointment, something to come back to or remind them of. Use it right away when they take it on. Not for a command you carry out right away (a jump, a flight, a landing, a purchase), where they are, or a status.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string", "description": "What it is, one short sentence in third person with the specific names, e.g. 'Accepted a cargo mission to deliver medical supplies to Lorville.'"},
+                        },
+                        "required": ["text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "memory_close",
+                    "description": "Close an entry of the Open list in MEMORY, or one you just tracked, as soon as the user finishes, fails or drops it.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "entry": {"type": "string", "description": "The open entry, in its words from the Open list."},
+                            "outcome": {"type": "string", "description": "What came of it, one short sentence in third person, e.g. 'Delivered the medical supplies to Lorville.'"},
+                        },
+                        "required": ["entry", "outcome"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "memory_recall",
                     "description": "Search your memory. Use only when the user asks what you remember or know about them; never for a question about the world or the game.",
                     "parameters": {
@@ -874,16 +1129,16 @@ class PersistentMemoryService:
 
     # ── private helpers ────────────────────────────────────────────
 
-    def _find_duplicate(self, embedding: list[float]) -> MemoryEntry | None:
-        """The most similar existing fact if above DEDUP_THRESHOLD."""
+    def _find_duplicate(self, embedding: list[float], entry_type: str = "fact") -> MemoryEntry | None:
+        """The most similar existing entry of that type if above DEDUP_THRESHOLD."""
         with self._lock:
             rows = self._db.execute(
                 """SELECT id, collection, entry_type, content, embedding,
                           source_wingman, session_id, created_at, updated_at
                    FROM memory_entries
-                   WHERE collection = ? AND entry_type = 'fact'
+                   WHERE collection = ? AND entry_type = ?
                    AND embedding IS NOT NULL""",
-                (self.collection,),
+                (self.collection, entry_type),
             ).fetchall()
         best_row, best = None, -1.0
         for r in rows:

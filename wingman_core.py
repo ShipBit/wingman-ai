@@ -4650,7 +4650,8 @@ class WingmanCore(WebSocketUser):
             ...
         ]
 
-        Returns the raw extraction result (facts + summary) without storing anything.
+        Returns the raw extraction result (facts, open entries, episode)
+        without storing anything.
         """
         # No Tower before sign-in: no Wingman to find.
         wingman = self.tower.get_wingman_by_name(wingman_name) if self.tower else None
@@ -4673,7 +4674,7 @@ class WingmanCore(WebSocketUser):
         # facts, but nothing is written.
         facts = svc.get_all(entry_type="fact")
         facts.sort(key=lambda e: e.updated_at)
-        text = svc._checkpoint_input(facts, "", "", transcript)
+        text = svc._checkpoint_input(facts, "", "", transcript, svc.open_entries())
         result = await asyncio.to_thread(
             svc.local_ai_service.support,
             text=text,

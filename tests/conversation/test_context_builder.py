@@ -47,7 +47,7 @@ class FakeMemory:
         return self._block
 
     def block_stats(self):
-        return (2, 1)
+        return (2, 1, 1)
 
 
 def make_config(backstory="Backstory: a grumpy ship AI.", template=TEMPLATE):
