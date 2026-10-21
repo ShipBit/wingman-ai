@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from api.enums import SpeechPriority
     from wingmen.wingman import Wingman
 
 
@@ -262,8 +263,10 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
         config.inworld.output_streaming = False
         return voice, "InWorld"
     if provider == TtsProvider.POCKET_TTS:
+        # Streaming stays as the user set it: both Pocket TTS paths play
+        # through the same stream, and without it every line is generated in
+        # full before the first word is heard.
         config.pocket_tts.voice = voice
-        config.pocket_tts.output_streaming = False
         return voice, "PocketTTS"
     if provider == TtsProvider.OPENAI_COMPATIBLE:
         config.openai_compatible_tts.voice = voice
@@ -275,6 +278,17 @@ def apply_voice_to_current_provider(config: Any, voice: Any) -> tuple[Any, str] 
 # Flat per-image token estimate — we must NOT count the raw base64 string (it would be
 # enormous and falsely trip the cap). Mirrors a high-detail image's real token cost.
 IMAGE_TOKEN_ESTIMATE = 1000
+
+
+def _message_dict(message: Any) -> dict:
+    """A history entry as a dict: dicts as they are, the model's message
+    objects (pydantic) dumped without their empty fields."""
+    if isinstance(message, dict):
+        return message
+    dump = getattr(message, "model_dump", None)
+    if callable(dump):
+        return dump(exclude_none=True)
+    return dict(vars(message))
 
 
 def _count_message_tokens(messages: list) -> int:
@@ -810,6 +824,13 @@ class SkillAudio:
         """True while the wingman is currently playing TTS/audio."""
         return bool(self._wingman.audio_player.is_playing)
 
+    def is_playing_at_least(self, priority: "SpeechPriority") -> bool:
+        """True while something at least as important as ``priority`` plays.
+        An event asks with EVENT: radio chatter playing does not count, the
+        event talks over it."""
+        player = self._wingman.audio_player
+        return bool(player.is_playing) and player.playing_priority <= priority
+
     async def play(self, audio_config: Any, *, volume: float = 1.0) -> None:
         """Start playback of a skill-owned audio file."""
         await self._wingman.audio_library.start_playback(audio_config, volume)
@@ -1003,14 +1024,23 @@ class SkillTts:
         Pocket TTS voice whose file is gone from the custom voices folder.
 
         Only Pocket TTS is checked: its voices are files the user can delete.
-        For other providers, and when the list can't be read, nothing counts
-        as missing.
+        A voice whose only clone was made for another model counts as missing
+        too: it is listed, but the loaded model cannot speak with it. For
+        other providers, and when the list can't be read, nothing counts as
+        missing.
         """
-        from api.enums import TtsProvider
+        from api.enums import TtsProvider, VoiceCloneState
 
         if self._wingman.config.features.tts_provider != TtsProvider.POCKET_TTS:
             return []
-        known = {getattr(v, "id", None) for v in await self.voices()} - {None}
+        listed = await self.voices()
+        if not listed:
+            return []
+        known = {
+            getattr(v, "id", None)
+            for v in listed
+            if getattr(v, "clone_state", None) != VoiceCloneState.MISSING
+        } - {None}
         if not known:
             return []
         return [
@@ -1019,11 +1049,32 @@ class SkillTts:
             if v not in known and not (isinstance(v, str) and os.path.exists(v))
         ]
 
-    async def speak(self, text: str, *, interrupt: bool = True, sound_config=None) -> None:
-        """Say text in the wingman's voice. interrupt=True (default) speaks immediately,
-        cutting off current playback; interrupt=False waits for it to finish."""
-        await self._wingman.play_to_user(text, no_interrupt=(not interrupt),
-                                         sound_config=sound_config)
+    async def speak(
+        self,
+        text: str,
+        *,
+        interrupt: bool = True,
+        sound_config=None,
+        priority: "SpeechPriority | None" = None,
+    ) -> bool:
+        """Say text in the wingman's voice. True when it was spoken.
+
+        interrupt=True (default) speaks immediately, cutting off current
+        playback; interrupt=False waits for it to finish.
+
+        Something said on the wingman's own initiative passes a ``priority``
+        (services/speech_priority): EVENT for a reaction to something that
+        happened (waits for the user and for answers, then speaks),
+        BACKGROUND for atmosphere like radio chatter (never talks over
+        anything; returns False when it could not be said)."""
+        from api.enums import SpeechPriority
+
+        return await self._wingman.play_to_user(
+            text,
+            no_interrupt=(not interrupt),
+            sound_config=sound_config,
+            priority=priority if priority is not None else SpeechPriority.ANSWER,
+        )
 
     async def set_voice(self, voice: Any, errors: list | None = None) -> str:
         """Set the voice on the wingman's current TTS provider and rebuild the TTS
@@ -1131,8 +1182,10 @@ class SkillConversation:
         self._wingman = wingman
 
     def history(self) -> list[dict]:
-        """Shallow copy of the live history. Don't mutate individual messages."""
-        return list(self._wingman.conversation.messages)
+        """Copy of the live history, every message a dict. The model's own
+        answers are stored as message objects; skills get them as dicts too,
+        so ``message.get("role")`` works on every entry."""
+        return [_message_dict(m) for m in self._wingman.conversation.messages]
 
     @property
     def summary(self) -> str:

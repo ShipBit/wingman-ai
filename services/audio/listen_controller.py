@@ -256,6 +256,20 @@ class ListenController:
         else:
             self._on_dropped(wingman)
 
+    def drop_hold(self) -> None:
+        """The wingman behind a held push-to-talk key is gone: its config was
+        unloaded. End the hold and send the clip nowhere."""
+        with self._lock:
+            if self.held_wingman is None:
+                return
+            self._gate.release()
+            self._take_heard_while_playing()
+            self.held_source = None
+            self.held_wingman = None
+            self._cancel_release()
+            self._cancel_hold_watch()
+            self._apply()
+
     def capture_start(self, source: str) -> bool:
         """Hold the gate for a caller that wants the clip back instead of having
         it dispatched: the microphone test in Settings."""

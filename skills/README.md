@@ -1559,7 +1559,7 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | `await .voices()` | All voices on the current provider (best-effort; `[]` if not cheaply enumerable). |
 | `await .missing_voices(voices)` | The voices in the list the current provider doesn't have, e.g. a Pocket TTS voice whose file was deleted. Only Pocket TTS is checked; other providers return `[]`. |
 | `await .set_voice(voice, errors=None)` | Set the voice on the **current** provider (no provider switch) and rebuild TTS so it takes effect. Refuses a voice from `missing_voices`. Returns a human-readable result string. |
-| `await .speak(text, *, interrupt=True, sound_config=None)` | Say text in the wingman's voice. `interrupt=True` (default) cuts off current playback; `interrupt=False` waits for it. `interrupt` is **keyword-only** and inverted from the old `no_interrupt`. |
+| `await .speak(text, *, interrupt=True, sound_config=None, priority=None)` | Say text in the wingman's voice; returns whether it was spoken. `interrupt=True` (default) cuts off current playback; `interrupt=False` waits for it. `interrupt` is **keyword-only** and inverted from the old `no_interrupt`. Lines said on the skill's own initiative pass a `priority` (`SpeechPriority` from `api.enums`). The order is answers, then events, then background: `EVENT` (a game event, a timer) waits until the user and every answer are done, also when one starts while the line is synthesized, and talks over background audio. `BACKGROUND` (radio chatter) never talks over anything and is dropped when it can't be said right away. |
 
 ### `self.wingman.audio` — playback & devices
 
@@ -1796,7 +1796,7 @@ async def prepare(self) -> None:
 
 async def _on_mission(self, event) -> None:
     name = event.data.get("mission_name", "a contract")
-    await self.wingman.tts.speak(f"New contract: {name}.", interrupt=False)
+    await self.wingman.tts.speak(f"New contract: {name}.", priority=SpeechPriority.EVENT)
 
 async def unload(self) -> None:
     self._sub.unsubscribe()

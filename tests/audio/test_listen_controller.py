@@ -351,3 +351,19 @@ def test_a_forgotten_mic_test_is_dropped_after_the_limit(monkeypatch):
     assert controller.held_source is None
     assert controller.state == ListenState.ARMED
     assert rec.utterances == []
+
+
+def test_a_hold_for_a_wingman_whose_config_was_unloaded_goes_nowhere():
+    controller, rec, _ = make()
+    old_wingman = object()
+    controller.ptt_down("key:1", old_wingman)
+    speak(controller)
+
+    controller.drop_hold()
+    release(controller, "key:1")
+
+    assert rec.utterances == []
+    assert controller.held_wingman is None
+    assert controller.state == ListenState.OFF
+    # The next key works as usual.
+    assert controller.ptt_down("key:2", object())

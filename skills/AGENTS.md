@@ -271,6 +271,7 @@ but you may only **change** things through sanctioned capabilities. Writing to c
 await self.wingman.tts.set_voice(voice)                 # voice on the CURRENT provider (no switching)
 await self.wingman.tts.missing_voices(voices)          # voices the provider lacks (deleted Pocket TTS files)
 await self.wingman.tts.speak(text, interrupt=True)      # say text; interrupt=False waits for current playback
+await self.wingman.tts.speak(text, priority=SpeechPriority.EVENT)  # on your own initiative: waits for the user and answers; BACKGROUND (ambience) is dropped instead. Returns whether it was spoken
 self.wingman.audio.is_playing                           # read playback state
 await self.wingman.audio.play(cfg) / .stop(cfg)         # play/stop your own audio
 sub = self.wingman.audio.on_playback_started(cb)        # returns a Subscription; sub.unsubscribe() in unload()
@@ -295,6 +296,7 @@ self.wingman.conversation.history() / .summary          # read the live conversa
 await self.wingman.conversation.add_user(c) / .add_assistant(c) / .show(text) / .reset()
 await self.wingman.conversation.add_note(c)             # context, not a turn: what your skill said on its own (in on_add_user_message)
 self.wingman.conversation.user_busy                     # user holds PTT / a wingman is answering: don't speak up now
+self.wingman.audio.is_playing_at_least(SpeechPriority.EVENT)  # something at least this important plays
 await self.wingman.conversation.summarize()             # summarize the live convo (free, local)
 
 # SECRETS / MEMORY:

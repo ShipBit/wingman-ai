@@ -109,6 +109,23 @@ def test_a_pocket_tts_voice_without_its_file_is_missing():
     assert _run(tts.missing_voices(["alba", "moxxi", "moxxi1"])) == ["moxxi"]
 
 
+def test_a_pocket_tts_voice_cloned_only_for_another_model_is_missing():
+    from api.enums import VoiceCloneState
+
+    wingman = _pocket_wingman([])
+    wingman._shared_providers["pocket_tts"].get_available_voices = AsyncMock(
+        return_value=[
+            SimpleNamespace(id="alba", clone_state=None),
+            SimpleNamespace(id="sean_murray", clone_state=VoiceCloneState.MISSING),
+            SimpleNamespace(id="moxxi", clone_state=VoiceCloneState.OUTDATED),
+        ]
+    )
+
+    assert _run(facade.SkillTts(wingman).missing_voices(["alba", "sean_murray", "moxxi"])) == [
+        "sean_murray"
+    ]
+
+
 def test_a_missing_voice_is_not_set():
     wingman = _pocket_wingman(["alba"])
 
@@ -116,6 +133,18 @@ def test_a_missing_voice_is_not_set():
 
     assert "Fabieng" in result
     assert wingman.config.pocket_tts.voice == "alba"
+
+
+def test_a_pocket_tts_voice_change_keeps_streaming_on():
+    config = SimpleNamespace(
+        features=SimpleNamespace(tts_provider=TtsProvider.POCKET_TTS),
+        pocket_tts=SimpleNamespace(voice="alba", output_streaming=True),
+    )
+
+    facade.apply_voice_to_current_provider(config, "moxxi")
+
+    assert config.pocket_tts.voice == "moxxi"
+    assert config.pocket_tts.output_streaming is True
 
 
 def test_other_providers_have_no_missing_voices():
@@ -243,3 +272,17 @@ def test_star_citizen_is_read_only_for_skills():
     except facade.FacadeError:
         return
     raise AssertionError("a skill could move the game folder")
+
+
+def test_the_history_gives_skills_dicts_also_for_the_models_answers():
+    from openai.types.chat import ChatCompletionMessage
+
+    answer = ChatCompletionMessage(role="assistant", content="Timer set.")
+    wingman = SimpleNamespace(
+        conversation=SimpleNamespace(messages=[{"role": "user", "content": "Set a timer"}, answer])
+    )
+
+    history = facade.SkillConversation(wingman).history()
+
+    assert [m.get("role") for m in history] == ["user", "assistant"]
+    assert history[1]["content"] == "Timer set."
