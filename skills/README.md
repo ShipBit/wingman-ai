@@ -657,6 +657,7 @@ class MySkill(Skill):
 - `respond="ai"`: the returned string goes to the AI, which voices it
 - `respond="speak"`: the returned string is spoken as is and also given to the AI
 - Returning `None` gives the plain "OK" acknowledgment
+- A command's static `responses` are its fixed acknowledgment. A `respond="speak"` result replaces them: the Wingman never says both
 
 ---
 
@@ -1566,6 +1567,7 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | Member | Description |
 | --- | --- |
 | `.is_playing` | `bool` — true while the wingman is playing TTS/audio. |
+| `.is_playing_at_least(priority)` | `bool` — something at least as important as `priority` (`SpeechPriority`) plays. Check it with `EVENT` before an event line, so it waits for answers but not for radio chatter. |
 | `await .play(audio_config, *, volume=1.0)` | Start playback of a skill-owned audio file. |
 | `await .stop(audio_config, *, fade_out=0.5)` | Stop playback (optionally fading out). |
 | `.on_playback_started(cb)` → `Subscription` | Observe playback start. Keep the returned `Subscription` and call `.unsubscribe()` in `unload()`. |
@@ -1589,10 +1591,84 @@ Which provider transcribes is a global setting. A skill may add words the transc
 ### `self.wingman.system_one` — typed decisions
 
 A fast, cheap model that picks from options you give it instead of writing text: which of these
-does the user mean, how urgent is this, yes or no. About 300 ms. `.available` is `False` when the
-user switched it off or the plan lacks it; check it and fall back to `local_ai` or a rule.
-See [AGENTS.md — System One](AGENTS.md#system-one--ask-for-a-decision-not-a-sentence) for the
-API and the four rules that make its answers reliable. The entry point is `await .decide(state, questions)` (`.decide_sync(...)` for threads).
+does the user mean, how urgent is this, yes or no. About 300 ms, a fraction of the cost of
+`ai.generate`. `.available` is `False` when the user switched it off or the plan lacks it; check
+it and fall back to `local_ai` or a rule. The entry point is `await .decide(state, questions)`
+(`.decide_sync(...)` for threads).
+
+Use it whenever the skill needs to **pick, rate or judge** rather than write.
+It cannot answer outside the options you give it, so there is nothing to parse
+and nothing to validate.
+
+This is a thin wrapper around [TypeSafe's Jev](https://docs.typesafe.ai) and
+keeps their names, so their docs and examples read straight across:
+
+| TypeSafe SDK | here |
+|---|---|
+| `Choice(instructions, criteria)` | `so.choice(instructions, criteria)` |
+| `Score(instructions, criteria)` | `so.score(instructions, criteria)` |
+| `Noul(instructions)` | `so.noul(instructions)` |
+| `client.system_one(state, questions)` | `await so.decide(state, questions)` |
+| `answers[k].choice` / `.confidence` | `answers.choice(k)` / `.confidence(k)` |
+| `answers[k].score` / `.probabilities` | `answers.score(k)` / `.probabilities(k)` |
+| `answers[k].noul` | `answers.noul(k)` |
+
+Three things are ours, each filling a gap: `so.describe()` builds their
+structured description object, `answers.level()` turns a score back into its
+label, and `answers.yes_no()` applies a threshold to a noul.
+
+```python
+so = self.wingman.system_one
+if so.available:
+    answers = await so.decide(
+        state={"transcript": text, "cargo": cargo},
+        questions={
+            "intent": so.choice("What does the pilot want?", {
+                "sell": so.describe("offload cargo", not_for="buying more"),
+                "buy":  "acquire cargo",
+                "none": "nothing about cargo",          # always give it an out
+            }),
+            "urgent": so.noul("Does this need doing right now?"),
+            "risk":   so.score("How risky is this route?", ["safe", "watchful", "dangerous"]),
+        },
+    )
+    answers.choice("intent", min_confidence=0.8)   # "sell", or None if unsure
+    answers.noul("urgent")                         # 0.94 — a probability
+    answers.yes_no("urgent")                       # True — thresholded at 0.5
+    answers.level("risk")                          # "dangerous"
+    answers.score("risk")                          # 1.99 — the position, continuous
+    answers.probabilities("risk")                  # {"safe": 0.0, ... } keyed by label
+```
+
+Four rules that come out of measuring it:
+
+- **Ask everything in one `decide()`.** Questions are evaluated in parallel:
+  eight cost 13 ms and 28% more tokens than one. Three calls for three
+  questions is three times the latency for nothing.
+- **Describe options that could be confused.** Descriptions cut wrong answers
+  from 16 to 3 out of 152 on Wingman's own command routing, at no cost in
+  latency. `not_for=` separates two neighbours better than a longer
+  description of either. A bare option name is fine when nothing is close.
+- **Give a choice a "none of these" option** whenever nothing applying is an
+  honest answer. Without one the probability has nowhere to go but onto the
+  real options.
+- **`min_confidence` separates unsure from sure, not two overlapping options.**
+  If the wrong neighbour keeps winning at high confidence, the fix is a better
+  description, not a higher threshold.
+
+The other readers on the answers:
+
+| Member | Description |
+| --- | --- |
+| `.ok` / `.error` | Whether an answer came back, and why not (`"system one is off"`). `error` is for the log: branch on the value being `None` instead. |
+| `.seconds` | How long the call took. |
+| `.keys()` | The questions that were answered. |
+| `.levels(k)` | The level labels of a score, lowest first. |
+| `.raw(k=None)` | The answers exactly as the model sent them, for anything the readers above don't cover. |
+
+Always handle `available` being False — the user can switch System One off in
+Settings, and a plan may not include it. Every reader returns `None`/`{}` in
+that case, so the skill silently takes the None branch unless you check.
 
 ### `self.wingman.commands` — user commands
 
