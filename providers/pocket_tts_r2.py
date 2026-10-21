@@ -161,10 +161,11 @@ def build_r2_config(model_id: str, cache_dir: str) -> str:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{model_id}.yaml"
     config = yaml.safe_load(rewrite_config_text(src.read_text(encoding="utf-8")))
-    # pocket_tts opens the config without an encoding, so on Windows it is read
-    # as cp1252. The German config has typographic quotes, which failed to load
-    # ("'charmap' codec can't decode byte 0x9d"). Dumped as ASCII, every other
-    # character is a YAML escape and reads the same in any encoding.
+    # pocket_tts before 4.0.1 opened the config without an encoding, so on
+    # Windows it was read as cp1252. The German config has typographic quotes,
+    # which failed to load ("'charmap' codec can't decode byte 0x9d"). Dumped as
+    # ASCII, every other character is a YAML escape and reads the same in any
+    # encoding, so the file does not depend on how the library opens it.
     text = yaml.safe_dump(config, allow_unicode=False, sort_keys=False)
     try:
         if out_path.read_text(encoding="ascii") == text:
