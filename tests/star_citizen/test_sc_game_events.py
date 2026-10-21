@@ -19,6 +19,15 @@ from wingmen.facade import SkillScGameLog
 CONFIG = path.join(REPO_ROOT, "skills", "sc_game_events", "default_config.yaml")
 
 
+class FakeAudio:
+    """What the tests set is an answer playing: important enough to wait for."""
+
+    is_playing = False
+
+    def is_playing_at_least(self, priority):
+        return self.is_playing
+
+
 class FakeWingman:
     def __init__(self, loaded_skills=()):
         self.name = "Computer"
@@ -35,8 +44,9 @@ class FakeWingman:
             self.prompts.append((system, text))
             return '"Armistice, keep your weapons cold."'
 
-        async def speak(text, interrupt=True):
+        async def speak(text, interrupt=True, priority=None):
             self.said.append(text)
+            return True
 
         async def show(text, skill_name=""):
             self.shown.append(text)
@@ -53,7 +63,7 @@ class FakeWingman:
         self.local_ai = SimpleNamespace(available=True, generate=generate)
         self.ai = SimpleNamespace(generate=generate)
         self.tts = SimpleNamespace(speak=speak)
-        self.audio = SimpleNamespace(is_playing=False)
+        self.audio = FakeAudio()
         self.conversation = SimpleNamespace(show=show, add_note=add_note, user_busy=False)
 
 

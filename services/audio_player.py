@@ -18,6 +18,8 @@ from services.audio.resample import RateConverter
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.pub_sub import PubSub
+from services.speech_priority import SpeechPriority, current_speech, must_yield
+from services.user_activity import user_activity
 from services.sound_effects import (
     get_additional_layer_file,
     get_streaming_gain_boost,
@@ -40,6 +42,8 @@ class AudioPlayer:
         # Counts every playback that starts, so a caller can tell whether the
         # one still playing is still its own.
         self.playback_count = 0
+        # How important the playback running now is (services/speech_priority).
+        self.playing_priority = SpeechPriority.ANSWER
         self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
@@ -216,6 +220,18 @@ class AudioPlayer:
             self.raw_stream.start()
         self.is_playing = True
 
+    def _claim(self) -> bool:
+        """Whether the speech about to start may start now; marks it yielded
+        when not. Called where the playback would stop the one running."""
+        slot = current_speech.get()
+        priority = slot.priority if slot else SpeechPriority.ANSWER
+        if must_yield(priority, self.is_playing, self.playing_priority, user_activity.busy):
+            if slot:
+                slot.yielded = True
+            return False
+        self.playing_priority = priority
+        return True
+
     async def play_with_effects(
         self,
         input_data: bytes | tuple,
@@ -230,6 +246,8 @@ class AudioPlayer:
         else:
             raise TypeError("Invalid input type for stream_with_effects")
 
+        if not self._claim():
+            return
         if self.is_playing:
             await self.stop_playback()
 
@@ -490,6 +508,10 @@ class AudioPlayer:
         queued. A provider that makes audio barely faster than real time
         otherwise runs dry at its first pause and the speakers click.
         """
+        # Decided before the device opens: a line that must wait does not
+        # touch the output at all.
+        if not self._claim():
+            return
         buffer = bytearray()
         # The loop below appends while PortAudio's thread takes from the front.
         # Without the lock, and with the front taken by rebinding the name

@@ -17,6 +17,7 @@ from api.enums import (
     TtsProvider,
     WingmanProTtsProvider,
     SoundEffect,
+    SpeechPriority,
 )
 from services.file import get_prompt
 from skills.skill_base import Skill, command_action, tool
@@ -275,10 +276,6 @@ class RadioChatter(Skill):
         else:
             return "Radio is off."
 
-    async def _speak(self, text: str, sound_config=None) -> None:
-        """Async helper for threaded TTS with interrupt=False and optional sound_config."""
-        await self.wingman.tts.speak(text, interrupt=False, sound_config=sound_config)
-
     async def _init_chatter(self, run_id: int) -> None:
         """Start the radio chatter."""
         interval_min = self._get_interval_min()
@@ -374,12 +371,6 @@ class RadioChatter(Skill):
             return
 
         original_voice_setting = await self._get_original_voice_setting()
-        elevenlabs_streaming = self.wingman.config.elevenlabs.output_streaming
-        inworld_streaming = self.wingman.config.inworld.output_streaming
-        pocket_tts_streaming = self.wingman.config.pocket_tts.output_streaming
-        openai_compatible_streaming = (
-            self.wingman.config.openai_compatible_tts.output_streaming
-        )
         original_sound_config = copy.deepcopy(self.wingman.config.sound)
 
         # copy for volume and effects
@@ -413,8 +404,10 @@ class RadioChatter(Skill):
             if not self.is_active(run_id):
                 return
 
-            # wait for audio_player idling
-            while self.wingman.audio.is_playing and self.is_active(run_id):
+            # Radio is background: it waits for the user and for every other
+            # voice, and the player drops the line if one of them started
+            # while it was synthesized (services/speech_priority).
+            while self._should_wait() and self.is_active(run_id):
                 time.sleep(2)
 
             if not self.is_active(run_id):
@@ -430,25 +423,26 @@ class RadioChatter(Skill):
                     color=LogType.INFO,
                     source_name=self.wingman.name,
                 )
-            self.wingman.run_in_thread(self._speak, text, sound_config)
+            try:
+                spoken = await self.wingman.tts.speak(
+                    text, sound_config=sound_config, priority=SpeechPriority.BACKGROUND
+                )
+            finally:
+                await self._switch_voice(original_voice_setting)
+            if not spoken:
+                # Someone else had something to say. The rest of this
+                # conversation would answer a line nobody heard.
+                return
             if self._get_radio_knowledge():
                 await self.wingman.conversation.add_assistant(
                     f"Background radio chatter: {text}"
                 )
-            max_wait = 10
-            while not self.wingman.audio.is_playing and max_wait > 0:
-                time.sleep(0.1)
-                max_wait -= 0.1
-            await self._switch_voice(
-                original_voice_setting,
-                elevenlabs_streaming,
-                inworld_streaming,
-                pocket_tts_streaming,
-                openai_compatible_streaming,
-            )
 
         while self.wingman.audio.is_playing:
             time.sleep(1)  # stay in function call until last message got played
+
+    def _should_wait(self) -> bool:
+        return self.wingman.audio.is_playing or self.wingman.conversation.user_busy
 
     async def _drop_missing_voices(
         self, voices: list[VoiceSelection]
@@ -487,14 +481,7 @@ class RadioChatter(Skill):
 
         return voice_index
 
-    async def _switch_voice(
-        self,
-        voice_setting: VoiceSelection = None,
-        elevenlabs_streaming: bool = False,
-        inworld_streaming: bool = False,
-        pocket_tts_streaming: bool = False,
-        openai_compatible_streaming: bool = False,
-    ) -> None:
+    async def _switch_voice(self, voice_setting: VoiceSelection = None) -> None:
         """Switch voice to the given voice setting."""
 
         if not voice_setting:

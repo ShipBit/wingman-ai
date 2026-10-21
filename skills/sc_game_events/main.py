@@ -22,6 +22,7 @@ from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from api.enums import SpeechPriority
 from api.interface import SettingsConfig, SkillConfig
 from services.skill_local_ai import SamplingPreset
 from skills.sc_game_events.notifications import (
@@ -240,8 +241,12 @@ class ScGameEvents(Skill):
     def _should_wait(self) -> bool:
         """A voice is playing, or the user is talking to a wingman: holding a
         push-to-talk key, just heard, or a turn runs. A line over a held key
-        ends up in the user's own transcript."""
-        return self.wingman.audio.is_playing or self.wingman.conversation.user_busy
+        ends up in the user's own transcript. Radio chatter does not count:
+        an event talks over it."""
+        return (
+            self.wingman.audio.is_playing_at_least(SpeechPriority.EVENT)
+            or self.wingman.conversation.user_busy
+        )
 
     async def _react_to_waiting(self) -> None:
         while self._waiting:
@@ -283,7 +288,8 @@ class ScGameEvents(Skill):
                 await self.wingman.hud.show_message(
                     self.wingman.name, line, duration=15
                 )
-            await self.wingman.tts.speak(line, interrupt=False)
+            # Waits again if an answer started meanwhile, and is said after it.
+            await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
             return True
         except asyncio.CancelledError:
             raise

@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntEnum
 from pydantic import BaseModel
 
 
@@ -323,6 +323,19 @@ class WingmanProTtsProvider(Enum):
     # stored value is unknown and no template value is at hand.
     INWORLD = "inworld"
     AZURE = "azure"
+
+
+class SpeechPriority(IntEnum):
+    """Who may talk over whom on the shared speakers. Lower is more
+    important. See services/speech_priority.py."""
+
+    ANSWER = 0
+    """What the user asked for: answers, the filler line, command responses."""
+    EVENT = 1
+    """Said on the wingman's own initiative about something that happened:
+    a game event, a timer. Waits for the user and for answers."""
+    BACKGROUND = 2
+    """Atmosphere such as radio chatter. Never talks over anything."""
 
 
 class McpTransportType(Enum):

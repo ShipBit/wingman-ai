@@ -4,6 +4,7 @@ import string
 import asyncio
 import time
 from typing import TYPE_CHECKING, Optional
+from api.enums import SpeechPriority
 from api.interface import SettingsConfig, SkillConfig
 from skills.skill_base import Skill, tool
 
@@ -289,6 +290,10 @@ class Timer(Skill):
     async def start_timer_worker(self) -> None:
         while self.active:
             await asyncio.sleep(2)
+            if not self.active:
+                # Unloaded during the sleep: a timer due now must not fire
+                # for a wingman that is gone.
+                break
             timers_to_delete = []
             for timer_id, timer in list(self.timers.items()):
                 try:
@@ -332,7 +337,7 @@ class Timer(Skill):
             if summary:
                 await self.wingman.conversation.add_assistant(summary)
                 self.log.info(summary)
-                await self.wingman.tts.speak(summary, interrupt=False)
+                await self.wingman.tts.speak(summary, priority=SpeechPriority.EVENT)
 
         if not timer.is_loop or timer.loops == 1:
             # we cant delete it here, because we are iterating over the timers in a separate thread

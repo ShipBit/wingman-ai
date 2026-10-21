@@ -1618,6 +1618,9 @@ class WingmanCore(WebSocketUser):
 
     async def _initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         if not self.is_client_logged_in:
+            # The config shown is another one now. The old Tower must not
+            # keep answering until the user signs in again.
+            await self.unload_tower()
             self.printr.print(
                 "Client not logged in yet - skipping Tower initialization.",
                 color=LogType.WARNING,
@@ -1712,10 +1715,32 @@ class WingmanCore(WebSocketUser):
 
     async def unload_tower(self):
         if self.tower:
-            for wingman in self.tower.wingmen:
-                await wingman.unload()
-            self.tower = None
+            # Detach first: from here on no key, transcript or voice
+            # activation reaches the old wingmen while they unload (each one
+            # may run a memory checkpoint first, which takes a while).
+            tower, self.tower = self.tower, None
             self.config_service.set_tower(None)
+            self.listen_controller.drop_hold()
+            await self.stop_playback()
+            for wingman in tower.wingmen:
+                # One wingman failing to unload must not keep the others,
+                # and their MCP servers, running.
+                try:
+                    await wingman.unload()
+                except Exception as e:
+                    self.printr.print(
+                        f"Unloading {wingman.name} failed: {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                try:
+                    await wingman.unload_mcps()
+                except Exception as e:
+                    self.printr.print(
+                        f"Closing the MCP servers of {wingman.name} failed: {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
 
             # Clear joystick configs so the loop idles, but keep the thread
             # alive. Restarting it on a new thread breaks pygame's DirectInput
@@ -1809,11 +1834,14 @@ class WingmanCore(WebSocketUser):
             if wingman:
                 if key:
                     source = _key_source(key)
+                    label = f"key '{key.name}'"
                 elif mouse_button:
                     source = mouse_button
+                    label = f"mouse button '{mouse_button}'"
                 else:
                     source = f"{joystick_config.guid}{joystick_config.button}"
-                self._ptt_down(source, wingman)
+                    label = f"joystick button {joystick_config.button}"
+                self._ptt_down(source, wingman, label)
 
     def on_release(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
@@ -1832,7 +1860,7 @@ class WingmanCore(WebSocketUser):
 
     # ───────────────── Push-to-talk (key, mouse, joystick, GUI) ───────────────── #
 
-    def _ptt_down(self, source: str, wingman: Wingman) -> None:
+    def _ptt_down(self, source: str, wingman: Wingman, label: str = "") -> None:
         if not self.listen_controller.ptt_down(source, wingman):
             self.printr.print(
                 f"Push-to-talk for {wingman.name} ignored: "
@@ -1846,6 +1874,13 @@ class WingmanCore(WebSocketUser):
             source_name=wingman.name,
             command_tag=CommandTag.RECORDING_STARTED,
         )
+        if label:
+            # Which input it was: a wingman with a key and a joystick button
+            # whose recordings break off mid-sentence needs to know which one.
+            self.printr.print(
+                f"Push-to-talk for {wingman.name}: {label}",
+                server_only=True,
+            )
 
     def _ptt_up(self, source: str) -> None:
         wingman = self.listen_controller.held_wingman
@@ -2006,8 +2041,20 @@ class WingmanCore(WebSocketUser):
                 color=LogType.INFO,
             )
             text = stripped
-        target = wingman or self.tower.get_wingman_from_text(text)
+        tower = self.tower
+        if not tower:
+            return
+        target = wingman or tower.get_wingman_from_text(text)
         if not target:
+            return
+        if target not in tower.wingmen:
+            # Said to a wingman of the config the user just switched away
+            # from: its key was held, or its clip was still transcribed.
+            self.printr.print(
+                f"Dropped '{text}': {target.name} is not loaded anymore.",
+                server_only=True,
+                color=LogType.INFO,
+            )
             return
         if playing:
             # Talking on means: skip the rest of the answer.
@@ -4480,6 +4527,10 @@ class WingmanCore(WebSocketUser):
         await self._stop_hud_server()
         await ScGameLogService().stop()
 
+        # The wingmen first: their skills (radio chatter, timers) may still
+        # be synthesizing, and their memory checkpoint needs the models.
+        await self.unload_tower()
+
         if self.settings_service.settings.xvasynth.enable:
             self.stop_xvasynth()
         if self.settings_service.settings.pocket_tts.enable:
@@ -4487,8 +4538,6 @@ class WingmanCore(WebSocketUser):
 
         # Stop managed llama-server processes
         self.llama_cpp_provider.unload_models()
-
-        await self.unload_tower()
 
         self.printr.print(
             "Core shutdown.",

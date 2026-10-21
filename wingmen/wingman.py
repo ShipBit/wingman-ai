@@ -50,6 +50,7 @@ from services.markdown import cleanup_text
 from services.secret_keeper import SecretKeeper
 from services import speech_text
 from services.printr import Printr
+from services.speech_priority import EVENT_WAIT_S, SpeechPriority, SpeechSlot, current_speech, must_yield
 from services.user_activity import user_activity
 from services.websocket_user import WebSocketUser
 from services.audio_library import AudioLibrary
@@ -379,6 +380,9 @@ class Wingman:
 
     async def unload(self):
         self._unloaded = True
+        # A filler line not out yet stays unsaid.
+        if getattr(self, "_turn_filler", None) is not None:
+            self._stop_turn_filler(learn=False)
         # Wait for any background memory extraction tasks to finish. A task
         # of another loop cannot be awaited here; work handed to the main
         # loop from a turn's loop is a concurrent future and can.
@@ -568,6 +572,10 @@ class Wingman:
         """Answer what the user said. While this runs the user counts as busy
         (services/user_activity.py): nothing a wingman says on its own may
         land between the question and the answer."""
+        if self._unloaded:
+            # Its config was switched away from while the words were on
+            # their way here.
+            return
         user_activity.turn_started()
         try:
             await self._process(transcript, images, transcription_benchmark)
@@ -628,6 +636,11 @@ class Wingman:
                 )
 
                 actual_response = instant_response or process_result
+
+                if self._unloaded:
+                    # The config was switched while the model answered: the
+                    # answer belongs to a wingman the user left.
+                    return
 
                 if actual_response:
                     await printr.print_async(
@@ -1079,6 +1092,8 @@ class Wingman:
     def _speak_filler(self, line: str) -> None:
         """Runs on the filler's thread: speech gets its own thread, the message
         is handed to the main loop by ``printr.print``."""
+        if self._unloaded:
+            return
         self.threaded_execution(self.play_to_user, line, False)
         printr.print(
             line,
@@ -1255,9 +1270,17 @@ class Wingman:
         text: str,
         no_interrupt: bool = False,
         sound_config: Optional[SoundConfig] = None,
-    ):
+        priority: SpeechPriority = SpeechPriority.ANSWER,
+    ) -> bool:
+        """Say ``text``. True when it went to the speakers.
+
+        ``priority`` (services/speech_priority) decides who may talk over
+        whom. An EVENT waits for the user and for a playback at least as
+        important, also when that one started during synthesis, and is said
+        after it, up to EVENT_WAIT_S. A BACKGROUND line in that situation is
+        not said at all."""
         if self._unloaded:
-            return
+            return False
         if sound_config:
             printr.print(
                 "Using custom sound config for playback", LogType.INFO, server_only=True
@@ -1269,11 +1292,10 @@ class Wingman:
             text, self.settings.spoken_language
         )
 
-        if no_interrupt and self.audio_player.is_playing:
-            while self.audio_player.is_playing:
-                await asyncio.sleep(0.1)
-            if self._unloaded:
-                return
+        deadline = time.monotonic() + EVENT_WAIT_S
+        if no_interrupt or priority != SpeechPriority.ANSWER:
+            if not await self._wait_for_turn(priority, deadline):
+                return False
 
         changed_text = text
         for skill in self.skills:
@@ -1309,7 +1331,7 @@ class Wingman:
                 LogType.WARNING,
                 server_only=True,
             )
-            return
+            return False
 
         if "{SKIP-TTS}" in text:
             printr.print(
@@ -1317,7 +1339,7 @@ class Wingman:
                 LogType.WARNING,
                 server_only=True,
             )
-            return
+            return False
 
         if not self.tts:
             printr.print(
@@ -1325,20 +1347,55 @@ class Wingman:
                 LogType.WARNING,
                 server_only=True,
             )
-            return
+            return False
 
+        slot = SpeechSlot(priority)
+        token = current_speech.set(slot)
         try:
-            await self.tts.play_audio(
-                text=text,
-                sound_config=sound_config,
-                audio_player=self.audio_player,
-                wingman_name=self.name,
-            )
+            while True:
+                slot.yielded = False
+                await self.tts.play_audio(
+                    text=text,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+                if not slot.yielded:
+                    return True
+                # Something more important came first while this was
+                # synthesized. An event is said after it; radio is dropped.
+                if priority != SpeechPriority.EVENT:
+                    return False
+                if not await self._wait_for_turn(priority, deadline):
+                    return False
         except Exception as e:
             await printr.print_async(
                 f"Error during TTS playback: {str(e)}", color=LogType.ERROR
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False
+        finally:
+            current_speech.reset(token)
+
+    async def _wait_for_turn(self, priority: SpeechPriority, deadline: float) -> bool:
+        """Wait until a line of ``priority`` may start (see must_yield). An
+        answer waits only for another answer, the filler line before it.
+        False when the wingman was unloaded, or the deadline passed."""
+        player = self.audio_player
+        while True:
+            if self._unloaded:
+                return False
+            if priority == SpeechPriority.ANSWER:
+                waiting = player.is_playing and player.playing_priority <= priority
+            else:
+                waiting = must_yield(
+                    priority, player.is_playing, player.playing_priority, user_activity.busy
+                )
+            if not waiting:
+                return True
+            if priority != SpeechPriority.ANSWER and time.monotonic() > deadline:
+                return False
+            await asyncio.sleep(0.1)
 
     # ───────────────── Image generation ───────────────── #
 
