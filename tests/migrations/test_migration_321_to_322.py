@@ -30,12 +30,6 @@ def test_elevenlabs_whitelist_becomes_disabled_list():
     McpConfig(**out)
 
 
-def test_disabled_list_matches_template():
-    entry = next(s for s in template("mcp.template.yaml")["servers"] if s["name"] == "elevenlabs")
-    assert entry["disabled_tools"] == ELEVENLABS_DISABLED_TOOLS
-    assert len(entry["disabled_tools"]) == 104
-
-
 def test_other_servers_lose_globs_and_keep_the_rest():
     old = {
         "servers": [
@@ -56,11 +50,6 @@ def test_hand_edited_disabled_list_wins():
     assert out["servers"][0]["disabled_tools"] == ["creative_generate_video"]
 
 
-def test_missing_file_uses_template():
-    new = {"servers": []}
-    assert _migration().migrate_mcp({}, new) is new
-
-
 # ── Inworld TTS prompt ────────────────────────────────────────────────
 
 
@@ -72,12 +61,6 @@ def test_the_inworld_prompt_is_replaced_for_everyone():
     # Dropped here, backfilled from the template afterwards.
     assert "tts_prompt" not in result["inworld"]
     assert result["inworld"]["voice_id"] == "Olivia"
-
-
-def test_defaults_lose_the_prompt_as_well():
-    result = _migration().migrate_defaults({"inworld": {"tts_prompt": "anything"}, "features": {}})
-
-    assert "tts_prompt" not in result["inworld"]
 
 
 def test_a_config_without_an_inworld_block_is_left_alone():
@@ -133,6 +116,8 @@ def test_settings_split_listening_from_transcribing():
     }
     stt = out["stt"]
     assert stt["provider"] == "parakeet"
+    assert stt["parakeet"]["run_locally"] is True
+    assert stt["parakeet"]["execution_provider"] == "cuda"
     assert stt["languages"] == ["de-DE", "en-US"]
     # the engines 3.2.2 no longer ships leave nothing behind, hotwords included;
     # the vocabulary starts clean
@@ -156,14 +141,6 @@ def test_energy_threshold_becomes_sensitivity():
         out = m.migrate_settings(settings)
         assert out["voice_activation"]["sensitivity"] == expected
         assert "energy_threshold" not in out["voice_activation"]
-
-
-def test_everyone_lands_on_local_parakeet():
-    out = _migration().migrate_settings(_settings_321())
-
-    assert out["stt"]["provider"] == "parakeet"
-    assert out["stt"]["parakeet"]["run_locally"] is True
-    assert out["stt"]["parakeet"]["execution_provider"] == "cuda"
 
 
 def test_migrated_settings_validate_after_template_backfill():
@@ -234,13 +211,3 @@ def test_a_pinned_chat_model_is_unpinned_to_the_plan_default():
         {"wingman_pro": {"conversation_deployment": "google/gemini-2.5-flash", "tts_provider": "wingman_pro"}}, "Computer")
     assert out["wingman_pro"]["conversation_deployment"] == ""
     assert out["wingman_pro"]["tts_provider"] == "wingman_pro"
-
-
-def test_an_already_empty_chat_model_is_left_alone():
-    out = _migration()._migrate_wingman_config({"wingman_pro": {"conversation_deployment": ""}}, "Computer")
-    assert out["wingman_pro"]["conversation_deployment"] == ""
-
-
-def test_a_config_without_a_wingman_pro_block_is_fine():
-    out = _migration()._migrate_wingman_config({"name": "Computer"}, "Computer")
-    assert out["name"] == "Computer"

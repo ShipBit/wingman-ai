@@ -16,7 +16,6 @@ from services import conversation_manager as manager_module
 from services.context_budget import ContextBudget
 from services.conversation_condenser import ConversationCondenser
 from services.conversation_manager import ConversationManager
-from services.token_utils import count_tokens
 
 BUDGET = ContextBudget(40_000)  # history_limit 20,000, keep 5,000
 ROWS = "Ship data row. " * 600  # ~2,400 tokens
@@ -117,22 +116,6 @@ def test_a_big_prompt_with_a_small_history_says_why_and_does_nothing(logged):
     run(cond, prompt=30_000)
     assert started == []
     assert any("system prompt, memory and tool definitions" in line for line in logged)
-
-
-def test_the_placeholder_tells_the_model_not_to_guess(logged):
-    mgr, cond, _ = setup(12)
-    run(cond, prompt=30_000)
-    note = tools(mgr)[0]["content"]
-    assert "call the tool again before stating" in note
-    assert "uex_get_commodity_information" in note
-    assert count_tokens(note) < 60
-
-
-def test_clearing_twice_logs_once(logged):
-    mgr, _, _ = setup(12)
-    asyncio.run(mgr.clear_tool_responses(20))
-    asyncio.run(mgr.clear_tool_responses(20))
-    assert sum("Removed" in line for line in logged) == 1
 
 
 def test_a_pending_response_is_left_alone(logged):

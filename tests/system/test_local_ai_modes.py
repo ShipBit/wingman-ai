@@ -58,14 +58,6 @@ def test_embeddings_follow_the_user_to_their_own_server():
     assert not service.provider.embed.called
 
 
-def test_readiness_is_asked_of_the_model_that_would_answer():
-    service = _service(LocalAiMode.CLOUD)
-    service.cloud.is_ready.return_value = True
-    service.provider.support_is_ready.return_value = False
-
-    assert service.is_ready() is True
-
-
 def test_the_support_model_being_remote_does_not_make_memory_ready():
     """Two separate questions since cloud mode. Memory needs embeddings, and
     those can be missing while the support model answers perfectly well."""

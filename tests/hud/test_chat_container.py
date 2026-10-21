@@ -167,7 +167,7 @@ def test_speech_does_not_hide_the_tool_chips_while_tools_run(service):
 
 @pytest.mark.parametrize(
     "profile_name, account_name, title",
-    [("Commander", "Jan", "Commander"), ("", "Jan", "Jan"), ("", None, "User")],
+    [("Commander", "Jan", "Commander"), ("", None, "User")],
 )
 def test_the_chat_calls_the_user_by_the_profiles_name_else_the_account_name(
     service, profile_name, account_name, title

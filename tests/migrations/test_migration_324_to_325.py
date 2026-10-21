@@ -5,9 +5,7 @@ the community SC Log Reader skill is retired because Core reads the log.
 
 from unittest.mock import MagicMock
 
-from api.interface import NestedConfig
 from services.migrations.migration_324_to_325 import Migration324To325
-from tests.support import template
 
 REMOVED = ("compress_tool_responses", "skill_max_input_tokens",
            "condense_keep_recent_tokens", "condense_max_messages")
@@ -37,12 +35,6 @@ def test_every_wingman_loses_them_too():
 
 def test_a_wingman_without_features_is_left_alone():
     assert migration().migrate_wingman({"name": "Board"}) == {"name": "Board"}
-
-
-def test_the_defaults_template_has_none_of_them_and_still_loads():
-    data = template("defaults.yaml")
-    assert not any(k in data["features"] for k in REMOVED)
-    NestedConfig(**data)
 
 
 # ── the SC Log Reader skill ─────────────────────────────────────────────

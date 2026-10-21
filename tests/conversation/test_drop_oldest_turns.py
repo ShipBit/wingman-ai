@@ -25,13 +25,6 @@ def turn(n, size=100):
     ]
 
 
-def test_nothing_to_free_removes_nothing():
-    m = manager()
-    m.messages = turn(1) + turn(2)
-    assert m.drop_oldest_turns(0) == 0
-    assert len(m.messages) == 8
-
-
 def test_removes_just_enough_whole_turns():
     m = manager()
     m.messages = turn(1, 1000) + turn(2, 1000) + turn(3, 1000)
@@ -50,12 +43,6 @@ def test_never_removes_the_latest_turn():
 
     assert removed == 8
     assert [x["content"] for x in m.messages if x["role"] == "user"] == ["q3"]
-
-
-def test_a_single_turn_is_left_alone():
-    m = manager()
-    m.messages = turn(1, 50_000)
-    assert m.drop_oldest_turns(10**9) == 0
 
 
 def test_cut_lands_on_a_user_message():

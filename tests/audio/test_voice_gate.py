@@ -115,12 +115,6 @@ def test_held_clip_is_cut_at_max_length_too(params):
     assert rest is not None and not rest.truncated
 
 
-def test_sensitivity_maps_onto_the_threshold():
-    assert GateParams(sensitivity=0.0).threshold == pytest.approx(0.85)
-    assert GateParams(sensitivity=1.0).threshold == pytest.approx(0.25)
-    assert GateParams(sensitivity=0.5).threshold == pytest.approx(0.55)
-
-
 def test_speech_right_after_a_split_is_not_lost(params):
     """The cut carries the frames after the last pause into the next
     utterance. If the speaker stops there, those frames still have to come

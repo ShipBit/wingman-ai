@@ -47,4 +47,5 @@ jobs:
           pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
 
       - name: Run tests
-        run: python -m pytest
+        # One worker per CPU core of the runner.
+        run: python -m pytest -n auto

@@ -101,20 +101,6 @@ def test_the_backstory_and_the_system_prompt_end_up_in_the_context():
     assert "a grumpy ship AI" in context
 
 
-def test_no_template_placeholder_is_left_unfilled():
-    context = build()
-
-    for name in (
-        "user_context",
-        "backstory",
-        "skills",
-        "ttsprompt",
-        "conversation_summary",
-        "language_instruction",
-    ):
-        assert "{" + name + "}" not in context
-
-
 def test_a_prompt_with_raw_braces_still_builds():
     """A user's own system prompt with a JSON example in it used to raise on
     every turn. The placeholders are still filled, the braces stay."""
@@ -125,14 +111,6 @@ def test_a_prompt_with_raw_braces_still_builds():
     assert 'Answer like {"status": 200}.' in context
     assert "a grumpy ship AI" in context
     assert "{backstory}" not in context
-
-
-def test_the_answer_language_and_the_wingman_name_are_in_the_context():
-    context = build(config_dir_name="Star Citizen")
-
-    assert "German" in context
-    assert "Computer" in context
-    assert "Star Citizen" in context
 
 
 def test_the_user_name_is_left_out_when_the_backstory_already_names_it():

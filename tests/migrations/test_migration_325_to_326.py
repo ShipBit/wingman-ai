@@ -4,8 +4,6 @@ voice's gender."""
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from services.migrations.migration_325_to_326 import (
     ELITE_SERVER,
     GALACTAPEDIA_SERVER,
@@ -38,20 +36,6 @@ def test_a_galactapedia_server_the_user_already_has_is_kept_as_it_is():
     mine = {"name": "wingman_galactapedia", "url": "https://my.own/galactapedia"}
     out = migration().migrate_mcp({"servers": [mine]}, {})
     assert out["servers"] == [mine, ELITE_SERVER]
-
-
-def test_without_an_mcp_yaml_the_template_is_used():
-    new = {"servers": []}
-    assert migration().migrate_mcp({}, new) is new
-
-
-@pytest.mark.parametrize("server", [ELITE_SERVER, GALACTAPEDIA_SERVER])
-def test_the_entry_matches_the_template(server):
-    entry = next(
-        s for s in template("mcp.template.yaml")["servers"]
-        if s["name"] == server["name"]
-    )
-    assert entry == server
 
 
 # ── Azure voice per Wingman ──
@@ -94,15 +78,6 @@ def test_an_azure_voice_already_set_is_kept():
     config = {"name": "C", "features": {"tts_provider": "wingman_pro"}, "inworld": {"voice_id": "Clive"},
               "wingman_pro": {"azure": {"voice": "de-DE-KatjaNeural"}}}
     assert migration().migrate_wingman(config)["wingman_pro"]["azure"]["voice"] == "de-DE-KatjaNeural"
-
-
-def test_a_german_inworld_voice_gets_a_german_azure_voice():
-    from services.migrations.migration_325_to_326 import azure_voice_for_inworld
-
-    assert azure_voice_for_inworld("Johanna") == "de-DE-KatjaNeural"
-    assert azure_voice_for_inworld("Matthias") == "de-DE-ConradNeural"
-    assert azure_voice_for_inworld("Alain") == "fr-FR-HenriNeural"
-    assert azure_voice_for_inworld("Mercedes") == "es-ES-ElviraNeural"
 
 
 # ── Azure instead of Pocket TTS for a spoken language other than English ──

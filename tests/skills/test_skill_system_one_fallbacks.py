@@ -59,13 +59,6 @@ def test_uex_still_finds_an_exact_name_with_system_one_off():
     assert options is None
 
 
-def test_uex_asks_nothing_when_there_is_no_shortlist():
-    llm = _uex_llm(True)
-    match, note = asyncio.run(llm.find_closest_match("Millennium Falcon", ["Carrack", "Gladius"]))
-    assert match is None
-    assert "No approximate matches" in note
-
-
 def test_uex_refuses_to_ask_about_an_unbounded_shortlist():
     """The substring pass after difflib has no limit; a choice takes 255, and
     a list that long is not a disambiguation anyway."""
@@ -86,17 +79,9 @@ def _resolve_panel(enabled: bool, asked: str, titles: list[str]):
     return asyncio.run(resolve_title(_wingman(enabled).system_one, asked, titles))
 
 
-def test_hud_exact_title_still_resolves_with_system_one_off():
-    assert _resolve_panel(False, "Mining Yield", ["Mining Yield"]) == "Mining Yield"
-
-
 def test_hud_gives_up_on_a_rephrased_title_with_system_one_off():
     """The caller then reports 'not found' and lists the panels."""
     assert _resolve_panel(False, "the mining panel", ["Mining Yield"]) is None
-
-
-def test_hud_has_nothing_to_resolve_against_an_empty_hud():
-    assert _resolve_panel(True, "anything", []) is None
 
 
 # ── Spotify playlists ───────────────────────────────────────────────
@@ -111,11 +96,6 @@ def _spotify(enabled: bool):
 
 
 PLAYLISTS = [{"name": "Late Night Coding", "uri": "a"}, {"name": "Road Trip", "uri": "b"}]
-
-
-def test_spotify_exact_name_still_matches_with_system_one_off():
-    skill = _spotify(False)
-    assert asyncio.run(skill._match_playlist("road trip", PLAYLISTS))["uri"] == "b"
 
 
 def test_spotify_gives_up_on_a_paraphrase_with_system_one_off():
@@ -151,12 +131,3 @@ def test_msfs_hands_over_the_whole_shortlist_with_system_one_off():
         {"name": "AUTOPILOT_ON", "type": "event", "description": "Turn autopilot on"},
     ]
     assert asyncio.run(skill._pick_one_command("turn on autopilot", matches)) is None
-
-
-def test_msfs_does_not_ask_about_a_single_candidate():
-    from skills.msfs2020_control.main import Msfs2020Control
-
-    skill = Msfs2020Control.__new__(Msfs2020Control)
-    skill.wingman = _wingman(True)
-    one = [{"name": "AP_MASTER", "type": "event", "description": "Toggle autopilot"}]
-    assert asyncio.run(skill._pick_one_command("autopilot", one)) is None

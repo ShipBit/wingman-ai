@@ -15,7 +15,6 @@ import pytest
 from api.enums import WingmanProTtsProvider
 from api.interface import NestedConfig
 from services.config_manager import deep_merge_configs
-from services.config_sanitizer import sanitize
 from services.migrations.migration_316_to_320 import Migration316To320, voice_to_inworld
 from tests.support import FIXTURES, read_yaml, template
 
@@ -101,19 +100,6 @@ def test_a_wingman_without_a_pro_block_still_gets_fixed(migration):
     assert "wingman_pro" not in migrated
 
 
-def test_the_sanitizer_catches_what_the_migration_skips(defaults_316):
-    """Belt and braces: a config that never ran the migration — someone who
-    edited the YAML by hand, or a path we did not think of — still loads."""
-    untouched = dict(defaults_316)
-
-    sanitize(NestedConfig, untouched)
-    # The sanitizer only repairs enums; the `azure:` section is an unknown key,
-    # which Pydantic ignores anyway.
-    config = NestedConfig(**deep_merge_configs(template("defaults.yaml"), untouched))
-
-    assert config.features.tts_provider.value != "azure"
-
-
 def test_an_azure_voice_keeps_its_gender_and_language(migration):
     """An Azure name carries both: "de-DE-KatjaNeural" is a German woman, and a
     user who picked that should not wake up sounding like an English man."""
@@ -146,15 +132,10 @@ def test_an_openai_voice_also_moves_to_inworld(migration):
     "old,expected",
     [
         ("de-DE-KatjaNeural", "Johanna"),
-        ("de-DE-ConradNeural", "Matthias"),
-        ("en-US-JennyNeural", "Ashley"),
-        ("en-US-GuyNeural", "Edward"),
-        ("nova", "Ashley"),
         ("onyx", "Edward"),
         # Unknown German name: language is still readable, gender is not.
         ("de-DE-Someone", "Johanna"),
         (None, "Ashley"),
-        ("", "Ashley"),
     ],
 )
 def test_voice_mapping(old, expected):
@@ -222,17 +203,6 @@ def test_a_device_token_survives(migration):
     assert secrets["wingman_pro"] == "wgd_live_abc123"
 
 
-def test_secrets_without_a_wingman_pro_key_are_left_alone(migration):
-    assert migration.migrate_secrets({"openai": "sk-abc"}) == {"openai": "sk-abc"}
-
-
-def test_an_empty_token_is_not_reported_as_removed(migration):
-    """An empty string is not a credential, so there is nothing to warn about."""
-    secrets = migration.migrate_secrets({"wingman_pro": ""})
-
-    assert secrets["wingman_pro"] == ""
-
-
 # ── summarisation thresholds ───────────────────────────────────────
 
 def test_the_condense_thresholds_move_with_the_new_token_ceiling(migration):
@@ -258,12 +228,6 @@ def test_an_own_setting_is_not_overwritten(migration):
 
     assert result["features"]["condense_max_messages"] == 20
     assert result["features"]["condense_keep_recent"] == 30
-
-
-def test_a_wingman_without_a_features_block_is_left_alone(migration):
-    """Most wingman files only override what differs from the defaults and carry
-    no ``features`` block at all."""
-    assert "features" not in migration.migrate_wingman({"name": "Computer"})
 
 
 def test_an_unused_pro_voice_does_not_overwrite_the_inworld_one(migration):

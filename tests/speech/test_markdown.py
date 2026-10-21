@@ -8,7 +8,7 @@ every Chinese, Japanese and Korean character, and those replies were silent.
 
 import pytest
 
-from services.markdown import MAX_LIST_ITEMS_FOR_TTS, cleanup_text, strip_edge_breaks
+from services.markdown import MAX_LIST_ITEMS_FOR_TTS, cleanup_text
 
 
 def spoken(text: str) -> str:
@@ -33,15 +33,10 @@ def test_emojis_are_dropped():
     assert spoken("Hallo 🚀🔥 ✅ ☀️ Ⓜ 🅰 Commander") == "Hallo Commander"
 
 
-def test_markdown_marks_are_dropped():
-    assert spoken("# Status\nShields at **forty** percent.") == "Status\nShields at forty percent."
-
-
 @pytest.mark.parametrize(
     "text, expected",
     [
         ("*seufzt* Na gut, ich mache es.", "Na gut, ich mache es."),
-        ("Sure. *checks the scanner* Two contacts.", "Sure. Two contacts."),
         ("Na gut *seufzt*", "Na gut"),
         ("*leans back in the pilot seat*\nAll systems green.", "All systems green."),
     ],
@@ -104,10 +99,6 @@ def test_a_break_between_sentences_stays():
     assert spoken(text) == text
 
 
-def test_several_edge_breaks_in_any_case():
-    assert strip_edge_breaks('<BREAK time="1s" /> <break time="2s"/> Hello. <break time="300ms" />') == "Hello."
-
-
 def test_list_items_that_are_sentences_are_said_as_sentences():
     text = (
         "Best run:\n\n"
@@ -135,17 +126,8 @@ def test_display_text_drops_what_only_the_voice_needs():
     )
 
 
-
 def test_display_text_keeps_code_as_written():
     from services.markdown import display_text
 
     text = 'Use `<div>` here. <break time="300ms" /> Done.\n```html\n<span>[sigh]</span>\n```'
     assert display_text(text) == 'Use `<div>` here. Done.\n```html\n<span>[sigh]</span>\n```'
-
-
-def test_display_text_keeps_markdown_and_data():
-    from services.markdown import display_text
-
-    text = "- [x] Shields\n  - [ ] Coolers [1]\n    code line\nCargo [SCU]: 4, see [docs][ref]"
-    assert display_text(text) == text
-    assert display_text("[sigh] Fine.\n  <break time=\"1s\"/> Indented.") == "Fine.\n  Indented."

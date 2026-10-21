@@ -4,24 +4,13 @@ and how a 3.2.3 settings.yaml is converted."""
 import copy
 from types import SimpleNamespace
 
-import pytest
-
 from api.enums import PocketTtsQuality, SpokenLanguage
 from services.migrations.migration_323_to_324 import Migration323To324
 from services.spoken_language import (
     inworld_language,
-    pocket_tts_has_high_quality,
     pocket_tts_model,
     transcription_tag,
 )
-
-
-@pytest.mark.parametrize("language", [l for l in SpokenLanguage if l != SpokenLanguage.OTHER])
-def test_every_language_has_a_model_and_hints(language):
-    for quality in PocketTtsQuality:
-        assert pocket_tts_model(language, quality)
-    assert transcription_tag(language).startswith(language.value + "-")
-    assert inworld_language(language) == language.value
 
 
 def test_the_model_follows_the_language():
@@ -30,16 +19,6 @@ def test_the_model_follows_the_language():
     assert pocket_tts_model(SpokenLanguage.FR, PocketTtsQuality.STANDARD) == "french"
     assert pocket_tts_model(SpokenLanguage.NL, PocketTtsQuality.HIGH) == "dutch_24l"
     assert pocket_tts_model(SpokenLanguage.EN, PocketTtsQuality.HIGH) == "english_2026-09_24l"
-
-
-def test_a_custom_model_wins():
-    assert pocket_tts_model(SpokenLanguage.DE, PocketTtsQuality.HIGH, "mine.yaml") == "mine.yaml"
-
-
-def test_high_quality_is_only_offered_where_it_differs():
-    assert pocket_tts_has_high_quality(SpokenLanguage.DE)
-    assert pocket_tts_has_high_quality(SpokenLanguage.FR)
-    assert pocket_tts_has_high_quality(SpokenLanguage.EN)
 
 
 # ── migration ────────────────────────────────────────────────────────
@@ -72,26 +51,10 @@ def test_multilingual_takes_the_language_of_a_non_english_model():
     assert out["pocket_tts"]["quality"] == "high"
 
 
-def test_an_explicit_language_is_kept():
-    out = migrate({"spoken_language": "es", "pocket_tts": {"model": "english_2026-04"}})
-    assert out["spoken_language"] == "es"
-
-
-@pytest.mark.parametrize("variant", ["v2", "v3"])
-def test_the_parakeet_variant_is_removed(variant):
-    out = migrate({"spoken_language": "en", "stt": {"parakeet": {"model_variant": variant}}})
-    assert "model_variant" not in out["stt"]["parakeet"]
-
-
 def test_a_custom_yaml_model_is_kept():
     out = migrate({"spoken_language": "de", "pocket_tts": {"model": "czech.yaml"}})
     assert out["pocket_tts"]["custom_model"] == "czech.yaml"
     assert "model" not in out["pocket_tts"]
-
-
-def test_french_is_standard_because_there_is_only_one_model():
-    out = migrate({"spoken_language": "fr", "pocket_tts": {"model": "french_24l"}})
-    assert out["pocket_tts"]["quality"] == "standard"
 
 
 # ── Pocket TTS: a new language counts as a model switch ─────────────

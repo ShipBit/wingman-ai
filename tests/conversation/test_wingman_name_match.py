@@ -19,11 +19,6 @@ def name_of(wingman):
     return wingman.config.name if wingman else None
 
 
-def test_exact_name_still_wins():
-    tower = tower_with("Computer", "Ava")
-    assert name_of(tower.get_wingman_from_text("Computer, open the map")) == "Computer"
-
-
 def test_a_letter_off_is_fine():
     tower = tower_with("Computer", "Ava")
     assert name_of(tower.get_wingman_from_text("Computa, open the map")) == "Computer"

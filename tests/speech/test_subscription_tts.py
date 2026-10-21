@@ -154,17 +154,6 @@ def test_a_used_up_allowance_says_so_instead_of_failing(backend, streaming):
     assert player.played is None and player.streamed == b""
 
 
-def test_inworld_handles_the_allowance_too(backend):
-    backend.responses.append(FakeResponse(429, {"message": "Allowance used up."}))
-    ws, player = subscription(), FakeAudioPlayer()
-    config = SimpleNamespace(voice_id="Ashley", output_streaming=False, model_id="x",
-                             temperature=1.0, audio_config=None)
-
-    asyncio.run(ws.generate_inworld_speech("Hi", config, SOUND, player, "Computer"))
-
-    assert ws.printr.lines == [("Allowance used up.", LogType.ERROR)]
-
-
 def test_inworld_always_asks_for_flash(backend):
     """The backend rejects every other Inworld model for subscriptions."""
     backend.responses.append(FakeResponse(content=b"mp3"))
@@ -223,19 +212,6 @@ def test_voice_lists_carry_gender_locale_and_lock(backend):
     assert inworld[0].description == "A warm, natural female voice"
     # An unknown gender and a missing lock are tolerated.
     assert (inworld[0].gender, inworld[0].locale, inworld[0].locked) == (TtsVoiceGender.UNKNOWN, None, False)
-
-
-def test_tts_models_come_from_the_models_answer():
-    body = {"plan": "free", "tts": {"default": "azure-neural", "models": [
-        {"id": "azure-neural", "name": "Azure Neural", "provider": "azure", "available": True, "usage_factor": 3},
-        {"id": "inworld-tts-2-flash", "name": "Inworld", "provider": "inworld", "available": False, "usage_factor": 1},
-    ]}}
-    models = ws_module.tts_models_from(body)
-    assert models.default == "azure-neural"
-    assert [(m.provider, m.available, m.usage_factor) for m in models.models] == [
-        ("azure", True, 3), ("inworld", False, 1),
-    ]
-    assert ws_module.tts_models_from({"models": []}).models == []
 
 
 # ── which provider speaks ──

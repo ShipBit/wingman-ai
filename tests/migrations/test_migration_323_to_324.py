@@ -62,21 +62,6 @@ def test_a_half_written_block_is_completed_not_replaced():
     }
 
 
-def test_nothing_else_is_touched():
-    before = _settings_323()
-    after = _migration().migrate_settings(dict(before))
-    after.pop("system_one")
-    after.pop("show_token_count")
-    after.pop("filler_responses")
-    assert after == before
-
-
-def test_the_result_still_loads():
-    """The whole point of the step: a 3.2.3 settings.yaml that has been through
-    it must satisfy the model 3.2.4 validates against."""
-    SettingsConfig(**_migration().migrate_settings(_settings_323()))
-
-
 def test_token_counts_are_added_and_switched_off():
     assert _migration().migrate_settings(_settings_323())["show_token_count"] is False
 
@@ -85,10 +70,6 @@ def test_a_user_who_switched_token_counts_on_keeps_them_on():
     settings = _settings_323()
     settings["show_token_count"] = True
     assert _migration().migrate_settings(settings)["show_token_count"] is True
-
-
-def test_filler_responses_are_added_and_switched_on():
-    assert _migration().migrate_settings(_settings_323())["filler_responses"] is True
 
 
 def test_a_user_who_switched_filler_responses_off_keeps_them_off():

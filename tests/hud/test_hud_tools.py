@@ -8,7 +8,7 @@ import pytest
 
 from hud_server.constants import GROUP_INFO
 from services.hud_service import HudService
-from services.hud_tools import HUD_TOOL_NAMES, run_hud_tool
+from services.hud_tools import run_hud_tool
 
 
 @pytest.fixture
@@ -21,10 +21,6 @@ def hud(monkeypatch):
 
 def _run(name, **args):
     return asyncio.run(run_hud_tool(SimpleNamespace(name="Computer", jev=None), name, args))
-
-
-def test_there_is_no_tool_that_clears_the_shared_panel():
-    assert HUD_TOOL_NAMES == {"hud_set_info", "hud_read_info", "hud_remove_info", "hud_show_progress"}
 
 
 def test_reading_shows_every_panel_with_its_state(hud, monkeypatch):

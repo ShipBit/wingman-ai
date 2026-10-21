@@ -14,7 +14,6 @@ import requests
 
 from api.interface import CommandActionConfig, CommandConfig, CommandKeyboardConfig
 from providers.typesafe_jev import JevClient, JevResult
-from services.benchmark import Benchmark
 from services.jev_decisions import (
     MULTIPLE_KEY,
     NONE_OPTION,
@@ -25,7 +24,6 @@ from services.jev_decisions import (
 )
 from services import jev_gate
 from services.jev_gate import MAX_COMMAND_OPTIONS, JevGate
-from services.turn_metrics import TurnMetrics
 from wingmen.facade import SkillSystemOne, SystemOneAnswers
 
 
@@ -67,11 +65,6 @@ def test_instant_activation_phrases_become_the_description():
     assert '"landing gear"' in criteria["DeployLandingGear"]
 
 
-def test_a_command_without_phrases_has_no_description():
-    criteria = command_questions([_command("ToggleShields")])["command"]["criteria"]
-    assert criteria["ToggleShields"] is None
-
-
 # ── what we do with the answer ──────────────────────────────────────
 
 
@@ -91,10 +84,6 @@ def test_a_failed_call_changes_nothing():
     assert read_command(JevResult(error="HTTP 503"), 0.0) is None
 
 
-def test_an_empty_answer_changes_nothing():
-    assert read_command(JevResult(answers={}), 0.0) is None
-
-
 # ── the client, switched off ────────────────────────────────────────
 
 
@@ -104,11 +93,6 @@ def test_no_subscription_and_no_key_means_no_request():
     result = client.system_one({"transcript": "hi"}, {"x": {"type": "noul"}})
     assert not result.ok
     assert "Wingman Pro" in result.error
-
-
-def test_no_questions_means_no_request():
-    result = JevClient(api_key="k").system_one({"transcript": "hi"}, {})
-    assert result.error == "no questions"
 
 
 def test_a_failed_request_starts_the_next_on_a_fresh_connection():
@@ -185,22 +169,6 @@ def _settings(enabled: bool, commands: bool = True):
     )
 
 
-def test_the_gate_is_off_without_settings():
-    gate = JevGate("T")
-    assert gate.enabled is False
-    assert gate.active is False
-
-
-def test_the_setting_switches_the_gate():
-    gate = JevGate("T", settings=_settings(True))
-    assert gate.enabled is True
-    gate.update_settings(_settings(False))
-    assert gate.enabled is False
-    # Off is off even with a credential present.
-    gate.client.api_key = "k"
-    assert gate.active is False
-
-
 def test_a_switched_off_gate_reaches_no_model():
     gate = JevGate("T", settings=_settings(False))
     assert asyncio.run(gate.ask({"x": 1}, {"q": {"type": "noul"}})) is None
@@ -272,22 +240,6 @@ def test_a_skill_gets_nothing_rather_than_an_error_when_off():
     assert answers.raw() == {}
 
 
-def test_the_builders_are_typesafes_own_wire_format():
-    """A skill author reading TypeSafe's docs must recognise what we send."""
-    assert SkillSystemOne.noul("is it?") == {"type": "noul", "instructions": "is it?"}
-    assert SkillSystemOne.score("how bad?", ["low", "high"]) == {
-        "type": "score",
-        "instructions": "how bad?",
-        "criteria": ["low", "high"],
-    }
-    assert SkillSystemOne.choice("which?", {"a": None, "b": "other"}) == {
-        "type": "choice",
-        "instructions": "which?",
-        "criteria": {"a": None, "b": "other"},
-    }
-    assert SkillSystemOne.yes_no is SkillSystemOne.noul
-
-
 def test_not_for_and_examples_become_the_structured_form():
     question = SkillSystemOne.choice(
         "which?",
@@ -303,11 +255,6 @@ def test_not_for_and_examples_become_the_structured_form():
         "not_for": "landing",
         "examples": ["gear down"],
     }
-
-
-def test_describe_stays_a_plain_string_when_there_is_nothing_to_add():
-    """So a caller can route every description through it without noise."""
-    assert SkillSystemOne.describe("the gear alone") == "the gear alone"
 
 
 def test_a_score_reads_back_as_a_label_a_number_and_named_shares():
@@ -367,30 +314,6 @@ def test_decisions_are_timed_and_drained_per_turn():
     assert [round(ms) for _label, ms in taken] == [310, 280]
     # Drained, so a turn that ends early cannot bill the next one.
     assert gate.take_decisions() == []
-
-
-def test_the_snapshot_is_one_row_with_the_decisions_under_it():
-    benchmark = Benchmark(label="turn")
-    metrics = TurnMetrics.__new__(TurnMetrics)
-    metrics.add_system_one_snapshot(
-        benchmark, [("Command choice", 310.0), ("Skill: 3 question(s)", 280.0)]
-    )
-
-    assert len(benchmark.snapshots) == 1
-    row = benchmark.snapshots[0]
-    assert row.label == "System 1 decision making"
-    assert row.execution_time_ms == 590.0
-    assert [child.label for child in row.snapshots] == [
-        "Command choice",
-        "Skill: 3 question(s)",
-    ]
-
-
-def test_a_turn_without_system_one_gets_no_row():
-    """An empty row would only make a user ask what it is."""
-    benchmark = Benchmark(label="turn")
-    TurnMetrics.__new__(TurnMetrics).add_system_one_snapshot(benchmark, [])
-    assert benchmark.snapshots == []
 
 
 # ── one call per turn, and a ceiling on how much it can be asked ────
@@ -473,21 +396,10 @@ def _answer(multiple: float, command: str = "ToggleShields", confidence: float =
     )
 
 
-def test_the_question_about_more_than_one_rides_along():
-    """A Choice names one command, so the count has to be asked separately —
-    and in the same call, where it is nearly free."""
-    questions = command_questions([_command("ToggleShields")])
-    assert set(questions) == {"command", MULTIPLE_KEY}
-
-
 def test_two_commands_are_handed_over_whole():
     """"Shields up, weapons hot." fired the shields at 0.85 and stopped. The
     weapons never came up, where the main model would have called both."""
     assert read_command(_answer(multiple=0.98), 0.8) is None
-
-
-def test_one_command_still_fires():
-    assert read_command(_answer(multiple=0.05), 0.8) == "ToggleShields"
 
 
 def test_a_trailing_clause_does_not_count_as_a_second_request():

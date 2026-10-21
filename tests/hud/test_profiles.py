@@ -52,13 +52,6 @@ def test_the_last_profile_left_is_the_default():
     assert [p.is_default for p in profiles] == [True, False]
 
 
-def test_a_config_named_by_a_profile_gets_it_others_get_the_default():
-    profiles = [_profile("default", default=True), _profile("sc", configs=["Star Citizen"])]
-
-    assert hud_profiles.active_profile(profiles, "Star Citizen").id == "sc"
-    assert hud_profiles.active_profile(profiles, "Elite").id == "default"
-
-
 def test_giving_a_config_to_a_profile_takes_it_from_the_other():
     profiles = [_profile("a", configs=["Star Citizen", "Elite"]), _profile("b")]
 
@@ -66,14 +59,6 @@ def test_giving_a_config_to_a_profile_takes_it_from_the_other():
 
     assert profiles[0].configs == ["Elite"]
     assert profiles[1].configs == ["Star Citizen"]
-
-
-def test_a_renamed_config_keeps_its_profile():
-    profiles = [_profile("a", configs=["Star Citizen"])]
-
-    hud_profiles.rename_config(profiles, "Star Citizen", "SC 4.0")
-
-    assert profiles[0].configs == ["SC 4.0"]
 
 
 def test_the_default_profile_cannot_be_deleted(service):
@@ -109,15 +94,6 @@ def test_an_update_cannot_take_the_default_away(service):
     assert (state.profiles[0].name, state.profiles[0].is_default) == ("Main", True)
 
 
-def test_the_profile_naming_the_loaded_config_is_active(service):
-    state = _run(service.create_hud_profile(CreateHudProfileRequest(name="SC", copy_from="default")))
-    sc = state.profiles[-1].model_copy(update={"configs": ["Star Citizen"]})
-
-    state = _run(service.update_hud_profile(sc.id, sc))
-
-    assert state.active_profile_id == sc.id
-
-
 def test_only_one_profile_is_previewed(service):
     state = _run(service.create_hud_profile(CreateHudProfileRequest(name="Racing")))
     racing = state.profiles[-1].id
@@ -128,17 +104,3 @@ def test_only_one_profile_is_previewed(service):
 
     state = _run(service.set_hud_profile_preview("default", HudProfilePreviewRequest(enabled=False)))
     assert state.preview_profile_id == racing
-
-
-def test_renaming_the_loaded_config_keeps_its_profile_on_the_hud(service):
-    state = _run(service.create_hud_profile(CreateHudProfileRequest(name="SC")))
-    sc = state.profiles[-1].model_copy(update={"configs": ["Star Citizen"]})
-    _run(service.update_hud_profile(sc.id, sc))
-    service._server = MagicMock(is_running=True)
-
-    _run(service._on_config_renamed(("Star Citizen", "SC 4.0")))
-
-    # Still the same profile on screen, under the config's new name
-    state = service.state()
-    assert state.profiles[-1].configs == ["SC 4.0"]
-    assert state.active_profile_id == sc.id

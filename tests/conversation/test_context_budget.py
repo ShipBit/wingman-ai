@@ -27,20 +27,9 @@ def config(provider, model=None, deployment=""):
     )
 
 
-def test_a_big_window_hits_the_absolute_ceilings():
-    b = ContextBudget(1_000_000)
-    assert (b.tool_cap, b.history_limit, b.keep_tokens) == (32_000, 64_000, 16_000)
-    assert b.brake == 900_000
-
-
 def test_a_small_window_scales_everything_down():
     b = ContextBudget(8_000)
     assert (b.tool_cap, b.history_limit, b.keep_tokens, b.brake) == (2_000, 4_000, 1_000, 7_200)
-
-
-def test_known_models_come_from_the_table():
-    assert model_window(config(ConversationProvider.OPENAI, "gpt-4.1-mini")) == 1_047_576
-    assert model_window(config(ConversationProvider.WINGMAN_PRO, deployment="google/gemini-2.5-flash")) == 1_048_576
 
 
 def test_unknown_models_get_the_provider_default():

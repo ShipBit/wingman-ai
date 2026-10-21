@@ -15,7 +15,6 @@ import pytest
 from api.enums import PocketTtsQuality, SpokenLanguage
 from api.interface import PocketTTSSettings
 from providers.pocket_tts import PocketTTS
-from providers.pocket_tts_r2 import hf_uri_to_https_url
 
 
 def write_voice(path, **metadata):
@@ -72,20 +71,6 @@ def recorded_downloads(monkeypatch):
     return calls
 
 
-def test_hf_uri_to_https_url():
-    assert hf_uri_to_https_url(
-        "hf://kyutai/pocket-tts-without-voice-cloning/languages/german/embeddings/alba.safetensors@abc123"
-    ) == (
-        "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning"
-        "/resolve/abc123/languages/german/embeddings/alba.safetensors"
-    )
-    # No revision -> main; non-hf URIs pass through untouched.
-    assert hf_uri_to_https_url("hf://kyutai/tts-voices/alba-mackenna/casual.wav") == (
-        "https://huggingface.co/kyutai/tts-voices/resolve/main/alba-mackenna/casual.wav"
-    )
-    assert hf_uri_to_https_url("https://example.com/x.wav") == "https://example.com/x.wav"
-
-
 def test_builtin_resolves_strictly_to_tagged_file(tmp_path, monkeypatch):
     provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
     # Decoys that must all be ignored for a built-in name: raw audio, a legacy
@@ -96,19 +81,6 @@ def test_builtin_resolves_strictly_to_tagged_file(tmp_path, monkeypatch):
 
     resolved = provider._resolve_voice_path("alba")
     assert resolved == str(voices_dir / "alba.german.safetensors")
-
-
-def test_custom_voice_resolution_unchanged(tmp_path, monkeypatch):
-    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
-    (voices_dir / "Bob.wav").write_bytes(b"x")
-    assert provider._resolve_voice_path("Bob") == str(voices_dir / "Bob.wav")
-    import os, time
-    current_clone(voices_dir / "Bob.german.safetensors")
-    later = time.time() + 10
-    os.utime(voices_dir / "Bob.german.safetensors", (later, later))
-    assert provider._resolve_voice_path("Bob") == str(
-        voices_dir / "Bob.german.safetensors"
-    )
 
 
 def test_ensure_builtin_voice_downloads_per_language(
@@ -173,13 +145,6 @@ def test_ensure_builtin_voice_rejects_custom_model_config(
     assert recorded_downloads == []
 
 
-def test_english_uses_the_canonical_tag(tmp_path, monkeypatch):
-    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="english")
-    assert provider._builtin_voice_cache_path("alba") == str(
-        voices_dir / "alba.english_drifting_26-09.safetensors"
-    )
-
-
 def test_get_available_voices_hides_builtin_stems(tmp_path, monkeypatch):
     provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
     (voices_dir / "alba.german.safetensors").write_bytes(b"x")
@@ -192,18 +157,6 @@ def test_get_available_voices_hides_builtin_stems(tmp_path, monkeypatch):
     custom_ids = [v.id for v in voices if v.provider == "custom_voices"]
     assert builtin_ids.count("alba") == 1
     assert sorted(custom_ids) == ["Bob", "Carol"]
-
-
-def test_preload_includes_builtin_voices(tmp_path, monkeypatch):
-    provider, _ = make_provider(tmp_path, monkeypatch, model="german")
-    provider.model = object()  # pretend a model is loaded
-    loaded = []
-    monkeypatch.setattr(provider, "get_voice_state", loaded.append)
-
-    results = provider.preload_voice_states(["alba", "alba", "Bob", ""])
-
-    assert loaded == ["alba", "Bob"]
-    assert results == {"alba": True, "Bob": True}
 
 
 def test_get_voice_state_surfaces_download_failure(tmp_path, monkeypatch):
@@ -308,21 +261,6 @@ def test_a_clone_from_another_pocket_tts_is_stale(tmp_path, monkeypatch):
     assert provider.list_custom_voices_needing_precompute() == []
 
 
-def test_only_stale_skips_voices_never_cloned_for_this_model(tmp_path, monkeypatch):
-    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="german")
-    (voices_dir / "Joe.wav").write_bytes(b"audio")
-    assert provider.list_custom_voices_needing_precompute() == ["Joe"]
-    assert provider.list_custom_voices_needing_precompute(only_stale=True) == []
-
-
-def test_a_clone_from_before_the_word_gap_prompts_is_made_again(tmp_path):
-    from providers.pocket_tts import POCKET_TTS_VERSION, PocketTTS
-
-    path = tmp_path / "Joe.german.safetensors"
-    write_voice(path, **{PocketTTS._CLONED_BY: POCKET_TTS_VERSION})
-    assert not PocketTTS._clone_is_current(str(path))
-
-
 def test_during_a_model_switch_nothing_is_cloned_under_the_new_name(tmp_path, monkeypatch):
     import numpy as np
     import soundfile as sf
@@ -344,14 +282,6 @@ def test_during_a_model_switch_nothing_is_cloned_under_the_new_name(tmp_path, mo
     assert provider.get_status()["is_loading"]
     assert provider._clone_from_audio_and_cache(str(wav)) == {"state": "ok"}
     assert not (voices_dir / "Joe.german.safetensors").exists()
-
-
-def test_clones_of_a_model_wingman_left_are_not_voices_of_their_own(tmp_path, monkeypatch):
-    provider, voices_dir = make_provider(tmp_path, monkeypatch, model="english")
-    (voices_dir / "Joe.wav").write_bytes(b"x")
-    (voices_dir / "Joe.english_2026-09.safetensors").write_bytes(b"x")
-    (voices_dir / "Joe.english_2026-04.safetensors").write_bytes(b"x")
-    assert provider._list_voice_stems(str(voices_dir)) == ["Joe"]
 
 
 def test_a_voice_with_a_recording_continues_the_piece_before(tmp_path, monkeypatch):

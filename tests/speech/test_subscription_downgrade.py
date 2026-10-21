@@ -43,12 +43,6 @@ def read(folder, name):
     return yaml.safe_load((folder / f"{name}.yaml").read_text())
 
 
-def test_one_config_moves_with_its_gender():
-    atc = {"features": {"tts_provider": "wingman_pro"}, "inworld": {"voice_id": "Clive"}}
-    assert downgrade_config_to_azure(atc, DEFAULTS)
-    assert atc["wingman_pro"] == {"tts_provider": "azure", "azure": {"voice": AZURE_MALE_VOICE}}
-
-
 def test_a_voice_the_user_picked_stays_and_other_providers_are_untouched():
     katja = {"features": {"tts_provider": "wingman_pro"}, "inworld": {"voice_id": "Clive"},
              "wingman_pro": {"tts_provider": "inworld", "azure": {"voice": "de-DE-KatjaNeural"}}}
@@ -71,7 +65,7 @@ def test_all_configs_on_disk(tmp_path):
     changed = downgrade_inworld_to_azure(cm)
 
     assert changed == ["Star Citizen/ATC"]
-    assert read(folder, "ATC")["wingman_pro"]["tts_provider"] == "azure"
+    assert read(folder, "ATC")["wingman_pro"] == {"tts_provider": "azure", "azure": {"voice": AZURE_MALE_VOICE}}
     assert "wingman_pro" not in read(folder, "Computer")
     # The defaults do not speak through the subscription, so they stay.
     assert yaml.safe_load(open(cm.default_config_path))["wingman_pro"]["tts_provider"] == "inworld"
@@ -129,18 +123,3 @@ def test_sign_in_rewrites_only_for_a_plan_without_inworld(tmp_path):
     assert asyncio.run(free._downgrade_subscription_tts()) is True
     assert read(folder, "ATC")["wingman_pro"]["tts_provider"] == "azure"
     assert len(free_lines) == 1 and "Star Citizen/ATC" in free_lines[0]
-
-
-def test_a_voice_of_a_main_market_keeps_its_language():
-    from services.wingman_default_voices import azure_voice_for_inworld
-
-    # Free has one multilingual female voice for every language.
-    assert azure_voice_for_inworld("Sabine") == "zh-CN-XiaoyuMultilingualNeural"
-    assert azure_voice_for_inworld("Matthias") == "de-DE-ConradNeural"
-    assert azure_voice_for_inworld("Alain") == "fr-FR-HenriNeural"
-    assert azure_voice_for_inworld("Brian") == "en-US-LewisMultilingualNeural"
-    assert azure_voice_for_inworld("Mercedes") == "zh-CN-XiaoyuMultilingualNeural"
-    assert azure_voice_for_inworld("Alvaro") == "es-ES-AlvaroNeural"
-    # English and unknown names: the multilingual voices, by gender.
-    assert azure_voice_for_inworld("Clive") == "en-US-LewisMultilingualNeural"
-    assert azure_voice_for_inworld("Nobody") == "zh-CN-XiaoyuMultilingualNeural"

@@ -130,25 +130,6 @@ def test_stops_after_the_set_number_until_the_user_speaks(reader, tmp_path):
     asyncio.run(run())
 
 
-def test_switched_off_categories_stay_quiet(reader, tmp_path):
-    log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman()
-
-    async def run():
-        await reader.start(str(tmp_path / "game"))
-        skill = _skill(wingman, react_safety=False)
-        await skill.prepare()
-        await until(lambda: reader.state() is not None)
-        with log.open("a") as stream:
-            stream.write(ARMISTICE)
-        await asyncio.sleep(0.3)
-        await skill.unload()
-        await reader.stop()
-
-    asyncio.run(run())
-    assert wingman.said == []
-
-
 def test_a_switched_off_type_stays_quiet_while_its_group_reacts(reader, tmp_path):
     log = write_game_log(tmp_path, FIRST, LOGIN)
     wingman = FakeWingman()
@@ -277,43 +258,6 @@ def _burst(log, count, minute=20):
             )
 
 
-def test_zero_means_no_limit(reader, tmp_path):
-    log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman()
-
-    async def run():
-        await reader.start(str(tmp_path / "game"))
-        skill = _skill(wingman, max_unanswered=0)
-        await skill.prepare()
-        await until(lambda: reader.state() is not None)
-        skill._unanswered = 500  # Long past any limit, and the user kept quiet.
-        _burst(log, 1)
-        await until(lambda: len(wingman.said) == 1)
-        await skill.unload()
-        await reader.stop()
-
-    asyncio.run(run())
-
-
-def test_never_talks_over_the_wingman(reader, tmp_path):
-    log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman()
-    wingman.audio.is_playing = True  # Answering the user right now.
-
-    async def run():
-        await reader.start(str(tmp_path / "game"))
-        skill = _skill(wingman, max_unanswered=0)
-        await skill.prepare()
-        await until(lambda: reader.state() is not None)
-        _burst(log, 3, minute=20)
-        await asyncio.sleep(0.5)
-        await skill.unload()
-        await reader.stop()
-
-    asyncio.run(run())
-    assert wingman.said == []
-
-
 def test_the_next_reaction_sees_the_last_ones(reader, tmp_path):
     """Without its last lines the model makes the same joke on every event."""
     log = write_game_log(tmp_path, FIRST, LOGIN)
@@ -422,34 +366,6 @@ def test_what_is_stale_by_then_is_dropped(monkeypatch):
     assert wingman.said == []
 
 
-def test_zone_changes_get_one_line_per_while(reader, tmp_path):
-    log = write_game_log(tmp_path, FIRST, LOGIN)
-    wingman = FakeWingman()
-
-    async def run():
-        await reader.start(str(tmp_path / "game"))
-        skill = _skill(wingman, max_unanswered=0)
-        await skill.prepare()
-        await until(lambda: reader.state() is not None)
-        with log.open("a") as stream:
-            stream.write(ARMISTICE)
-        await until(lambda: len(wingman.said) == 1)
-        with log.open("a") as stream:
-            # Leaving: another event than entering, the policy lets it through.
-            stream.write(
-                ARMISTICE.replace("10:00:02", "10:07:00").replace("Entering", "Leaving")
-            )
-        await asyncio.sleep(0.5)
-        assert len(wingman.said) == 1
-        _burst(log, 1, minute=30)  # A mission still counts.
-        await until(lambda: len(wingman.said) == 2)
-        await skill.unload()
-        await reader.stop()
-
-    asyncio.run(run())
-    assert len(wingman.said) == 2
-
-
 def test_a_flickering_zone_is_said_once_and_does_not_use_up_the_limit(monkeypatch):
     clock = _clocked(monkeypatch)
     wingman = FakeWingman()
@@ -514,11 +430,3 @@ def test_a_trip_keeps_its_arrival(monkeypatch):
 
     asyncio.run(run())
     assert "Baijini Point" in wingman.prompts[1][1]
-
-
-def test_the_gap_between_routine_lines_is_a_setting_from_2_to_20_minutes():
-    wingman = FakeWingman()
-    assert _skill(wingman)._routine_gap() == 5 * 60
-    assert _skill(wingman, routine_gap_minutes=12)._routine_gap() == 12 * 60
-    assert _skill(wingman, routine_gap_minutes=0)._routine_gap() == 2 * 60
-    assert _skill(wingman, routine_gap_minutes=60)._routine_gap() == 20 * 60

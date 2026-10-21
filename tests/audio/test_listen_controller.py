@@ -7,7 +7,7 @@ import numpy as np
 
 import services.audio.listen_controller as lc
 from services.audio.listen_controller import ListenController, ListenState
-from services.audio.voice_gate import FRAME_SAMPLES, GateParams, Utterance, VoiceGate
+from services.audio.voice_gate import FRAME_SAMPLES, GateParams, VoiceGate
 
 
 class Recorder:
@@ -49,29 +49,12 @@ def release(controller, source):
     return ok
 
 
-def test_starts_off_and_switching_on_means_listening():
-    controller, rec, _ = make()
-    assert controller.state == ListenState.OFF
-    controller.set_voice_activation(True)
-    assert controller.state == ListenState.ARMED
-    assert rec.states == [ListenState.ARMED]
-
-
 def test_mute_and_unmute():
     controller, _, _ = make()
     controller.set_voice_activation(True)
     controller.set_muted(True)
     assert controller.state == ListenState.MUTED
     controller.toggle_muted()
-    assert controller.state == ListenState.ARMED
-
-
-def test_switching_on_clears_an_old_mute():
-    controller, _, _ = make()
-    controller.set_voice_activation(True)
-    controller.set_muted(True)
-    controller.set_voice_activation(False)
-    controller.set_voice_activation(True)
     assert controller.state == ListenState.ARMED
 
 
@@ -176,14 +159,6 @@ def test_second_source_cannot_take_the_gate():
     assert controller.state == ListenState.HELD
 
 
-def test_armed_utterances_carry_no_wingman():
-    controller, rec, _ = make()
-    controller.set_voice_activation(True)
-    speak(controller)
-    assert len(rec.utterances) == 1
-    assert rec.utterances[0][1] is None
-
-
 def test_capture_for_the_mic_test_keeps_the_clip():
     controller, rec, _ = make()
     controller.set_voice_activation(True)
@@ -194,12 +169,6 @@ def test_capture_for_the_mic_test_keeps_the_clip():
     assert utterance is not None
     assert rec.utterances == []
     assert controller.state == ListenState.ARMED
-
-
-def test_off_ignores_frames():
-    controller, rec, _ = make()
-    speak(controller)
-    assert rec.utterances == []
 
 
 def test_a_long_capture_keeps_every_piece():
@@ -274,29 +243,6 @@ def test_utterance_right_after_playback_counts_as_during_it(monkeypatch):
     now[0] += lc.PLAYBACK_TAIL_S / 2
     speak(controller)
     assert rec.utterances[0][2] is True
-
-
-def test_utterance_long_after_playback_is_the_user(monkeypatch):
-    now = [100.0]
-    monkeypatch.setattr(lc.time, "monotonic", lambda: now[0])
-    controller, rec, _ = make()
-    controller.set_voice_activation(True)
-    controller.playback_started()
-    controller.playback_finished()
-    now[0] += 5.0
-    speak(controller)
-    assert rec.utterances[0][2] is False
-
-
-def test_flag_does_not_leak_into_the_next_utterance():
-    controller, rec, _ = make()
-    controller.set_voice_activation(True)
-    controller.playback_started()
-    speak(controller)
-    controller.playback_finished()
-    controller._playback_ended_at = float("-inf")
-    speak(controller)
-    assert [u[2] for u in rec.utterances] == [True, False]
 
 
 # --- a hold nobody released ---

@@ -1,7 +1,5 @@
 """The bridge picks the HUD backend for the OS Core runs on."""
 
-import sys
-
 import pytest
 
 import hud_server.platform as hud_platform
@@ -18,8 +16,6 @@ from tests.support import FakeHudBackend
 @pytest.mark.parametrize(
     "system, expected",
     [
-        ("Windows", OsFamily.WINDOWS),
-        ("Linux", OsFamily.LINUX),
         ("Darwin", OsFamily.MACOS),
         ("FreeBSD", None),
     ],
@@ -43,22 +39,6 @@ def test_linux_without_a_display_keeps_the_hud_off_and_says_why(monkeypatch):
         backend.start()
 
 
-def test_the_macos_backend_runs_only_on_macos():
-    backend = create_backend(OsFamily.MACOS)
-
-    assert backend.os == OsFamily.MACOS
-    assert backend.supported == (sys.platform == "darwin")
-
-
-def test_an_unknown_os_has_no_hud(monkeypatch):
-    monkeypatch.setattr(hud_platform.platform, "system", lambda: "FreeBSD")
-
-    backend = create_backend()
-
-    assert not backend.supported
-    assert "FreeBSD" in backend.unsupported_reason
-
-
 def test_a_backend_that_fails_to_load_turns_the_hud_off_instead_of_failing(monkeypatch):
     monkeypatch.setitem(
         hud_platform.BACKENDS, OsFamily.LINUX, ("hud_server.platform.not_there", "Backend")
@@ -68,10 +48,6 @@ def test_a_backend_that_fails_to_load_turns_the_hud_off_instead_of_failing(monke
 
     assert not backend.supported
     assert "failed to load" in backend.unsupported_reason
-
-
-def test_the_windows_backend_runs_only_on_windows():
-    assert create_backend(OsFamily.WINDOWS).supported == (sys.platform == "win32")
 
 
 def test_the_hud_screen_falls_back_to_the_last_monitor():

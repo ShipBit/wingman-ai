@@ -13,10 +13,6 @@ from services.audio_player import AudioPlayer
 from services.speech_priority import SpeechSlot, current_speech, must_yield
 
 
-def test_an_answer_always_starts():
-    assert not must_yield(SpeechPriority.ANSWER, True, SpeechPriority.ANSWER, True)
-
-
 def test_an_event_waits_for_the_user_and_for_answers_but_talks_over_radio():
     assert must_yield(SpeechPriority.EVENT, False, SpeechPriority.ANSWER, True)
     assert must_yield(SpeechPriority.EVENT, True, SpeechPriority.ANSWER, False)

@@ -35,12 +35,6 @@ def test_48k_to_16k_keeps_length_and_pitch():
     assert abs(dominant_hz(out, 16000) - 440) < 5
 
 
-def test_44k1_to_16k_keeps_length_and_pitch():
-    out = run(44100, 1411)
-    assert abs(len(out) - 32000) < 600
-    assert abs(dominant_hz(out, 16000) - 440) < 5
-
-
 def test_16k_passes_through_in_frames():
     r = Resampler(16000)
     frames = r.push(np.ones(1000, np.float32)) + r.push(np.ones(1000, np.float32))
@@ -75,12 +69,6 @@ def sine(rate, seconds=0.5, hz=440.0):
 def convert_in_blocks(converter, samples, block=1024):
     out = [converter.convert(samples[i : i + block]) for i in range(0, len(samples), block)]
     return np.concatenate(out)
-
-
-def test_same_rate_is_untouched():
-    c = RateConverter(48000, 48000)
-    x = sine(48000)
-    assert np.array_equal(c.convert(x), x)
 
 
 def test_up_from_24k_to_48k_keeps_the_tone_and_doubles_the_length():

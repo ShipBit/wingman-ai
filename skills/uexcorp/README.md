@@ -106,13 +106,11 @@ shared.
 
 ## Tests
 
-From the Wingman AI project root:
+The tests live in `tests/skills/uexcorp/` and are part of Core's test suite. From the Wingman AI project root:
 
 ```
-python -m skills.uexcorp.tests.test_route_planner
+python -m pytest tests/skills/uexcorp
 ```
-
-Every `tests/test_*.py` module runs this way and prints `ALL OK`.
 
 ---
 

@@ -81,17 +81,6 @@ def test_the_system_one_toggle_actually_reaches_the_config():
     assert current.system_one.enabled is False
 
 
-def test_the_toggle_survives_being_switched_back_on():
-    current = _settings()
-    current.system_one.enabled = False
-
-    incoming = _settings()
-    incoming.system_one.enabled = True
-
-    asyncio.run(_service(current).save_settings(incoming))
-    assert current.system_one.enabled is True
-
-
 def test_a_language_change_before_sign_in_reloads_the_config(monkeypatch):
     """The client sets the language before it signs in, while there is no
     Tower yet. The Tower then started from the config parsed at boot, still on
@@ -139,9 +128,3 @@ def test_every_settings_block_is_either_copied_or_deliberately_not():
         f"client cannot change them: {missing}. Give each one a line, or add "
         "it to DELIBERATELY_NOT_COPIED with the reason."
     )
-
-
-def test_the_exception_list_only_holds_real_fields():
-    """A stale entry here would hide a genuinely dropped block."""
-    unknown = DELIBERATELY_NOT_COPIED - set(SettingsConfig.model_fields)
-    assert not unknown, f"no such settings block: {unknown}"

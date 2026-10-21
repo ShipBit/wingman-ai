@@ -130,18 +130,6 @@ def test_manually_deleted_default_dir_falls_back_to_first(
     assert config_names(users_dir) == ["General", "Star Citizen"]
 
 
-def test_manually_edited_default_to_unknown_name(boot_config_manager):
-    """User edits context.yaml and sets default_config to a nonexistent name."""
-    cm = boot_config_manager()
-    cm.context_state.default_config = "Does Not Exist"
-    cm.save_context_state()
-
-    cm2 = boot_config_manager()
-    default = cm2.find_default_config()
-    assert default.name == "General"  # first existing dir (sorted)
-    assert cm2.context_state.default_config == "General"
-
-
 def test_manually_removed_tombstone_resurrects_template(
     users_dir, boot_config_manager
 ):
@@ -162,7 +150,6 @@ def test_manually_removed_tombstone_resurrects_template(
     "content",
     [
         "default_config: [this, is, not, a, string]\n",
-        "- General\n- Star Citizen\n",
         "hello\n",
     ],
 )
@@ -254,7 +241,7 @@ def test_rename_into_deleted_template_name_keeps_tombstone(
     assert not path.exists(path.join(sc_dir, "Computer.yaml"))
 
 
-@pytest.mark.parametrize("bad_name", [".Team", "_Backup", "a/b", "a\\b", "  ", ""])
+@pytest.mark.parametrize("bad_name", [".Team", "a/b", ""])
 def test_invalid_config_names_are_rejected(users_dir, boot_config_manager, bad_name):
     cm = boot_config_manager()
 

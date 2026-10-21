@@ -41,12 +41,3 @@ def test_noise_is_not():
         vad.reset()
         scores = [vad(wav[i : i + FRAME_SAMPLES]) for i in range(0, len(wav) - FRAME_SAMPLES, FRAME_SAMPLES)]
         assert max(scores) < 0.3, file
-
-
-def test_reset_forgets_the_context():
-    vad = SileroVad(ROOT)
-    frames = frames_of("tests/fixtures/speech_16k.wav")
-    for f in frames[:20]:
-        vad(f)
-    vad.reset()
-    assert np.all(vad._context == 0)

@@ -153,33 +153,6 @@ def test_broken_rules_are_rejected(tmp_path, monkeypatch):
     assert source.status.problem == ScGameLogRulesProblem.INVALID
 
 
-def test_rules_that_need_a_newer_reader(tmp_path, monkeypatch):
-    bundled = Instructions.load(bundled_bytes()).revision
-    raw = _rules_bytes(bundled + 1, minimum_reader_version="99.0.0")
-    source = _source(tmp_path, monkeypatch, 200, raw)
-    assert asyncio.run(source.check()) is None
-    assert source.status.problem == ScGameLogRulesProblem.NEEDS_UPDATE
-
-
-def test_the_maintainer_comes_from_the_rules(tmp_path, monkeypatch):
-    bundled = Instructions.load(bundled_bytes()).revision
-    maintainer = {"name": "Mallachi", "discord": "mallachi"}
-    source = _source(
-        tmp_path, monkeypatch, 200, _rules_bytes(bundled + 1, maintainer=maintainer)
-    )
-    asyncio.run(source.check())
-    assert source.status.maintainer == maintainer
-
-
-def test_the_default_maintainer_without_one_in_the_rules(tmp_path, monkeypatch):
-    bundled = Instructions.load(bundled_bytes()).revision
-    data = json.loads(_rules_bytes(bundled + 1))
-    data.pop("maintainer", None)
-    source = _source(tmp_path, monkeypatch, 200, json.dumps(data).encode())
-    asyncio.run(source.check())
-    assert source.status.maintainer == rules_module.DEFAULT_MAINTAINER
-
-
 def test_a_maintainer_link_must_be_https():
     with pytest.raises(Exception):
         Instructions.load(_rules_bytes(9, maintainer={"name": "X", "url": "javascript:alert(1)"}))

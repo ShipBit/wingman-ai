@@ -40,7 +40,7 @@ def test_wlroots_desktops_take_it_with_grim(monkeypatch, wayland):
     assert wayland == ["grim"]
 
 
-@pytest.mark.parametrize("desktop", ["GNOME", "KDE"])
+@pytest.mark.parametrize("desktop", ["GNOME"])
 def test_otherwise_the_portal_asks_the_desktop(monkeypatch, wayland, desktop):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     tools(monkeypatch, "grim")

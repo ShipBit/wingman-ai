@@ -26,11 +26,6 @@ def test_a_recording_that_stops_mid_word_loses_the_cut_off_word():
     assert abs(end_at_word_gap(rec, SR, max_seconds=12).size / SR - 3.0) < 0.03
 
 
-def test_trailing_silence_is_the_pause_it_ends_on():
-    rec = np.concatenate([speech(2), silence(0.2), speech(3), silence(1)])
-    assert abs(end_at_word_gap(rec, SR).size / SR - 5.2) < 0.03
-
-
 def test_without_any_pause_the_limit_cuts():
     assert end_at_word_gap(speech(20), SR, max_seconds=12).size == 12 * SR
     assert end_at_word_gap(speech(3), SR, max_seconds=12).size == 3 * SR

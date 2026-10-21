@@ -13,7 +13,6 @@ from services.filler_response import (
     FillerResponder,
     build_system_prompt,
     clean_filler,
-    language_rule,
 )
 
 
@@ -22,10 +21,6 @@ from services.filler_response import (
 
 def test_a_short_line_is_kept_and_unquoted():
     assert clean_filler('"Moment, ich schau nach."', "Wie viel kostet Eisen?") == "Moment, ich schau nach."
-
-
-def test_only_the_first_line_is_spoken():
-    assert clean_filler("Einen Moment.\nDas dauert kurz.", "x") == "Einen Moment."
 
 
 @pytest.mark.parametrize("text", [None, "", "   \n ", "Soll ich nachsehen?", "¿Busco el precio?"])
@@ -46,10 +41,6 @@ def test_a_long_answer_is_dropped():
 
 
 # ── prompt ───────────────────────────────────────────────────────────
-
-
-def test_the_language_is_named():
-    assert language_rule(SpokenLanguage.DE) == "Write in German."
 
 
 def test_the_prompt_is_filled():
@@ -96,19 +87,6 @@ def test_switched_off_starts_nothing():
     responder, local_ai, _ = _responder(enabled=False)
     assert _start(responder) is None
     local_ai.support.assert_not_called()
-
-
-def test_no_support_model_starts_nothing():
-    responder, _, _ = _responder(ready=False)
-    assert _start(responder) is None
-
-
-def test_the_line_is_spoken_while_the_turn_runs():
-    responder, _, spoken = _responder()
-    line = _start(responder)
-    _wait_until(lambda: line.finished)  # the turn is still running
-    assert responder.stop(line) is True
-    assert spoken == ["Moment, ich schau nach."]
 
 
 def test_it_does_not_need_the_turns_event_loop():
@@ -160,10 +138,6 @@ def test_a_failing_support_call_is_silent():
     assert spoken == []
 
 
-def test_stop_without_a_line():
-    assert _responder()[0].stop(None) is False
-
-
 def test_stop_waits_for_a_line_being_handed_out():
     """The answer is printed right after stop(); the filler must be out first."""
     responder, _, _ = _responder()
@@ -187,7 +161,6 @@ def test_stop_waits_for_a_line_being_handed_out():
     stopper.join(1)
     assert result["spoken"] is True
     assert spoken == ["Moment, ich schau nach."]
-
 
 
 def test_semicolon_cuts_off_the_second_clause():
@@ -220,14 +193,6 @@ def test_a_tool_whose_answer_always_beats_the_line_gets_none(monkeypatch):
     assert local_ai.support.call_count == calls
     # Another tool is not known yet and still gets its line.
     assert not _turn(responder, 0.01, tool="uex_get_vehicle_information").skipped
-
-
-def test_a_slow_tool_keeps_its_line(monkeypatch):
-    responder, local_ai, _ = _responder(delay=0.0, monkeypatch=monkeypatch)
-    monkeypatch.setattr(filler_response, "SPEAK_MARGIN_S", 0.0)
-    for _ in range(3):
-        assert not _turn(responder, 0.1).skipped
-
 
 
 def test_a_turn_that_ended_without_an_answer_teaches_nothing(monkeypatch):

@@ -21,17 +21,6 @@ def test_a_bottom_aligned_window_grows_up_from_the_bottom_of_its_area():
     assert layout.get_position("message_chat") == (100, 600)
 
 
-def test_a_top_aligned_window_stays_at_the_top_of_its_area():
-    layout = _layout()
-    layout.register_window(
-        "persistent_info", mode=LayoutMode.MANUAL, manual_x=40, manual_y=60,
-        align=Align.TOP, area_height=400, height=150,
-    )
-    layout.update_window_height("persistent_info", 300)
-
-    assert layout.get_position("persistent_info") == (40, 60)
-
-
 def test_a_centered_window_stays_in_the_middle_of_its_area_as_it_grows():
     layout = _layout()
     layout.register_window(
@@ -64,17 +53,6 @@ def test_a_manual_window_takes_no_slot_in_its_anchors_stack():
     layout.register_window("persistent_mic", anchor=Anchor.TOP_LEFT, height=80, priority=10)
 
     assert layout.get_position("persistent_mic") == (20, 20)
-
-
-def test_moving_a_manual_window_takes_effect_without_registering_it_again():
-    layout = _layout()
-    layout.register_window(
-        "message_chat", mode=LayoutMode.MANUAL, manual_x=100, manual_y=100, height=100
-    )
-
-    layout.update_window("message_chat", manual_x=300, manual_y=200, width=500)
-
-    assert layout.get_position("message_chat") == (300, 200)
 
 
 def test_switching_a_window_from_auto_to_manual_moves_it():

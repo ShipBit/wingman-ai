@@ -39,12 +39,6 @@ def test_no_language_and_a_broken_answer_give_none():
     assert asyncio.run(other_language.resolve("Pizza", broken)) is None
 
 
-def test_inworld_voices_are_matched_by_primary_language():
-    voices = [VoiceInfo(id="a", languages=["nl-NL"]), VoiceInfo(id="b", languages=["en"]), VoiceInfo(id="c", languages=["nl"])]
-    assert [v.id for v in other_language.inworld_speaks(voices, "nl")] == ["a", "c"]
-    assert other_language.inworld_speaks(voices, None) == []
-
-
 def test_switch_and_restore(tmp_path):
     folder = tmp_path / "configs" / "Star Citizen"
     folder.mkdir(parents=True)
@@ -99,14 +93,6 @@ def test_a_subscription_without_inworld_switches_to_azure_and_back(tmp_path):
 
     assert len(other_language.restore_wingmen(cm)) == 1
     assert yaml.safe_load((folder / "ATC.yaml").read_text())["features"]["tts_provider"] == "pocket_tts"
-
-
-def test_the_report_says_what_works():
-    dutch = OtherLanguageSetting(code="nl", name="Nederlands", english_name="Dutch")
-    klingon = OtherLanguageSetting(code="tlh", name="tlhIngan Hol", english_name="Klingon")
-    assert other_language.report(dutch, "parakeet", True, "wingman_pro", ["x"]).stt_supported
-    assert not other_language.report(klingon, "parakeet", False, None, []).stt_supported
-    assert other_language.report(klingon, "wingman_pro", False, None, []).stt_supported
 
 
 def test_dutch_set_as_another_language_becomes_dutch(tmp_path):

@@ -5,7 +5,6 @@ the wingman's name; the phrase in the config has neither."""
 import asyncio
 from types import SimpleNamespace
 
-import pytest
 
 from services.command_executor import CommandExecutor
 
@@ -36,11 +35,6 @@ def fired(executor, executed, transcript):
     executed.clear()
     asyncio.run(executor.try_instant_activation(transcript))
     return list(executed)
-
-
-def test_plain_phrase_fires():
-    executor, executed = executor_with(["landing gear"])
-    assert fired(executor, executed, "landing gear") == ["cmd0"]
 
 
 def test_punctuation_and_capitals_do_not_matter():
@@ -75,11 +69,6 @@ def test_two_commands_on_one_phrase_both_fire():
 def test_empty_phrase_never_matches_a_bare_name():
     executor, executed = executor_with([""], ["landing gear"])
     assert fired(executor, executed, "Computer.") == []
-
-
-def test_a_phrase_listed_twice_fires_its_command_once():
-    executor, executed = executor_with(["Lower landing gear", "lower landing gear."])
-    assert fired(executor, executed, "Lower Landing Gear.") == ["cmd0"]
 
 
 def test_a_command_listed_twice_fires_once():

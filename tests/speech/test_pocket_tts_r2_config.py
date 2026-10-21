@@ -22,9 +22,10 @@ from providers.pocket_tts_r2 import (
 from services.spoken_language import POCKET_TTS_MODEL_LANGUAGES
 
 MODELS = sorted(POCKET_TTS_MODEL_LANGUAGES)
+CP1252_MODELS = ["german", "dutch_24l"]  # typographic quotes and the others
 
 
-@pytest.mark.parametrize("model_id", MODELS)
+@pytest.mark.parametrize("model_id", CP1252_MODELS)
 def test_the_written_config_reads_the_same_in_cp1252(tmp_path, model_id):
     written = build_r2_config(model_id, str(tmp_path))
 

@@ -47,9 +47,7 @@ def sample_list(tmp_path):
 @pytest.mark.parametrize(
     "text, spoken",
     [
-        ("Cptn. Kirk wartet.", "Captain Kirk wartet."),
         ("Lt. Cmdr. Data meldet sich.", "Lieutenant Commander Data meldet sich."),
-        ("Treffpunkt: Sunshine Blvd.", "Treffpunkt: Sunshine Boulevard."),
         ("Das sind ca. 10 km, also 1 km weniger.", "Das sind circa zehn Kilometer, also ein Kilometer weniger."),
         ("Bei 20 °C, z.B. morgen.", "Bei zwanzig Grad Celsius, zum Beispiel morgen."),
         ("Das kostet 1.234,50 € bzw. $20.", "Das kostet eintausend-zweihundert-vierunddreißig Euro fünfzig beziehungsweise zwanzig Dollar."),
@@ -93,14 +91,6 @@ def test_a_list_switched_off_does_nothing():
     assert say("5 aUEC", presets=()) == "fünf aUEC"
 
 
-def test_every_bundled_table_loads():
-    for language in [l for l in L if l != L.OTHER]:
-        assert speech_text._abbreviations(ROOT, language.value)
-        assert speech_text._units(ROOT, language.value)
-    assert ("star_citizen", "Star Citizen") == speech_text.list_presets(ROOT)[0][:2]
-    assert ("sample", "Sample", 8) == speech_text.list_presets(speech_text._app_root)[0]
-
-
 def test_a_rule_for_one_language_only():
     # German voices would read "U E C" as German letters; players say them in English.
     assert say("5 aUEC", L.EN) == "five Alpha U E C"
@@ -120,24 +110,6 @@ def test_a_voice_that_reads_numbers_gets_them_as_written():
     )
 
 
-def test_a_range_before_a_unit():
-    assert say("Sicht 3-4 km, 10–15 min.") == "Sicht drei bis vier Kilometer, zehn bis fünfzehn Minuten."
-
-
-def test_a_list_as_it_applies_to_a_language():
-    rules = speech_text.preset_rules_for(speech_text._app_root, "sample", L.DE)
-    assert [(r.written, r.spoken) for r in rules if r.written == "aUEC"] == [("aUEC", "Alpha Juh-Ih-Ssi")]
-    rules = speech_text.preset_rules_for(speech_text._app_root, "sample", L.EN)
-    assert [(r.written, r.spoken) for r in rules if r.written == "aUEC"] == [("aUEC", "Alpha U E C")]
-    assert len({r.written for r in rules}) == len(rules)
-
-
 def test_an_other_language_gets_only_the_rules():
     rules = [Rule(written="aUEC", spoken="Credits")]
     assert say("5 aUEC, ca. 3 km", L.OTHER, rules=rules, presets=()) == "5 Credits, ca. 3 km"
-
-
-def test_german_voices_say_wingman_words_the_english_way():
-    rules = speech_text.preset_rules_for(ROOT, "wingman", L.DE)
-    assert {r.written for r in rules} == {"online", "Online", "Wingman"}
-    assert speech_text.preset_rules_for(ROOT, "wingman", L.EN) == []

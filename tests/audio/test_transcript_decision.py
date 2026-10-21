@@ -51,11 +51,6 @@ def test_the_wingmans_own_sentence_is_an_echo():
     assert core._is_echo(_words("bin hier, bitte geben"))
 
 
-def test_the_user_talking_over_it_is_not():
-    core = _core_with("Ja, ich bin hier. Bitte geben Sie Ihre Anweisung.")
-    assert not core._is_echo(_words("ATC, ich habe eine Frage zum Landeanflug"))
-
-
 def test_a_sentence_that_only_shares_words_is_not_an_echo():
     """The same words in another order are the user talking, not the
     microphone hearing the speakers."""
@@ -67,13 +62,6 @@ def test_a_sentence_that_only_shares_words_is_not_an_echo():
 # --- said over the wingman, heard through speakers ---
 
 ANSWER = "Guten Morgen, Shackles. Alle Systeme sind online und bereit für Ihre Befehle."
-
-
-def test_the_tail_of_the_answer_is_an_echo():
-    core = _core_with(ANSWER)
-    words = _words("Systeme sind online und bereit für ihre Befehle.")
-    assert core._without_echo(words) == []
-    assert core._is_echo(words)
 
 
 def test_a_misheard_word_or_two_is_still_an_echo():

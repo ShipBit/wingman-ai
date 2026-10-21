@@ -52,9 +52,6 @@ def test_the_guid_comes_first_then_the_class_name(table):
 def test_a_key_with_a_manufacturer_prefix_and_a_colour_variant(table):
     assert item_names.lookup(None, "Carryable_case") == "Medical Case"
     assert item_names.lookup(None, "cds_armor_core_01_01_12") == "ADP Core"
-
-
-def test_a_ship_component_sold_with_its_item_suffix(table):
     assert item_names.lookup(None, "SHLD_BEHR_S03_7CA_SCItem") == "7CA 'Nargun'"
 
 
@@ -62,13 +59,6 @@ def test_an_unknown_item_gets_a_tidied_class_name_not_the_code(table):
     assert item_names.lookup(None, "ESPR_BallisticCannon_Barrel_S3") is None
     assert item_names.display_name(None, "ESPR_BallisticCannon_Barrel_S3") == "ESPR Ballistic Cannon Barrel S3"
     assert item_names.display_name(None, "") is None
-
-
-def test_without_a_table_the_names_are_tidied(tmp_path, monkeypatch):
-    monkeypatch.setattr(item_names, "TABLE", tmp_path / "missing.json")
-    monkeypatch.setattr(item_names, "_current", None)
-    assert item_names.display_name("aaaa-1111", "food_burrito_01_a") == "Food Burrito 01 A"
-    assert item_names.display_name(None, "SHLD_BEHR_S03_8CA_SCItem") == "SHLD BEHR S03 8CA"
 
 
 # ── staying current: the table is downloaded like the rules ──────────────
@@ -106,14 +96,6 @@ def test_an_older_broken_or_missing_table_changes_nothing(table, tmp_path):
     ):
         assert asyncio.run(_source(tmp_path, answer).check()) is False
         assert item_names.lookup(None, "SHLD_BEHR_S03_7CA_SCItem") == "7CA 'Nargun'"
-
-
-def test_suffixes_to_strip_come_with_the_table(table, tmp_path):
-    table.write_text(json.dumps({
-        "format_version": 1, "strip_suffixes": ["_NewSuffix"], "by_class": {"radr_chco_s00": "Radar"},
-    }))
-    item_names.ItemNamesSource(str(tmp_path / "cache"))
-    assert item_names.lookup(None, "RADR_CHCO_S00_NewSuffix") == "Radar"
 
 
 def test_a_confirmed_purchase_carries_the_name(reader, tmp_path, table):

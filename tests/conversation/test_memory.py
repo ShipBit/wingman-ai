@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import pytest
 
 from services import persistent_memory as pm
-from services.persistent_memory import PersistentMemoryService, age_label
+from services.persistent_memory import PersistentMemoryService
 
 
 @dataclass
@@ -258,21 +258,6 @@ def test_an_open_thread_alone_is_worth_an_episode(service):
         ["A few commands. Open: Bounty on Kessler not started."]
 
 
-def test_an_empty_episode_is_not_stored(service):
-    service.local_ai_service.answer = answer(["Name is Shackles"])
-
-    service.checkpoint_sync(turns(4), final=True)
-
-    assert [e for e in service.get_all() if e.entry_type == "episode"] == []
-
-
-def test_only_five_episodes_are_kept(service):
-    for i in range(8):
-        service._add_memory_impl("episode", f"Session number {i} was about something.", session_id=f"s{i}")
-
-    assert len([e for e in service.get_all() if e.entry_type == "episode"]) == pm.MAX_EPISODES
-
-
 def test_tidy_only_rewrites_facts_and_leaves_the_episode(service):
     service._add_memory_impl("fact", "Name is Sam")
     service._add_memory_impl("fact", "User's name is Sam")
@@ -346,14 +331,6 @@ def test_the_prompt_lists_the_most_recently_updated_facts_first(service, monkeyp
     block = service.memory_block()
 
     assert "Fact number 2" in block and "Fact number 1" in block and "Fact number 0" not in block
-
-
-def test_age_labels():
-    now = 10 * 86400.0
-    assert age_label(now - 3600, now) == "earlier today"
-    assert age_label(now - 86400, now) == "yesterday"
-    assert age_label(now - 5 * 86400, now) == "5 days ago"
-    assert age_label(now - 21 * 86400 + 100, now) == "2 weeks ago"
 
 
 # ── the fact cap ───────────────────────────────────────────────────

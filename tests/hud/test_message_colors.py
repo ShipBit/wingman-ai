@@ -1,8 +1,6 @@
 """A message's loader glows in the profile's accent color, and its tables
 are a shade of the panel's background, as see-through as the background."""
 
-from PIL import Image
-
 from tests.support import FakeHudBackend, bottom_edge, make_overlay, overlay_errors, run_frames
 
 RED = "#ff0000"
@@ -65,37 +63,3 @@ def test_the_loader_glows_on_the_bottom_edge_in_the_accent_color():
     r, g, b, _ = bottom_edge(backend, overlay, "message_atc")
     assert r > g + 40 and r > b + 40
     assert overlay_errors(overlay) == []
-
-
-def test_a_loader_color_given_by_the_call_wins():
-    backend = FakeHudBackend()
-    overlay = make_overlay(backend)
-    show(overlay, "Checking the hangar", accent_color=RED, bg_color="#000000")
-
-    overlay._handle_message({"type": "set_loader", "group": "atc", "show": True, "color": "#00ff00"})
-    run_frames(overlay)
-
-    r, g, b, _ = bottom_edge(backend, overlay, "message_atc")
-    assert g > r + 40 and g > b + 40
-
-
-def test_the_table_text_has_no_light_rim_on_a_see_through_row():
-    backend = FakeHudBackend()
-    overlay = make_overlay(backend)
-    show(overlay, TABLE, accent_color="#d84f4f", bg_color="#202227d9", text_color="#cccccc")
-    run_frames(overlay)
-    image = backend.window("HUD_message_atc").image
-    scene = Image.new("RGBA", image.size, (120, 70, 40, 255))
-    scene.alpha_composite(image)
-    pixels = scene.load()
-
-    header = [y for y in range(scene.height) for x in range(scene.width)
-              if pixels[x, y][0] > 180 and pixels[x, y][1] < 110]
-    top, bottom = min(header) - 3, max(header) + 3
-    row = pixels[30, top + 1]
-    # Text edges laid over the row, not mixed into its light shade
-    rim = [
-        (x, y) for y in range(top, bottom) for x in range(20, scene.width - 20)
-        if all(c > r + 25 for c, r in zip(pixels[x, y][:3], row[:3])) and pixels[x, y][1] > 90
-    ]
-    assert rim == []

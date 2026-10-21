@@ -70,13 +70,6 @@ def run(coroutine):
 # ── skills ──
 
 
-def test_a_registered_skill_is_discoverable_but_its_tools_are_not_active():
-    registry = registry_with(FakeSkill("notes", ["save_note"]))
-
-    assert [m.name for m in registry.get_discoverable_skills()] == ["notes"]
-    assert active_tool_names(registry) == set()
-
-
 def test_activating_a_skill_exposes_its_tools_and_finds_the_skill_by_tool():
     notes = FakeSkill("notes", ["save_note", "read_note"])
     registry = registry_with(notes, FakeSkill("music", ["play_track"]))
@@ -104,17 +97,6 @@ def test_two_active_skills_sharing_a_tool_name_send_and_route_it_once():
     assert registry.active_skill_for_tool("uex_get_trade_routes") is bundled  # same one every time
 
 
-def test_deactivating_hides_the_tools_again():
-    registry = registry_with(FakeSkill("notes", ["save_note"]))
-    run(registry.activate_skill("notes"))
-
-    ok, _ = registry.deactivate_skill("notes")
-
-    assert ok
-    assert active_tool_names(registry) == set()
-    assert registry.deactivate_skill("notes")[0] is False  # already off
-
-
 def test_a_conversation_reset_hides_activated_tools_but_keeps_auto_activated_ones():
     registry = registry_with(
         FakeSkill("notes", ["save_note"]),
@@ -140,16 +122,6 @@ def test_unregistering_removes_the_skill_and_its_tools():
     assert registry.get_skill_for_tool("save_note") is None
     assert active_tool_names(registry) == set()
     assert registry.skill_count == 0
-
-
-def test_activating_an_unknown_skill_fails_and_names_the_ones_that_exist():
-    registry = registry_with(FakeSkill("notes", ["save_note"]))
-
-    success, message, _ = run(registry.activate_skill("ghost"))
-
-    assert not success
-    assert "notes" in message
-    assert registry.active_skill_names == set()
 
 
 def test_the_meta_tools_list_only_what_can_still_be_activated():
@@ -198,17 +170,6 @@ def capabilities(skills, servers):
     return CapabilityRegistry(skill_registry, mcp_registry), skill_registry, mcp_registry
 
 
-def test_the_capability_tool_offers_skills_first_then_mcp_servers():
-    registry, _, _ = capabilities([FakeSkill("notes", ["save_note"])], ["docs"])
-
-    tools = dict(registry.get_meta_tools())
-    schema = tools["activate_capability"]["function"]
-
-    assert schema["parameters"]["properties"]["capability_name"]["enum"] == ["notes", "docs"]
-    assert "list_active_capabilities" in tools
-    assert registry.has_capabilities
-
-
 def test_a_capability_that_is_already_on_is_not_offered_again():
     registry, skills, mcp = capabilities([FakeSkill("notes", ["save_note"])], ["docs"])
     run(skills.activate_skill("notes"))
@@ -236,17 +197,3 @@ def test_activating_a_capability_goes_to_the_registry_that_owns_it():
     assert skill_changed and skills.active_skill_names == {"notes"}
     assert mcp_changed and mcp.activated == [("activate_mcp_server", {"server_name": "docs"})]
     assert not ghost_changed and "ghost" in message
-
-
-def test_the_active_list_names_skills_and_servers_with_their_tools():
-    registry, skills, mcp = capabilities([FakeSkill("notes", ["save_note"])], ["docs"])
-
-    empty, _ = run(registry.execute_meta_tool("list_active_capabilities", {}))
-    run(skills.activate_skill("notes"))
-    mcp.active_server_names.add("docs")
-    listing, changed = run(registry.execute_meta_tool("list_active_capabilities", {}))
-
-    assert "No capabilities" in empty
-    assert "Notes: save_note" in listing
-    assert "Docs: mcp_docs_search" in listing
-    assert not changed

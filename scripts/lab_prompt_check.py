@@ -2,8 +2,8 @@
 """Test prompts via the Local AI Lab playground endpoint.
 
 Usage:
-    python scripts/test_tts_praise.py [--prompt tts-test-praise] [--iterations 3] [--host http://localhost:49111]
-    python scripts/test_tts_praise.py --prompt condense-conversation --preset Balanced --iterations 5
+    python scripts/lab_prompt_check.py [--prompt tts-test-praise] [--iterations 3] [--host http://localhost:49111]
+    python scripts/lab_prompt_check.py --prompt condense-conversation --preset Balanced --iterations 5
 
 Fetches presets, prompts, and example messages from Core (single source of truth).
 By default tests only the production preset for known prompts, or all presets for unknown ones.
