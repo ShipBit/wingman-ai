@@ -1380,7 +1380,8 @@ class Wingman:
     async def _wait_for_turn(self, priority: SpeechPriority, deadline: float) -> bool:
         """Wait until a line of ``priority`` may start (see must_yield). An
         answer waits only for another answer, the filler line before it.
-        False when the wingman was unloaded, or the deadline passed."""
+        False when the wingman was unloaded, the deadline passed, or a
+        BACKGROUND line would have to wait: it is said now or not at all."""
         player = self.audio_player
         while True:
             if self._unloaded:
