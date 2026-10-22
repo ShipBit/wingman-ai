@@ -3,6 +3,7 @@ the user got an answer: an event is said after the answer, radio chatter is
 not said at all."""
 
 import asyncio
+import time
 from types import SimpleNamespace
 
 from api.enums import SpeechPriority, SpokenLanguage, TtsProvider
@@ -78,3 +79,14 @@ def test_radio_chatter_that_came_second_is_dropped(monkeypatch):
 
     assert _say(wingman, SpeechPriority.BACKGROUND) is False
     assert wingman.tts.calls == 1
+
+
+def test_radio_chatter_does_not_wait_for_a_running_answer(monkeypatch):
+    monkeypatch.setattr(user_activity_module.user_activity, "_holding", False)
+    wingman = _wingman()
+    wingman.audio_player.is_playing = True
+
+    started = time.monotonic()
+    assert _say(wingman, SpeechPriority.BACKGROUND) is False
+    assert time.monotonic() - started < 1
+    assert wingman.tts.calls == 0
