@@ -1277,8 +1277,8 @@ class Wingman:
         ``priority`` (services/speech_priority) decides who may talk over
         whom. An EVENT waits for the user and for a playback at least as
         important, also when that one started during synthesis, and is said
-        after it, up to EVENT_WAIT_S. A BACKGROUND line in that situation is
-        not said at all."""
+        after it, up to EVENT_WAIT_S. A BACKGROUND line in that situation, or
+        one that would have to wait before synthesis, is not said at all."""
         if self._unloaded:
             return False
         if sound_config:
@@ -1380,7 +1380,8 @@ class Wingman:
     async def _wait_for_turn(self, priority: SpeechPriority, deadline: float) -> bool:
         """Wait until a line of ``priority`` may start (see must_yield). An
         answer waits only for another answer, the filler line before it.
-        False when the wingman was unloaded, or the deadline passed."""
+        False when the wingman was unloaded, the deadline passed, or a
+        BACKGROUND line would have to wait: it is said now or not at all."""
         player = self.audio_player
         while True:
             if self._unloaded:
@@ -1393,6 +1394,10 @@ class Wingman:
                 )
             if not waiting:
                 return True
+            # Background is said now or not at all. Waited for, it would come
+            # long after the moment it was about (chat read out after the answer).
+            if priority == SpeechPriority.BACKGROUND:
+                return False
             if priority != SpeechPriority.ANSWER and time.monotonic() > deadline:
                 return False
             await asyncio.sleep(0.1)
