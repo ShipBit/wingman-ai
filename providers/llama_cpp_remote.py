@@ -19,20 +19,37 @@ class LlamaCppRemote:
         self._init_clients()
 
     def _init_clients(self):
-        """Initialize OpenAI clients pointing at remote llama-server endpoints."""
-        support_url = f"{self.settings.support_remote_host}:{self.settings.support_remote_port}/v1"
-        embed_url = (
-            f"{self.settings.embed_remote_host}:{self.settings.embed_remote_port}/v1"
+        """Initialize OpenAI clients pointing at remote llama-server endpoints.
+
+        A malformed host or port (e.g. a host that already carries a port) makes
+        the OpenAI client raise. That must not take Core down at startup: the
+        user could no longer open the UI to correct it. The broken client stays
+        None and its calls fail with a clear message instead.
+        """
+        self._support_client = self._make_client(
+            "support",
+            self.settings.support_remote_host,
+            self.settings.support_remote_port,
+        )
+        self._embed_client = self._make_client(
+            "embedding",
+            self.settings.embed_remote_host,
+            self.settings.embed_remote_port,
         )
 
-        self._support_client = OpenAI(
-            base_url=support_url,
-            api_key="not-needed",
-        )
-        self._embed_client = OpenAI(
-            base_url=embed_url,
-            api_key="not-needed",
-        )
+    @staticmethod
+    def _make_client(role: str, host: str, port: int) -> Optional[OpenAI]:
+        url = f"{host}:{port}/v1"
+        try:
+            return OpenAI(base_url=url, api_key="not-needed")
+        except Exception as e:
+            printr.print(
+                f"Invalid address for the remote {role} server ({url}): {e}. "
+                "Enter the host without a port (e.g. http://127.0.0.1) and the port separately.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return None
 
     @staticmethod
     def detect_context_size(host: str, port: int) -> Optional[int]:
@@ -103,6 +120,8 @@ class LlamaCppRemote:
             from services.file import get_prompt
 
             system_prompt = get_prompt("support-default")
+        if self._support_client is None:
+            return SupportResult(text=None)
         try:
             response = self._support_client.chat.completions.create(
                 model="local-model",
@@ -157,7 +176,7 @@ class LlamaCppRemote:
         """Generate embeddings via remote llama-server."""
         # Ensure all inputs are non-empty strings (guards against multimodal content lists)
         sanitized = [t if isinstance(t, str) and t.strip() else "" for t in texts]
-        if not any(sanitized):
+        if not any(sanitized) or self._embed_client is None:
             return None
 
         try:
@@ -176,6 +195,8 @@ class LlamaCppRemote:
 
     def is_ready(self) -> bool:
         """Non-blocking connectivity check. Logs warnings but doesn't block."""
+        if self._support_client is None:
+            return False
         try:
             # Quick health check on support endpoint
             self._support_client.models.list()
@@ -191,6 +212,8 @@ class LlamaCppRemote:
         embed test report "not ready" whenever support was unreachable, however
         healthy the embedding server was.
         """
+        if self._embed_client is None:
+            return False
         try:
             self._embed_client.models.list()
             return True
