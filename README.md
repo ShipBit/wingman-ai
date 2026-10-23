@@ -163,7 +163,7 @@ The video that started it all, our first prototype from 2023:
 
 Wingman AI Core is open source and free, and so is the client. The AI providers you use might not be. That's why we offer the **Wingman Subscription**: one account for chat models, speech recognition, voices and image generation, with a monthly usage allowance instead of pay-per-use bills and no API keys.
 
-- **Free** has every feature: as many Wingmen as you want, commands, skills, MCP servers, the HUD, the avatar studio and voices in every language, with a budget that refills every month.
+- **Free** has almost every feature: as many Wingmen as you want, commands, skills, MCP servers, the HUD, the avatar studio and voices in every language, with a budget that refills every month. Only Voice Activation needs Pro or Ultra.
 - **Pro** gives you 10x the usage of Free, **Ultra** 30x. Both add Voice Activation and more voices, and Ultra includes every voice.
 - **Tell a friend**: share your invite link, and when a friend subscribes, you both get a Usage Reset.
 
