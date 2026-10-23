@@ -2,7 +2,7 @@
 
 Official website: [https://www.wingman-ai.com](https://www.wingman-ai.com)
 
-[![Wingman AI Showreel](https://img.youtube.com/vi/qR8FjmQJRGE/0.jpg)](https://youtu.be/qR8FjmQJRGE 'Wingman AI Showreel')
+[![Never Fly Solo Again: Wingman AI 3 for Star Citizen](assets/wingman-video.webp)](https://youtu.be/Hcgmras9YFE 'Never Fly Solo Again: Wingman AI 3 for Star Citizen')
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer. AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
 
@@ -19,9 +19,9 @@ The idea is simple, but the possibilities are endless. For example, you could:
 
 ## Features
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px; gap: 8px;">
-<img src="assets/wingman-ui-1.png"></img> <img src="assets/wingman-ui-2.png"></img> <img src="assets/wingman-ui-3.png"></img> <img src="assets/wingman-ui-4.png"></img>
-</div>
+<p align="center">
+<img src="assets/wingman-client-chat.webp" width="32%" alt="Chat with a Wingman"> <img src="assets/wingman-client-commands.webp" width="32%" alt="Commands"> <img src="assets/wingman-client-settings.webp" width="32%" alt="Settings">
+</p>
 
 Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the following features:
 
@@ -106,9 +106,9 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
 
 We (Team ShipBit) offer an additional [client with a neat GUI](https://www.wingman-ai.com) that you can use to configure everything in Wingman AI Core.
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px; gap: 8px;">
-<img src="assets/wingman-ui-5.png"></img> <img src="assets/wingman-ui-6.png"></img> <img src="assets/wingman-ui-7.png"></img> <img src="assets/wingman-ui-8.png"></img>
-</div>
+<p align="center">
+<img src="assets/wingman-hud-overlay.webp" width="49%" alt="HUD Overlay in Star Citizen"> <img src="assets/wingman-log-reader.webp" width="49%" alt="Log Reader in Star Citizen">
+</p>
 
 ## Is this a "Star Citizen" thing?
 
