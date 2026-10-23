@@ -12,8 +12,9 @@ import time
 from typing import Optional, Any
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 import uvicorn
 from uvicorn import Server, Config
 
@@ -50,6 +51,7 @@ from hud_server.models import (
 # The overlay renders on every OS; the platform backend puts it on screen
 from hud_server.overlay.overlay import HeadsUpOverlay, PIL_AVAILABLE
 from hud_server.platform import create_backend
+from hud_server.obs import ObsBroadcaster, OBS_HTML, same_origin
 
 printr = Printr()
 
@@ -94,6 +96,9 @@ class HudServer:
 
         # HUD state manager
         self.manager = HudManager()
+
+        # The HUD for OBS Browser Sources
+        self.obs_broadcaster = ObsBroadcaster(framerate=self._framerate)
 
         # Overlay support (optional)
         self._overlay = None
@@ -605,6 +610,42 @@ class HudServer:
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok")
 
+        # ─────────────────────────────── OBS Browser Source ─────────────────────────────── #
+
+        @app.get(hud_const.PATH_OBS, response_class=HTMLResponse, tags=["obs"])
+        async def obs_overlay_page():
+            """The page to add as an OBS Browser Source: the HUD on a transparent background."""
+            return HTMLResponse(content=OBS_HTML)
+
+        @app.websocket(hud_const.PATH_OBS_WS)
+        async def obs_websocket(ws: WebSocket):
+            """The HUD windows for the /obs page, as they change."""
+            if not same_origin(ws.headers):
+                await ws.close(code=1008)
+                return
+            await ws.accept()
+            try:
+                await self.obs_broadcaster.connect(ws)
+                # The page sends nothing; this waits for it to go
+                while (await ws.receive())["type"] != "websocket.disconnect":
+                    pass
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+            finally:
+                self.obs_broadcaster.disconnect(ws)
+
+        @app.get(hud_const.PATH_OBS_FRAME, tags=["obs"])
+        def obs_frame_snapshot(request: Request):
+            """The HUD as one screen-sized transparent PNG (sync: encoding runs in the thread pool)."""
+            if not same_origin(request.headers):
+                raise HTTPException(status_code=403, detail="Not from this server's own pages")
+            return Response(content=self.obs_broadcaster.snapshot(), media_type="image/png")
+
+        @app.get(hud_const.PATH_OBS_STATUS, tags=["obs"])
+        async def obs_status():
+            """Connected Browser Sources, the HUD screen's size and the windows shown."""
+            return self.obs_broadcaster.get_status()
+
 
     # ─────────────────────────────── Overlay Support ─────────────────────────────── #
 
@@ -648,6 +689,7 @@ class HudServer:
                 screen=self._screen,
                 event_callback=self._on_overlay_event,
                 backend=backend,
+                obs_broadcaster=self.obs_broadcaster,
             )
 
             # Register callback to send commands to overlay
@@ -708,6 +750,7 @@ class HudServer:
                     )
                 self._overlay_thread = None
 
+            self.obs_broadcaster.clear()
             self._overlay = None
             self._command_queue = None
             if self._error_queue:
@@ -824,6 +867,7 @@ class HudServer:
         self._host = host
         self._port = port
         self._framerate = max(1, framerate)
+        self.obs_broadcaster.set_framerate(self._framerate)
         self._layout_margin = layout_margin
         self._layout_spacing = layout_spacing
         self._screen = max(1, screen)
@@ -870,6 +914,7 @@ class HudServer:
 
         if framerate is not None:
             self._framerate = max(1, min(240, framerate))
+            self.obs_broadcaster.set_framerate(self._framerate)
             settings_msg["framerate"] = self._framerate
         if layout_margin is not None:
             self._layout_margin = layout_margin
@@ -890,6 +935,7 @@ class HudServer:
         try:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
+            self.obs_broadcaster.set_loop(self._loop)
 
             config = Config(
                 app=self.app,
@@ -919,6 +965,8 @@ class HudServer:
 
     async def stop(self):
         """Stop the HUD server."""
+        # Also when the server thread died on its own: the encoder still runs
+        self.obs_broadcaster.stop()
         if not self._running:
             return
 

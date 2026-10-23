@@ -221,7 +221,49 @@ class FakeHudBackend(HudBackend):
         return window.handler(event, x, y) if window.handler else None
 
 
-def make_overlay(backend, events=None):
+class FakeObs:
+    """Stands in for the OBS broadcaster: what the overlay says is on screen."""
+
+    def __init__(self):
+        self.shown = {}  # window name -> (canvas, x, y, opacity)
+
+    def set_dimensions(self, width, height):
+        pass
+
+    def set_framerate(self, framerate):
+        pass
+
+    def show_window(self, name, canvas, x, y, opacity):
+        self.shown[name] = (canvas, x, y, opacity)
+
+    def move_window(self, name, x, y, opacity):
+        self.shown[name] = (self.shown[name][0], x, y, opacity)
+
+    def hide_window(self, name):
+        self.shown.pop(name, None)
+
+
+def hold_encoding(monkeypatch, size):
+    """Make the OBS encoder stop on pictures of `size` until released.
+    Returns (started, release): events for "it is encoding now" and "go on"."""
+    import threading
+
+    from hud_server import obs
+
+    started, release = threading.Event(), threading.Event()
+    encode = obs._png
+
+    def held(image):
+        if image.size == size:
+            started.set()
+            release.wait(5)
+        return encode(image)
+
+    monkeypatch.setattr(obs, "_png", held)
+    return started, release
+
+
+def make_overlay(backend, events=None, obs_broadcaster=None):
     """A HUD overlay on `backend`, fonts loaded, ready to step frames by hand."""
     from hud_server.overlay.overlay import HeadsUpOverlay
 
@@ -230,6 +272,7 @@ def make_overlay(backend, events=None):
         error_queue=queue.Queue(),
         event_callback=(events.append if events is not None else None),
         backend=backend,
+        obs_broadcaster=obs_broadcaster,
     )
     overlay._init_fonts()
     overlay.dt = 0.05

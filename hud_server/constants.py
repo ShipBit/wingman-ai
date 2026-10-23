@@ -30,6 +30,7 @@ MAX_TEXT_SIZE_CACHE_SIZE = 2000
 THREAD_NAME_SERVER = "HUDServerThread"
 THREAD_NAME_OVERLAY = "HUDOverlayThread"
 THREAD_NAME_CLIENT_LOOP = "HUDClientLoopThread"
+THREAD_NAME_OBS_ENCODER = "HUDObsEncoderThread"
 
 # API Paths
 PATH_HEALTH = "/health"
@@ -50,6 +51,10 @@ PATH_ELEMENT_SHOW = "/element/show"
 PATH_ELEMENT_HIDE = "/element/hide"
 PATH_DEFAULTS = "/defaults"
 PATH_PREVIEW = "/preview"
+PATH_OBS = "/obs"
+PATH_OBS_WS = "/obs/ws"
+PATH_OBS_FRAME = "/obs/frame.png"
+PATH_OBS_STATUS = "/obs/status"
 
 # Shared containers every Wingman writes to; their look comes from the defaults
 GROUP_CHAT = "wingman_chat"  # element "message"
