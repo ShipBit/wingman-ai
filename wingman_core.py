@@ -2887,7 +2887,12 @@ class WingmanCore(WebSocketUser):
                 only_stale=only_stale, spoken_language_only=True
             )
         )
+        # What this pass leaves for "Precompute all custom voices": voices of
+        # other languages, and on a plain restart those never cloned for this
+        # model. Each is cloned when first used.
+        left_out = len(pocket.list_custom_voices_needing_precompute()) - total
         if not total:
+            self._log_precompute(pocket.model_id, 0, 0, left_out)
             return
         loop = asyncio.get_running_loop()
 
@@ -2904,11 +2909,28 @@ class WingmanCore(WebSocketUser):
         await self.set_core_state(
             CoreState.LOADING_CONFIG, message=f"Preparing voices (0/{total})", progress=0.0
         )
-        await loop.run_in_executor(
+        result = await loop.run_in_executor(
             None,
             lambda: pocket.precompute_custom_voices(
                 progress_cb=progress, only_stale=only_stale, spoken_language_only=True
             ),
+        )
+        self._log_precompute(
+            pocket.model_id, result["succeeded"], result["failed"], left_out
+        )
+
+    def _log_precompute(self, model: str, prepared: int, failed: int, left_out: int) -> None:
+        """One line per start on what the automatic pass cloned, so a log
+        shows whether the voices were ready without counting save lines."""
+        line = f"PocketTTS voices for '{model}': {prepared} prepared"
+        if failed:
+            line += f", {failed} failed"
+        if left_out:
+            line += f", {left_out} left for when they are used (other languages or never cloned)"
+        self.printr.print(
+            line + ".",
+            color=LogType.WARNING if failed else LogType.INFO,
+            server_only=True,
         )
 
     # POST /pocket_tts/preload_voice
