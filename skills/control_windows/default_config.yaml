@@ -1,14 +1,17 @@
 module: skills.control_windows.main
 name: ControlWindows
+api_version: 3
 display_name: Control Windows
 author: teddybear082
 platforms:
   - windows
+  - darwin
+  - linux
 tags:
   - Utility
 description:
-  en: Launch applications and control your Windows computer. Utilize the clipboard of your computer.
-  de: Starte Anwendungen und steuere deinen Windows-Computer. Nutze die Zwischenablage deines Computers.
+  en: Launch, switch, arrange and close applications on your computer. Utilize the clipboard of your computer.
+  de: Starte, wechsle, ordne und schließe Anwendungen auf deinem Computer. Nutze die Zwischenablage deines Computers.
 discovery_keywords:
   - launch app
   - open program
@@ -16,8 +19,8 @@ discovery_keywords:
   - clipboard
   - copy
   - paste
-  - Windows control
+  - window control
 discoverable_by_default: false
 hint:
-  en: This skill looks for applications in your Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
-  de: Dieser Skill sucht nach Anwendungen in deinem Startmenü-Verzeichnis (%APPDATA%/Microsoft/Windows/Start Menu/Programs). Wenn er dir also sagt, dass er eine Anwendung nicht finden kann, erstelle eine Verknüpfung in diesem Verzeichnis.
+  en: "Windows: apps are found in your Start Menu (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so add a shortcut there if one is missing. macOS: apps are found in your Applications folders, and moving windows needs the Accessibility permission. Linux: apps are found by their menu entries. Windows can be controlled in X11, and in a Wayland session those that run through XWayland. The clipboard needs wl-clipboard or xclip."
+  de: "Windows: Anwendungen werden in deinem Startmenü gesucht (%APPDATA%/Microsoft/Windows/Start Menu/Programs), lege dort eine Verknüpfung an, wenn eine fehlt. macOS: Anwendungen werden in deinen Programme-Ordnern gesucht, und Fenster verschieben braucht die Berechtigung für Bedienungshilfen. Linux: Anwendungen werden über ihre Menüeinträge gefunden. Fenster lassen sich unter X11 steuern, in einer Wayland-Sitzung die, die über XWayland laufen. Die Zwischenablage braucht wl-clipboard oder xclip."

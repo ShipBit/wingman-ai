@@ -10,6 +10,8 @@ CREATE TABLE imports(
     `date_imported` INTEGER,
     `dataset_count` INTEGER,
     `time_taken` INTEGER,
+    `date_expires` INTEGER,
+    `etag` TEXT,
     `last_import_run_id` INTEGER
 );
 
@@ -33,6 +35,8 @@ CREATE TABLE category_attribute(
     `category_name` TEXT,
     `date_added` INTEGER,
     `date_modified` INTEGER,
+    `description` TEXT,
+    `is_lower_better` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -107,14 +111,29 @@ CREATE TABLE commodity(
     `date_added` INTEGER,
     `date_modified` INTEGER,
     `is_blacklisted` BIT,
+    `id_item` INTEGER,
+    `ids_star_systems` TEXT,
+    `ids_planets` TEXT,
+    `ids_moons` TEXT,
+    `ids_poi` TEXT,
+    `ids_orbits` TEXT,
+    `uuid` TEXT,
+    `is_extractable` BIT,
+    `is_pure` BIT,
+    `is_refinable` BIT,
+    `is_volatile_qt` BIT,
+    `is_volatile_time` BIT,
+    `is_inert` BIT,
+    `is_explosive` BIT,
+    `is_buggy` BIT,
     `last_import_run_id` INTEGER
 );
 
 CREATE TABLE commodity_alert(
     `id_commodity` INTEGER,
     `id_terminal` INTEGER,
-    `price_buy` INTEGER,
-    `price_sell` INTEGER,
+    `price_buy` REAL,
+    `price_sell` REAL,
     `scu_buy` REAL,
     `scu_sell` REAL,
     `status_buy` INTEGER,
@@ -162,17 +181,21 @@ CREATE TABLE commodity_price(
     `terminal_name` TEXT,
     `terminal_code` TEXT,
     `terminal_slug` TEXT,
+    `container_sizes` TEXT,
+    `quality` INTEGER,
     `last_import_run_id` INTEGER
 );
 
 CREATE TABLE commodity_status(
-    `code` INTEGER,
+    `code` TEXT,
     `name` TEXT,
     `name_short` TEXT,
     `name_abbr` TEXT,
     `percentage` TEXT,
     `colors` TEXT,
     `is_buy` BIT,
+    `percentage_start` REAL,
+    `percentage_end` REAL,
     `last_import_run_id` INTEGER
 );
 
@@ -248,6 +271,15 @@ CREATE TABLE item(
     `notification` TEXT,
     `date_added` INTEGER,
     `date_modified` INTEGER,
+    `size` TEXT,
+    `color` TEXT,
+    `color2` TEXT,
+    `wiki` TEXT,
+    `game_version` TEXT,
+    `screenshot` TEXT,
+    `quality` INTEGER,
+    `is_commodity` BIT,
+    `is_harvestable` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -278,6 +310,8 @@ CREATE TABLE item_attribute(
     `unit` TEXT,
     `date_added` INTEGER,
     `date_modified` INTEGER,
+    `item_uuid` TEXT,
+    `item_wiki` TEXT,
     `last_import_run_id` INTEGER
 );
 
@@ -339,6 +373,11 @@ CREATE TABLE orbit(
     `star_system_name` TEXT,
     `faction_name` TEXT,
     `jurisdiction_name` TEXT,
+    `is_man_made` BIT,
+    `is_asteroid` BIT,
+    `is_planet` BIT,
+    `is_star` BIT,
+    `is_jump_point` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -471,6 +510,9 @@ CREATE TABLE poi(
     `city_name` TEXT,
     `faction_name` TEXT,
     `jurisdiction_name` TEXT,
+    `type` TEXT,
+    `subtype` TEXT,
+    `is_mining_related` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -507,6 +549,8 @@ CREATE TABLE refinery_audit(
     `city_name` TEXT,
     `outpost_name` TEXT,
     `terminal_name` TEXT,
+    `id_space_station` INTEGER,
+    `poi_name` TEXT,
     `last_import_run_id` INTEGER
 );
 
@@ -566,6 +610,7 @@ CREATE TABLE space_station(
     `city_name` TEXT,
     `faction_name` TEXT,
     `jurisdiction_name` TEXT,
+    `is_jump_point` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -636,6 +681,15 @@ CREATE TABLE terminal(
     `company_name` TEXT,
     `max_container_size` INTEGER,
     `is_blacklisted` BIT,
+    `fullname` TEXT,
+    `displayname` TEXT,
+    `contact_url` TEXT,
+    `game_version` TEXT,
+    `screenshot` TEXT,
+    `screenshot_author` TEXT,
+    `screenshot_full` TEXT,
+    `mcs` INTEGER,
+    `is_jump_point` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -648,14 +702,14 @@ CREATE TABLE vehicle(
     `name_full` TEXT,
     `slug` TEXT,
     `uuid` TEXT,
-    `scu` INTEGER,
+    `scu` REAL,
     `crew` TEXT,
-    `mass` INTEGER,
-    `width` INTEGER,
-    `height` INTEGER,
-    `length` INTEGER,
-    `fuel_quantum` INTEGER,
-    `fuel_hydrogen` INTEGER,
+    `mass` REAL,
+    `width` REAL,
+    `height` REAL,
+    `length` REAL,
+    `fuel_quantum` REAL,
+    `fuel_hydrogen` REAL,
     `container_sizes` TEXT,
     `is_addon` BIT,
     `is_boarding` BIT,
@@ -702,6 +756,8 @@ CREATE TABLE vehicle(
     `date_added` INTEGER,
     `date_modified` INTEGER,
     `company_name` TEXT,
+    `is_quantum_capable` BIT,
+    `url_photo` TEXT,
     `last_import_run_id` INTEGER
 );
 
@@ -803,6 +859,14 @@ CREATE TABLE commodity_route(
     `destination_terminal_is_player_owned` BIT,
     `destination_faction_name` TEXT,
     `date_added` INTEGER,
+    `price_roi` REAL,
+    `scu_reachable` INTEGER,
+    `container_sizes_origin` TEXT,
+    `container_sizes_destination` TEXT,
+    `game_version_origin` TEXT,
+    `game_version_destination` TEXT,
+    `container_size_min_origin` INTEGER,
+    `container_size_min_destination` INTEGER,
     `last_import_run_id` INTEGER
 );
 
@@ -817,8 +881,13 @@ CREATE TABLE commodity_raw_price(
     `commodity_name` TEXT,
     `commodity_code` TEXT,
     `commodity_slug` TEXT,
-    `terminal_name` INTEGER,
-    `terminal_code` INTEGER,
-    `terminal_slug` INTEGER,
+    `terminal_name` TEXT,
+    `terminal_code` TEXT,
+    `terminal_slug` TEXT,
+    `price_buy` REAL,
+    `price_buy_avg` REAL,
     `last_import_run_id` INTEGER
 );
+
+/* Distance lookup per orbit pair when trade routes are derived after each price import */
+CREATE INDEX idx_orbit_distance_orbits ON orbit_distance(`id_orbit_origin`, `id_orbit_destination`);

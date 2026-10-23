@@ -61,7 +61,7 @@ class SkillManifest:
         # Get tool info
         tool_names = []
         tool_summaries = []
-        for tool_name, tool_def in skill.get_tools():
+        for tool_name, tool_def in skill.get_enabled_tools():
             tool_names.append(tool_name)
             # Extract description from tool definition
             if isinstance(tool_def, dict):
@@ -152,7 +152,7 @@ class SkillRegistry:
         self._manifests[skill.name] = manifest
 
         # Map tool names to this skill
-        for tool_name, _ in skill.get_tools():
+        for tool_name, _ in skill.get_enabled_tools():
             self._tool_to_skill[tool_name] = skill.name
 
         # Auto-activate if configured
@@ -163,6 +163,23 @@ class SkillRegistry:
                 color=LogType.SKILL,
                 server_only=True,
             )
+
+    def refresh_skill(self, skill: "Skill") -> None:
+        """Rebuild a registered skill's manifest and tool map in place.
+
+        Used when the wingman's disabled tools change. Activation state is kept:
+        a skill the model already activated stays active, it just offers a
+        different set of tools from now on.
+        """
+        if skill.name not in self._skills:
+            return
+        old = self._manifests.get(skill.name)
+        if old:
+            for tool_name in old.tool_names:
+                self._tool_to_skill.pop(tool_name, None)
+        self._manifests[skill.name] = SkillManifest.from_skill(skill)
+        for tool_name, _ in skill.get_enabled_tools():
+            self._tool_to_skill[tool_name] = skill.name
 
     def unregister_skill(self, skill_name: str) -> None:
         """Remove a skill from the registry."""
@@ -296,18 +313,32 @@ class SkillRegistry:
         manifest = self._manifests.get(skill_name)
         return manifest.display_name if manifest else skill_name
 
+    def _active_in_order(self) -> list["Skill"]:
+        # Sorted: two active skills with the same tool name (a bundled skill and a custom copy)
+        # always resolve to the same one, for its definition and for the call
+        all_active = self._active_skills | self._auto_activated_skills
+        return [self._skills[name] for name in sorted(all_active) if name in self._skills]
+
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
         Get tools from all active skills (both explicitly activated and auto-activated).
+        A tool name two active skills share comes from the first (active_skill_for_tool).
         """
         tools = []
-        # Combine manually activated and auto-activated skills
-        all_active = self._active_skills | self._auto_activated_skills
-        for skill_name in all_active:
-            skill = self._skills.get(skill_name)
-            if skill:
-                tools.extend(skill.get_tools())
+        seen = set()
+        for skill in self._active_in_order():
+            for tool_name, tool in skill.get_enabled_tools():
+                if tool_name not in seen:
+                    seen.add(tool_name)
+                    tools.append((tool_name, tool))
         return tools
+
+    def active_skill_for_tool(self, tool_name: str) -> Optional["Skill"]:
+        """The active skill whose tool definition the model got for this name, if any."""
+        for skill in self._active_in_order():
+            if any(name == tool_name for name, _ in skill.get_enabled_tools()):
+                return skill
+        return None
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:
         """

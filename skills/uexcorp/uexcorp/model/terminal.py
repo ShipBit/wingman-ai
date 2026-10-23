@@ -64,6 +64,15 @@ class Terminal(DataModel):
             max_container_size: int | None = None,  # int(11)
 
             is_blacklisted: int | None = None,  # tinyint(1) # own property
+            fullname: str | None = None,  # string(255)
+            displayname: str | None = None,  # string(255)
+            contact_url: str | None = None,  # string(255)
+            game_version: str | None = None,  # string(255)
+            screenshot: str | None = None,  # string(255)
+            screenshot_author: str | None = None,  # string(255)
+            screenshot_full: str | None = None,  # string(255)
+            mcs: int | None = None,  # int(11)
+            is_jump_point: int | None = None,  # int(1)
             load: bool = False,
     ):
         super().__init__("terminal")
@@ -116,6 +125,15 @@ class Terminal(DataModel):
             "company_name": company_name,
             "max_container_size": max_container_size,
             "is_blacklisted": is_blacklisted,
+            "fullname": fullname,
+            "displayname": displayname,
+            "contact_url": contact_url,
+            "game_version": game_version,
+            "screenshot": screenshot,
+            "screenshot_author": screenshot_author,
+            "screenshot_full": screenshot_full,
+            "mcs": mcs,
+            "is_jump_point": is_jump_point,
             "last_import_run_id": None,
         }
         if load:
@@ -155,6 +173,8 @@ class Terminal(DataModel):
             extras.append("Loading Dock")
         if self.get_has_freight_elevator():
             extras.append("Freight Elevator")
+        if self.get_is_jump_point():
+            extras.append("Located at Jump Point")
         if self.get_is_blacklisted():
             extras.append("Blacklisted for trade recommendations through advanced uex skill configuration")
         if self.get_is_affinity_influenceable():
@@ -170,25 +190,27 @@ class Terminal(DataModel):
 
         offerings = {}
 
+        # All options below belong to THIS terminal, so the terminal info is
+        # suppressed in each embedded option to avoid repeating it per entry.
         vehicle_rental_prices = VehicleRentalPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
         if vehicle_rental_prices:
-            offerings['vehicle_rental'] = [vehicle_rental_price.get_data_for_ai_minimal() for vehicle_rental_price in vehicle_rental_prices]
+            offerings['vehicle_rental'] = [vehicle_rental_price.get_data_for_ai_minimal(show_terminal_information=False) for vehicle_rental_price in vehicle_rental_prices]
 
         vehicle_purchase_prices = VehiclePurchasePriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
         if vehicle_purchase_prices:
-            offerings['vehicle_purchase'] = [vehicle_purchase_price.get_data_for_ai_minimal() for vehicle_purchase_price in vehicle_purchase_prices]
+            offerings['vehicle_purchase'] = [vehicle_purchase_price.get_data_for_ai_minimal(show_terminal_information=False) for vehicle_purchase_price in vehicle_purchase_prices]
 
         item_prices = ItemPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
         if item_prices:
-            offerings['item'] = [item_price.get_data_for_ai_minimal() for item_price in item_prices]
+            offerings['item'] = [item_price.get_data_for_ai_minimal(show_terminal_information=False) for item_price in item_prices]
 
         commodity_prices = CommodityPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
         if commodity_prices:
-            offerings['commodity'] = [commodity_price.get_data_for_ai_minimal() for commodity_price in commodity_prices]
+            offerings['commodity'] = [commodity_price.get_data_for_ai_minimal(show_terminal_information=False) for commodity_price in commodity_prices]
 
         commodity_raw_prices = CommodityRawPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
         if commodity_raw_prices:
-            offerings['commodity_raw'] = [commodity_raw_price.get_data_for_ai_minimal() for commodity_raw_price in commodity_raw_prices]
+            offerings['commodity_raw'] = [commodity_raw_price.get_data_for_ai_minimal(show_terminal_information=False) for commodity_raw_price in commodity_raw_prices]
 
         return offerings
 
@@ -231,32 +253,51 @@ class Terminal(DataModel):
 
         return information
 
-    def get_data_for_ai_minimal(self) -> dict:
+    def get_parent_location_name(self) -> str | None:
         from skills.uexcorp.uexcorp.model.poi import Poi
 
+        if self.get_id_city():
+            return self.get_city_name()
+        elif self.get_id_poi():
+            return str(Poi(self.get_id_poi(), load=True))
+        elif self.get_id_outpost():
+            return self.get_outpost_name()
+        elif self.get_id_space_station():
+            return self.get_space_station_name()
+        return None
+
+    def get_data_for_ai_minimal(self, embedded: bool = False) -> dict:
+        # embedded=True: the terminal is listed inside its parent location's
+        # data, so location type / parent / star system are already known from
+        # the surrounding context and are omitted per entry.
         information = {
             "name": self.get_nickname(),
-            "location_type": "Terminal",
             "terminal_types": self.get_types(),
             "terminal_extras": self.get_extras(),
-            "parent_location": "",
-            "star_system_name": self.get_star_system_name(),
             "company_name": self.get_company_name(),
             "faction_name": self.get_faction_name(),
-            "max_container_size_in_scu": self.get_max_container_size() or "unknown",
+            # 0 means "no container handling here" -> omitted like unknown
+            "max_container_size_in_scu": self.get_max_container_size() or None,
         }
 
-        if self.get_id_city():
-            information["parent_location"] = self.get_city_name()
-        elif self.get_id_poi():
-            poi = Poi(self.get_id_poi(), load=True)
-            information["parent_location"] = str(poi)
-        elif self.get_id_outpost():
-            information["parent_location"] = self.get_outpost_name()
-        elif self.get_id_space_station():
-            information["parent_location"] = self.get_space_station_name()
+        if not embedded:
+            information.update({
+                "location_type": "Terminal",
+                "parent_location": self.get_parent_location_name(),
+                "star_system_name": self.get_star_system_name(),
+            })
 
         return information
+
+    def get_ai_location_string(self) -> str:
+        # Identity-as-string for embedding inside price/offer options: carries
+        # name, parent location and star system without per-option JSON keys.
+        name = self.get_nickname() or self.get_name()
+        context = []
+        for part in [self.get_parent_location_name(), self.get_star_system_name()]:
+            if part and part not in name and part not in context:
+                context.append(part)
+        return f"{name} ({', '.join(context)})" if context else name
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -410,6 +451,33 @@ class Terminal(DataModel):
 
     def set_is_blacklisted(self, is_blacklisted: int):
         self.data["is_blacklisted"] = is_blacklisted
+
+    def get_fullname(self) -> str | None:
+        return self.data["fullname"]
+
+    def get_displayname(self) -> str | None:
+        return self.data["displayname"]
+
+    def get_contact_url(self) -> str | None:
+        return self.data["contact_url"]
+
+    def get_game_version(self) -> str | None:
+        return self.data["game_version"]
+
+    def get_screenshot(self) -> str | None:
+        return self.data["screenshot"]
+
+    def get_screenshot_author(self) -> str | None:
+        return self.data["screenshot_author"]
+
+    def get_screenshot_full(self) -> str | None:
+        return self.data["screenshot_full"]
+
+    def get_mcs(self) -> int | None:
+        return self.data["mcs"]
+
+    def get_is_jump_point(self) -> int | None:
+        return self.data["is_jump_point"]
 
     def __str__(self):
         return str(self.data["name"])

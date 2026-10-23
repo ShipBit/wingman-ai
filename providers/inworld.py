@@ -1,23 +1,29 @@
 import base64
 import json
+import re
 from os import path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 import threading
 import queue
 import time
 import requests
 import aiofiles
-from api.enums import LogType
+from api.enums import LogType, TtsProvider, TtsVoiceGender
 from api.interface import (
     SoundConfig,
     VoiceInfo,
     WingmanInitializationError,
     InworldConfig,
 )
+from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.spoken_language import inworld_language
+
+if TYPE_CHECKING:
+    from api.interface import SettingsConfig, WingmanConfig
 
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "inworld.mp3"
@@ -50,6 +56,7 @@ class Inworld:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        language: Optional[str] = None,
     ):  # Prepare audio config - override encoding for streaming
         # Convert snake_case keys to camelCase for the API
         audio_config = {
@@ -72,6 +79,10 @@ class Inworld:
             "audioConfig": audio_config,
             "temperature": config.temperature,
         }
+        # Without it Inworld guesses the language from the text and keeps the
+        # voice's original prompt; with it, a localized prompt when there is one.
+        if language:
+            payload["language"] = language
 
         response = requests.request(
             "POST",
@@ -251,7 +262,7 @@ class Inworld:
         voices: list[VoiceInfo] = []
         params = None
         if filter_language:
-            params = {"filter": f"language={filter}"}
+            params = {"filter": f"language={filter_language}"}
 
         response = requests.get(
             "https://api.inworld.ai/tts/v1/voices",
@@ -267,7 +278,12 @@ class Inworld:
                 VoiceInfo(
                     id=voice_id,
                     name=voice_name or voice_id,
+                    gender=inworld_voice_gender(voice),
                     languages=voice.get("languages", []),
+                    provider="inworld",
+                    # The picker shows it and searches in it, as for the
+                    # subscription's Inworld voices.
+                    description=voice.get("description") or None,
                 )
             )
         return voices
@@ -278,3 +294,47 @@ class Inworld:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(audio_data)
         return file_path
+
+
+def inworld_voice_gender(voice: dict) -> TtsVoiceGender:
+    """The voice's gender, read the same way as wingman-backend does for the
+    subscription's list.
+
+    Inworld's list has no gender field today. Should one appear, it wins.
+    Until then the description names it ("A warm, natural female voice").
+    Female is tested first because "female" contains "male".
+    """
+    field = str(voice.get("gender") or "").lower()
+    if field in ("female", "male", "neutral"):
+        return TtsVoiceGender(field.capitalize())
+    text = str(voice.get("description") or "").lower()
+    if re.search(r"\b(female|woman|girl)\b", text):
+        return TtsVoiceGender.FEMALE
+    if re.search(r"\b(male|man|boy)\b", text):
+        return TtsVoiceGender.MALE
+    return TtsVoiceGender.UNKNOWN
+
+
+@tts_provider(TtsProvider.INWORLD)
+class InworldTts(TtsInterface):
+    def __init__(
+        self,
+        inworld_instance: "Inworld",
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+    ):
+        self._inworld = inworld_instance
+        self._config = config
+        self._settings = settings
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._inworld.play_audio(
+            text=text,
+            config=self._config.inworld,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+            language=inworld_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
+        )

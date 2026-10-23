@@ -20,10 +20,8 @@ class DataModel:
     def get_data_for_ai_minimal(self, **kwargs) -> dict:
         return self.get_data_for_ai()
 
-    def persist(self, skip_commit: bool = False) -> bool:
-        if not self.data or not self.table:
-            return False
-
+    def get_persist_data(self) -> dict:
+        """Column values as stored: common import data applied, bools as int, dicts/lists as JSON."""
         # Add common data to the model
         for key, value in self.helper.get_handler_import().get_common_data().items():
             if key in self.data:
@@ -35,7 +33,14 @@ class DataModel:
                 value = int(value)
             elif isinstance(value, dict) or isinstance(value, list):
                 value = json.dumps(value)
-            clean_data[f"`{key}`"] = value
+            clean_data[key] = value
+        return clean_data
+
+    def persist(self, skip_commit: bool = False) -> bool:
+        if not self.data or not self.table:
+            return False
+
+        clean_data = {f"`{key}`": value for key, value in self.get_persist_data().items()}
 
         sql = f"INSERT OR REPLACE INTO {self.table} ({','.join(clean_data.keys())}) VALUES ({','.join(['?'] * len(clean_data))})"
         try:
@@ -47,11 +52,18 @@ class DataModel:
             self.helper.get_handler_error().write("data_model.persist", [sql], e)
             return False
         if not skip_commit:
-            self.helper.get_database().get_connection().commit()
+            self.helper.get_database().commit()
         return True
 
     def get_data(self) -> dict:
         return self.data
+
+    @staticmethod
+    def parse_int_list(value: str | None) -> list[int]:
+        """Parse UEX csv values like "1,2,4,8" (e.g. container sizes) into ints."""
+        if not value:
+            return []
+        return [int(part) for part in str(value).split(",") if part.strip().isdigit()]
 
     def set_data(self, data: dict):
         for key, value in self.data.items():
@@ -92,8 +104,7 @@ class DataModel:
             else:
                 sql += f" AND `{key_two}` IS NULL"
 
-        self.helper.get_database().execute(sql, parameters)
-        result = self.helper.get_database().get_cursor().fetchmany(1)
+        result = self.helper.get_database().execute_fetchmany(sql, parameters, 1)
 
         if not result:
             return False

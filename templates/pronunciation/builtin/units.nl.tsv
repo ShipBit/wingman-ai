@@ -1,0 +1,36 @@
+# Eenheden, alleen direct na een getal ("10 km"). geschreven<TAB>voor 1<TAB>voor alle andere waarden.
+km/h	één kilometer per uur	kilometer per uur
+km/u	één kilometer per uur	kilometer per uur
+m/s	één meter per seconde	meter per seconde
+km	één kilometer	kilometer
+cm	één centimeter	centimeter
+mm	één millimeter	millimeter
+m	één meter	meter
+kg	één kilogram	kilogram
+g	één gram	gram
+t	één ton	ton
+ml	één milliliter	milliliter
+l	één liter	liter
+°C	één graad Celsius	graden Celsius
+°F	één graad Fahrenheit	graden Fahrenheit
+°	één graad	graden
+h	één uur	uur
+u	één uur	uur
+min	één minuut	minuten
+ms	één milliseconde	milliseconden
+s	één seconde	seconden
+sec	één seconde	seconden
+GHz	één gigahertz	gigahertz
+MHz	één megahertz	megahertz
+kHz	één kilohertz	kilohertz
+Hz	één hertz	hertz
+TB	één terabyte	terabyte
+GB	één gigabyte	gigabyte
+MB	één megabyte	megabyte
+kB	één kilobyte	kilobyte
+kWh	één kilowattuur	kilowattuur
+kW	één kilowatt	kilowatt
+MW	één megawatt	megawatt
+W	één watt	watt
+€	één euro	euro
+$	één dollar	dollar

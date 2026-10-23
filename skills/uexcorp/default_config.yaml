@@ -1,5 +1,7 @@
 module: skills.uexcorp.main
 name: UEXCorp
+api_version: 3
+version: 3.0.0
 display_name: UEXCorp
 author: JayMatthew
 tags:
@@ -7,8 +9,8 @@ tags:
   - Star Citizen
   - Internet
 description:
-  en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
-  de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.
+  en: Star Citizen trade routes, commodity prices, locations, ships and items from UEX community data.
+  de: Handelsrouten, Warenpreise, Orte, Schiffe und Items für Star Citizen aus den Community-Daten von UEX.
 discovery_keywords:
   - trading
   - routes
@@ -23,39 +25,19 @@ discovery_keywords:
   - terminals
 discoverable_by_default: false
 prompt: |
-  ### UEXCORP API ACCESS
-  You have comprehensive access to the UEXCorp API for live Star Citizen market data, commodity prices, ship information, and trading routes.
+  ### UEX (Star Citizen trade data)
+  Live data from UEX: commodity prices and terminals, trade routes, locations, ships and items.
 
-  #### CORE FUNCTIONALITY
-  **Market Data:** Live commodity prices, terminal status, and availability information
-  **Ship Database:** Detailed vehicle specifications, requirements, and capabilities
-  **Location Information:** Star systems, stations, terminals, and facility details
-  **Trading Routes:** Optimized commodity routes with profit calculations
-  **Item Database:** Ship components, weapons, and equipment details (when enabled)
-
-  #### EXECUTION GUIDELINES
-  **Automatic Data Retrieval:**
-  - Treat any price, commodity, or ship questions as UEXCorp API requests
-  - Execute functions with minimal parameters first, then ask for specifics
-  - Silently retrieve detailed information when users mention specific items/ships
-  - Use efficient filtering to provide targeted results
-
-  **Response Management:**
-  - Always include terminal status (Out of Stock, Full Inventory) for commodities
-  - Limit lists to 5 entries max, indicate total available results
-  - Provide summaries first, offer detailed information on request
-  - Display negative values as "negative/minus X%" for TTS compatibility
-
-  **Multi-Function Execution:**
-  - Execute multiple API calls silently when needed for complete data
-  - Only explain reasoning in final summary, not for each individual call
-  - Retrieve missing profit calculation data from other functions before asking user
-
-  #### SPECIAL CONSIDERATIONS
-  - Some ships (Hull-C) require loading docks, not just freight elevators
-  - Show "Important information for user" messages in condensed form
-  - Focus on essential information, keep responses concise
-  - Present data efficiently for voice synthesis and readability
+  Rules:
+  - Price, commodity, trade, location or ship questions: call a UEX function right away with everything you know (ship, money, location). Ask only for what is missing.
+  - Buy and sell options: say the stock or demand status (e.g. "high stock" when buying, "no demand" when selling).
+  - Lists: at most 5 entries, and say how many there are in total. Summary first, details on request.
+  - Say negative values as "minus X percent".
+  - Several calls for one answer: make them silently, explain only in the final answer. For a profit calculation, get missing prices from the other functions before asking.
+  - "Relay to user" notes: pass them on, condensed.
+  - Loading docks (e.g. Hull-C) and container sizes are already part of the trade routes.
+  - Star systems in trade routes: always pass the ones the user names as filter_star_system_whitelist, e.g. "only Stanton" = ["Stanton"].
+  - Keep answers short: they are spoken.
 
 custom_properties:
   ### Commodity Information Start ###
@@ -97,14 +79,20 @@ custom_properties:
   ### Route Information Start ###
   # - id: tool_commodity_route
   #   name: Provide commodity routes
-  #   hint: If enabled, this skill can provide UEX trade routes for commodities (Only with legal commodities).
+  #   hint: If enabled, this skill can provide UEX trade routes for commodities (including illegal commodities, which are marked with a warning).
   #   value: true
   #   required: true
   #   property_type: boolean
 
   - id: commodity_route_default_count
     name: Default trade route count
-    hint: Set this option to the amount of trade routes you want to show at default.
+    value: 1
+    required: true
+    property_type: number
+
+  - id: commodity_route_default_max_stops
+    name: Default trade route stops
+    hint: "Most stops after the start when you don't ask for a number (1-5). 1 = buy at A, sell at B. More stops can buy and sell along the way, e.g. collect a commodity at two terminals."
     value: 1
     required: true
     property_type: number
@@ -116,9 +104,23 @@ custom_properties:
     required: true
     property_type: boolean
 
+  - id: commodity_route_ranking
+    name: Trade route ranking
+    hint: "How trade routes are compared. Profit per stop: best earnings for the stops flown. Profit per distance: best earnings for the distance traveled. Total profit: highest overall profit, favors routes with more stops."
+    property_type: single_select
+    value: "profit_per_stop"
+    required: true
+    options:
+      - label: "Profit per stop"
+        value: "profit_per_stop"
+      - label: "Profit per distance"
+        value: "profit_per_distance"
+      - label: "Total profit"
+        value: "total_profit"
+
   - id: commodity_route_advanced_info
     name: Show advanced trade route info
-    hint: Shows additional information as more location data (terminal name is always included), flags if locations are monitored and more like the score by uexcorp.
+    hint: Shows additional information as more location data (terminal name is always included), flags if locations are monitored and more like profit per stop and return on investment.
     value: false
     required: true
     property_type: boolean
@@ -132,12 +134,3 @@ custom_properties:
   #   required: true
   #   property_type: boolean
   ### Profit Calculation End ###
-
-  ### FasterWhisper Start ###
-  - id: add_fasterwhisper_hotwords
-    name: Add FasterWhisper hotwords (Experimental)
-    hint: Add common names fetched from UEXCorp as FasterWhisper hotwords. Voice detection might be improved but bias towards Star Citizen content in the detection is possible.
-    value: false
-    required: true
-    property_type: boolean
-  ### FasterWhisper End ###

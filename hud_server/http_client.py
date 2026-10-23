@@ -7,7 +7,7 @@ This replaces the WebSocket-based client for the integrated HUD server.
 
 Usage:
     from hud_server.http_client import HudHttpClient
-    from hud_server.types import Anchor, HudColor, FontFamily, message_props
+    from hud_server.types import Anchor, HudColor, FontFamily, WindowType, message_props
 
     # Async usage with type-safe props
     async with HudHttpClient() as client:
@@ -17,12 +17,13 @@ Usage:
             accent_color=HudColor.ACCENT_ORANGE,
             font_family=FontFamily.CONSOLAS
         )
-        await client.create_group("notifications", props=props)
-        await client.show_message("notifications", "Alert", "Something happened!")
+        await client.create_group("notifications", WindowType.MESSAGE, props=props)
+        await client.show_message("notifications", WindowType.MESSAGE, "Alert", "Something happened!")
 
         # Using enums directly (auto-converted to values)
         await client.create_chat_window(
             "chat",
+            WindowType.CHAT,
             anchor=Anchor.BOTTOM_LEFT,
             width=500
         )
@@ -30,7 +31,7 @@ Usage:
     # Sync usage
     client = HudHttpClientSync()
     client.connect()
-    client.show_message("group1", "Title", "Content", color=HudColor.SUCCESS)
+    client.show_message("group1", WindowType.MESSAGE, "Title", "Content", color=HudColor.SUCCESS)
     client.disconnect()
 
 For available property types and values, see:
@@ -44,12 +45,15 @@ For available property types and values, see:
 import asyncio
 import threading
 import httpx
+
+from services.markdown import display_text
 from typing import Optional, Any, Union
 from urllib.parse import quote
 from api.enums import LogType
-from hud_server.constants import PATH_GROUPS, PATH_STATE, PATH_STATE_RESTORE, PATH_HEALTH, PATH_MESSAGE, \
+from hud_server.constants import PATH_GROUPS, PATH_HEALTH, PATH_MESSAGE, \
     PATH_MESSAGE_APPEND, PATH_MESSAGE_HIDE, PATH_LOADER, PATH_ITEMS, PATH_PROGRESS, PATH_TIMER, PATH_CHAT_WINDOW, \
-    PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE
+    PATH_CHAT_MESSAGE, PATH_CHAT_MESSAGES, PATH_CHAT_SHOW, PATH_CHAT_HIDE, PATH_ELEMENT_SHOW, PATH_ELEMENT_HIDE, PATH_DEFAULTS, \
+    PATH_PREVIEW
 from services.printr import Printr
 from hud_server import constants as hud_const
 from hud_server.types import (
@@ -85,14 +89,22 @@ class HudHttpClient:
 
     # Timeout constants
     DEFAULT_CONNECT_TIMEOUT = hud_const.HTTP_CONNECT_TIMEOUT
-    DEFAULT_REQUEST_TIMEOUT = hud_const.HTTP_REQUEST_TIMEOUT
-    RECONNECT_ATTEMPTS = 1
     MAX_TIMEOUT_RETRIES = 3
 
-    def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
+    def __init__(
+        self,
+        base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}",
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+    ):
         self.base_url = base_url.rstrip("/")
+        # None: the network. httpx.ASGITransport(app=server.app) talks to a
+        # server in this process without a port (the headless demos do)
+        self._transport = transport
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
+        # The groups the server had when this client connected, from its
+        # health answer. A server that restarted has lost them.
+        self.server_groups: set[str] = set()
 
     @property
     def connected(self) -> bool:
@@ -120,6 +132,7 @@ class HudHttpClient:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=timeout,
+                transport=self._transport,
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     "Accept": "application/json; charset=utf-8"
@@ -129,6 +142,10 @@ class HudHttpClient:
             response = await self._client.get(PATH_HEALTH)
             if response.status_code == 200:
                 self._connected = True
+                try:
+                    self.server_groups = set(response.json().get("groups") or [])
+                except Exception:
+                    self.server_groups = set()
                 return True
             return False
         except httpx.ConnectError:
@@ -326,10 +343,11 @@ class HudHttpClient:
             True if successful, False otherwise
         """
         encoded_group = quote(group_name, safe='')
-        result = await self._request("PATCH", f"{PATH_GROUPS}/{encoded_group}", {
-            "element": _resolve_enum(element),
-            "props": _resolve_props(props)
-        })
+        result = await self._request(
+            "PUT",
+            f"{PATH_GROUPS}/{encoded_group}/{_resolve_enum(element)}",
+            {"props": _resolve_props(props) or {}},
+        )
         return result is not None
 
     async def delete_group(self, group_name: str, element: WindowType) -> Optional[dict]:
@@ -341,19 +359,42 @@ class HudHttpClient:
         """Get list of all group names."""
         return await self._request("GET", PATH_GROUPS)
 
-    # ─────────────────────────────── State ─────────────────────────────── #
+    # ─────────────────────────────── Defaults ─────────────────────────────── #
 
-    async def get_state(self, group_name: str) -> Optional[dict]:
-        """Get the current state of a group for persistence."""
-        encoded_group = quote(group_name, safe='')
-        return await self._request("GET", f"{PATH_STATE}/{encoded_group}")
+    async def get_defaults(self) -> Optional[dict]:
+        """The defaults groups use for props their own calls leave out."""
+        return await self._request("GET", PATH_DEFAULTS)
 
-    async def restore_state(self, group_name: str, state: dict) -> Optional[dict]:
-        """Restore a group's state from a previous snapshot."""
-        return await self._request("POST", PATH_STATE_RESTORE, {
-            "group_name": group_name,
-            "state": state
+    async def set_defaults(
+        self,
+        props: Optional[dict] = None,
+        groups: Optional[dict[str, dict]] = None,
+    ) -> bool:
+        """Replace the defaults: `props` for every group, `groups` per group name.
+
+        Existing windows pick them up immediately.
+        """
+        result = await self._request("PUT", PATH_DEFAULTS, {
+            "props": _resolve_props(props) or {},
+            "groups": {name: _resolve_props(p) or {} for name, p in (groups or {}).items()},
         })
+        return result is not None
+
+    # ─────────────────────────────── Preview ─────────────────────────────── #
+
+    async def set_preview(self, containers: dict[str, dict], interactive: bool = False) -> bool:
+        """Show or update the preview: "chat"/"info" mapped to resolved props."""
+        result = await self._request("PUT", PATH_PREVIEW, {
+            "containers": {name: _resolve_props(p) or {} for name, p in containers.items()},
+            "interactive": interactive,
+        })
+        return result is not None
+
+    async def clear_preview(self) -> bool:
+        return await self._request("DELETE", PATH_PREVIEW) is not None
+
+    async def get_preview(self) -> Optional[dict]:
+        return await self._request("GET", PATH_PREVIEW)
 
     # ─────────────────────────────── Messages ─────────────────────────────── #
 
@@ -366,7 +407,8 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
         props: Optional[BaseProps] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        title_icon: Optional[str] = None
     ) -> Optional[dict]:
         """Show a message in a HUD group.
 
@@ -379,6 +421,7 @@ class HudHttpClient:
             tools: Optional list of tool information for display
             props: Optional MessageProps to override group defaults
             duration: Optional display duration in seconds (0.1-3600)
+            title_icon: Optional local file path to an icon shown in front of the title
 
         Returns:
             Server response dict or None if failed
@@ -398,7 +441,7 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "title": title,
-            "content": content
+            "content": display_text(content)
         }
         if color:
             data["color"] = _resolve_enum(color)
@@ -408,6 +451,8 @@ class HudHttpClient:
             data["props"] = _resolve_props(props)
         if duration is not None:
             data["duration"] = duration
+        if title_icon:
+            data["title_icon"] = title_icon
 
         return await self._request("POST", PATH_MESSAGE, data)
 
@@ -467,7 +512,8 @@ class HudHttpClient:
         title: str,
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Add a persistent item to a group.
 
@@ -478,6 +524,7 @@ class HudHttpClient:
             description: Item description text
             color: Optional item color (use HudColor enum or hex string)
             duration: Optional auto-remove duration in seconds
+            added_by: Who adds it, e.g. a Wingman's name
 
         Returns:
             Server response dict or None if failed
@@ -502,6 +549,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if duration is not None:
             data["duration"] = duration
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_ITEMS, data)
 
@@ -543,8 +592,9 @@ class HudHttpClient:
 
     async def remove_item(self, group_name: str, element: WindowType, title: str) -> Optional[dict]:
         """Remove an item from a group."""
+        encoded_group = quote(group_name, safe='')
         encoded_title = quote(title, safe='')
-        return await self._request("DELETE", f"{PATH_ITEMS}/{group_name}/{_resolve_enum(element)}/{encoded_title}")
+        return await self._request("DELETE", f"{PATH_ITEMS}/{encoded_group}/{_resolve_enum(element)}/{encoded_title}")
 
     async def clear_items(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Clear all items from a group."""
@@ -563,7 +613,8 @@ class HudHttpClient:
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
-        props: Optional[BaseProps] = None
+        props: Optional[BaseProps] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Show or update a progress bar.
 
@@ -606,6 +657,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if props:
             data["props"] = _resolve_props(props)
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_PROGRESS, data)
 
@@ -619,7 +672,8 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
-        props: Optional[BaseProps] = None
+        props: Optional[BaseProps] = None,
+        added_by: Optional[str] = None,
     ) -> Optional[dict]:
         """Show a timer-based progress bar.
 
@@ -661,6 +715,8 @@ class HudHttpClient:
             data["color"] = _resolve_enum(color)
         if props:
             data["props"] = _resolve_props(props)
+        if added_by:
+            data["added_by"] = added_by
 
         return await self._request("POST", PATH_TIMER, data)
 
@@ -788,7 +844,10 @@ class HudHttpClient:
         element: WindowType,
         sender: str,
         text: str,
-        color: Optional[Union[str, HudColor]] = None
+        color: Optional[Union[str, HudColor]] = None,
+        icon: Optional[str] = None,
+        own: bool = False,
+        tools: Optional[list[dict]] = None,
     ) -> Optional[dict]:
         """Send a message to a chat window.
 
@@ -798,6 +857,9 @@ class HudHttpClient:
             sender: Sender name displayed with the message
             text: Message text content
             color: Optional sender color override (use HudColor enum or hex string)
+            icon: Path of the sender's picture, shown round next to the message
+            own: Written by the user: a bubble on the right, like in a messenger
+            tools: Tool chips under the message, as with show_message
 
         Returns:
             Server response dict with message_id or None if failed
@@ -815,10 +877,16 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "sender": sender,
-            "text": text
+            "text": display_text(text)
         }
         if color:
             data["color"] = _resolve_enum(color)
+        if icon:
+            data["icon"] = icon
+        if own:
+            data["own"] = True
+        if tools:
+            data["tools"] = tools
 
         return await self._request("POST", PATH_CHAT_MESSAGE, data)
 
@@ -834,14 +902,14 @@ class HudHttpClient:
             "group_name": group_name,
             "element": _resolve_enum(element),
             "message_id": message_id,
-            "text": text
+            "text": display_text(text)
         }
         return await self._request("PUT", PATH_CHAT_MESSAGE, data)
 
     async def clear_chat_window(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Clear all messages from a chat window."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("DELETE", f"{PATH_CHAT_MESSAGE}/{encoded_group}/{_resolve_enum(element)}")
+        return await self._request("DELETE", f"{PATH_CHAT_MESSAGES}/{encoded_group}/{_resolve_enum(element)}")
 
     async def show_chat_window(self, group_name: str, element: WindowType) -> Optional[dict]:
         """Show a hidden chat window."""
@@ -1045,14 +1113,14 @@ class HudHttpClientSync:
     def delete_group(self, group_name: str, element: WindowType):
         return self._run_coro(self._client.delete_group(group_name, element)) if self._client else None
 
+    def get_defaults(self) -> Optional[dict]:
+        return self._run_coro(self._client.get_defaults()) if self._client else None
+
+    def set_defaults(self, props: Optional[dict] = None, groups: Optional[dict] = None) -> bool:
+        return self._run_coro(self._client.set_defaults(props, groups)) if self._client else False
+
     def get_groups(self):
         return self._run_coro(self._client.get_groups()) if self._client else None
-
-    def get_state(self, group_name: str):
-        return self._run_coro(self._client.get_state(group_name)) if self._client else None
-
-    def restore_state(self, group_name: str, state: dict):
-        return self._run_coro(self._client.restore_state(group_name, state)) if self._client else None
 
     def show_message(
         self,
@@ -1063,11 +1131,12 @@ class HudHttpClientSync:
         color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
         props: Optional[BaseProps] = None,
-        duration: Optional[float] = None
+        duration: Optional[float] = None,
+        title_icon: Optional[str] = None
     ):
         """Show a message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_message(
-            group_name, element, title, content, color, tools, props, duration
+            group_name, element, title, content, color, tools, props, duration, title_icon
         )) if self._client else None
 
     def append_message(self, group_name: str, element: WindowType, content: str):
@@ -1217,11 +1286,14 @@ class HudHttpClientSync:
         element: WindowType,
         sender: str,
         text: str,
-        color: Optional[Union[str, HudColor]] = None
+        color: Optional[Union[str, HudColor]] = None,
+        icon: Optional[str] = None,
+        own: bool = False,
+        tools: Optional[list[dict]] = None,
     ):
         """Send chat message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.send_chat_message(
-            group_name, element, sender, text, color
+            group_name, element, sender, text, color, icon, own, tools
         )) if self._client else None
 
     def update_chat_message(self, group_name: str, element: WindowType, message_id: str, text: str):

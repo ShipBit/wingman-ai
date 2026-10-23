@@ -1,5 +1,6 @@
 module: skills.vision_ai.main
 name: VisionAI
+api_version: 3
 display_name: Vision AI
 author: ShipBit
 discoverable_by_default: false

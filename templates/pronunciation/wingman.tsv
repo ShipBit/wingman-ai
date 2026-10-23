@@ -1,0 +1,9 @@
+# Words of Wingman itself and of everyday speech that voices get wrong, for no
+# game in particular. written<TAB>spoken<TAB>languages (comma-separated codes).
+# Name: Wingman
+# German voices read the English words the German way: "on-lie-ne" and a
+# short "a" in "Wingman". These spell the English sound (2026-10-19).
+# "onlain" came out "onläihn" with the German Pocket TTS model (2026-10-21).
+online	onlaihn	de
+Online	Onlaihn	de
+Wingman	Wingmähn	de

@@ -49,8 +49,10 @@ class McpServerManifest:
     @classmethod
     def from_connection(cls, connection: McpConnection) -> "McpServerManifest":
         """Create a manifest from an MCP connection."""
-        tool_names = [t.prefixed_name for t in connection.tools]
-        tool_summaries = [t.description[:100] for t in connection.tools]
+        # Disabled tools are not part of what the model may discover.
+        enabled = [t for t in connection.tools if t.is_enabled]
+        tool_names = [t.prefixed_name for t in enabled]
+        tool_summaries = [t.description[:100] for t in enabled]
 
         # Join discovery keywords list into string
         discovery_keywords = ""
@@ -135,6 +137,10 @@ class McpRegistry:
         self._prefixed_to_original: dict[str, str] = {}
         """Maps prefixed tool names to original tool names"""
 
+        self._errors: dict[str, str] = {}
+        """Why a server is not connected. A server that never connected has no
+        entry in _connections, so its error has to live here."""
+
     async def _notify_state_changed(self):
         """Notify listeners that MCP state has changed."""
         if self._on_state_changed:
@@ -163,10 +169,11 @@ class McpRegistry:
         connection = self._connections.get(server_name)
         if connection and not connection.is_connected and connection.error:
             return connection.error
-        return None
+        return self._errors.get(server_name)
 
     def set_server_error(self, server_name: str, error: str) -> None:
         """Set an error message for a server (e.g., on timeout)."""
+        self._errors[server_name] = error
         connection = self._connections.get(server_name)
         if connection:
             connection.error = error
@@ -177,6 +184,7 @@ class McpRegistry:
         config: McpServerConfig,
         headers: Optional[dict[str, str]] = None,
         auto_activate: bool = False,
+        auth: Optional[Any] = None,
     ) -> McpConnection:
         """
         Register and connect to an MCP server.
@@ -185,28 +193,65 @@ class McpRegistry:
             config: Server configuration
             headers: Optional headers (e.g., API keys from SecretKeeper)
             auto_activate: Whether to automatically activate the server
+            auth: Optional httpx.Auth for OAuth servers
 
         Returns:
             The connection object
         """
-        connection = await self._client.connect(config, headers)
+        connection = await self._client.connect(config, headers, auth)
 
         if connection.is_connected:
+            self._errors.pop(config.name, None)
             self._connections[config.name] = connection
-            self._manifests[config.name] = McpServerManifest.from_connection(connection)
-
-            # Map tool names to server
-            for tool in connection.tools:
-                self._tool_to_server[tool.prefixed_name] = config.name
-                self._prefixed_to_original[tool.prefixed_name] = tool.name
+            self._index_tools(connection)
 
             if auto_activate:
                 self._active_servers.add(config.name)
 
             # Notify UI that MCP state has changed (after registry is updated)
             await self._notify_state_changed()
+        else:
+            self._errors[config.name] = connection.error or "Connection failed."
 
         return connection
+
+    def _index_tools(self, connection: McpConnection) -> None:
+        """Rebuild the manifest and tool maps for one connection.
+
+        Only enabled tools are mapped, so a disabled tool is both invisible to
+        the model and refused if a model asks for it by name anyway.
+        """
+        name = connection.config.name
+        self._manifests[name] = McpServerManifest.from_connection(connection)
+
+        for tool in connection.tools:
+            self._tool_to_server.pop(tool.prefixed_name, None)
+            self._prefixed_to_original.pop(tool.prefixed_name, None)
+        for tool in connection.tools:
+            if tool.is_enabled:
+                self._tool_to_server[tool.prefixed_name] = name
+                self._prefixed_to_original[tool.prefixed_name] = tool.name
+
+    async def set_disabled_tools(
+        self, server_name: str, disabled_tools: list[str]
+    ) -> bool:
+        """Apply a new disabled list to a live connection without reconnecting.
+
+        Flipping one switch in the UI must not tear down every server of every
+        wingman, which is what a full `init_mcps` would do. Returns False when
+        this registry has no connection for the server.
+        """
+        connection = self._connections.get(server_name)
+        if not connection:
+            return False
+
+        disabled = set(disabled_tools)
+        connection.config.disabled_tools = list(disabled_tools)
+        for tool in connection.tools:
+            tool.is_enabled = tool.name not in disabled
+        self._index_tools(connection)
+        await self._notify_state_changed()
+        return True
 
     async def unregister_server(self, server_name: str, notify: bool = True) -> None:
         """Disconnect and remove an MCP server.
@@ -215,6 +260,7 @@ class McpRegistry:
             server_name: Name of the server to unregister
             notify: Whether to notify UI of state change (set False during batch operations)
         """
+        self._errors.pop(server_name, None)
         connection = self._connections.get(server_name)
         if connection:
             # Remove tool mappings
@@ -236,6 +282,7 @@ class McpRegistry:
 
         This batches disconnections and only sends a single UI notification at the end.
         """
+        self._errors.clear()
         server_names = list(self._connections.keys())
         if not server_names:
             return
@@ -445,7 +492,7 @@ class McpRegistry:
             parts = [
                 f"Currently active MCP servers ({len(self._active_servers)} total):\n"
             ]
-            for server_name in self._active_servers:
+            for server_name in sorted(self._active_servers):
                 manifest = self._manifests.get(server_name)
                 if manifest:
                     tools = (

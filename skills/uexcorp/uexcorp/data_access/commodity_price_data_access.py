@@ -34,6 +34,8 @@ class CommodityPriceDataAccess(DataAccess):
             "terminal_name",
             "terminal_code",
             "terminal_slug",
+            "container_sizes",
+            "quality",
         ]
 
     def load(self, **params) -> list[CommodityPrice]:

@@ -6,13 +6,15 @@ class CommodityStatus(DataModel):
 
     def __init__(
             self,
-            code: int, # int(11)
+            code: str, # string(255)
             is_buy: bool, # int(1)
             name: str | None = None, # string(255)
             name_short: str | None = None, # string(255)
             name_abbr: str | None = None, # string(255)
             percentage: str | None = None, # string(255)
             colors: str | None = None, # string(255)
+            percentage_start: float | None = None, # float
+            percentage_end: float | None = None, # float
             load: bool = False,
     ):
         super().__init__("commodity_status")
@@ -24,6 +26,8 @@ class CommodityStatus(DataModel):
             "percentage": percentage,
             "colors": colors,
             "is_buy": is_buy,
+            "percentage_start": percentage_start,
+            "percentage_end": percentage_end,
             "last_import_run_id": None,
         }
         if load:
@@ -31,15 +35,53 @@ class CommodityStatus(DataModel):
                 raise Exception("code and is_buy is required to load data")
             self.load_by_value("code", self.data["code"], "is_buy", self.data["is_buy"])
 
+    # The raw UEX status names describe the terminal's fill level ("High
+    # Inventory", "Out of Stock") for both trade directions. On sell options
+    # that reading is inverted for the player - a full terminal is the WORST
+    # place to sell - and LLMs regularly trip over it. So never expose the raw
+    # names to the AI; translate the code into what the player cares about:
+    # stock when buying, demand when selling.
+    _BUY_STOCK_LABELS = {
+        1: "out of stock",
+        2: "very low stock",
+        3: "low stock",
+        4: "medium stock",
+        5: "high stock",
+        6: "very high stock",
+        7: "full stock",
+    }
+    _SELL_DEMAND_LABELS = {
+        1: "extremely high demand",
+        2: "very high demand",
+        3: "high demand",
+        4: "medium demand",
+        5: "low demand",
+        6: "very low demand",
+        7: "no demand",
+    }
+
     def get_data_for_ai(self) -> dict:
         return {
-            "name": self.get_name(),
-            "percentage": self.get_percentage(),
-            "type": "buy (higher inventory means more can be bought here and is better)" if self.get_is_buy() else "sell (lower inventory means higher demand and is better)",
+            "status": self.get_data_for_ai_minimal(),
+            "type": "buy" if self.get_is_buy() else "sell",
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+    def get_data_for_ai_minimal(self) -> str:
+        labels = self._BUY_STOCK_LABELS if self.get_is_buy() else self._SELL_DEMAND_LABELS
+        try:
+            code = int(self.get_code())  # stored as TEXT
+        except (TypeError, ValueError):
+            code = None
+        label = labels.get(code)
+        if label is None:
+            if self.get_percentage() is not None:
+                return f"{self.get_name()} ({self.get_percentage()})"
+            return self.get_name()
+        if self.get_percentage() is not None:
+            if self.get_is_buy():
+                return f"{label} ({self.get_percentage()})"
+            return f"{label} (terminal {self.get_percentage()} full)"
+        return label
 
     def get_code(self) -> str:
         return self.data["code"]
@@ -61,6 +103,12 @@ class CommodityStatus(DataModel):
 
     def get_colors(self) -> str:
         return self.data["color_sell"]
+
+    def get_percentage_start(self) -> float | None:
+        return self.data["percentage_start"]
+
+    def get_percentage_end(self) -> float | None:
+        return self.data["percentage_end"]
 
     def __str__(self):
         return f"{self.get_name_short()} ({self.get_percentage()})"

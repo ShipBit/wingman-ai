@@ -1,0 +1,256 @@
+"""Secrets are kept on disk, survive a restart and never touch the real file.
+
+SecretKeeper is a singleton that reads the secrets file once when it is first
+created. Every test redirects the config folder into a tmp folder before that
+first load and resets the singleton, so the user's own secrets file is never
+read or written.
+"""
+
+import asyncio
+from os import path
+
+import pytest
+
+from services.config_manager import SECRETS_FILE
+from services.secret_keeper import SecretKeeper
+from tests.support import read_yaml, write_yaml
+
+
+class FakeConnectionManager:
+    def __init__(self):
+        self.sent = []
+
+    async def broadcast(self, command):
+        self.sent.append(command)
+
+
+@pytest.fixture
+def secrets_dir(tmp_path, monkeypatch):
+    """A tmp config folder. The singleton is reset before and after the test."""
+    import services.secret_keeper as keeper_module
+
+    monkeypatch.setattr(keeper_module, "get_writable_dir", lambda *_: str(tmp_path))
+    monkeypatch.setattr(SecretKeeper, "_instance", None)
+    monkeypatch.setattr(SecretKeeper, "prompted_secrets", [])
+    monkeypatch.setattr(SecretKeeper, "_connection_manager", FakeConnectionManager())
+    return tmp_path
+
+
+def secrets_file(folder):
+    return path.join(str(folder), SECRETS_FILE)
+
+
+def restart():
+    """What a new Core start does: forget the instance, load from disk again."""
+    SecretKeeper._instance = None
+    return SecretKeeper()
+
+
+# ── loading ──
+
+
+def test_a_saved_secret_survives_a_restart(secrets_dir):
+    keeper = SecretKeeper()
+    assert asyncio.run(keeper.post_secrets({"openai": "sk-test-123"})) is None
+
+    reloaded = restart()
+
+    assert reloaded.config_file.startswith(str(secrets_dir))
+    assert reloaded.secrets == {"openai": "sk-test-123"}
+
+
+def test_a_missing_secrets_file_loads_as_no_secrets(secrets_dir):
+    keeper = SecretKeeper()
+
+    assert keeper.secrets == {}
+    assert keeper.load() == {}
+
+
+def test_an_empty_secrets_file_loads_as_no_secrets(secrets_dir):
+    open(secrets_file(secrets_dir), "w").close()
+
+    assert SecretKeeper().secrets == {}
+
+
+def test_a_broken_secrets_file_loads_as_no_secrets_instead_of_raising(secrets_dir):
+    with open(secrets_file(secrets_dir), "w", encoding="UTF-8") as f:
+        f.write("openai: [unclosed")
+
+    assert SecretKeeper().secrets == {}
+
+
+# ── retrieve ──
+
+
+def test_retrieve_returns_the_stored_secret_without_prompting(secrets_dir):
+    write_yaml(secrets_file(secrets_dir), {"openai": "sk-test-123"})
+    keeper = SecretKeeper()
+
+    value = asyncio.run(keeper.retrieve("wingman", "openai", prompt_if_missing=False))
+
+    assert value == "sk-test-123"
+    assert keeper._connection_manager.sent == []
+
+
+def test_retrieve_of_a_missing_secret_returns_empty_and_never_prompts_when_told_not_to(
+    secrets_dir,
+):
+    keeper = SecretKeeper()
+
+    value = asyncio.run(keeper.retrieve("wingman", "openai", prompt_if_missing=False))
+
+    assert value == ""
+    assert keeper._connection_manager.sent == []
+
+
+def test_a_missing_secret_prompts_the_client_only_once(secrets_dir):
+    keeper = SecretKeeper()
+
+    async def ask_twice():
+        await keeper.retrieve("wingman", "openai")
+        await keeper.retrieve("wingman", "openai")
+
+    asyncio.run(ask_twice())
+
+    sent = keeper._connection_manager.sent
+    assert len(sent) == 1
+    assert sent[0].secret_name == "openai"
+    assert sent[0].requester == "wingman"
+
+
+# ── post_secrets ──
+
+
+def test_posting_secrets_adds_new_keys_and_overwrites_existing_ones(secrets_dir):
+    write_yaml(secrets_file(secrets_dir), {"openai": "sk-old", "hume": "hume-test-1"})
+    keeper = SecretKeeper()
+
+    asyncio.run(keeper.post_secrets({"openai": "sk-test-123", "inworld": "iw-test-1"}))
+
+    expected = {"openai": "sk-test-123", "hume": "hume-test-1", "inworld": "iw-test-1"}
+    assert keeper.secrets == expected
+    assert read_yaml(secrets_file(secrets_dir)) == expected
+
+
+
+# ── the subscription's device token ──
+
+
+def test_asking_for_subscription_models_before_sign_in_never_prompts(secrets_dir):
+    """The client asks for the TTS models as soon as it knows the plan, before
+    it has saved the device token. That popped "WingmanPro needs to know a
+    secret" on a fresh install, for a token the user cannot know."""
+    from types import SimpleNamespace
+
+    from wingman_core import SubscriptionNotSignedIn, WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper())
+
+    with pytest.raises(SubscriptionNotSignedIn):
+        asyncio.run(WingmanCore._fetch_subscription_models(core))
+
+    assert SecretKeeper._connection_manager.sent == []
+
+
+def _command_handler(keeper):
+    from services.command_handler import CommandHandler
+
+    handler = CommandHandler.__new__(CommandHandler)
+    handler.secret_keeper = keeper
+    handler.connection_manager = SecretKeeper._connection_manager
+    return handler
+
+
+def test_saving_the_device_token_tells_the_client_core_has_it(secrets_dir):
+    """The client asks Core for the subscription's models only after this, so
+    the first answer is not an empty list from a Core without the token."""
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="wingman_pro", secret_value="token", show_message=False), None
+    ))
+
+    assert [c.command for c in SecretKeeper._connection_manager.sent] == ["subscription_token_saved"]
+
+
+def test_saving_another_secret_says_nothing_about_the_subscription(secrets_dir):
+    from api.commands import SaveSecretCommand
+
+    handler = _command_handler(SecretKeeper())
+    asyncio.run(handler.handle_secret(
+        SaveSecretCommand(secret_name="openai", secret_value="sk-test", show_message=False), None
+    ))
+
+    assert SecretKeeper._connection_manager.sent == []
+
+
+def test_the_model_list_before_sign_in_is_empty_without_an_error_toast(secrets_dir):
+    """On a fresh install the client may ask for the models before it has sent
+    the token. That showed "Wingman Pro: Not signed in." as an error."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from wingman_core import WingmanCore
+
+    core = SimpleNamespace(secret_keeper=SecretKeeper(), printr=MagicMock())
+    core._fetch_subscription_models = lambda: WingmanCore._fetch_subscription_models(core)
+
+    assert asyncio.run(WingmanCore.get_wingman_pro_models(core)) == []
+    core.printr.toast_error.assert_not_called()
+
+
+
+def test_saving_the_same_value_again_still_tells_the_wingmen(secrets_dir):
+    """Saving the same key again is how a user retries a wingman that failed
+    to validate, say while the provider was down."""
+    keeper = SecretKeeper()
+    published = []
+
+    async def listener(secrets):
+        published.append(dict(secrets))
+
+    keeper.secret_events.subscribe("secrets_saved", listener)
+    asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
+    asyncio.run(keeper.post_secrets({"wingman_pro": "token-1"}))
+    assert len(published) == 2
+
+
+def _save_secret(handler, value, show_message):
+    from api.commands import SaveSecretCommand
+
+    command = SaveSecretCommand(
+        command="save_secret",
+        secret_name="wingman_pro",
+        secret_value=value,
+        show_message=show_message,
+    )
+    asyncio.run(handler.handle_secret(command, websocket=None))
+
+
+def test_the_client_resending_its_token_does_not_validate_the_wingmen_again(secrets_dir):
+    """The client sends its device token on every start. Each save made every
+    Wingman validate again and start a new gateway session."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    keeper = SecretKeeper()
+    published = []
+
+    async def listener(secrets):
+        published.append(dict(secrets))
+
+    keeper.secret_events.subscribe("secrets_saved", listener)
+    handler = _command_handler(keeper)
+    handler.source_name = "test"
+    handler.printr = MagicMock(print_async=AsyncMock())
+
+    _save_secret(handler, "token-1", show_message=False)
+    _save_secret(handler, "token-1", show_message=False)
+    assert len(published) == 1
+    # The client still learns that Core has the token.
+    assert len(SecretKeeper._connection_manager.sent) == 2
+
+    _save_secret(handler, "token-1", show_message=True)
+    _save_secret(handler, "token-2", show_message=False)
+    assert len(published) == 3
+    assert restart().secrets == {"wingman_pro": "token-2"}

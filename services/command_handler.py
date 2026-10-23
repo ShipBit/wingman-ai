@@ -5,15 +5,17 @@ import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     ClientLoggedOutCommand,
+    CoreStateChangedCommand,
     RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
     SaveSecretCommand,
+    SubscriptionTokenSavedCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
     ClientLoggedInCommand,
 )
-from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
+from api.enums import CoreState, KeyboardRecordingType, LogSource, LogType, RecordingDevice, ToastType
 from api.interface import (
     CommandActionConfig,
     CommandJoystickConfig,
@@ -22,6 +24,7 @@ from api.interface import (
     ConfigWithDirInfo,
 )
 from mouse import mouse
+from services import error_reporting
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -39,6 +42,9 @@ class CommandHandler:
         self.timeout_task = None
         self.recorded_keys = []
         self.keyboard_hook_callback = None
+        # Recording twice must not hook twice, a stop from the client after
+        # the click already stopped must not unhook twice.
+        self._mouse_hooked = False
         self.is_joystick_recording = False
 
     async def dispatch(self, message, websocket: WebSocket):
@@ -74,6 +80,10 @@ class CommandHandler:
                 await self.handle_client_logged_in(
                     ClientLoggedInCommand(**command), websocket
                 )
+            elif command_name == "client_logged_out":
+                await self.handle_client_logged_out(
+                    ClientLoggedOutCommand(**command), websocket
+                )
             else:
                 raise ValueError("Unknown command")
         except Exception as e:
@@ -87,12 +97,28 @@ class CommandHandler:
     async def handle_client_ready(self, websocket: WebSocket):
         await self.connection_manager.client_ready(websocket)
 
+        # Send current core state so late-connecting clients get the right status
+        # (core_state_changed is not queued when no clients are connected)
+        state_command = CoreStateChangedCommand(
+            state=self.core.core_state,
+            message=self.core.core_state_message,
+            progress=self.core.core_state_progress,
+        )
+        await self.connection_manager.send_to(state_command, websocket)
+
     # todo: make this a POST request - was just a demo for commands with params
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):
         secret_name = command.secret_name
         secret_value = command.secret_value
-        self.secret_keeper.secrets[secret_name] = secret_value
-        await self.secret_keeper.save()
+        # The client sends its device token again on every start, without a
+        # message. Saving it would make every Wingman validate again for
+        # nothing. A user retrying a failed Wingman comes with a message.
+        unchanged = self.secret_keeper.secrets.get(secret_name) == secret_value
+        if not unchanged or command.show_message:
+            self.secret_keeper.secrets[secret_name] = secret_value
+            await self.secret_keeper.save()
+        if secret_name == "wingman_pro":
+            await self.connection_manager.broadcast(SubscriptionTokenSavedCommand())
 
         if command.show_message:
             await self.printr.print_async(
@@ -144,7 +170,9 @@ class CommandHandler:
         )
 
         self.recorded_keys = []
-        mouse.hook(self.on_mouse)
+        if not self._mouse_hooked:
+            mouse.hook(self.on_mouse)
+            self._mouse_hooked = True
 
     async def handle_record_joystick_actions(
         self, command: RecordJoystickActionsCommand, websocket: WebSocket
@@ -203,7 +231,7 @@ class CommandHandler:
                 # let capslock, numlock or scrolllock through, as it changes following keypresses
                 keyboard.direct_event(
                     event.scan_code,
-                    (0 if event.event_type == "down" else 2) + int(event.is_extended),
+                    (0 if event.event_type == "down" else 2) + int(bool(event.is_extended)),
                 )
 
             self.recorded_keys.append(event)
@@ -228,8 +256,9 @@ class CommandHandler:
         if command.recording_device == RecordingDevice.JOYSTICK:
             self.is_joystick_recording = False
             self.core.cancel_joystick_recording()
-        if command.recording_device == RecordingDevice.MOUSE:
+        if command.recording_device == RecordingDevice.MOUSE and self._mouse_hooked:
             mouse.unhook(self.on_mouse)
+            self._mouse_hooked = False
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:
@@ -274,9 +303,22 @@ class CommandHandler:
     async def handle_client_logged_in(
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
+        # Before the early return: a second account signing in on the same
+        # machine arrives as a keepalive too.
+        error_reporting.set_user(command.user_id)
+
         if self.core.is_client_logged_in:
-            # retrieved keepalive / token refresh from Azure but Tower is still initialized
+            # keepalive / token refresh, but the Tower is already initialized
             return
+
+        # Wait until config is loaded before proceeding — the server now starts
+        # before startup completes, so this command may arrive early.
+        while self.core.core_state in (
+            CoreState.STARTING,
+            CoreState.MIGRATING,
+            CoreState.LOADING_CONFIG,
+        ):
+            await asyncio.sleep(0.1)
 
         self.core.is_client_logged_in = True
         self.core.client_plan = command.plan
@@ -284,6 +326,8 @@ class CommandHandler:
 
         # Store username in settings for wingman access
         self.core.config_manager.settings_config.user_name = command.account_name
+        # ...and into the speech vocabulary, so the wingmen spell it right
+        self.core.settings_service.seed_vocabulary()
 
         self.printr.print(
             f"User {command.account_name} logged in ({command.plan})",
@@ -293,16 +337,110 @@ class CommandHandler:
             server_only=True,
         )
 
+        downgraded = await self._downgrade_subscription_tts()
+        rewritten = await self._rewrite_locked_voices()
+        if downgraded or rewritten:
+            # Reloading publishes config_loaded, which initializes the Tower
+            # with the rewritten configs.
+            await self.core.config_service.load_config(
+                self.core.config_service.current_config_dir
+            )
+            return
+
         config_dir_info = ConfigWithDirInfo(
             config=self.core.config_service.current_config,
             config_dir=self.core.config_service.current_config_dir,
         )
         await self.core.initialize_tower(config_dir_info)
 
+    async def _downgrade_subscription_tts(self) -> bool:
+        """A plan without Inworld (Free) speaks with Azure: Wingmen set to the
+        subscription's Inworld move there, with a voice of the same gender.
+        Whether the plan has Inworld comes from the backend's model list, not
+        the plan name. No answer from the backend: nothing changes."""
+        from services.wingman_default_voices import downgrade_inworld_to_azure
+
+        tts = await self.core.get_wingman_tts_models()
+        if not tts.models or any(
+            m.provider == "inworld" and m.available for m in tts.models
+        ):
+            return False
+        changed = downgrade_inworld_to_azure(self.core.config_manager)
+        if not changed:
+            return False
+        await self.printr.print_async(
+            "Your plan has no Inworld voices, so these Wingmen now speak with Azure: "
+            + ", ".join(changed),
+            color=LogType.INFO,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+        )
+        return True
+
+    async def _fetch_plan_voices(self) -> dict[str, list]:
+        """The subscription's Azure and Inworld voices, `locked` where the plan
+        does not include them. A provider whose list could not be fetched maps
+        to an empty list, which means "leave it alone"."""
+        from providers.wingman_subscription import WingmanSubscription
+
+        # A short timeout: this runs on sign-in, before the Tower starts.
+        subscription = WingmanSubscription(
+            wingman_name="",
+            settings=self.core.config_manager.settings_config.wingman_pro,
+            timeout=10,
+        )
+
+        async def fetch(provider: str, load) -> list:
+            try:
+                return await asyncio.to_thread(load) or []
+            except Exception as e:
+                self.printr.print(
+                    f"Could not fetch the plan's {provider} voices: {e}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                return []
+
+        azure, inworld = await asyncio.gather(
+            fetch("azure", subscription.get_available_azure_voices),
+            fetch("inworld", subscription.get_available_inworld_voices),
+        )
+        return {"azure": azure, "inworld": inworld}
+
+    async def _rewrite_locked_voices(self) -> bool:
+        """A Wingman set to a subscription voice its plan does not include gets
+        the closest free voice in its config, so the config says what the
+        backend really plays. Returns True when a config changed."""
+        from services.wingman_default_voices import rewrite_locked_voices
+
+        try:
+            voices = await self._fetch_plan_voices()
+            changed = rewrite_locked_voices(self.core.config_manager, voices)
+        except Exception as e:
+            self.printr.print(
+                f"Could not replace locked voices: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return False
+        if not changed:
+            return False
+        await self.printr.print_async(
+            "These voices are not in your plan, so the Wingmen now use free ones: "
+            + ", ".join(changed),
+            color=LogType.INFO,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+        )
+        return True
+
     async def handle_client_logged_out(
         self, command: ClientLoggedOutCommand, websocket: WebSocket
     ):
+        # Read the name before clearing it, so the log line says who left.
+        name = self.core.client_account_name
         self.core.is_client_logged_in = False
+        error_reporting.set_user(None)
         self.core.client_plan = "Free"
         self.core.client_account_name = ""
 
@@ -310,7 +448,7 @@ class CommandHandler:
         self.core.config_manager.settings_config.user_name = None
 
         self.printr.print(
-            "User {command.account_name} logged out",
+            f"User {name or 'unknown'} logged out",
             toast=ToastType.NORMAL,
             source=LogSource.SYSTEM,
             source_name=self.source_name,

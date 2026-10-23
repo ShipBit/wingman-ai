@@ -1,0 +1,22 @@
+# Azure voice (subscription) of each shipped Wingman per spoken language (see
+# services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
+# "legacy" lists every voice its template or this table gave it before
+# (comma-separated), so a Wingman still on one counts as untouched and moves
+# to the voice of its language.
+# "*" is every language without a row of its own. Every voice here is one the
+# Free plan includes (plan_voices in wingman-backend): Computer the female
+# multilingual one, ATC and Clippy male ones. Chosen by ear on 2026-10-19.
+Computer	legacy	en-US-JennyMultilingualNeural,de-DE-KatjaNeural,fr-FR-DeniseNeural,es-ES-ElviraNeural,zh-CN-XiaoyuMultilingualNeural
+Computer	*	zh-CN-XiaoyuMultilingualNeural
+ATC	legacy	en-US-AndrewMultilingualNeural,en-US-LewisMultilingualNeural
+ATC	en	en-US-LewisMultilingualNeural
+ATC	de	de-DE-ConradNeural
+ATC	fr	fr-FR-HenriNeural
+ATC	es	es-ES-AlvaroNeural
+ATC	*	en-US-LewisMultilingualNeural
+Clippy	legacy	en-US-AndrewMultilingualNeural
+Clippy	en	en-US-AndrewMultilingualNeural
+Clippy	de	de-DE-ConradNeural
+Clippy	fr	fr-FR-HenriNeural
+Clippy	es	es-ES-AlvaroNeural
+Clippy	*	en-US-AndrewMultilingualNeural

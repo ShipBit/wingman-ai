@@ -1,44 +1,107 @@
 """
-HeadsUp Overlay - PIL-based implementation with sophisticated Markdown rendering
-
-This implementation uses ONLY:
-- PIL (Pillow) for rendering (text, shapes, images)
-- Win32 API for window management
+Markdown for the HUD, drawn with PIL: headers, paragraphs, lists, tables,
+code, quotes, images and emoji, with typewriter support.
 """
 
+import base64
+import binascii
 import copy
 import os
 import re
-from typing import Tuple, Dict, List
+import queue
+import threading
+from collections import OrderedDict
+from typing import Tuple, Dict, List, Optional
 import io
 import urllib.request
-import urllib.error
 
 # PIL for rendering
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageChops
+    from PIL import Image, ImageChops, ImageDraw
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     Image = None
-    ImageDraw = None
-    ImageFont = None
     ImageChops = None
+    ImageDraw = None
 
-# Import cache size constants (with fallback defaults for standalone usage)
-try:
-    from hud_server.constants import (
-        MAX_IMAGE_CACHE_SIZE,
-        MAX_INLINE_TOKEN_CACHE_SIZE,
-        MAX_TEXT_WRAP_CACHE_SIZE,
-        MAX_TEXT_SIZE_CACHE_SIZE,
-    )
-except ImportError:
-    # Fallback defaults for standalone testing
-    MAX_IMAGE_CACHE_SIZE = 20
-    MAX_INLINE_TOKEN_CACHE_SIZE = 100
-    MAX_TEXT_WRAP_CACHE_SIZE = 200
-    MAX_TEXT_SIZE_CACHE_SIZE = 2000
+from hud_server.rendering import glass
+from hud_server.constants import (
+    MAX_IMAGE_CACHE_SIZE,
+    MAX_INLINE_TOKEN_CACHE_SIZE,
+    MAX_TEXT_WRAP_CACHE_SIZE,
+    MAX_TEXT_SIZE_CACHE_SIZE,
+    MAX_BASE64_IMAGE_BYTES,
+)
+
+# data:image/<type>;base64,<data> URIs
+_DATA_URI_RE = re.compile(r'^data:image/[a-zA-Z0-9.+-]+;base64,(.+)$', re.DOTALL)
+
+# Images from the web: downloaded once per URL, beside the HUD (never on the
+# thread that draws it), kept for every renderer and every width.
+MAX_WEB_IMAGES = 64
+MAX_WEB_IMAGE_SIZE = 2048
+_web_lock = threading.Lock()
+_web_images: "OrderedDict[str, Image.Image]" = OrderedDict()
+_web_pending: set = set()
+_web_failed: set = set()
+_web_version = 0
+_web_jobs: Optional[queue.Queue] = None
+
+
+def web_image_version() -> int:
+    """Goes up whenever a download ends: what showed a placeholder for it
+    has to be drawn again."""
+    return _web_version
+
+
+def _web_image(url: str) -> Optional[Image.Image]:
+    """The downloaded image, or None while it loads (the download starts
+    here) or after it failed."""
+    global _web_jobs
+    with _web_lock:
+        image = _web_images.get(url)
+        if image is not None:
+            _web_images.move_to_end(url)
+            return image
+        if url in _web_pending or url in _web_failed:
+            return None
+        _web_pending.add(url)
+        if _web_jobs is None:
+            _web_jobs = queue.Queue()
+            for n in range(2):
+                # Daemon threads: a slow server must not hold up Core's exit
+                threading.Thread(
+                    target=_download_worker, args=(_web_jobs,), name=f"hud-image-{n}", daemon=True
+                ).start()
+        jobs = _web_jobs
+    jobs.put(url)
+    return None
+
+
+def _download_worker(jobs: queue.Queue) -> None:
+    global _web_version
+    while True:
+        url = jobs.get()
+        image = None
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                image = Image.open(io.BytesIO(response.read()))
+                image.load()
+            image = image.convert('RGBA')
+            image.thumbnail((MAX_WEB_IMAGE_SIZE, MAX_WEB_IMAGE_SIZE))
+        except Exception:
+            image = None
+        with _web_lock:
+            _web_pending.discard(url)
+            if image is None:
+                _web_failed.add(url)
+            else:
+                _web_images[url] = image
+                while len(_web_images) > MAX_WEB_IMAGES:
+                    _web_images.popitem(last=False)
+            _web_version += 1
 
 
 class MarkdownRenderer:
@@ -54,8 +117,6 @@ class MarkdownRenderer:
         # Calculate line height based on font size (1.625x for good readability)
         font_size = fonts.get('_font_size', 16)
         self.line_height = int(font_size * 1.625)
-        self.letter_spacing = 0  # No letter spacing
-        self.char_count = 0  # For typewriter tracking
         self._text_size_cache = {}
         self._text_size_cache_max = MAX_TEXT_SIZE_CACHE_SIZE
         self._image_cache = {}  # Cache for loaded images
@@ -72,46 +133,42 @@ class MarkdownRenderer:
         self._wrap_cache = {}
         self._max_wrap_cache_size = MAX_TEXT_WRAP_CACHE_SIZE
 
-        # Cache statistics for monitoring
-        self._cache_stats = {
-            'text_size_hits': 0,
-            'text_size_misses': 0,
-            'token_cache_hits': 0,
-            'token_cache_misses': 0,
-            'wrap_cache_hits': 0,
-            'wrap_cache_misses': 0,
-        }
+    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple, bg_alpha: int = 255):
+        """Text, accent and background colour, and how opaque the background is."""
+        self.colors = {'text': text, 'accent': accent, 'bg': bg, 'bg_alpha': bg_alpha}
 
-    def get_cache_stats(self) -> Dict[str, int]:
-        """Get cache statistics for performance monitoring."""
-        return dict(self._cache_stats)
+    def bg_shade(self, strength: float) -> Tuple[int, int, int, int]:
+        """The panel's background a little lighter (a dark one) or darker (a
+        light one), and as see-through as the background."""
+        r, g, b = self.colors.get('bg', (30, 33, 43))[:3]
+        shade = (255, 255, 255) if 0.2126 * r + 0.7152 * g + 0.0722 * b < 128 else (0, 0, 0)
+        return shade + (round(strength * self.colors.get('bg_alpha', 255)),)
 
-    def clear_caches(self):
-        """Clear all caches. Call when memory pressure is high."""
-        self._text_size_cache.clear()
-        self._image_cache.clear()
-        self._inline_token_cache.clear()
-        self._wrap_cache.clear()
-        # Reset stats
-        for key in self._cache_stats:
-            self._cache_stats[key] = 0
-
-    def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple):
-        self.colors = {'text': text, 'accent': accent, 'bg': bg}
+    def accent_tint(self, strength: float) -> Tuple[int, int, int, int]:
+        """The accent over the panel at `strength`, as see-through as the panel's background."""
+        return tuple(self.colors['accent'][:3]) + (round(strength * self.colors.get('bg_alpha', 255)),)
 
     def _load_image(self, url: str, max_width: int) -> Image.Image:
-        """Load an image from URL or file path, resize to fit max_width while keeping aspect ratio.
+        """Load an image from a local path, URL, or base64 source, resize to fit max_width
+        while keeping aspect ratio.
 
         Returns None if loading fails.
         """
-        # Check cache first
+        # Check cache first (least recently used goes first)
         cache_key = (url, max_width)
         if cache_key in self._image_cache:
-            return self._image_cache[cache_key]
+            img = self._image_cache.pop(cache_key)
+            self._image_cache[cache_key] = img
+            return img
 
-        # Check if we already failed to load this URL
+        # Check if we already failed to load this source
         if url in self._image_load_failures:
             return None
+
+        if url.startswith(('http://', 'https://')):
+            # Shown once it has arrived; until then the placeholder
+            original = _web_image(url)
+            return self._remember_image(cache_key, original) if original is not None else None
 
         try:
             img = None
@@ -124,41 +181,53 @@ class MarkdownRenderer:
                 file_path = url[7:]  # Remove 'file://'
                 if os.path.isfile(file_path):
                     img = Image.open(file_path)
-            elif url.startswith(('http://', 'https://')):
-                # Download from URL with timeout
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    img_data = response.read()
-                    img = Image.open(io.BytesIO(img_data))
+            else:
+                # data:image/<type>;base64,<data> URI, or a raw base64 string
+                data_uri_match = _DATA_URI_RE.match(url)
+                b64_payload = data_uri_match.group(1) if data_uri_match else url
+
+                try:
+                    decoded = base64.b64decode(b64_payload, validate=True)
+                except (binascii.Error, ValueError):
+                    decoded = None
+
+                if decoded is not None:
+                    if len(decoded) > MAX_BASE64_IMAGE_BYTES:
+                        self._image_load_failures.add(url)
+                        return None
+                    img = Image.open(io.BytesIO(decoded))
 
             if img is None:
                 self._image_load_failures.add(url)
                 return None
 
-            # Convert to RGBA if necessary
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
-
-            # Resize to fit max_width while keeping aspect ratio (only shrink, never enlarge)
-            orig_width, orig_height = img.size
-            if orig_width > max_width:
-                ratio = max_width / orig_width
-                new_height = int(orig_height * ratio)
-                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-
-            # Cache the result (limit cache size)
-            if len(self._image_cache) >= self._image_cache_max:
-                # Remove oldest entry
-                oldest_key = next(iter(self._image_cache))
-                del self._image_cache[oldest_key]
-
-            self._image_cache[cache_key] = img
-            return img
+            return self._remember_image(cache_key, img)
 
         except Exception as e:
             # Mark as failed to avoid retrying
             self._image_load_failures.add(url)
             return None
+
+    def _remember_image(self, cache_key, img: Image.Image) -> Image.Image:
+        """The image as RGBA, shrunk to the width (never enlarged), cached."""
+        max_width = cache_key[1]
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        orig_width, orig_height = img.size
+        if orig_width > max_width:
+            ratio = max_width / orig_width
+            new_height = int(orig_height * ratio)
+            img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+        if len(self._image_cache) >= self._image_cache_max:
+            oldest_key = next(iter(self._image_cache))
+            del self._image_cache[oldest_key]
+        self._image_cache[cache_key] = img
+        return img
+
+    @property
+    def image_version(self) -> int:
+        return web_image_version()
 
     def _get_text_size(self, text: str, font) -> Tuple[int, int]:
         """Get text size with caching.
@@ -168,10 +237,8 @@ class MarkdownRenderer:
         # Use id(font) because font objects are not hashable but are persistent in this app
         key = (text, id(font))
         if key in self._text_size_cache:
-            self._cache_stats['text_size_hits'] += 1
             return self._text_size_cache[key]
 
-        self._cache_stats['text_size_misses'] += 1
 
         try:
             bbox = font.getbbox(text)
@@ -352,10 +419,8 @@ class MarkdownRenderer:
         # Check cache first
         cache_key = (text, id(font), max_width)
         if cache_key in self._wrap_cache:
-            self._cache_stats['wrap_cache_hits'] += 1
             return self._wrap_cache[cache_key]
 
-        self._cache_stats['wrap_cache_misses'] += 1
 
         words = text.split(' ')
         lines, current = [], []
@@ -402,11 +467,9 @@ class MarkdownRenderer:
         """
         # Check cache first - tokens are immutable once parsed
         if text in self._inline_token_cache:
-            self._cache_stats['token_cache_hits'] += 1
             # Deep copy required: callers modify token positions for typewriter effect
             return copy.deepcopy(self._inline_token_cache[text])
 
-        self._cache_stats['token_cache_misses'] += 1
 
         tokens = self._tokenize_inline_uncached(text)
 
@@ -428,9 +491,10 @@ class MarkdownRenderer:
         while i < len(text):
             start_pos = i
 
-            # Image ![alt](url)
+            # Image ![alt](url). The URL allows one level of balanced parens so local
+            # paths like .../Wingman (Beta)/icon.png aren't truncated at the first ).
             if text[i:i+2] == '![':
-                m = re.match(r'!\[([^]]*)]\(([^)]+)\)', text[i:])
+                m = re.match(r'!\[([^]]*)]\(((?:[^()]|\([^()]*\))+)\)', text[i:])
                 if m:
                     full_len = len(m.group(0))
                     # Content is "alt" which starts at i+2, ends before ]
@@ -726,7 +790,6 @@ class MarkdownRenderer:
             if stripped.startswith('```'):
                 lang = stripped[3:].strip()
                 code_lines = []
-                start_i = i
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith('```'):
                     code_lines.append(lines[i])
@@ -764,7 +827,6 @@ class MarkdownRenderer:
             # Blockquote > (can start with > or have spaces before it)
             if stripped.startswith('>') or line.lstrip().startswith('>'):
                 quote_lines = []
-                start_i = i
                 while i < len(lines):
                     current_line = lines[i].strip()
                     if current_line.startswith('>'):
@@ -801,7 +863,6 @@ class MarkdownRenderer:
             # Table |
             if stripped.startswith('|') and '|' in stripped[1:]:
                 table_lines = []
-                start_i = i
                 while i < len(lines) and '|' in lines[i]:
                     table_lines.append(lines[i].strip())
                     i += 1
@@ -818,7 +879,6 @@ class MarkdownRenderer:
             m = re.match(r'^(\s*)([-*+])\s+(.*)$', line)
             if m:
                 items = []
-                start_i = i
                 while i < len(lines):
                     item_m = re.match(r'^(\s*)([-*+])\s+(.*)$', lines[i])
                     if item_m:
@@ -849,7 +909,6 @@ class MarkdownRenderer:
             m = re.match(r'^(\s*)((?:\d+\.)+\d*)\s+(.*)$', line)
             if m:
                 items = []
-                start_i = i
                 while i < len(lines):
                     item_m = re.match(r'^(\s*)((?:\d+\.)+\d*)\s+(.*)$', lines[i])
                     if item_m:
@@ -899,7 +958,6 @@ class MarkdownRenderer:
 
             # Paragraph (default)
             para = []
-            start_i = i
             while i < len(lines) and lines[i].strip() and not self._is_block_start(lines[i]):
                 para.append(lines[i].strip())
                 i += 1
@@ -950,7 +1008,6 @@ class MarkdownRenderer:
 
         for block in blocks:
             block_start = block.get('start', 0)
-            block_end = block.get('end', block_start)
 
             # Skip blocks that haven't been reached yet by typewriter
             if self.remaining_chars != float('inf') and block_start >= self.remaining_chars:
@@ -965,7 +1022,11 @@ class MarkdownRenderer:
             elif t == 'paragraph':
                 current_y = self._render_paragraph(draw, block, x, current_y, width)
             elif t == 'code_block':
-                current_y = self._render_code_block(draw, canvas, block, x, current_y, width)
+                data_block = self.DATA_BLOCKS.get(block.get('lang', '').strip().lower())
+                if data_block:
+                    current_y = getattr(self, data_block)(draw, block, x, current_y, width)
+                else:
+                    current_y = self._render_code_block(draw, canvas, block, x, current_y, width)
             elif t == 'blockquote':
                 current_y = self._render_blockquote(draw, canvas, block, x, current_y, width)
             elif t == 'hr':
@@ -1134,7 +1195,6 @@ class MarkdownRenderer:
         for line in wrapped_lines:
             # Calculate visibility based on typewriter position
             line_start_in_code = chars_shown
-            line_end_in_code = chars_shown + len(line)
 
             # Check if this line should be visible
             if typewriter_pos != float('inf'):
@@ -1165,55 +1225,6 @@ class MarkdownRenderer:
             chars_shown += len(line) + 1  # +1 for newline
 
         return y + total_h + 12
-
-    def _render_text_with_emoji(self, draw, text: str, x: int, y: int, color: Tuple, font, emoji_y_offset: int = 5):
-        """Render text with inline emoji support for titles and labels.
-
-        Args:
-            draw: ImageDraw object
-            text: Text to render (may contain emojis)
-            x: X position
-            y: Y position
-            color: Text color (RGBA tuple)
-            font: Font to use for text
-            emoji_y_offset: Vertical offset for emojis (default 5 for bold titles)
-        """
-        if not text:
-            return
-
-        current_x = x
-        i = 0
-        emoji_font = self.fonts.get('emoji', font)
-
-        while i < len(text):
-            # Check for emoji at current position
-            emoji_len = self._get_emoji_length(text, i)
-            if emoji_len > 0:
-                # Render emoji with emoji font and color support
-                emoji_text = text[i:i+emoji_len]
-                if self.color_emojis:
-                    draw.text((current_x, y + emoji_y_offset), emoji_text, fill=color, font=emoji_font, embedded_color=True)
-                else:
-                    draw.text((current_x, y + emoji_y_offset), emoji_text, fill=color, font=emoji_font)
-                emoji_w, _ = self._get_text_size(emoji_text, emoji_font)
-                # Reduce emoji width - more aggressive for variation selector emojis
-                has_variation_selector = '\ufe0f' in emoji_text
-                if has_variation_selector:
-                    current_x += int(emoji_w * 0.55)
-                else:
-                    current_x += int(emoji_w * 0.85)
-                i += emoji_len
-            else:
-                # Find the next emoji or end of text
-                text_start = i
-                while i < len(text) and self._get_emoji_length(text, i) == 0:
-                    i += 1
-                # Render text segment
-                text_segment = text[text_start:i]
-                if text_segment:
-                    draw.text((current_x, y), text_segment, fill=color, font=font)
-                    text_w, _ = self._get_text_size(text_segment, font)
-                    current_x += text_w
 
     def _render_code_line_with_emoji(self, draw, line: str, x: int, y: int, color: Tuple, font, emoji_y_offset: int = 0, emoji_x_offset: int = 0):
         """Render a code line with emoji support.
@@ -1345,24 +1356,19 @@ class MarkdownRenderer:
             if max_chars <= 0:
                 return y - 4  # Nothing visible yet
 
-        # First, estimate the height by doing a dry run
-        # We'll use a simple line-based estimate
-        font = self.fonts.get('italic', self.fonts['normal'])
-        lines = self._wrap_text(text, font, content_w)
-        line_h = self.line_height
-
-        # Calculate how much text is visible
-        if max_chars is not None:
-            chars_shown = 0
-            visible_lines = 0
-            for line in lines:
-                if chars_shown >= max_chars:
-                    break
-                visible_lines += 1
-                chars_shown += len(line) + 1
-            visible_h = max(1, visible_lines) * line_h + 12
-        else:
-            visible_h = len(lines) * line_h + 12
+        # The text goes on a layer of its own first: its real height sizes the box. An estimate from
+        # wrapped lines was off with bold (wider) or short text (a box a line too tall).
+        quote_color = (180, 186, 196)
+        text_y = y + 6
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_end = self._render_tokens(
+            ImageDraw.Draw(text_layer), tokens, content_x, text_y, content_w,
+            override_color=quote_color,
+            max_chars=max_chars,
+            quote=True,
+        ) - 10  # _render_tokens adds a 10 px margin after the last line
+        visible_h = text_end - y + 8
 
         # Draw accent border on left
         accent = self.colors['accent']
@@ -1372,35 +1378,15 @@ class MarkdownRenderer:
         bg = (40, 46, 56, 180)
         draw.rounded_rectangle([x + border_w, y, x + width, y + visible_h], radius=6, fill=bg)
 
-        # Render the blockquote content with full markdown support
-        quote_color = (180, 186, 196)
-        text_y = y + 6
-
-        # Use _render_tokens for proper markdown/emoji rendering
-        final_y = self._render_tokens(
-            draw, tokens, content_x, text_y, content_w,
-            override_color=quote_color,
-            override_font=font,
-            max_chars=max_chars
-        )
+        canvas.alpha_composite(text_layer)
 
         return y + visible_h + 10
 
     def _render_hr(self, draw, x: int, y: int, width: int) -> int:
+        """A thin line in a shade of the panel: it follows the profile's background and its
+        transparency (was a fixed grey with accent dots at the ends and the centre)."""
         hr_y = y + 12
-        # Simple horizontal line with accent color
-        accent = self.colors['accent']
-
-        # Draw the main line
-        line_start_x = x
-        line_end_x = x + width
-        draw.line([(line_start_x, hr_y), (line_end_x, hr_y)], fill=(60, 66, 78), width=1)
-
-        # Decorative dots at the ends and center
-        dot_positions = [line_start_x, x + width // 2, line_end_x]
-        for dot_x in dot_positions:
-            draw.ellipse([dot_x - 2, hr_y - 2, dot_x + 2, hr_y + 2], fill=accent)
-
+        glass.paint(draw._image, Image.new("L", (max(1, width), 1), 255), self.bg_shade(0.16), (x, hr_y))
         return y + 24
 
     def _render_footnote_def(self, draw, block: Dict, x: int, y: int, width: int) -> int:
@@ -1491,14 +1477,27 @@ class MarkdownRenderer:
         bold_font = self.fonts.get('bold', font)
         line_h = self.line_height - 4
 
+        # The text goes on a layer of its own, laid over the rows at the end:
+        # drawn straight onto a see-through row shade, its anti-aliased edges
+        # would mix with the shade instead of covering it and show as a halo
+        canvas = draw._image
+        text_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        text_draw = ImageDraw.Draw(text_layer)
+
         # Parse rows (skip separator lines)
         rows = []
         row_line_indices = []  # Track which original line each row came from
+        aligns: List[str] = []  # From the separator row: ---: right, :---: center, else left
         for li, line in enumerate(lines):
             cells = [c.strip() for c in line.split('|')[1:-1]]
             if cells and not all(re.match(r'^[-:]+$', c.strip()) for c in cells if c.strip()):
                 rows.append(cells)
                 row_line_indices.append(li)
+            elif cells and not aligns:
+                aligns = [
+                    'center' if c.startswith(':') and c.endswith(':') else 'right' if c.endswith(':') else 'left'
+                    for c in cells
+                ]
 
         if not rows:
             return y
@@ -1507,13 +1506,10 @@ class MarkdownRenderer:
         if num_cols == 0:
             return y
 
-        # Calculate column widths - table uses full width like code blocks
+        # Column widths follow their content - table uses full width like code blocks
         cell_padding = 6
         table_w = width  # Match code block width
-        col_width = max(40, table_w // num_cols)
-        col_widths = [col_width] * num_cols
-        # Adjust last column to fill remaining space
-        col_widths[-1] = table_w - sum(col_widths[:-1])
+        col_widths = self._table_column_widths(rows, num_cols, font, bold_font, table_w, cell_padding)
 
         # Calculate row heights (need to pre-calculate for proper backgrounds)
         row_heights = []
@@ -1539,6 +1535,9 @@ class MarkdownRenderer:
             row_positions.append(pos)
             pos += len(line) + 1  # +1 for newline
 
+        # The rows' shades, put on as one rounded, anti-aliased shape at the end
+        shades = []
+
         # Track visible rows for proper border drawing
         visible_rows = 0
         last_visible_y = y
@@ -1558,28 +1557,7 @@ class MarkdownRenderer:
             is_header = (ri == 0)
             current_font = bold_font if is_header else font
             text_color = self.colors['accent'] if is_header else self.colors['text']
-
-            # Row background
-            bg = (45, 52, 64) if is_header else ((32, 38, 48) if ri % 2 == 1 else (38, 44, 54))
-
-            # Draw row background
-            if ri == 0:
-                draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                draw.rectangle([x, current_y + row_h - 8, x + table_w, current_y + row_h], fill=bg)
-            else:
-                # Check if this is the last visible row
-                next_row_visible = False
-                if ri + 1 < len(rows):
-                    next_orig_idx = row_line_indices[ri + 1]
-                    next_row_pos = row_positions[next_orig_idx] if next_orig_idx < len(row_positions) else float('inf')
-                    next_row_visible = (typewriter_pos == float('inf') or next_row_pos < typewriter_pos)
-
-                if not next_row_visible or ri == len(rows) - 1:
-                    # This is the last visible row - use rounded bottom
-                    draw.rounded_rectangle([x, current_y, x + table_w, current_y + row_h], radius=8, fill=bg)
-                    draw.rectangle([x, current_y, x + table_w, current_y + 8], fill=bg)
-                else:
-                    draw.rectangle([x, current_y, x + table_w, current_y + row_h], fill=bg)
+            shades.append((current_y - y, row_h, self.bg_shade(0.08 if is_header else (0.02 if ri % 2 == 1 else 0.045))))
 
             # Draw cells with typewriter support
             cell_x = x
@@ -1592,29 +1570,417 @@ class MarkdownRenderer:
                 # Approximate: row_start + position within row
                 cell_start_approx = row_start_pos + sum(len(row[j]) + 1 for j in range(ci) if j < len(row))
 
+                # A right or center aligned column moves text that fits on one line
+                align = aligns[ci] if ci < len(aligns) else 'left'
+                offset = 0
+                if align != 'left':
+                    shown_w = self._inline_width(cell_text, current_font)
+                    if shown_w < content_w:
+                        offset = (content_w - shown_w) // (1 if align == 'right' else 2)
+
                 # Render cell with typewriter effect
                 self._render_cell_content_with_pos(
-                    draw, cell_text, cell_x + cell_padding, current_y + 5,
+                    text_draw, cell_text, cell_x + cell_padding + offset, current_y + 5,
                     content_w, line_h + 6, current_font, text_color,
                     cell_start_approx, typewriter_pos
                 )
-
-                # Column separator
-                if ci < num_cols - 1:
-                    sep_x = cell_x + cell_w
-                    draw.line([(sep_x, current_y + 4), (sep_x, current_y + row_h - 4)],
-                             fill=(55, 62, 74), width=1)
 
                 cell_x += cell_w
 
             last_visible_y = current_y + row_h
             current_y += row_h
 
-        # Outer border (only around visible portion)
         if visible_rows > 0:
-            draw.rounded_rectangle([x, y, x + table_w, last_visible_y], radius=8, outline=(55, 62, 74), width=1)
+            table_h = last_visible_y - y + 1
+            rows_layer = Image.new("RGBA", (table_w + 1, table_h), (0, 0, 0, 0))
+            rows_draw = ImageDraw.Draw(rows_layer)
+            for top, row_h, shade in shades:
+                rows_draw.rectangle([0, top, table_w, top + row_h], fill=shade)
+            rows_layer.putalpha(ImageChops.multiply(rows_layer.getchannel("A"), glass.rounded_mask(table_w + 1, table_h, 8)))
+            glass.put(canvas, rows_layer, (x, y))
+            glass.paint(canvas, glass.ring_mask(table_w + 1, table_h, 8), self.bg_shade(0.1), (x, y))
+        canvas.alpha_composite(text_layer)
 
         return last_visible_y + 10 if visible_rows > 0 else y
+
+    # ── Data blocks ──────────────────────────────────────────────────────
+    # Fenced code blocks with one of these languages draw a small figure instead of code:
+    #
+    #   ```bar                         ```steps               ```stats
+    #   max: 640                       done | HDMS-Ryder      Pay here | 5,177,981
+    #   Arriving | 618 text | 22 muted current | Rayari Kaltag Profit | 2,133,227 | accent
+    #   Leaving | 22 muted | 618 accent jump | Jump           ```
+    #   legend | text Sell | accent Buy next | Levski
+    #   ```                            ```
+    #
+    # Everything takes its look from the HUD profile: its fonts, its text and accent colour
+    # and its background (muted = text pulled towards the background). No settings of their own.
+
+    DATA_BLOCKS = {'bar': '_render_bar_block', 'steps': '_render_steps_block', 'stats': '_render_stats_block'}
+
+    @staticmethod
+    def _block_rows(code: str) -> List[List[str]]:
+        return [[cell.strip() for cell in line.split('|')] for line in code.split('\n') if line.strip()]
+
+    def _tone(self, name: str, mute: float = 0.55) -> Tuple[int, int, int]:
+        """A colour of the HUD profile by role: accent, text, or muted (text towards the background)."""
+        text = tuple(self.colors['text'][:3])
+        if name == 'accent':
+            return tuple(self.colors['accent'][:3])
+        if name == 'text':
+            return text
+        return glass.mix(text, self.colors.get('bg', (30, 33, 43)), mute)
+
+    def _label_color(self) -> Tuple[int, int, int]:
+        # Like the overlay's names and labels next to the text
+        return self._tone('muted', 0.35)
+
+    @staticmethod
+    def _centered_text_y(font, center_y: float, text: str = 'Ay') -> int:
+        """Where to draw `text` so its letters sit centred on center_y (fonts start below their y)."""
+        try:
+            top, bottom = font.getbbox(text)[1], font.getbbox(text)[3]
+        except Exception:
+            top, bottom = 0, 16
+        return int(round(center_y - (top + bottom) / 2))
+
+    def _render_bar_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """Labelled bars of coloured segments (e.g. a cargo hold), on a track that is the full `max`."""
+        canvas = draw._image
+        font = self.fonts['normal']
+        maximum, bars, legend = None, [], []
+        for cells in self._block_rows(block.get('code', '')):
+            head = cells[0]
+            if len(cells) == 1 and head.lower().startswith('max:'):
+                try:
+                    maximum = float(head.split(':', 1)[1])
+                except ValueError:
+                    pass
+            elif head.lower() == 'legend':
+                legend = [tuple(cell.split(None, 1)) for cell in cells[1:] if len(cell.split(None, 1)) == 2]
+            else:
+                segments = []
+                for cell in cells[1:]:
+                    parts = cell.split(None, 1)
+                    try:
+                        segments.append((float(parts[0]), parts[1] if len(parts) > 1 else 'accent'))
+                    except (ValueError, IndexError):
+                        continue
+                bars.append((head, segments))
+
+        row_h = self.line_height
+        bar_h = max(10, round(self.line_height / 2.6))
+        labels = [label for label, _ in bars if label]
+        label_w = max((self._get_text_size(label, font)[0] for label in labels), default=0)
+        label_w = label_w + 12 if label_w else 0
+
+        def amount(segments) -> str:
+            filled = sum(value for value, _ in segments)
+            return f"{filled:,.0f} / {maximum:,.0f}" if maximum else f"{filled:,.0f}"
+
+        # How full each bar is, at its right end
+        amounts = [amount(segments) for _, segments in bars]
+        amount_w = max((self._get_text_size(text, font)[0] for text in amounts), default=0) + 12
+        bar_x, bar_w = x + label_w, max(20, width - label_w - amount_w)
+        current_y = y + 2
+        for (label, segments), filled in zip(bars, amounts):
+            center = current_y + row_h / 2
+            if label:
+                self._draw_text_with_spacing(draw, (x, self._centered_text_y(font, center)), label,
+                                             self._label_color(), font)
+            text_w = self._get_text_size(filled, font)[0]
+            self._draw_text_with_spacing(draw, (x + width - text_w, self._centered_text_y(font, center, filled)),
+                                         filled, self._label_color(), font)
+            top = int(center - bar_h / 2)
+            glass.paint(canvas, glass.rounded_mask(bar_w, bar_h, 3), self.bg_shade(0.14), (bar_x, top))
+            total = maximum or sum(value for value, _ in segments) or 1
+            cursor = float(bar_x)
+            for value, tone in segments:
+                if value <= 0:
+                    continue
+                seg_w = min(max(3.0, value / total * bar_w), bar_x + bar_w - cursor)
+                if seg_w <= 0:
+                    break
+                glass.paint(canvas, glass.rounded_mask(int(round(seg_w)), bar_h, 2), self._tone(tone),
+                            (int(round(cursor)), top))
+                cursor += seg_w + 2
+            current_y += row_h
+
+        if legend:
+            swatch = max(8, bar_h)
+            cursor, line_top = bar_x, current_y
+            for tone, text in legend:
+                item_w = swatch + 6 + self._get_text_size(text, font)[0]
+                if cursor > bar_x and cursor + item_w > x + width:
+                    cursor, line_top = bar_x, line_top + row_h
+                center = line_top + row_h / 2
+                glass.paint(canvas, glass.rounded_mask(swatch, swatch, 2), self._tone(tone),
+                            (cursor, int(center - swatch / 2)))
+                self._draw_text_with_spacing(draw, (cursor + swatch + 6, self._centered_text_y(font, center)),
+                                             text, self._label_color(), font)
+                cursor += item_w + 16
+            current_y = line_top + row_h
+        return current_y + 8
+
+    def _render_steps_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """A route in one row: done, current and next stops, joined by chevrons pointing the way
+        (flown legs dimmed, the leg to the next stop in the accent colour); a `jump` between two
+        stops puts a jump gate on the leg between them. Too wide for the row: it scrolls to the
+        current stop and fades out on the sides where the route goes on."""
+        canvas = draw._image
+        normal, bold = self.fonts['normal'], self.fonts.get('bold', self.fonts['normal'])
+        stops, jumps = [], set()
+        for cells in self._block_rows(block.get('code', '')):
+            kind = cells[0].lower()
+            label = cells[1] if len(cells) > 1 else ''
+            if kind == 'jump':
+                jumps.add(len(stops))  # a gate on the leg before the next stop
+            else:
+                stops.append((kind if kind in ('done', 'current') else 'next', label))
+        if not stops:
+            return y
+
+        icon = max(10, int(self.fonts.get('_font_size', 16) * 0.85))
+        fonts = [bold if kind == 'current' else normal for kind, _ in stops]
+        widths = [icon + 6 + self._get_text_size(label, font)[0] for (_, label), font in zip(stops, fonts)]
+        gaps = list(range(1, len(stops)))
+        gate_w = self._jump_gate_size()[0]
+        min_gap = [48 + (gate_w + 24 if i in jumps else 0) for i in gaps]
+        row_h = self.line_height
+
+        # Drawn on a strip of its own, cut to the row's width when the route is wider
+        overflow = sum(widths) + sum(min_gap) > width
+        # Scrolling anyway: some air between the stops
+        extra = 16 if overflow else (width - sum(widths) - sum(min_gap)) / max(1, len(gaps))
+        strip_w = int(sum(widths) + sum(min_gap) + extra * len(gaps)) + 1 if overflow else width
+        pad = 4  # room for letters reaching past the line
+        strip = Image.new("RGBA", (strip_w, row_h + pad * 2), (0, 0, 0, 0))
+        pen = ImageDraw.Draw(strip)
+
+        def draw_icon(kind: str, left: float, center: float):
+            # Drawn 4x larger and scaled down: PIL's circles and lines have no anti-aliasing
+            scale = 4
+            size = icon * scale
+            image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            pen = ImageDraw.Draw(image)
+            if kind == 'done':
+                pen.ellipse([0, 0, size - 1, size - 1], fill=self._tone('muted') + (255,))
+                pen.line([(size * 0.27, size * 0.52), (size * 0.44, size * 0.69), (size * 0.74, size * 0.36)],
+                         fill=tuple(self.colors.get('bg', (30, 33, 43))[:3]) + (255,), width=max(scale, size // 8),
+                         joint="curve")
+            else:
+                ring = (self._tone('accent') if kind == 'current' else self._label_color()) + (255,)
+                stroke = max(2, icon // 6) * scale
+                pen.ellipse([stroke / 2, stroke / 2, size - 1 - stroke / 2, size - 1 - stroke / 2], outline=ring, width=stroke)
+                if kind == 'current':
+                    dot = size * 0.36
+                    pen.ellipse([size / 2 - dot / 2, size / 2 - dot / 2, size / 2 + dot / 2, size / 2 + dot / 2], fill=ring)
+            glass.put(strip, image.resize((icon, icon), Image.LANCZOS), (int(left), int(round(center - icon / 2))))
+
+        def label_color(kind: str):
+            return self._label_color() if kind == 'done' else tuple(self.colors['text'][:3])
+
+        center = pad + row_h / 2
+        cursor = 0.0
+        spans = []
+        for i, ((kind, label), font, item_w) in enumerate(zip(stops, fonts, widths)):
+            if i:
+                gap_w = min_gap[i - 1] + extra
+                previous = stops[i - 1][0]
+                leg = 'next' if previous == 'current' else 'flown' if kind in ('done', 'current') else 'ahead'
+                start, end = cursor + 6, cursor + gap_w - 6
+                if i in jumps:
+                    middle = (start + end) / 2
+                    self._draw_chevrons(strip, start, middle - gate_w / 2 - 5, center, leg)
+                    self._draw_chevrons(strip, middle + gate_w / 2 + 5, end, center, leg)
+                    self._draw_jump_gate(strip, middle, center, self._leg_color(leg))
+                else:
+                    self._draw_chevrons(strip, start, end, center, leg)
+                cursor += gap_w
+            draw_icon(kind, cursor, center)
+            self._draw_text_with_spacing(pen, (cursor + icon + 6, self._centered_text_y(font, center)),
+                                         label, label_color(kind), font)
+            spans.append((cursor, cursor + item_w))
+            cursor += item_w
+
+        if overflow:
+            # The current stop (else the next one) a third in, whole and clear of the fades
+            kinds = [kind for kind, _ in stops]
+            focus = kinds.index('current') if 'current' in kinds else kinds.index('next') if 'next' in kinds else len(stops) - 1
+            left, right = spans[focus]
+            fade = min(48, width // 6)
+            at = max(fade + 4, min(width / 3 - (right - left) / 2, width - fade - 4 - (right - left)))
+            offset = int(min(max(0, left - at), strip_w - width))
+            strip = strip.crop((offset, 0, offset + width, strip.height))
+            alpha = [255] * width
+            for i in range(fade):
+                level = int(255 * (i + 0.5) / fade)
+                if offset > 0:
+                    alpha[i] = min(alpha[i], level)
+                if offset + width < strip_w:
+                    alpha[width - 1 - i] = min(alpha[width - 1 - i], level)
+            ramp = Image.new("L", (width, 1))
+            ramp.putdata(alpha)
+            strip.putalpha(ImageChops.multiply(strip.getchannel("A"), ramp.resize(strip.size)))
+        glass.put(canvas, strip, (x, y - pad))
+        return y + row_h + 8
+
+    def _leg_color(self, leg: str) -> Tuple[int, int, int]:
+        """A route leg's colour: flown (the accent, dimmed), next (the accent) or ahead (muted)."""
+        if leg == 'flown':
+            return glass.mix(self._tone('accent'), self.colors.get('bg', (30, 33, 43)), 0.55)
+        if leg == 'next':
+            return self._tone('accent')
+        return self._tone('muted', 0.4)
+
+    def _draw_chevrons(self, strip: Image.Image, start: float, end: float, center: float, leg: str) -> None:
+        """A faint track from start to end with up to three chevrons in its middle, pointing right.
+        On the leg to the next stop they brighten towards it."""
+        if end - start < 4:
+            return
+        color = self._leg_color(leg)
+        track = self._tone('muted', 0.6) if leg == 'ahead' else color
+        glass.put(strip, glass.hairline(int(end - start), track + (110 if leg == 'ahead' else 150,)),
+                  (int(start), int(round(center))))
+        size = max(5, round(self.fonts.get('_font_size', 16) * 0.47))
+        step = size + 3
+        count = 3 if end - start >= 40 else 2 if end - start >= 24 else 1
+        glyph_w = size / 2 + 2
+        left = (start + end) / 2 - ((count - 1) * step + glyph_w) / 2
+        # Drawn 4x larger and scaled down, like the stop icons
+        scale = 4
+        for i in range(count):
+            alpha = 110 + 145 * (i + 1) / count if leg == 'next' else 230 if leg == 'flown' else 170
+            image = Image.new("RGBA", (int((glyph_w + 3) * scale), (size + 2) * scale), (0, 0, 0, 0))
+            ImageDraw.Draw(image).line(
+                [(scale, scale), ((1 + size / 2) * scale, (size / 2 + 1) * scale), (scale, (size + 1) * scale)],
+                fill=color + (int(alpha),), width=int(1.9 * scale), joint="curve")
+            image = image.resize((image.width // scale, image.height // scale), Image.LANCZOS)
+            glass.put(strip, image, (int(round(left + i * step)), int(round(center - (size + 2) / 2))))
+
+    def _jump_gate_size(self) -> Tuple[int, int]:
+        height = round(self.line_height * 0.75)
+        return round(height * 0.66), height
+
+    def _draw_jump_gate(self, strip: Image.Image, center_x: float, center: float, color: Tuple[int, int, int]) -> None:
+        """The jump symbol: an upright portal ring with a soft core."""
+        w, h = self._jump_gate_size()
+        scale = 4
+        W, H = w * scale, h * scale
+        image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        pen = ImageDraw.Draw(image)
+        core_w, core_h = W * 0.42, H * 0.56
+        pen.ellipse([W / 2 - core_w / 2, H / 2 - core_h / 2, W / 2 + core_w / 2, H / 2 + core_h / 2], fill=color + (90,))
+        stroke = 2 * scale
+        pen.ellipse([stroke / 2, stroke / 2, W - 1 - stroke / 2, H - 1 - stroke / 2], outline=color + (255,), width=stroke)
+        glass.put(strip, image.resize((w, h), Image.LANCZOS), (int(round(center_x - w / 2)), int(round(center - h / 2))))
+
+    def _render_stats_block(self, draw, block: Dict, x: int, y: int, width: int) -> int:
+        """A card of figures side by side: a small label over each value; a third field `accent`
+        colours the value. A line without `|` is a full-width text line under the figures (markdown)."""
+        canvas = draw._image
+        normal = self.fonts['normal']
+        value_font = self.fonts.get('h4', self.fonts.get('bold', normal))
+        items, notes = [], []
+        for line in block.get('code', '').split('\n'):
+            if not line.strip():
+                continue
+            if '|' not in line:
+                notes.append(line.strip())
+                continue
+            cells = [cell.strip() for cell in line.split('|')]
+            items.append((cells[0], cells[1] if len(cells) > 1 else '', cells[2].lower() if len(cells) > 2 else 'text'))
+        if not items and not notes:
+            return y
+
+        # Content on a layer of its own: its height sizes the card behind it
+        pad_x, pad_y = 12, 10
+        inner_x, inner_w = x + pad_x, width - pad_x * 2
+        layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        pen = ImageDraw.Draw(layer)
+        current_y = y + pad_y
+        if items:
+            gap = 12
+            col_w = (inner_w - gap * (len(items) - 1)) / len(items)
+            _, text_h = self._get_text_size('Ay', normal)
+            label_line = text_h + 6
+            wrapped = [self._wrap_text(label, normal, int(col_w)) or [''] for label, _, _ in items]
+            label_rows = max(len(lines) for lines in wrapped)
+            for i, ((_, value, tone), lines) in enumerate(zip(items, wrapped)):
+                left = inner_x + i * (col_w + gap)
+                for row, line in enumerate(lines):
+                    self._draw_text_with_spacing(pen, (int(left), current_y + row * label_line), line,
+                                                 self._label_color(), normal)
+                color = self._tone('accent') if tone == 'accent' else tuple(self.colors['text'][:3])
+                self._draw_text_with_spacing(pen, (int(left), current_y + label_rows * label_line + 2), value,
+                                             color, value_font)
+            # Below the values' letters: a font draws them bbox[3] below its y, not just their height
+            try:
+                value_bottom = value_font.getbbox('Ay')[3]
+            except Exception:
+                value_bottom = self._get_text_size('Ay', value_font)[1]
+            current_y += label_rows * label_line + 2 + value_bottom + 4
+        divider_y = None
+        for i, note in enumerate(notes):
+            if i == 0 and items:
+                divider_y = current_y + 4
+                current_y += 12
+            current_y = self._render_tokens(pen, self.tokenize_inline(note), inner_x, current_y, inner_w) - 10 + 4
+        bottom = current_y + pad_y - 4
+
+        glass.paint(canvas, glass.rounded_mask(width, bottom - y, 8), self.bg_shade(0.05), (x, y))
+        glass.paint(canvas, glass.ring_mask(width, bottom - y, 8), self.bg_shade(0.1), (x, y))
+        if divider_y is not None:
+            glass.paint(canvas, Image.new("L", (inner_w, 1), 255), self.bg_shade(0.12), (inner_x, int(divider_y)))
+        canvas.alpha_composite(layer)
+        return bottom + 10
+
+    TABLE_MIN_COLUMN = 40
+
+    def _table_column_widths(self, rows: List[List[str]], num_cols: int, font, bold_font,
+                             table_w: int, cell_padding: int) -> List[int]:
+        """Widths that follow the content, summing to table_w: a short column ('SCU') stays narrow and
+        a long one ('Recycled Material Composite') gets the room, instead of equal thirds where the long
+        one wraps. Space left over is shared by content width; when the content is too wide, columns
+        that fit their fair share keep their width and the others share the rest equally."""
+        natural = []
+        for ci in range(num_cols):
+            widest = 0
+            for ri, row in enumerate(rows):
+                cell = row[ci].strip() if ci < len(row) else ''
+                widest = max(widest, self._inline_width(cell, bold_font if ri == 0 else font))
+            natural.append(max(self.TABLE_MIN_COLUMN, widest + cell_padding * 2 + 4))
+
+        if sum(natural) <= table_w:
+            extra = table_w - sum(natural)
+            widths = [n + extra * n // sum(natural) for n in natural]
+        else:
+            widths = [0] * num_cols
+            open_columns = list(range(num_cols))
+            remaining = table_w
+            while open_columns:
+                share = remaining / len(open_columns)
+                fitting = [ci for ci in open_columns if natural[ci] <= share]
+                if not fitting:
+                    for ci in open_columns:
+                        widths[ci] = max(self.TABLE_MIN_COLUMN, int(share))
+                    break
+                for ci in fitting:
+                    widths[ci] = natural[ci]
+                    remaining -= natural[ci]
+                    open_columns.remove(ci)
+        # Rounding: the last column takes what is left, so the table is exactly table_w wide
+        widths[-1] = max(self.TABLE_MIN_COLUMN, table_w - sum(widths[:-1]))
+        return widths
+
+    def _inline_width(self, text: str, base_font) -> int:
+        """How wide a line of inline markdown is drawn: each part in its own font (bold is wider)."""
+        styled = ('bold', 'italic', 'bold_italic', 'code')
+        return sum(
+            self._get_text_size(token.get('text', ''),
+                                self.fonts.get(token['type'], base_font) if token['type'] in styled else base_font)[0]
+            for token in self.tokenize_inline(text)
+        )
 
     def _render_cell_content_with_pos(self, draw, text: str, x: int, y: int, max_width: int,
                                       line_h: int, base_font, base_color: Tuple,
@@ -1811,9 +2177,14 @@ class MarkdownRenderer:
                 else:
                     draw.text((render_x, render_y), word, fill=tcolor, font=tfont)
 
-                # Strikethrough
+                # Strikethrough: through the middle of the drawn letters. word_h is only their height;
+                # the font puts them bbox[1] below render_y, so word_h // 2 alone hit their top.
                 if is_strike:
-                    sy = render_y + word_h // 2
+                    try:
+                        top, bottom = tfont.getbbox(word)[1], tfont.getbbox(word)[3]
+                    except Exception:
+                        top, bottom = 0, word_h
+                    sy = render_y + (top + bottom) // 2
                     draw.line([(render_x, sy), (render_x + word_w, sy)], fill=tcolor, width=1)
 
                 render_x += word_w
@@ -1874,35 +2245,6 @@ class MarkdownRenderer:
 
         return max(1, lines)
 
-    def _calculate_wrapped_lines(self, text: str, font, max_width: int) -> int:
-        """Calculate how many lines the text will need when wrapped to max_width."""
-        if not text or max_width <= 0:
-            return 1
-
-        # Strip markdown syntax for width calculation
-        plain_text = re.sub(r'\*{1,3}|`|~~|\[.*?]\(.*?\)|!\[.*?]\(.*?\)', '', text)
-
-        words = plain_text.split()
-        if not words:
-            return 1
-
-        lines = 1
-        current_width = 0
-        space_width, _ = self._get_text_size(' ', font)
-
-        for word in words:
-            word_width, _ = self._get_text_size(word, font)
-
-            if current_width == 0:
-                current_width = word_width
-            elif current_width + space_width + word_width <= max_width:
-                current_width += space_width + word_width
-            else:
-                lines += 1
-                current_width = word_width
-
-        return max(1, lines)
-
     def _render_ul(self, draw, canvas, block: Dict, x: int, y: int, width: int) -> int:
         """Render unordered list with typewriter support."""
         items = block.get('items', []) if isinstance(block, dict) else block
@@ -1931,10 +2273,12 @@ class MarkdownRenderer:
             indent_px = indent * 20
             bullet = bullets[min(indent, len(bullets) - 1)]
             bullet_x = x + indent_px
-            text_x = bullet_x + 16
+            # A task item's checkbox is its marker: no bullet in front of it
+            is_task = text.lstrip()[:3] in ('[ ]', '[x]', '[X]')
+            text_x = bullet_x if is_task else bullet_x + 16
 
             # Only draw bullet if typewriter has reached at least the marker
-            if typewriter_pos == float('inf') or typewriter_pos > item_start:
+            if not is_task and (typewriter_pos == float('inf') or typewriter_pos > item_start):
                 bullet_font = self.fonts.get('bold', self.fonts['normal'])
                 draw.text((bullet_x, current_y), bullet, fill=self.colors['accent'], font=bullet_font)
 
@@ -1990,7 +2334,7 @@ class MarkdownRenderer:
             num_x = x + indent_px
 
             num_font = self.fonts.get('bold', self.fonts['normal'])
-            nw, nh = self._get_text_size(num_text, num_font)
+            nw, _ = self._get_text_size(num_text, num_font)
 
             # Only draw number if typewriter has reached at least the marker
             if typewriter_pos == float('inf') or typewriter_pos > item_start:
@@ -2018,7 +2362,7 @@ class MarkdownRenderer:
 
     def _render_tokens(self, draw, tokens: List[Dict], x: int, y: int, width: int,
                        override_color: Tuple = None, override_font = None, max_chars: int = None,
-                       header_level: int = None) -> int:
+                       header_level: int = None, quote: bool = False) -> int:
         """Render inline tokens with word wrapping and styling.
 
         The typewriter effect uses 'remaining_chars' as a position in the ORIGINAL text.
@@ -2029,12 +2373,16 @@ class MarkdownRenderer:
         Args:
             max_chars: If provided, limits the number of visible characters (overrides remaining_chars)
             header_level: If provided (1-6), uses appropriately sized emoji font for headers
+            quote: Blockquote text: italic, but bold stays bold (bold italic) and code stays code
         """
         current_x = x
         current_y = y
 
         # Get actual line height from font metrics
-        base_font = override_font if override_font else self.fonts['normal']
+        if quote:
+            base_font = self.fonts.get('italic', self.fonts['normal'])
+        else:
+            base_font = override_font if override_font else self.fonts['normal']
         _, base_h = self._get_text_size('Ay', base_font)  # Use 'Ay' to get proper ascender/descender height
         line_h = base_h
 
@@ -2066,6 +2414,9 @@ class MarkdownRenderer:
                     font = self.fonts.get(emoji_font_key, self.fonts.get('emoji', self.fonts['normal']))
                 else:
                     font = self.fonts.get('emoji', self.fonts['normal'])
+            elif quote:
+                style = 'code' if ttype == 'code' else 'bold_italic' if ttype in ('bold', 'bold_italic') else 'italic'
+                font = self.fonts.get(style, self.fonts['normal'])
             elif override_font:
                 font = override_font
             elif ttype == 'bold':
@@ -2219,7 +2570,7 @@ class MarkdownRenderer:
                 fn_color = self.colors['accent']
 
                 # Get text size
-                fn_w, fn_h = self._get_text_size(fn_text, fn_font)
+                fn_w, _ = self._get_text_size(fn_text, fn_font)
 
                 # Draw slightly lower (moved down)
                 fn_y = current_y + 5

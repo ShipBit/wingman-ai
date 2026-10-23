@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -60,8 +60,17 @@ class VehicleInformation(Tool):
             if offset:
                 vehicle_data_access.offset(offset)
 
-        vehicles = vehicle_data_access.load(debug=True) # TODO remove debug=True
-        return json.dumps([vehicle.get_data_for_ai() for vehicle in vehicles]), ""
+        vehicles = vehicle_data_access.load()
+
+        data = [vehicle.get_data_for_ai() for vehicle in vehicles]
+
+        if filter_vehicles:
+            for entry, vehicle in zip(data, vehicles):
+                photos = vehicle.get_url_photos()
+                if photos:
+                    entry["image_url"] = photos[0]
+
+        return compression.dumps(data), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}
@@ -71,26 +80,26 @@ class VehicleInformation(Tool):
             "filter_vehicles": Validator(
                 Validator.VALIDATE_VEHICLE,
                 multiple=True,
-                prompt="Provide one or multiple ship names (incl. short manufacturer name) to filter by name. (e.g. \"RSI Aurora MR\")",
+                prompt="Ship or vehicle names, best with manufacturer, e.g. [\"Drake Cutlass Black\", \"Crusader C2 Hercules Starlifter\"]. If set, all other filters are ignored.",
             ),
             "filter_vehicle_roles": Validator(
                 Validator.VALIDATE_VEHICLE_ROLE,
                 multiple=True,
-                prompt="Provide one or multiple roles to filter by role. (e.g. \"mining\" or \"cargo\")",
+                prompt="Only vehicles with all of these roles, e.g. [\"mining\"] or [\"cargo transporter\", \"starter\"].",
             ),
             "filter_vehicle_company": Validator(
                 Validator.VALIDATE_COMPANY,
                 multiple=True,
                 config={"is_vehicle_manufacturer": True},
-                prompt="Provide one or multiple companies to filter by manufacturer. (e.g. \"Aegis Dynamics\")",
+                prompt="Only vehicles built by these manufacturers, e.g. [\"Aegis Dynamics\"].",
             ),
             "filter_vehicle_cargo_size_in_scu_min": Validator(
                 Validator.VALIDATE_NUMBER,
-                prompt="Filter by minimum cargo size in SCU. (e.g. 100)",
+                prompt="Only vehicles with at least this cargo capacity in SCU, e.g. 100.",
             ),
             "filter_vehicle_cargo_size_in_scu_max": Validator(
                 Validator.VALIDATE_NUMBER,
-                prompt="Filter by maximum cargo size in SCU. (e.g. 250)",
+                prompt="Only vehicles with at most this cargo capacity in SCU, e.g. 250.",
             ),
 
             # Currently unreliable handling by AI
@@ -99,7 +108,15 @@ class VehicleInformation(Tool):
         }
 
     def get_description(self) -> str:
-        return "Holds information about all vehicles. May be filtered by at least one filter option."
+        return (
+            "Look up Star Citizen ships and ground vehicles: cargo capacity (SCU), crew, size, roles, manufacturer, "
+            "and where to buy or rent them with prices. Use it for questions about a specific ship, "
+            "or to find ships by role, manufacturer or cargo capacity. At least one filter is required."
+        )
 
     def get_prompt(self) -> str:
-        return "Holds all information's about all vehicles, filterable. (eg incl. rent/buy options per ship, cargo sizes, ...)."
+        return (
+            "Ship and vehicle data: specs, cargo capacity, buy and rent locations with prices. "
+            "With filter_vehicles, a result may include an 'image_url' with a photo of the ship; "
+            "you may show it as a markdown image or link."
+        )

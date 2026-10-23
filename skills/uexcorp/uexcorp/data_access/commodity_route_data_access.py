@@ -84,6 +84,14 @@ class CommodityRouteDataAccess(DataAccess):
             "destination_terminal_is_player_owned",
             "destination_faction_name",
             "date_added",
+            "price_roi",
+            "scu_reachable",
+            "container_sizes_origin",
+            "container_sizes_destination",
+            "game_version_origin",
+            "game_version_destination",
+            "container_size_min_origin",
+            "container_size_min_destination",
         ]
 
     def load(self, **params) -> list[CommodityRoute]:
@@ -94,6 +102,10 @@ class CommodityRouteDataAccess(DataAccess):
 
     def add_filter_by_commodity_name_whitelist(self, commodity_name_whitelist: list[str]) -> "CommodityRouteDataAccess":
         self.filter.where("commodity_name", commodity_name_whitelist)
+        return self
+
+    def add_filter_by_id_commodity(self, id_commodity: int | list[int], **params) -> "CommodityRouteDataAccess":
+        self.filter.where("id_commodity", id_commodity, **params)
         return self
 
     def add_filter_by_commodity_name_blacklist(self, commodity_name_blacklist: list[str]) -> "CommodityRouteDataAccess":
@@ -113,6 +125,30 @@ class CommodityRouteDataAccess(DataAccess):
     def add_filter_by_has_loading_dock(self) -> "CommodityRouteDataAccess":
         self.filter.where("has_loading_dock_origin", True)
         self.filter.where("has_loading_dock_destination", True)
+        return self
+
+    def add_filter_by_max_container_size(self, max_container_size: int) -> "CommodityRouteDataAccess":
+        # Drops routes where a terminal only handles containers larger than the ship carries.
+        # Unknown sizes (NULL) count as 0 and keep the route.
+        self.filter.where(f"COALESCE({self.filter.get_table()}.container_size_min_origin, 0)", max_container_size, "<=")
+        self.filter.where(f"COALESCE({self.filter.get_table()}.container_size_min_destination, 0)", max_container_size, "<=")
+        return self
+
+    def load_legs(self, columns: list[str]) -> list[dict]:
+        """Filtered rows as plain dicts: the route planner reads thousands of legs per call,
+        building a model object for each would only cost time. Only the given columns are
+        read: copying all ~80 columns of every leg took most of the tool's time."""
+        return [dict(row) for row in self._fetch_all(columns=columns)]
+
+    def add_filter_by_has_availability(self, has_availability: bool) -> "CommodityRouteDataAccess":
+        # No availability = zero stock at origin or zero demand at destination.
+        # Unknown values (NULL) count as available, so they never hide a route.
+        table = self.filter.get_table()
+        # Each side on its own: MIN() with a NULL argument is NULL and would hide a zero.
+        self.filter.where(
+            f"(COALESCE({table}.scu_origin, 1) > 0 AND COALESCE({table}.scu_destination, 1) > 0)",
+            has_availability,
+        )
         return self
 
     def add_filter_by_is_profitable(self) -> "CommodityRouteDataAccess":

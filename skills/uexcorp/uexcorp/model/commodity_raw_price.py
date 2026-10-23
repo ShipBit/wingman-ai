@@ -16,9 +16,11 @@ class CommodityRawPrice(DataModel):
             commodity_name: str | None = None, # string(255)
             commodity_code: str | None = None, # string(255)
             commodity_slug: str | None = None, # string(255)
-            terminal_name: int | None = None, # int(11)
-            terminal_code: int | None = None, # int(11)
-            terminal_slug: int | None = None, # int(11)
+            terminal_name: str | None = None, # string(255)
+            terminal_code: str | None = None, # string(255)
+            terminal_slug: str | None = None, # string(255)
+            price_buy: float | None = None, # float
+            price_buy_avg: float | None = None, # float
             load: bool = False,
     ):
         super().__init__("commodity_raw_price")
@@ -36,6 +38,8 @@ class CommodityRawPrice(DataModel):
             "terminal_name": terminal_name,
             "terminal_code": terminal_code,
             "terminal_slug": terminal_slug,
+            "price_buy": price_buy,
+            "price_buy_avg": price_buy_avg,
             "last_import_run_id": None,
         }
         if load:
@@ -44,20 +48,31 @@ class CommodityRawPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp.uexcorp.model.commodity import Commodity
         from skills.uexcorp.uexcorp.model.terminal import Terminal
 
-        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         return {
-            "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "price_sell_to_terminal": self.get_price_sell(),
+            "commodity": self.get_commodity_name(),
+            "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
+            "sell_price_to_terminal": self.get_price_sell(),
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+    def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
+
+        information = {}
+
+        if show_commodity_information:
+            information["commodity"] = self.get_commodity_name()
+
+        if show_terminal_information:
+            terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+            information["terminal"] = terminal.get_ai_location_string() if terminal else self.get_terminal_name()
+
+        information["sell_price_to_terminal"] = self.get_price_sell()
+
+        return information
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -98,5 +113,15 @@ class CommodityRawPrice(DataModel):
     def get_terminal_slug(self) -> str:
         return self.data["terminal_slug"]
 
+    def get_ai_string(self, show_commodity: bool = True) -> str:
+        commodity = f" {self.get_commodity_name()}" if show_commodity else ""
+        return f"Sell{commodity} to {self.get_terminal_name()} for {self.get_price_sell()} (raw)"
+
+    def get_price_buy(self) -> float | None:
+        return self.data["price_buy"]
+
+    def get_price_buy_avg(self) -> float | None:
+        return self.data["price_buy_avg"]
+
     def __str__(self):
-        return f"Sell {self.get_commodity_name()} to {self.get_terminal_name()} for {self.get_price_sell()}"
+        return self.get_ai_string()

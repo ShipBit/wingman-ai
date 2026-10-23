@@ -249,6 +249,10 @@ from ._keyboard_event import KEY_DOWN, KEY_UP, KeyboardEvent
 from ._generic import GenericListener as _GenericListener
 from ._canonical_names import all_modifiers, sided_modifiers, normalize_name
 
+def get_init_error():
+    """Returns the keyboard initialization error message, or None if successful."""
+    return getattr(_os_keyboard, 'init_error', None)
+
 _modifier_scan_codes = set()
 def is_modifier(key):
     """

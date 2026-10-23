@@ -1,0 +1,363 @@
+module: skills.sc_game_events.main
+name: ScGameEvents
+api_version: 3
+display_name: Star Citizen Events
+author: Mallachi
+requires:
+  - sc_gamelog
+auto_activate: true
+tags:
+  - Star Citizen
+  - Game Integration
+description:
+  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, injuries and trades, and knows where you are and which missions you have. Needs the Star Citizen log in the settings.
+  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Verletzungen und Handel, und weiß, wo du bist und welche Missionen du hast. Braucht das Star Citizen Log in den Einstellungen.
+discovery_keywords:
+  - star citizen
+  - game events
+  - mission
+  - location
+  - where am i
+custom_properties:
+  - id: react_mission
+    name: All missions
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_mission_accepted
+    name: Contract Accepted
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_mission_complete
+    name: Contract Completed
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_mission_failed
+    name: Contract Failed
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_mission_withdrawn
+    name: Contract Withdrawn
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_contract_shared
+    name: Contract Shared
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_contract_available
+    name: Contract Available
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_mission_objective_new
+    name: New Objective
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_objective_complete
+    name: Objective Completed
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_objective_withdrawn
+    name: Objective Withdrawn
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_safety
+    name: All zones and safety
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_armistice_zone
+    name: Armistice Zone
+    hint: Both entering and leaving armistice zones.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_restricted_area
+    name: Restricted Area
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_monitored_space
+    name: Monitored Space
+    hint: Both entering and leaving monitored space.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_monitored_space_availability
+    name: Monitoring Offline or Restored
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_jurisdiction_change
+    name: Jurisdiction Changes
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_crimestat_increased
+    name: CrimeStat Increase
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_health
+    name: All health
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_injury
+    name: Injuries
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_med_bed_heal
+    name: Medical Bed Treatment
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_emergency_services
+    name: Emergency Services
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_bleeding
+    name: Bleeding
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_incapacitated
+    name: Incapacitation
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_ship
+    name: All ship and hangar
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_hangar_ready
+    name: Hangar Ready
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_hangar_queue
+    name: Hangar Queue
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_ship_boarding
+    name: Ship Boarding
+    hint: Both boarding and leaving a ship.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_fuel_low
+    name: Low Fuel
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_vehicle_impounded
+    name: Vehicle Impounded
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_fatal_collision
+    name: Fatal Vehicle Collision
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_insurance_claim
+    name: Insurance Claim Requests
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_insurance_claim_complete
+    name: Insurance Claim Results
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_money
+    name: All trade and rewards
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_reward_earned
+    name: Rewards
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_fined
+    name: Fines
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_money_sent
+    name: Money Sent
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_shop_buy
+    name: Shop Purchases
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_shop_sell
+    name: Shop Sales
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_transaction_complete
+    name: Transaction Completed
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_commodity_buy
+    name: Commodity Purchase Requests
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_commodity_sell
+    name: Commodity Sale Requests
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_cargo_transfer
+    name: Cargo Transfer Requests
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_refinery_submitted
+    name: Refinery Submission Requests
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_refinery_complete
+    name: Refinery Work Order Notifications
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_blueprint_received
+    name: Blueprints Received
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_location
+    name: All location and quantum travel
+    hint: Turns the whole group on or off. Pick single types below. These come often.
+    property_type: boolean
+    required: false
+    value: false
+  - id: react_location_updates
+    name: Location Changes
+    hint: Arrival and departure notifications.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_quantum_route_set
+    name: Quantum Route Set
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_quantum_calibration_started
+    name: Quantum Calibration Started
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_quantum_calibration_complete
+    name: Quantum Calibration Complete
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_qt_calibration_complete_group
+    name: Party Member Quantum Ready
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_qt_arrived
+    name: Quantum Arrival
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_session
+    name: All session and social
+    hint: Turns the whole group on or off. Pick single types below.
+    property_type: boolean
+    required: false
+    value: false
+  - id: react_user_login
+    name: Player Login
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_session_start
+    name: Session Started
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_join_pu
+    name: Joined Persistent Universe
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_party_invite
+    name: Party Invitations
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_incoming_call
+    name: Incoming Calls
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_party_membership
+    name: Party Membership Changes
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_journal_entry
+    name: Journal Entries
+    property_type: boolean
+    required: false
+    value: true
+  - id: max_unanswered
+    name: Reactions until you speak again
+    hint: The Wingman stops reacting after this many reactions until you say or type something. 0 means no limit.
+    property_type: number
+    required: false
+    value: 10
+  - id: routine_gap_minutes
+    name: Minutes between routine lines
+    hint: Zones, quantum travel, the hangar and the login are said at most once in this many minutes, per group. Arrivals, departures, missions, money and injuries are not held back by this.
+    property_type: slider
+    options:
+      - label: "min"
+        value: 2
+      - label: "max"
+        value: 20
+      - label: "step"
+        value: 1
+    required: false
+    value: 5
+  - id: show_in_hud
+    name: Show reactions in the HUD
+    hint: Also show what the Wingman says about the game in the HUD overlay, if the HUD is switched on in the settings.
+    property_type: boolean
+    required: false
+    value: true
+  - id: remember_reactions
+    name: Remember reactions
+    hint: Keep what the Wingman said about the game in the conversation, so it can refer back to it.
+    property_type: boolean
+    required: false
+    value: true

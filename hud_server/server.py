@@ -29,6 +29,9 @@ from hud_server.types import WindowType
 from hud_server.models import (
     CreateGroupRequest,
     UpdateGroupRequest,
+    DefaultsRequest,
+    PreviewRequest,
+    PreviewResponse,
     MessageRequest,
     AppendMessageRequest,
     LoaderRequest,
@@ -39,26 +42,14 @@ from hud_server.models import (
     ChatMessageRequest,
     ChatMessageUpdateRequest,
     CreateChatWindowRequest,
-    StateRestoreRequest,
     HealthResponse,
-    GroupStateResponse,
     OperationResponse,
     ChatMessageResponse,
 )
 
-# Try to import overlay support (bundled with hud_server)
-OVERLAY_AVAILABLE = False
-HeadsUpOverlay = None
-PIL_AVAILABLE = False
-
-try:
-    from hud_server.overlay.overlay import HeadsUpOverlay as _HeadsUpOverlay, PIL_AVAILABLE as _PIL_AVAILABLE
-    OVERLAY_AVAILABLE = _PIL_AVAILABLE and _HeadsUpOverlay is not None
-    HeadsUpOverlay = _HeadsUpOverlay
-    PIL_AVAILABLE = _PIL_AVAILABLE
-except ImportError:
-    _HeadsUpOverlay = None
-    _PIL_AVAILABLE = False
+# The overlay renders on every OS; the platform backend puts it on screen
+from hud_server.overlay.overlay import HeadsUpOverlay, PIL_AVAILABLE
+from hud_server.platform import create_backend
 
 printr = Printr()
 
@@ -86,7 +77,10 @@ class HudServer:
     STARTUP_TIMEOUT_SECONDS = hud_const.SERVER_STARTUP_TIMEOUT
     STARTUP_CHECK_INTERVAL = hud_const.SERVER_STARTUP_CHECK_INTERVAL
 
-    def __init__(self):
+    def __init__(self, backend=None):
+        # The OS's windows; None picks the backend for this OS. The headless
+        # demos pass one that draws nothing on screen
+        self._backend = backend
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._server: Optional[Server] = None
@@ -106,6 +100,10 @@ class HudServer:
         self._overlay_thread: Optional[threading.Thread] = None
         self._command_queue: Optional[queue.Queue] = None
         self._error_queue: Optional[queue.Queue] = None
+        self._error_thread: Optional[threading.Thread] = None
+
+        # Called with overlay events (e.g. preview_changed), from the overlay thread
+        self._event_listeners: list = []
 
         # Create FastAPI app
         self.app = self._create_app()
@@ -229,6 +227,42 @@ class HudServer:
             )
             return {"status": "ok", "message": "Settings updated"}
 
+        # ─────────────────────────────── Defaults ─────────────────────────────── #
+
+        @app.get(hud_const.PATH_DEFAULTS, response_model=DefaultsRequest, tags=["defaults"])
+        async def get_defaults():
+            """The values groups use for props their own calls leave out."""
+            return DefaultsRequest(**self.manager.get_defaults())
+
+        @app.put(hud_const.PATH_DEFAULTS, response_model=OperationResponse, tags=["defaults"])
+        async def set_defaults(request: DefaultsRequest):
+            """Replace the defaults. Existing windows pick them up immediately."""
+            self.manager.set_defaults(request.props, request.groups)
+            return OperationResponse(status="ok", message="Defaults updated")
+
+        # ─────────────────────────────── Preview ─────────────────────────────── #
+
+        @app.get(hud_const.PATH_PREVIEW, response_model=PreviewResponse, tags=["preview"])
+        async def get_preview():
+            """The current preview of the shared containers, if one is shown."""
+            preview = self.manager.get_preview()
+            if preview is None:
+                return PreviewResponse(active=False)
+            return PreviewResponse(active=True, **preview)
+
+        @app.post(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        @app.put(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        async def set_preview(request: PreviewRequest):
+            """Show or update the preview of the chat and info containers."""
+            self.manager.set_preview(request.containers, request.interactive)
+            return OperationResponse(status="ok")
+
+        @app.delete(hud_const.PATH_PREVIEW, response_model=OperationResponse, tags=["preview"])
+        async def clear_preview():
+            """End the preview; the real containers come back."""
+            self.manager.clear_preview()
+            return OperationResponse(status="ok")
+
         # ─────────────────────────────── Groups ─────────────────────────────── #
 
         @app.post("/groups", response_model=OperationResponse, tags=["groups"])
@@ -276,22 +310,6 @@ class HudServer:
             """Get list of all group names."""
             return {"groups": self.manager.get_groups()}
 
-        # ─────────────────────────────── State ─────────────────────────────── #
-
-        @app.get("/state/{group_name}", response_model=GroupStateResponse, tags=["state"])
-        async def get_state(group_name: str):
-            """Get the current state of a group for persistence."""
-            state = self.manager.get_group_state(group_name)
-            if state is None:
-                raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
-            return GroupStateResponse(group_name=group_name, state=state)
-
-        @app.post("/state/restore", response_model=OperationResponse, tags=["state"])
-        async def restore_state(request: StateRestoreRequest):
-            """Restore a group's state from a previous snapshot."""
-            self.manager.restore_group_state(request.group_name, request.state)
-            return OperationResponse(status="ok", message=f"State restored for '{request.group_name}'")
-
         # ─────────────────────────────── Messages ─────────────────────────────── #
 
         @app.post("/message", response_model=OperationResponse, tags=["messages"])
@@ -305,7 +323,8 @@ class HudServer:
                 color=request.color,
                 tools=request.tools,
                 props=request.props,
-                duration=request.duration
+                duration=request.duration,
+                title_icon=request.title_icon
             )
             return OperationResponse(status="ok")
 
@@ -346,7 +365,8 @@ class HudServer:
                 title=request.title,
                 description=request.description,
                 color=request.color,
-                duration=request.duration
+                duration=request.duration,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -399,7 +419,8 @@ class HudServer:
                 maximum=request.maximum,
                 description=request.description,
                 color=request.color,
-                auto_close=request.auto_close
+                auto_close=request.auto_close,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -414,7 +435,8 @@ class HudServer:
                 description=request.description,
                 color=request.color,
                 auto_close=request.auto_close,
-                initial_progress=request.initial_progress
+                initial_progress=request.initial_progress,
+                added_by=request.added_by,
             )
             return OperationResponse(status="ok")
 
@@ -443,7 +465,6 @@ class HudServer:
                 "max_messages": request.max_messages,
                 "sender_colors": request.sender_colors or {},
                 "fade_old_messages": request.fade_old_messages,
-                "is_chat_window": True,
             }
             # Remove None values
             props = {k: v for k, v in props.items() if v is not None}
@@ -472,7 +493,10 @@ class HudServer:
                 element=request.element.value,
                 sender=request.sender,
                 text=request.text,
-                color=request.color
+                color=request.color,
+                icon=request.icon,
+                own=request.own,
+                tools=request.tools,
             )
             if message_id is None:
                 raise HTTPException(status_code=404, detail=f"Chat window '{request.group_name}' not found")
@@ -490,7 +514,7 @@ class HudServer:
                 raise HTTPException(status_code=404, detail=f"Message '{request.message_id}' not found in window '{request.group_name}'")
             return OperationResponse(status="ok")
 
-        @app.delete("/chat/messages/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        @app.delete(hud_const.PATH_CHAT_MESSAGES + "/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
         async def clear_chat_messages(group_name: str, element: str):
             """Clear all messages from a chat window."""
             try:
@@ -586,9 +610,18 @@ class HudServer:
 
     def _start_overlay(self):
         """Start the overlay renderer in a background thread (if available)."""
-        if not OVERLAY_AVAILABLE or HeadsUpOverlay is None:
+        if not PIL_AVAILABLE:
             printr.print(
                 hud_const.LOG_OVERLAY_NOT_AVAILABLE,
+                color=LogType.WARNING,
+                server_only=True
+            )
+            return
+
+        backend = self._backend or create_backend()
+        if not backend.supported:
+            printr.print(
+                hud_const.LOG_OVERLAY_UNSUPPORTED.format(backend.unsupported_reason),
                 color=LogType.WARNING,
                 server_only=True
             )
@@ -613,6 +646,8 @@ class HudServer:
                 layout_margin=self._layout_margin,
                 layout_spacing=self._layout_spacing,
                 screen=self._screen,
+                event_callback=self._on_overlay_event,
+                backend=backend,
             )
 
             # Register callback to send commands to overlay
@@ -624,6 +659,14 @@ class HudServer:
                 name=hud_const.THREAD_NAME_OVERLAY
             )
             self._overlay_thread.start()
+
+            self._error_thread = threading.Thread(
+                target=self._drain_overlay_errors,
+                args=(self._error_queue,),
+                daemon=True,
+                name="HUDOverlayErrorThread",
+            )
+            self._error_thread.start()
 
             printr.print(
                 hud_const.LOG_OVERLAY_STARTED,
@@ -667,6 +710,10 @@ class HudServer:
 
             self._overlay = None
             self._command_queue = None
+            if self._error_queue:
+                self._error_queue.put(None)  # stops the drain thread
+            self._error_queue = None
+            self._error_thread = None
             self.manager.unregister_command_callback(self._send_to_overlay)
 
             printr.print(
@@ -681,6 +728,59 @@ class HudServer:
                 color=LogType.ERROR,
                 server_only=True
             )
+
+    def add_event_listener(self, listener) -> None:
+        """Call `listener(event)` for overlay events such as `preview_changed`,
+        and `overlay_error` (`context`, `error`) when the overlay hits one.
+
+        Runs on an overlay thread: hand the work to your own loop quickly.
+        """
+        if listener not in self._event_listeners:
+            self._event_listeners.append(listener)
+
+    def remove_event_listener(self, listener) -> None:
+        if listener in self._event_listeners:
+            self._event_listeners.remove(listener)
+
+    def _on_overlay_event(self, event: dict[str, Any]) -> None:
+        if event.get("type") == "preview_changed":
+            self.manager.preview_moved(
+                event["container"], event["x1"], event["y1"], event["x2"], event["y2"]
+            )
+        self._notify(event)
+
+    def _notify(self, event: dict[str, Any]) -> None:
+        for listener in list(self._event_listeners):
+            try:
+                listener(event)
+            except Exception as e:
+                printr.print(
+                    f"[HUD Server] Event listener failed: {type(e).__name__}: {e}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+
+    def _drain_overlay_errors(self, error_queue: queue.Queue):
+        """Log what the overlay thread reports. Heartbeats are dropped, and an
+        error repeating every frame is logged once per 10 seconds."""
+        last_logged: dict[tuple, float] = {}
+        while True:
+            report = error_queue.get()
+            if report is None:
+                return
+            if not isinstance(report, dict) or report.get("type") != "error":
+                continue
+            key = (report.get("context"), report.get("error"))
+            now = time.time()
+            if now - last_logged.get(key, 0) < 10:
+                continue
+            last_logged[key] = now
+            printr.print(
+                f"[HUD Overlay] {report.get('context', '?')}: {report.get('error', '')}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            self._notify({"type": "overlay_error", "context": report.get("context"), "error": report.get("error")})
 
     def _send_to_overlay(self, command: dict[str, Any]):
         """Send a command to the overlay renderer."""
@@ -735,11 +835,12 @@ class HudServer:
         )
         self._thread.start()
 
-        # Wait for server to start
+        # Wait until uvicorn finished its startup: the lifespan has started the
+        # overlay and hooked it to the manager, so nothing sent after this is lost
         max_checks = int(self.STARTUP_TIMEOUT_SECONDS / self.STARTUP_CHECK_INTERVAL)
         for _ in range(max_checks):
             time.sleep(self.STARTUP_CHECK_INTERVAL)
-            if self._running:
+            if self._running and self._server is not None and self._server.started:
                 printr.print(
                     hud_const.LOG_SERVER_STARTED.format(self._host, self._port),
                     color=LogType.INFO,
@@ -853,23 +954,3 @@ class HudServer:
     def base_url(self) -> str:
         """Get the base URL for the server."""
         return f"http://{self._host}:{self._port}"
-
-
-# Standalone execution support
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="HUD Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=7862, help="Port to bind to")
-    args = parser.parse_args()
-
-    print(f"Starting HUD Server on http://{args.host}:{args.port}")
-    print("API docs available at /docs")
-
-    uvicorn.run(
-        "hud_server.server:HudServer().app",
-        host=args.host,
-        port=args.port,
-        reload=False
-    )

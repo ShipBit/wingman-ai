@@ -6,7 +6,7 @@ You need **Python 3.11.7** and some dependencies to run Wingman AI Core. We reco
 
 ```bash
 brew update && brew upgrade                             # upgrade all packages
-brew install pyenv portaudio pyobjc-framework-Quartz    # install dependencies
+brew install pyenv portaudio                            # install dependencies
 pyenv install 3.11.7                                    # install Python with pyenv
 pyenv global 3.11.7                                     # set your global Python version
 ```
@@ -25,19 +25,13 @@ source venv/bin/activate            # activate the virtual environment
 pip install -r requirements.txt     # install dependencies
 ```
 
-## Copy runtime dependencies
+`requirements.txt` installs one package (`pocket-tts`) from GitHub, so Git must be installed.
 
-The release version of Wingman AI bundles model files and binaries that are too large for git. For the full experience in your dev environment, you can copy these from an existing Wingman AI installation into your repository root:
+## Models
 
-| Directory | Purpose | What happens if you skip it |
-| --- | --- | --- |
-| `faster-whisper-models/` | Pre-downloaded speech recognition models | Models auto-download from HuggingFace on first use — can be slow. |
-| `pocket-tts-models/` | PocketTTS text-to-speech model weights | Models auto-download on first use. |
-| `pocket-tts-voices/` | Pre-packaged TTS voice samples | Voices auto-download on first use. |
+Models (Parakeet, Pocket TTS, Silero VAD and others) are downloaded by Core on first use into the `models/` folder of the Wingman user data directory (`~/Library/Application Support/WingmanAI/models` on macOS). If you already have a Wingman AI installation, the dev environment uses the same folder, so there is nothing to copy.
 
-Copying these is optional — the app will download what it needs on first launch, but this avoids timeouts.
-
-> **Note:** NVIDIA CUDA acceleration is not available on macOS. FasterWhisper and PocketTTS will run on CPU.
+> **Note:** NVIDIA CUDA acceleration is not available on macOS. Parakeet and Pocket TTS run on the CPU.
 
 ## Setup Visual Studio Code
 
@@ -63,16 +57,12 @@ This process is not trusted! Input event monitoring will not be possible until i
 
 Go to `System Settings > Privacy & Security > Accessibility` and enable VSCode there.
 
-## Setup whispercpp (optional)
+## Run the tests
 
-WhisperCPP is an alternative local STT provider. On macOS, it cannot be autostarted and must be run manually:
-
-1. Download the latest stable macOS release from the [whispercpp repository](https://github.com/ggerganov/whisper.cpp/releases) or build it from source
-2. Download a model (e.g. `ggml-base.bin`) and place it in your whispercpp models directory
-3. Start whispercpp on the host and port configured in Wingman AI — the client UI will show you the exact command
-4. Restart Wingman AI Core to connect to the running whispercpp instance
-
-Most developers use FasterWhisper (the default) and don't need whispercpp.
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ## Developing Skills
 

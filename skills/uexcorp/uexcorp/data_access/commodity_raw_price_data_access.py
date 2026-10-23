@@ -24,6 +24,8 @@ class CommodityRawPriceDataAccess(DataAccess):
             "terminal_name",
             "terminal_code",
             "terminal_slug",
+            "price_buy",
+            "price_buy_avg",
         ]
 
     def load(self, **params) -> list[CommodityRawPrice]:

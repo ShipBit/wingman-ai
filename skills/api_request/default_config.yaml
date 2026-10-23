@@ -1,5 +1,6 @@
 module: skills.api_request.main
 name: APIRequest
+api_version: 3
 display_name: API Requests
 author: teddybear082
 tags:
@@ -19,9 +20,6 @@ discovery_keywords:
   - webhook
   - API call
 discoverable_by_default: false
-hint:
-  en: Do not hardcode API keys in the skill context or your Wingman configuration. Enter them during a conversation (preferrably by text) or store them in `/files/api_request_key_holder.yaml`.
-  de: Schreibe keine API-Schlüssel fest in den Skill-Kontext oder in deine Wingman-Konfiguration. Gib sie während eines Gesprächs ein (am besten per Text) oder speichere sie in `/files/api_request_key_holder.yaml`.
 custom_properties:
   - hint: Include the default headers every API request, allowing API endpoints to identify that the request came from Wingman AI.
     id: use_default_headers
@@ -29,21 +27,18 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
-  - hint: The maximum number of times to retry a failed API request before giving up.
-    id: max_retries
+  - id: max_retries
     name: Max Retries
     property_type: number
     required: false
     value: 1
-  - hint: The maximum time in seconds to wait for an API request to complete before timing out. This helps prevent requests from hanging indefinitely.
-    id: request_timeout
-    name: Request Timeout
+  - id: request_timeout
+    name: Request Timeout (sec)
     property_type: number
     required: false
     value: 10
-  - hint: The delay in seconds between retry attempts for a failed API request. This allows time for the issue to resolve before trying again.
-    id: retry_delay
-    name: Retry Delay
+  - id: retry_delay
+    name: Retry Delay (sec)
     property_type: number
     required: false
     value: 5

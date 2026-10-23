@@ -39,6 +39,8 @@ class RefineryAudit(DataModel):
         city_name: str | None = None,  # string(255)
         outpost_name: str | None = None,  # string(255)
         terminal_name: str | None = None,  # string(255)
+        id_space_station: int | None = None,  # int(11)
+        poi_name: str | None = None,  # string(255)
         load: bool = False,
     ):
         super().__init__("refinery_audit")
@@ -75,6 +77,8 @@ class RefineryAudit(DataModel):
             "city_name": city_name,
             "outpost_name": outpost_name,
             "terminal_name": terminal_name,
+            "id_space_station": id_space_station,
+            "poi_name": poi_name,
             "last_import_run_id": None,
         }
         if load:
@@ -183,3 +187,9 @@ class RefineryAudit(DataModel):
 
     def get_terminal_name(self) -> str | None:
         return self.data["terminal_name"]
+
+    def get_id_space_station(self) -> int | None:
+        return self.data["id_space_station"]
+
+    def get_poi_name(self) -> str | None:
+        return self.data["poi_name"]

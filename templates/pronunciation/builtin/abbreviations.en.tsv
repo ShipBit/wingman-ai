@@ -1,0 +1,35 @@
+# Abbreviations speech models read wrong, and how they are spoken.
+# One per line: written<TAB>spoken. Case matters.
+# Ambiguous ones (St. = Street or Saint, No. = number or no) are left out.
+e.g.	for example
+i.e.	that is
+etc.	et cetera
+vs.	versus
+approx.	approximately
+dept.	department
+Mr.	mister
+Mrs.	missus
+Dr.	doctor
+Prof.	professor
+Capt.	captain
+Cptn.	captain
+Cptn	captain
+Cpt.	captain
+Lt.	lieutenant
+Cmdr.	commander
+Cmdr	commander
+Cdr.	commander
+Col.	colonel
+Gen.	general
+Maj.	major
+Sgt.	sergeant
+Cpl.	corporal
+Pvt.	private
+Adm.	admiral
+Jr.	junior
+Sr.	senior
+Mt.	mount
+Ave.	avenue
+Blvd.	boulevard
+Blvd	boulevard
+Rd.	road

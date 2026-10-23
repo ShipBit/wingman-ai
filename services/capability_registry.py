@@ -33,11 +33,29 @@ class CapabilityRegistry:
 
         Skills are listed first (faster/local), then MCPs (network-based).
         """
-        skills = self.skill_registry.get_discoverable_skills()
-        mcps = self.mcp_registry.get_connected_servers()
+        # Only what is still off. A capability that is already on has its
+        # tools in front of the model, so offering it again is two kinds of
+        # waste: the description rides in every prompt for the rest of the
+        # session, and the model spends a whole round activating something
+        # that is active. Measured 2026-09-21 on the scenario bench, that
+        # second round happened on most skill turns.
+        active_skills = self.skill_registry.active_skill_names
+        skills = [
+            manifest
+            for manifest in self.skill_registry.get_discoverable_skills()
+            if manifest.name not in active_skills
+        ]
+        active_servers = self.mcp_registry.active_server_names
+        mcps = [
+            manifest
+            for manifest in self.mcp_registry.get_connected_servers()
+            if manifest.name not in active_servers
+        ]
 
         if not skills and not mcps:
-            return []  # No capabilities available for discovery
+            # Everything is on. There is nothing left to discover, and the
+            # tools themselves say what is available.
+            return []
 
         # Build unified enum
         capability_options = []

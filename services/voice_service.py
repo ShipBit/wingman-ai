@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
-from api.enums import AzureRegion
+from api.enums import TtsProvider
 from api.interface import (
     AzureTtsConfig,
     EdgeTtsConfig,
@@ -13,18 +13,20 @@ from api.interface import (
     XVASynthTtsConfig,
     PocketTTSConfig,
 )
-from providers.edge import Edge
+from providers.edge import Edge, get_edge_voices
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
 from providers.inworld import Inworld
-from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
-from providers.wingman_pro import WingmanPro
+from providers.open_ai import OpenAi, OpenAiCompatibleTts
+from providers.wingman_subscription import WingmanSubscription
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 
 from services.audio_player import AudioPlayer
+from services import speech_text
 from services.config_manager import ConfigManager
 from services.printr import Printr
+from services.spoken_language import inworld_language
 
 
 class VoiceService:
@@ -40,6 +42,7 @@ class VoiceService:
         self.audio_player = audio_player
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
+        self.edge_voices: list[VoiceInfo] = []
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -66,15 +69,15 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/voices/openai-compatible",
-            endpoint=self.get_openai_compatible_voices,
+            path="/voices/edge",
+            endpoint=self.get_edge_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/voices/azure",
-            endpoint=self.get_azure_voices,
+            path="/voices/openai-compatible",
+            endpoint=self.get_openai_compatible_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -121,12 +124,6 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voices/preview/azure",
-            endpoint=self.play_azure_tts,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/voices/preview/elevenlabs",
             endpoint=self.play_elevenlabs_tts,
             tags=tags,
@@ -157,40 +154,17 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voices/preview/wingman-pro/azure",
-            endpoint=self.play_wingman_pro_azure,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/voices/preview/wingman-pro/openai",
-            endpoint=self.play_wingman_pro_openai,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
             path="/voices/preview/wingman-pro/inworld",
             endpoint=self.play_wingman_pro_inworld,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/wingman-pro/azure",
+            endpoint=self.play_wingman_pro_azure,
+            tags=tags,
+        )
 
-    def __convert_azure_voice(self, voice):
-        # retrieved from Wingman Pro as serialized dict
-        if isinstance(voice, dict):
-            return VoiceInfo(
-                id=voice.get("short_name"),
-                name=voice.get("local_name"),
-                gender=voice.get("gender"),
-                locale=voice.get("locale"),
-            )
-        # coming directly from Azure API as a voice object
-        else:
-            return VoiceInfo(
-                id=voice.short_name,
-                name=voice.local_name,
-                gender=voice.gender.name,
-                locale=voice.locale,
-            )
 
     # GET /voices/elevenlabs
     async def get_elevenlabs_voices(self, api_key: str) -> list[VoiceInfo]:
@@ -222,6 +196,16 @@ class VoiceService:
         result = await inworld.get_available_voices()
         return result
 
+    # GET /voices/edge
+    async def get_edge_voices(self) -> list[VoiceInfo]:
+        # Microsoft's list changes rarely: once per Core start is enough.
+        if not self.edge_voices:
+            try:
+                self.edge_voices = await get_edge_voices()
+            except Exception as e:
+                self.printr.toast_error(f"Edge TTS: \n{str(e)}")
+        return self.edge_voices
+
     # GET /voices/openai-compatible
     async def get_openai_compatible_voices(
         self,
@@ -234,37 +218,60 @@ class VoiceService:
             voices_endpoint=voices_endpoint
         )
 
-    # GET /voices/azure
-    def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
-        azure = OpenAiAzure()
-        voices = azure.get_available_voices(
-            api_key=api_key, region=region.value, locale=locale
-        )
-        result = [self.__convert_azure_voice(voice) for voice in voices]
-        return result
-
     # GET /voices/azure/wingman-pro
-    def get_wingman_pro_azure_voices(self, locale: str = ""):
-        wingman_pro = WingmanPro(
+    def get_wingman_pro_azure_voices(
+        self, filter_language: str = None
+    ) -> list[VoiceInfo]:
+        wingman_pro = WingmanSubscription(
             wingman_name="", settings=self.config_manager.settings_config.wingman_pro
         )
-        voices = wingman_pro.get_available_voices(locale=locale)
-        if not voices:
-            return []
-        result = [self.__convert_azure_voice(voice) for voice in voices]
-        return result
+        return wingman_pro.get_available_azure_voices(filter_language=filter_language)
 
     # GET /voices/inworld/wingman-pro
     def get_wingman_pro_inworld_voices(
         self, filter_language: str = None
     ) -> list[VoiceInfo]:
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="", settings=self.config_manager.settings_config.wingman_pro
         )
         voices = wingman_pro.get_available_inworld_voices(
             filter_language=filter_language
         )
         return voices
+
+    def _spoken(self, text: str, provider: TtsProvider, as_written: bool) -> str:
+        """A preview says the text the way a Wingman would: with the
+        pronunciation rules. The pronunciation editor asks for a word as
+        written, to compare it with the spelling that fixes it."""
+        if as_written:
+            return text
+        settings = self.config_manager.settings_config
+        return speech_text.prepare_for_speech(
+            text,
+            settings.spoken_language,
+            settings.pronunciation.rules,
+            settings.pronunciation.presets,
+            reads_numbers=provider in speech_text.VOICES_THAT_READ_NUMBERS,
+        )
+
+    async def _run_playback(self, playback):
+        """Run a playback coroutine in a worker thread with its own event loop.
+
+        Playback previews block their loop (audio pumping + drain), so running
+        them on the API event loop would freeze the server and make POST
+        /stop-playback unreachable until the preview ends. This mirrors how
+        wingmen play TTS via threaded_execution.
+
+        Answers when the voice is done, stopped or replaced by the next
+        preview: the client shows Stop until then. Providers without streaming
+        (Edge, xVASynth) return as soon as their audio starts, so wait for it
+        here.
+        """
+        await asyncio.to_thread(asyncio.run, playback)
+        player = self.audio_player
+        mine = player.playback_count
+        while player.is_playing and player.playback_count == mine:
+            await asyncio.sleep(0.1)
 
     # POST /play/openai
     async def play_openai_tts(
@@ -276,17 +283,20 @@ class VoiceService:
         speed: float,
         sound_config: SoundConfig,
         stream: bool,
+        as_written: bool = False,
     ):
         openai = OpenAi(api_key=api_key)
-        await openai.play_audio(
-            text=text,
-            voice=voice,
-            model=model,
-            speed=speed,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-            stream=stream,
+        await self._run_playback(
+            openai.play_audio(
+                text=self._spoken(text, TtsProvider.OPENAI, as_written),
+                voice=voice,
+                model=model,
+                speed=speed,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                stream=stream,
+            )
         )
 
     # POST /play/openai-compatible
@@ -300,32 +310,22 @@ class VoiceService:
         speed: float,
         sound_config: SoundConfig,
         stream: bool,
+        as_written: bool = False,
     ):
         openai = OpenAiCompatibleTts(api_key=api_key, base_url=base_url)
-        await openai.play_audio(
-            text=text,
-            voice=voice,
-            model=model,
-            speed=speed,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-            stream=stream,
+        await self._run_playback(
+            openai.play_audio(
+                text=self._spoken(text, TtsProvider.OPENAI_COMPATIBLE, as_written),
+                voice=voice,
+                model=model,
+                speed=speed,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                stream=stream,
+            )
         )
 
-    # POST /play/azure
-    async def play_azure_tts(
-        self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
-    ):
-        azure = OpenAiAzure()
-        await azure.play_audio(
-            text=text,
-            api_key=api_key,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-        )
 
     # POST /play/elevenlabs
     async def play_elevenlabs_tts(
@@ -334,66 +334,100 @@ class VoiceService:
         api_key: str,
         config: ElevenlabsConfig,
         sound_config: SoundConfig,
+        as_written: bool = False,
     ):
         elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
-        await elevenlabs.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-            stream=False,
+        await self._run_playback(
+            elevenlabs.play_audio(
+                text=self._spoken(text, TtsProvider.ELEVENLABS, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                stream=False,
+            )
         )
 
     # POST /play/edgetts
     async def play_edge_tts(
-        self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: EdgeTtsConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
     ):
         edge = Edge()
-        await edge.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
+        await self._run_playback(
+            edge.play_audio(
+                text=self._spoken(text, TtsProvider.EDGE_TTS, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+            )
         )
 
     # POST /play/hume
     async def play_hume(
-        self, text: str, api_key: str, config: HumeConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        api_key: str,
+        config: HumeConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
     ):
         hume = Hume(api_key=api_key, wingman_name="")
-        await hume.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
+        await self._run_playback(
+            hume.play_audio(
+                text=self._spoken(text, TtsProvider.HUME, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+            )
         )
+
+    def _inworld_language(self) -> str:
+        settings = self.config_manager.settings_config
+        return inworld_language(settings.spoken_language, settings.other_language)
 
     # POST /play/inworld
     async def play_inworld(
-        self, text: str, api_key: str, config: InworldConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        api_key: str,
+        config: InworldConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
     ):
         inworld = Inworld(api_key=api_key, wingman_name="")
-        await inworld.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
+        await self._run_playback(
+            inworld.play_audio(
+                text=self._spoken(text, TtsProvider.INWORLD, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                language=self._inworld_language(),
+            )
         )
 
     # POST /play/xvasynth
     async def play_xvasynth_tts(
-        self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: XVASynthTtsConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
     ):
-        await self.xvasynth.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
+        await self._run_playback(
+            self.xvasynth.play_audio(
+                text=self._spoken(text, TtsProvider.XVASYNTH, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+            )
         )
 
     # GET /voices/pocket-tts
@@ -402,49 +436,22 @@ class VoiceService:
     
     # POST /play/pocket-tts
     async def play_pocket_tts(
-        self, text: str, config: PocketTTSConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: PocketTTSConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
     ):
-        await self.pocket_tts.play_audio(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
+        await self._run_playback(
+            self.pocket_tts.play_audio(
+                text=self._spoken(text, TtsProvider.POCKET_TTS, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+            )
         )
 
-    # POST /play/wingman-pro/azure
-    async def play_wingman_pro_azure(
-        self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
-    ):
-        wingman_pro = WingmanPro(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
-        )
-        await wingman_pro.generate_azure_speech(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-        )
-
-    # POST /play/wingman-pro/openai
-    async def play_wingman_pro_openai(
-        self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
-    ):
-        wingman_pro = WingmanPro(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
-        )
-        await wingman_pro.generate_openai_speech(
-            text=text,
-            voice=voice,
-            model=model,
-            speed=speed,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
-        )
 
     # POST /play/wingman-pro/inworld
     async def play_wingman_pro_inworld(
@@ -452,15 +459,45 @@ class VoiceService:
         text: str,
         config: InworldConfig,
         sound_config: SoundConfig,
+        as_written: bool = False,
     ):
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="system",
             settings=self.config_manager.settings_config.wingman_pro,
         )
-        await wingman_pro.generate_inworld_speech(
-            text=text,
-            config=config,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
+        await self._run_playback(
+            wingman_pro.generate_inworld_speech(
+                text=self._spoken(text, TtsProvider.WINGMAN_PRO, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                language=self._inworld_language(),
+                # A preview plays even a voice the plan does not include.
+                preview=True,
+            )
+        )
+
+    # POST /play/wingman-pro/azure
+    async def play_wingman_pro_azure(
+        self,
+        text: str,
+        config: AzureTtsConfig,
+        sound_config: SoundConfig,
+        as_written: bool = False,
+    ):
+        wingman_pro = WingmanSubscription(
             wingman_name="system",
+            settings=self.config_manager.settings_config.wingman_pro,
+        )
+        await self._run_playback(
+            wingman_pro.generate_azure_speech(
+                text=self._spoken(text, TtsProvider.WINGMAN_PRO, as_written),
+                config=config,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name="system",
+                language=self._inworld_language(),
+                preview=True,
+            )
         )

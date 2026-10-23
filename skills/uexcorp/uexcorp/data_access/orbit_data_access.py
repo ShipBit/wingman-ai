@@ -28,6 +28,11 @@ class OrbitDataAccess(DataAccess):
             "star_system_name",
             "faction_name",
             "jurisdiction_name",
+            "is_man_made",
+            "is_asteroid",
+            "is_planet",
+            "is_star",
+            "is_jump_point",
         ]
 
     def load(self, **params) -> list[Orbit]:
@@ -78,6 +83,10 @@ class OrbitDataAccess(DataAccess):
 
     def add_filter_by_is_lagrange(self, is_lagrange: bool) -> "OrbitDataAccess":
         self.filter.where("is_lagrange", is_lagrange)
+        return self
+
+    def add_filter_by_is_jump_point(self, is_jump_point: bool) -> "OrbitDataAccess":
+        self.filter.where("is_jump_point", is_jump_point)
         return self
 
     def add_filter_by_star_system_name(self, star_system_name: str | list[str]) -> "OrbitDataAccess":

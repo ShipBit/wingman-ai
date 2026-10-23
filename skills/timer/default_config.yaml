@@ -1,5 +1,6 @@
 module: skills.timer.main
 name: Timer
+api_version: 3
 display_name: Timer
 author: JayMatthew
 discoverable_by_default: true

@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SC Accountant · Operations desk</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar"><a class="brand" href="/" aria-label="SC Accountant home"><span class="brandmark">SC</span><span>ACCOUNTANT<small>Your operations desk</small></span></a><nav id="navigation" aria-label="Main navigation"></nav><div class="sidebar-foot"><span class="status-dot"></span> Personal records<small>Local to this Wingman profile</small></div></aside>
+<div class="workspace"><header><div><span class="eyebrow">PERSONAL OPERATIONS</span><h1 id="page-title">Overview</h1></div><div class="header-tools"><label class="mode-label" for="mode">Workspace</label><select id="mode"><option value="simple">Simple</option><option value="advanced">Advanced</option></select><button id="refresh" class="icon-button" title="Refresh records">Refresh</button></div></header>
+<main id="content" aria-live="polite"><p class="empty">Loading your records…</p></main>
+<footer>Recorded activity, with evidence kept alongside it. Missing information stays visible.</footer></div>
+<div id="toast" role="status" hidden></div>
+<dialog id="action-dialog"><form id="action-form"><div class="dialog-head"><div><span class="eyebrow">UPDATE YOUR RECORDS</span><h2 id="dialog-title"></h2></div><button type="button" id="dialog-close" class="icon-button" aria-label="Close form">×</button></div><p id="dialog-description" class="muted"></p><div id="form-fields"></div><p id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" id="dialog-cancel">Cancel</button><button type="submit" class="primary" id="dialog-save">Save record</button></div></form></dialog>
+</body></html>

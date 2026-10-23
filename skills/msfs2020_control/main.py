@@ -1,8 +1,7 @@
-import os
-import time
+import asyncio
 import random
+import time
 import requests
-import sys
 from typing import TYPE_CHECKING
 from SimConnect import *
 from api.interface import (
@@ -10,25 +9,27 @@ from api.interface import (
     SkillConfig,
     WingmanInitializationError,
 )
-from api.enums import LogType
-from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
-
-# add skill to sys path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import msfs2020 command processer helper
 from skills.msfs2020_control.command_matcher.command_matcher import CommandMatcher
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class Msfs2020Control(Skill):
+    # Below this the fifteen candidates are near-equals and the model reading
+    # them with the rest of the conversation in front of it knows more than a
+    # decision taken on the intent string alone. Then it gets all fifteen.
+    SYSTEM_ONE_MIN_CONFIDENCE = 0.6
+
+
+    NOT_CONNECTED = "Error: Not connected to the simulator yet. Check that MSFS2020 is running."
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.already_initialized_simconnect = False
@@ -99,13 +100,61 @@ class Msfs2020Control(Skill):
         """
         
         matches = self.command_matcher.find_matches(user_intent)
+
+        # The fuzzy pass has to stay — the SimConnect corpus is thousands of
+        # entries, far past what a choice takes. But once it is down to
+        # fifteen, naming the one is a decision, and handing the model fifteen
+        # blocks of text to read instead costs a turn's worth of tokens here
+        # and in every turn that follows.
+        picked = await self._pick_one_command(user_intent, matches)
+        if picked:
+            return self.command_matcher.matches_as_string([picked])
+
         matches_string = self.command_matcher.matches_as_string(matches)
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Found potential matching commands for intent {user_intent}: {matches_string}",
-                color=LogType.INFO,
+                server_only=True,
             )
         return matches_string
+
+    async def _pick_one_command(self, user_intent: str, matches: list) -> dict | None:
+        """The one command the intent asks for, or None to hand over all of them.
+
+        None whenever there is nothing to gain or nothing to ask with: System
+        One off, no plan access, fewer than two candidates, or an answer the
+        model was not sure enough about. The caller then returns the full list
+        exactly as it did before.
+        """
+        system_one = self.wingman.system_one
+        if not system_one or not system_one.available or len(matches) < 2:
+            return None
+
+        by_name = {m["name"]: m for m in matches}
+        criteria = {
+            name: f"[{m['type']}] {m['description']}"[:200] for name, m in by_name.items()
+        }
+        criteria["none_of_these"] = "none of them does what was asked"
+        answers = await system_one.decide(
+            state={"intent": user_intent, "simulator": "Microsoft Flight Simulator"},
+            questions={
+                "command": system_one.choice(
+                    "Which SimConnect event or SimVar does the pilot's intent ask for?",
+                    criteria,
+                    not_for="a command that only sounds similar but does something else",
+                )
+            },
+        )
+        name = answers.choice("command", min_confidence=self.SYSTEM_ONE_MIN_CONFIDENCE)
+        if name is None or name == "none_of_these":
+            return None
+        if self.settings.debug_mode:
+            self.log.info(
+                f"System One picked '{name}' for '{user_intent}' "
+                f"(confidence {answers.confidence('command'):.2f}, {answers.seconds * 1000:.0f} ms)",
+                server_only=True,
+            )
+        return by_name[name]
 
     @tool(
         description="Retrieve data from MSFS2020 via SimConnect SimVars. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."
@@ -118,11 +167,13 @@ class Msfs2020Control(Skill):
             data_point: The data point to retrieve, such as 'PLANE_ALTITUDE', 'PLANE_HEADING_DEGREES_TRUE'.
         """
         
+        if not self.aq:
+            return self.NOT_CONNECTED
         value = self.aq.get(data_point)
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Retrieving data point from sim: {data_point}; value returned: {value}",
-                color=LogType.INFO,
+                server_only=True,
             )
         return f"{data_point} value is: {value}"
 
@@ -140,30 +191,42 @@ class Msfs2020Control(Skill):
             argument: The argument to pass for the action, if any.
         """
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting to perform action/set data in sim: {action} with argument: {argument}",
-                color=LogType.INFO,
+                server_only=True,
             )
-        try:
-            if argument is not None:
-                self.aq.set(action, argument)
-            else:
-                event_to_trigger = self.ae.find(action)
-                event_to_trigger()
-        except Exception:
-            await self.printr.print_async(
-                f"Tried to perform action {action} with argument {argument} using aq.set, now going to try ae.event_to_trigger.",
-                color=LogType.INFO,
-            )
+        if not self.aq or not self.ae:
+            return self.NOT_CONNECTED
 
-        try:
-            if argument is not None:
+        if argument is not None:
+            # Try setting the SimVar first, then fall back to the event with the argument.
+            # aq.set returns False (it does not raise) for a name that is no settable SimVar.
+            try:
+                if self.aq.set(action, argument):
+                    return f"Action '{action}' executed with argument '{argument}'"
+            except Exception:
+                self.log.info(
+                    f"aq.set failed for {action} with {argument}, trying ae.event_to_trigger.",
+                    server_only=True,
+                )
+            try:
                 event_to_trigger = self.ae.find(action)
                 event_to_trigger(argument)
+            except Exception:
+                self.log.info(
+                    f"Neither aq.set nor ae.event_to_trigger worked with {action} and {argument}. Command failed.",
+                    server_only=True,
+                )
+                return "Error: Command failed."
+            return f"Action '{action}' executed with argument '{argument}'"
+
+        try:
+            event_to_trigger = self.ae.find(action)
+            event_to_trigger()
         except Exception:
-            await self.printr.print_async(
-                f"Neither aq.set nor ae.event_to_trigger worked with {action} and {argument}.  Command failed.",
-                color=LogType.INFO,
+            self.log.info(
+                f"ae.event_to_trigger failed for {action}. Command failed.",
+                server_only=True,
             )
             return "Error: Command failed."
 
@@ -198,7 +261,7 @@ class Msfs2020Control(Skill):
         if place_info:
             on_ground = self.aq.get("SIM_ON_GROUND")
             on_ground_statement = "The plane is currently in the air."
-            if not on_ground:
+            if on_ground:
                 on_ground_statement = "The plane is currently on the ground."
             return f"{on_ground_statement}  Detailed information regarding the location we are currently at or flying over: {place_info}"
         else:
@@ -209,19 +272,13 @@ class Msfs2020Control(Skill):
         while self.loaded and not self.already_initialized_simconnect:
             try:
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Attempting to find MSFS2020....",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("Attempting to find MSFS2020....", server_only=True)
                 self.sm = SimConnect()
                 self.aq = AircraftRequests(self.sm, _time=2000)
                 self.ae = AircraftEvents(self.sm)
                 self.already_initialized_simconnect = True
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Initialized SimConnect with MSFS2020.",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("Initialized SimConnect with MSFS2020.", server_only=True)
                 if self._get_autostart_data_monitoring_loop_mode():
                     await self.initialize_data_monitoring_loop()
             except Exception:
@@ -233,52 +290,49 @@ class Msfs2020Control(Skill):
             return
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Starting threaded data monitoring loop",
-                color=LogType.INFO,
-            )
+            self.log.info("Starting threaded data monitoring loop", server_only=True)
 
-        self.threaded_execution(self.start_data_monitoring_loop)
+        self.wingman.run_in_thread(self.start_data_monitoring_loop)
 
     async def start_data_monitoring_loop(self):
-        if not self.data_monitoring_loop_running:
-            self.data_monitoring_loop_running = True
+        if self.data_monitoring_loop_running:
+            return
+        self.data_monitoring_loop_running = True
 
+        try:
             while self.data_monitoring_loop_running:
-                min_seconds = self._get_min_data_monitoring_seconds()
-                max_seconds = self._get_max_data_monitoring_seconds()
-                random_time = random.choice(
-                    range(
-                        min_seconds,
-                        max_seconds,
-                        15,
-                    )
-                )  # Gets random number from min to max in increments of 15
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Attempting looped monitoring check.",
-                        color=LogType.INFO,
-                    )
                 try:
+                    min_seconds = self._get_min_data_monitoring_seconds()
+                    max_seconds = self._get_max_data_monitoring_seconds()
+                    if max_seconds <= min_seconds:
+                        max_seconds = min_seconds + 15
+                    # Random number from min to max in increments of 15
+                    random_time = random.choice(
+                        range(min_seconds, max_seconds, 15)
+                    )
+                    if self.settings.debug_mode:
+                        self.log.info(
+                            "Attempting looped monitoring check.", server_only=True
+                        )
                     place_data = await self.convert_lat_long_data_into_place_data()
                     if place_data:
                         await self.initiate_llm_call_with_plane_data(place_data)
                 except Exception as e:
+                    random_time = 60
                     if self.settings.debug_mode:
-                        await self.printr.print_async(
+                        self.log.info(
                             f"Something failed in looped monitoring check.  Could not return data or send to llm: {e}.",
-                            color=LogType.INFO,
+                            server_only=True,
                         )
-                time.sleep(random_time)
+                await asyncio.sleep(random_time)
+        finally:
+            self.data_monitoring_loop_running = False
 
     async def stop_data_monitoring_loop(self):
         self.data_monitoring_loop_running = False
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Stopping data monitoring loop",
-                color=LogType.INFO,
-            )
+            self.log.info("Stopping data monitoring loop", server_only=True)
 
     async def convert_lat_long_data_into_place_data(
         self, latitude=None, longitude=None, altitude=None
@@ -301,7 +355,7 @@ class Msfs2020Control(Skill):
             ground_altitude = self.aq.get("GROUND_ALTITUDE")
 
         # If no values still, for instance, when connection is made but no data yet, return None
-        if not latitude or not longitude or not altitude or not ground_altitude:
+        if not latitude or not longitude or altitude is None or ground_altitude is None:
             return None
 
         # Set zoom level based on altitude, see zoom documentation at https://nominatim.org/release-docs/develop/api/Reverse/
@@ -321,73 +375,71 @@ class Msfs2020Control(Skill):
             zoom = 8
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting query of OpenStreetMap Nominatum with parameters: {latitude}, {longitude}, {altitude}, zoom level: {zoom}",
-                color=LogType.INFO,
+                server_only=True,
             )
 
         # Request data from openstreetmap nominatum api for reverse geocoding
-        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language=en&extratags=1"
+        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language={self.wingman.language.code or 'en'}&extratags=1"
         headers = {"User-Agent": f"msfs2020control_skill wingmanai {self.wingman.name}"}
-        response = requests.get(url, headers=headers, timeout=10)
+        try:
+            response = await asyncio.to_thread(
+                requests.get, url, headers=headers, timeout=10
+            )
+        except Exception as e:
+            self.log.warning(f"Nominatim request failed: {e}", server_only=True)
+            return None
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            return {
+                "display_name": data.get("display_name"),
+                "address": data.get("address"),
+            }
         else:
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"API request failed to {url}, status code: {response.status_code}.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
             return None
 
+    async def _speak(self, text: str) -> None:
+        """Async helper for threaded TTS — speaks without interrupting current playback."""
+        await self.wingman.tts.speak(text, interrupt=False)
+
     # Get LLM to provide a verbal response to the user, without requiring the user to initiate a communication with the LLM
     async def initiate_llm_call_with_plane_data(self, data):
+        if not self.aq:
+            return
         on_ground = self.aq.get("SIM_ON_GROUND")
         on_ground_statement = "The plane is currently in the air."
         if on_ground:
             on_ground_statement = "The plane is currently on the ground."
         backstory = self._get_data_monitoring_backstory()
         user_content = f"{on_ground_statement}  Information about the location: {data}"
-        messages = [
-            {
-                "role": "system",
-                "content": f"""
+        system_content = f"""
                     {backstory}
-                """,
-            },
-            {
-                "role": "user",
-                "content": user_content,
-            },
-        ]
+                    Speak {self.wingman.language.name}, unless the backstory above asks for another language.
+                """
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting LLM call with parameters: {backstory}, {user_content}.",
-                color=LogType.INFO,
+                server_only=True,
             )
-        completion = await self.llm_call(messages)
-        response = (
-            completion.choices[0].message.content
-            if completion and completion.choices
-            else ""
+        response = await self.wingman.ai.generate(
+            user_content, system=system_content, auto_shorten=True
         )
 
         if not response:
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    "LLM call returned no response.",
-                    color=LogType.INFO,
-                )
+                self.log.info("LLM call returned no response.", server_only=True)
             return
 
-        await self.printr.print_async(
-            text=f"Data monitoring response: {response}",
-            color=LogType.INFO,
-            source_name=self.wingman.name,
-        )
+        self.log.info(f"Data monitoring response: {response}")
 
-        self.threaded_execution(self.wingman.play_to_user, response, True)
-        await self.wingman.add_assistant_message(response)
+        self.wingman.run_in_thread(self._speak, response)
+        await self.wingman.conversation.add_assistant(response)
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
@@ -396,7 +448,7 @@ class Msfs2020Control(Skill):
         """Load the skill by trying to connect to the sim"""
         await super().prepare()
         self.loaded = True
-        self.threaded_execution(self.start_simconnect)
+        self.wingman.run_in_thread(self.start_simconnect)
 
     async def unload(self) -> None:
         """Unload the skill."""

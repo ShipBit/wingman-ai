@@ -1,5 +1,6 @@
 module: skills.radio_chatter.main
 name: RadioChatter
+api_version: 3
 display_name: Radio Chatter
 author: JayMatthew
 tags:
@@ -13,7 +14,7 @@ discoverable_by_default: false
 custom_properties:
   - id: prompt
     name: Prompt for message generation
-    hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
+    hint: The scenario for the generated radio chatter. If empty, a generic radio conversation is used.
     required: false
     value: "Generate a dialog between random pilots in the Star Citizen universe. Feel free to throw in some random details. Keep in mind that Port Olisar does no longer exist."
     property_type: textarea
@@ -26,42 +27,45 @@ custom_properties:
     options:
       - label: "multiple"
         value: true
-  - id: interval_min
-    name: Min interval
-    hint: The minimum time in seconds between radio chatter. This is also the time used until the first chatter event occurs.
-    value: 30
+  - id: interval_range
+    name: Interval (sec)
+    hint: Time between radio chatter events. Also used for the first event.
+    value: [60, 600]
     required: true
-    property_type: number
-  - id: interval_max
-    name: Max interval
-    hint: The maximum time in seconds between radio chatter.
-    value: 600
+    property_type: range_slider
+    options:
+      - label: "min"
+        value: 60
+      - label: "max"
+        value: 600
+      - label: "step"
+        value: 10
+  - id: messages_range
+    name: Messages per event
+    hint: Number of messages to play per chatter event.
+    value: [1, 5]
     required: true
-    property_type: number
-  - id: messages_min
-    name: Min messages
-    hint: The minimum number of messages to play for on chatter event.
-    value: 1
+    property_type: range_slider
+    options:
+      - label: "min"
+        value: 1
+      - label: "max"
+        value: 5
+      - label: "step"
+        value: 1
+  - id: participants_range
+    name: Participants
+    hint: Number of participants in the chatter.
+    value: [2, 3]
     required: true
-    property_type: number
-  - id: messages_max
-    name: Max messages
-    hint: The maximum number of messages to play for on chatter event.
-    value: 5
-    required: true
-    property_type: number
-  - id: participants_min
-    name: Min participants
-    hint: The minimum number of participants in the chatter.
-    value: 2
-    required: true
-    property_type: number
-  - id: participants_max
-    name: Max participants
-    hint: The maximum number of participants in the chatter.
-    value: 3
-    required: true
-    property_type: number
+    property_type: range_slider
+    options:
+      - label: "min"
+        value: 1
+      - label: "max"
+        value: 5
+      - label: "step"
+        value: 1
   - id: force_radio_sound
     name: Force radio effect
     hint: Overwrites wingman sound effects for radio chatter with selected radio effects. Needs at least one valid value in "Availale radio effects".
@@ -69,11 +73,26 @@ custom_properties:
     required: false
     property_type: boolean
   - id: radio_sounds
-    name: Availale radio effects
-    hint: A list of radio effects seperated by commas that are randomly used when "Force radio effects" is enabled. Possible values are "low", "medium" and "high".
+    name: Available radio effects
+    hint: Radio effects randomly used when "Force radio effect" is enabled.
     value: "low, medium"
     required: false
-    property_type: string
+    property_type: single_select
+    options:
+      - label: "Low"
+        value: "low"
+      - label: "Medium"
+        value: "medium"
+      - label: "High"
+        value: "high"
+      - label: "Low & Medium"
+        value: "low, medium"
+      - label: "Low & High"
+        value: "low, high"
+      - label: "Medium & High"
+        value: "medium, high"
+      - label: "All"
+        value: "low, medium, high"
   - id: auto_start
     name: Auto start
     hint: Automatically start the radio chatter with your Wingman.

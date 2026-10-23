@@ -9,7 +9,7 @@ class Migration200To210(BaseMigration):
     old_version = "2_0_0"
     new_version = "2_1_0"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Migrate settings.yaml from 2.0.0 to 2.1.0."""
         # Add hardware_scan_performed flag
         if "hardware_scan_performed" not in old:
@@ -18,22 +18,37 @@ class Migration200To210(BaseMigration):
             self.log("- added new property: hardware_scan_performed (set to False)")
 
         # Add PocketTTS Global Settings
-        if "pocket_tts" not in old and "pocket_tts" in new:
-            old["pocket_tts"] = new["pocket_tts"]
+        if "pocket_tts" not in old:
+            old["pocket_tts"] = {
+                "enable": True,
+                "custom_model_path": "",
+            }
             self.log("- added new setting: pocket_tts")
 
         # Add HUD Server Settings
-        if "hud_server" not in old and "hud_server" in new:
-            old["hud_server"] = new["hud_server"]
+        if "hud_server" not in old:
+            old["hud_server"] = {
+                "enabled": False,
+                "host": "127.0.0.1",
+                "port": 7862,
+                "framerate": 60,
+                "layout_margin": 20,
+                "layout_spacing": 15,
+                "screen": 1,
+            }
             self.log("- added new setting: hud_server")
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Migrate defaults.yaml from 2.0.0 to 2.1.0."""
         # Add PocketTTS Provider Defaults
-        if "pocket_tts" not in old and "pocket_tts" in new:
-            old["pocket_tts"] = new["pocket_tts"]
+        if "pocket_tts" not in old:
+            old["pocket_tts"] = {
+                "voice": "alba",
+                "speed": 1.0,
+                "output_streaming": True,
+            }
             self.log("- added new provider default: pocket_tts")
 
         # Remove deprecated ElevenLabs latency optimization
@@ -43,7 +58,7 @@ class Migration200To210(BaseMigration):
 
         return old
 
-    def migrate_wingman(self, old: dict, new: dict) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Migrate wingman configs from 2.0.0 to 2.1.0."""
         if "elevenlabs" in old and "latency" in old["elevenlabs"]:
             del old["elevenlabs"]["latency"]

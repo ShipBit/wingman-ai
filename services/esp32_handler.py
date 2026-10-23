@@ -64,7 +64,7 @@ class Esp32Handler:
                                 await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
                                 
                                 self.wait_for_response = True
-                                self.core.on_audio_recorder_speech_recorded(self.recording_file_path)
+                                self.core.process_recording_file(self.recording_file_path)
 
                     except json.JSONDecodeError:
                         pass  # data is not JSON, leave it as is

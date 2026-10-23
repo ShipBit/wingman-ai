@@ -8,6 +8,7 @@ Get started with Wingman AI development on your platform:
 
 - **[Windows Development](develop-windows.md)** - Set up your development environment on Windows
 - **[macOS Development](develop-macos.md)** - Set up your development environment on macOS
+- **[Linux Development](develop-linux.md)** - Set up your development environment on Linux
 
 ## Extending Wingman AI
 
@@ -25,6 +26,10 @@ Learn how to create custom extensions for Wingman AI:
 
 Additional reference documentation:
 
+- **[The HUD](hud.md)** - The shared chat and info containers, HUD profiles per config, the preview and the per-Wingman switches
+- **[What Wingman AI shortens, and when](context-and-shortening.md)** - Every place where tool responses, the conversation or skill input get cut, cleared or summarized, with example scenarios
+- **[CI/CD Pipeline](ci-cd.md)** - How Core is built and staged
+- **[MCP OAuth](mcp-oauth.md)** - How hosted MCP servers that need OAuth are connected
 - **[Available Edge TTS Voices](available-edge-tts-voices.md)** - Complete list of available voices for Edge TTS
 
 ## Additional Resources

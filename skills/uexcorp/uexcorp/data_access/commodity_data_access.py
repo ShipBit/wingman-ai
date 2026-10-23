@@ -36,6 +36,21 @@ class CommodityDataAccess(DataAccess):
             "date_added",
             "date_modified",
             "is_blacklisted",
+            "id_item",
+            "ids_star_systems",
+            "ids_planets",
+            "ids_moons",
+            "ids_poi",
+            "ids_orbits",
+            "uuid",
+            "is_extractable",
+            "is_pure",
+            "is_refinable",
+            "is_volatile_qt",
+            "is_volatile_time",
+            "is_inert",
+            "is_explosive",
+            "is_buggy",
         ]
 
     def load(self, **params) -> list[Commodity]:

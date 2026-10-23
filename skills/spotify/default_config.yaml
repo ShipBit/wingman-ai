@@ -1,5 +1,6 @@
 module: skills.spotify.main
 name: Spotify
+api_version: 3
 display_name: Spotify
 author: ShipBit
 tags:

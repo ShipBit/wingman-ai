@@ -1,76 +1,54 @@
-# Wingman AI Core — Agent Development Guide
+# Wingman AI Core — Agent Guide
 
-## Logging — Never use bare `print()`
+## Pull requests
 
-All output goes through the `Printr` singleton (`services/printr.py`). The two modes have different calling conventions:
+When work is approved, open a PR in both repos (Core and the closed-source Client). Drop the worktree of a repo you did not change. Link a GitHub issue in Core if there is one (`Closes #123`).
 
-- **`server_only=True`** → **sync** call, terminal and log file only, client never sees it:
+## Client API regeneration
 
-  ```python
-  printr.print("debug info", color=LogType.SYSTEM, server_only=True)
-  ```
-
-- **`server_only=False`** (default) → **async** call, broadcasts to client GUI, **MUST be awaited**:
-
-  ```python
-  await printr.print_async("Wingman ready", color=LogType.INFO, source_name=self.name)
-  ```
-
-If you use `printr.print()` without `server_only=True`, it sends to the client synchronously via `ensure_async()` — prefer the explicit async version when you want client visibility.
-
-## Config Properties — interface.py
-
-New fields in Pydantic models should almost never be `Optional`. The correct pattern:
-
-1. Make the field **required** or give it a **concrete default value**
-2. Add the default in the appropriate template YAML (`templates/configs/`)
-3. Add a migration step that inserts the value into existing configs
-
-Only use `Optional` when `None` is a **semantically meaningful state** (e.g., "no override", "use system default"). Do not use `Optional` just to avoid writing a migration.
-
-## Cross-Platform — Windows and macOS
-
-Core must run on both Windows and macOS. If a feature uses Windows-specific modules, **guard all imports** and skip gracefully on macOS — never crash:
-
-```python
-if platform.system() == "Windows":
-    import win32api
-```
-
-Skills declare OS support via `platforms` in `default_config.yaml` (`windows`, `darwin`, `linux`).
-
-## Version Bumps and Migrations
-
-Version lives in `services/system_manager.py` as `LOCAL_VERSION`. Migration templates in `templates/migration/{version}/configs/` are frozen snapshots of default configs for each version.
-
-**When bumping a version** (e.g., 2.1.1 → 2.2.0):
-
-1. Snapshot current `templates/configs/*.yaml` → `templates/migration/2_1_1/configs/` (freeze old version)
-2. Create `templates/migration/2_2_0/configs/` (copy current configs as starting point)
-3. Create skeleton migration `services/migrations/migration_211_to_220.py` with no-op `migrate_defaults` and `migrate_wingman` methods
-4. Update `LOCAL_VERSION`
-
-**When adding a feature that changes config:**
-
-1. Update the Pydantic model in `api/interface.py`
-2. Update `templates/configs/` with new defaults
-3. **Sync** changes to `templates/migration/{CURRENT_VERSION}/configs/` — must always reflect the latest state of the version being developed
-4. Add migration step(s) to the current migration file
-
-Migration methods: `migrate_settings(old, new)`, `migrate_defaults(old, new)`, `migrate_wingman(old, new)`, and optionally `migrate_secrets(old)`, `migrate_mcp(old, new)`. See `services/migrations/base_migration.py`. Migrations are auto-discovered and chained by version order.
-
-## Client API Regeneration
-
-If you change anything in `api/interface.py`, `api/enums.py`, or FastAPI endpoints in `main.py`, the Wingman Client's generated TypeScript types become stale. **You cannot restart Core yourself.** After making API/interface changes, stop and tell the user:
+After a change to `api/interface.py`, `api/enums.py` or an endpoint, the Client's generated types are stale. You cannot restart Core yourself, so stop and tell the user:
 
 > "I've changed Core's API. Please restart Core now so the client can regenerate its API types."
 
-Do this before making any related client changes or running client tests.
+Do this before any related client change or client test.
 
-## Documentation
+## Tests
 
-Update `README.md` and `docs/` when new providers, major features, or setup changes are introduced. Also update `skills/README.md` and `skills/AGENTS.md` if the skill system changes. Skip docs for minor refactors or bugfixes.
+`python -m pytest`, in `tests/` by area; CI runs them on Linux for every PR.
 
-## Skills
+- Add a test for a bug fix or a behavior change. Do not test library behavior or pin constants.
+- `tests/` is public: no backend internals, client details, tester names, network or API keys.
+- Every test passes on a developer's Mac and on Linux CI: no skips for missing tools or checkouts, nothing read outside the repo and `tmp_path`.
+- Helpers go in `tests/support.py`, fixtures in a `conftest.py`.
 
-**Read [skills/AGENTS.md](skills/AGENTS.md) before creating or modifying any skill.** It contains critical rules about token budgets, the mandatory Skill-vs-MCP triage, and implementation patterns.
+## Logging
+
+Never `print()`. Use the `Printr` singleton (`services/printr.py`):
+
+- `printr.print(..., server_only=True)` is sync and goes to the terminal and log only.
+- `await printr.print_async(...)` also reaches the client. It must be awaited.
+
+Use `LogType.LOCALMODEL` for support-model work, `LogType.MEMORY` for memory operations and `LogType.FILLER` for the line spoken while a tool runs: the client styles each one differently.
+
+## Support model prompts
+
+The support model is small (cloud by default, Qwen3.5-4B locally). Write prompts for the weakest one:
+
+- Templates in `prompts/*.md` with `{variables}` filled by the caller, never hard-coded values.
+- Labeled sections (`Rules:`, `Input:`), "EXACT words" when it must quote, "IN CHARACTER" when it must rephrase, explicit "Do NOT" lines, under ~200 tokens.
+- Pick a `SamplingPreset` per task (`services/skill_local_ai.py`). The 1.0/1.0 defaults make extraction drop and duplicate facts.
+
+## Config fields and migrations
+
+- New fields in `api/interface.py` are required, without a default there. `Optional` only when `None` means something.
+- The default goes into `templates/configs/`, and a migration step adds it to existing configs.
+- Bump versions only with `python scripts/bump_version.py <version>`: it sets all seven places in Core and Client and writes the migration skeleton.
+- A migration step goes into the release being built, never into one that shipped. If `LOCAL_VERSION` is already out with testers, bump first.
+
+## Cross-platform
+
+Core runs on Windows, macOS and Linux. Guard OS-specific imports behind `platform.system()` and skip gracefully elsewhere. Skills declare `platforms` in their `default_config.yaml`. HUD OS code lives behind `hud_server/platform/`.
+
+## Docs and skills
+
+Update `README.md` and `docs/` for new providers, major features or setup changes, not for bug fixes. Before working on a skill, read [skills/AGENTS.md](skills/AGENTS.md).

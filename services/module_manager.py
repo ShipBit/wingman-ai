@@ -12,20 +12,13 @@ from api.interface import (
     SkillBase,
     SkillConfig,
     SkillToolInfo,
-    WingmanConfig,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.whispercpp import Whispercpp
-from providers.xvasynth import XVASynth
-from services.audio_library import AudioLibrary
-from services.audio_player import AudioPlayer
-from services.file import get_writable_dir, get_custom_skills_dir
+from services.file import get_custom_skills_dir
 from services.printr import Printr
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
-    from services.tower import Tower
 
 SKILLS_DIR = "skills"
 
@@ -64,62 +57,13 @@ class ModuleManager:
         return module_name, module_path
 
     @staticmethod
-    def create_wingman_dynamically(
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-        audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
-        xvasynth: XVASynth,
-        tower: "Tower",
-    ):
-        """Dynamically creates a Wingman instance from a module path and class name
+    def resolve_skill_module(config: SkillConfig):
+        """Resolve and import a skill's Python module WITHOUT instantiating it.
 
-        Args:
-            name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            settings (SettingsConfig): The general user settings.
-            audio_player (AudioPlayer): The audio player handling the playback of audio files.
-            audio_library (AudioLibrary): The audio library handling the storage and retrieval of audio files.
-            whispercpp (Whispercpp): The Whispercpp provider for speech-to-text.
-            fasterwhisper (FasterWhisper): The FasterWhisper provider for speech-to-text.
-            xvasynth (XVASynth): The XVASynth provider for text-to-speech.
-            tower (Tower): The Tower instance, that manages loaded Wingmen.
+        Mirrors load_skill's 3-tier resolution (sys.path/dev → bundled → custom).
+        Returns the imported module. Raises on import/exec failure or if not found.
         """
-
-        try:
-            # try to load from app dir first
-            module = import_module(config.custom_class.module)
-        except ModuleNotFoundError:
-            # split module into name and path
-            module_name, module_path = ModuleManager.get_module_name_and_path(
-                config.custom_class.module
-            )
-            module_path = path.join(get_writable_dir(module_path), module_name + ".py")
-            # load from alternative absolute file path
-            spec = util.spec_from_file_location(module_name, module_path)
-            module = util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-        DerivedWingmanClass = getattr(module, config.custom_class.name)
-        instance = DerivedWingmanClass(
-            name=name,
-            config=config,
-            settings=settings,
-            audio_player=audio_player,
-            audio_library=audio_library,
-            whispercpp=whispercpp,
-            fasterwhisper=fasterwhisper,
-            xvasynth=xvasynth,
-            tower=tower,
-        )
-        return instance
-
-    @staticmethod
-    def load_skill(
-        config: SkillConfig, settings: SettingsConfig, wingman: "Wingman"
-    ) -> Skill:
+        from contextlib import contextmanager
 
         @contextmanager
         def add_to_sys_path(path_to_add: str):
@@ -132,11 +76,11 @@ class ModuleManager:
         skill_name, skill_path = ModuleManager.get_module_name_and_path(config.module)
         module = None
 
-        # 1. Try import_module first (works for dev mode or bundled skills in sys.path)
+        # 1. import_module (dev / bundled in sys.path)
         try:
             dependencies_dir = (
                 path.join(skill_path, "venv", "lib", "python3.11", "site-packages")
-                if sys.platform == "darwin"
+                if sys.platform != "win32"
                 else path.join(skill_path, "venv", "Lib", "site-packages")
             )
             dependencies_dir = path.abspath(dependencies_dir)
@@ -145,43 +89,30 @@ class ModuleManager:
         except ModuleNotFoundError:
             pass
 
-        # 2. Try bundled skills directory (for release mode)
+        # 2. bundled skills dir (release)
         if module is None:
             bundled_dir = get_bundled_skills_dir()
             if bundled_dir:
-                # skill_path is like "skills/spotify", we need just "spotify"
                 skill_folder = skill_path.replace("skills/", "").replace("skills\\", "")
                 bundled_skill_path = path.join(bundled_dir, skill_folder)
                 plugin_module_path = path.join(bundled_skill_path, "main.py")
-
                 if path.isfile(plugin_module_path):
                     dependencies_dir = (
-                        path.join(
-                            bundled_skill_path,
-                            "venv",
-                            "lib",
-                            "python3.11",
-                            "site-packages",
-                        )
-                        if sys.platform == "darwin"
-                        else path.join(
-                            bundled_skill_path, "venv", "Lib", "site-packages"
-                        )
+                        path.join(bundled_skill_path, "venv", "lib", "python3.11", "site-packages")
+                        if sys.platform != "win32"
+                        else path.join(bundled_skill_path, "venv", "Lib", "site-packages")
                     )
                     with add_to_sys_path(dependencies_dir):
-                        spec = util.spec_from_file_location(
-                            skill_name, plugin_module_path
-                        )
+                        spec = util.spec_from_file_location(skill_name, plugin_module_path)
                         module = util.module_from_spec(spec)
                         spec.loader.exec_module(module)
 
-        # 3. Try custom skills directory (for user-created skills)
+        # 3. custom skills dir (user)
         if module is None:
             custom_skills_dir = get_custom_skills_dir()
             skill_folder = skill_path.replace("skills/", "").replace("skills\\", "")
             custom_skill_path = path.join(custom_skills_dir, skill_folder)
             plugin_module_path = path.join(custom_skill_path, "main.py")
-
             if path.isfile(plugin_module_path):
                 dependencies_dir = path.join(custom_skill_path, "dependencies")
                 with add_to_sys_path(dependencies_dir):
@@ -193,10 +124,26 @@ class ModuleManager:
             raise FileNotFoundError(
                 f"Skill '{skill_name}' not found in bundled skills or custom skills directory"
             )
+        return module
 
+    @staticmethod
+    def load_skill(
+        config: SkillConfig, settings: SettingsConfig, wingman: "Wingman"
+    ) -> Skill:
+        module = ModuleManager.resolve_skill_module(config)
         DerivedSkillClass = getattr(module, config.name)
         instance = DerivedSkillClass(config=config, settings=settings, wingman=wingman)
         return instance
+
+    @staticmethod
+    def probe_import(config: SkillConfig) -> None:
+        """Import-probe a skill: resolve its module and confirm its class exists,
+        WITHOUT instantiating. Raises on any failure (caller treats as 'invalid')."""
+        module = ModuleManager.resolve_skill_module(config)
+        if not hasattr(module, config.name):
+            raise AttributeError(
+                f"Skill class '{config.name}' not found in module '{config.module}'"
+            )
 
     @staticmethod
     def _get_untracked_skill_folders(skills_dir: str) -> set[str] | None:
@@ -328,6 +275,13 @@ class ModuleManager:
                                     # so disable uninstall for all source skills
                                     is_local = True
 
+                            # A bundled skill that replaced a community one
+                            # keeps its folder; the old custom copy is ignored.
+                            if is_custom and skill_name in skills_default_configs:
+                                from services.skill_catalog import REPLACED_BY_CORE
+
+                                if skill_name in REPLACED_BY_CORE:
+                                    continue
                             # Later entries (custom skills) override earlier ones
                             skills_default_configs.update(
                                 {

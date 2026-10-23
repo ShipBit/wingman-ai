@@ -1,0 +1,11 @@
+# Edge voice of each shipped Wingman per spoken language (see
+# services/wingman_default_voices.py). wingman<TAB>language<TAB>voice.
+# The templates name no Edge voice, so there is no "legacy" row: a Wingman
+# without one of its own follows the language. "*" is every language without
+# a row of its own: a multilingual voice. Chosen by ear on 2026-10-19.
+Computer	en	en-US-JennyNeural
+Computer	de	de-DE-AmalaNeural
+Computer	*	en-US-AvaMultilingualNeural
+ATC	en	en-CA-LiamNeural
+ATC	de	de-DE-FlorianMultilingualNeural
+ATC	*	de-DE-FlorianMultilingualNeural
