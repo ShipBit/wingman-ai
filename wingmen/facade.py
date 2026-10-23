@@ -1076,7 +1076,9 @@ class SkillTts:
         (services/speech_priority): EVENT for a reaction to something that
         happened (waits for the user and for answers, then speaks),
         BACKGROUND for atmosphere like radio chatter (never talks over
-        anything; returns False when it could not be said)."""
+        anything and never waits; returns False when it could not be said,
+        also when something else plays, a BACKGROUND line included). A
+        priority overrides ``interrupt``."""
         from api.enums import SpeechPriority
 
         return await self._wingman.play_to_user(

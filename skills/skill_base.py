@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import re
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -113,6 +114,55 @@ def _python_type_to_json_schema(py_type: Any) -> dict:
     return {"type": "string"}
 
 
+_ARGS_HEADERS = ("Args", "Arguments", "Parameters")
+_SECTION_HEADER = re.compile(
+    r"(Args|Arguments|Parameters|Returns?|Raises|Yields?|Examples?|Notes?):"
+)
+_ARG_LINE = re.compile(r"\*{0,2}(\w+)\s*(?:\([^)]*\))?\s*:\s*(.*)")
+
+
+def _parse_docstring(doc: Optional[str]) -> tuple[str, dict[str, str]]:
+    """Split a Google-style docstring into its summary and the `Args:` descriptions.
+
+    A parameter's description may go on over more lines, indented deeper than
+    the parameter name. Every other section (Returns, Raises, ...) is dropped.
+    """
+    if not doc:
+        return "", {}
+    summary: list[str] = []
+    params: dict[str, list[str]] = {}
+    section = None
+    param_indent = None
+    current = None
+    for line in inspect.cleandoc(doc).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        header = _SECTION_HEADER.fullmatch(stripped)
+        if header:
+            section = header.group(1)
+            param_indent = None
+            current = None
+            continue
+        if section is None:
+            summary.append(stripped)
+            continue
+        if section not in _ARGS_HEADERS:
+            continue
+        indent = len(line) - len(line.lstrip())
+        if param_indent is None:
+            param_indent = indent
+        match = _ARG_LINE.fullmatch(stripped)
+        if indent <= param_indent and match:
+            current = match.group(1)
+            params[current] = [match.group(2)] if match.group(2) else []
+        elif current:
+            params[current].append(stripped)
+    return " ".join(summary), {
+        name: " ".join(parts) for name, parts in params.items() if parts
+    }
+
+
 def _generate_tool_schema(
     func: Callable,
     name: Optional[str] = None,
@@ -133,11 +183,11 @@ def _generate_tool_schema(
         Tuple of (tool_name, tool_definition_dict)
     """
     tool_name = name or func.__name__
-    tool_description = description or func.__doc__ or f"Execute {tool_name}"
+    doc_summary, param_descriptions = _parse_docstring(func.__doc__)
+    tool_description = description or doc_summary or f"Execute {tool_name}"
 
-    # Clean up multiline docstrings
-    if tool_description:
-        tool_description = " ".join(tool_description.split())
+    # Clean up multiline descriptions
+    tool_description = " ".join(tool_description.split())
 
     # Get function signature and type hints
     sig = inspect.signature(func)
@@ -159,9 +209,9 @@ def _generate_tool_schema(
         param_type = hints.get(param_name, str)
         param_schema = _python_type_to_json_schema(param_type)
 
-        # Add description from default if it's annotated (future enhancement)
-        # For now, use parameter name as hint
-        param_schema["description"] = f"The {param_name.replace('_', ' ')}"
+        param_schema["description"] = param_descriptions.get(
+            param_name, f"The {param_name.replace('_', ' ')}"
+        )
 
         properties[param_name] = param_schema
 
