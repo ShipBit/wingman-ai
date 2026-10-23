@@ -139,6 +139,7 @@ class CommodityRoute(Tool):
 
         # Start/destination limit where a route begins/ends, not every hop of it, so they go
         # to the planner instead of filtering the legs
+        places: dict[str, tuple[str, list]] = {}
         for location, terminal_ids, kind in (
             (filter_start_location, start_terminal_ids, "start"),
             (filter_destination_location, end_terminals_ids, "destination"),
@@ -149,7 +150,8 @@ class CommodityRoute(Tool):
             terminal_data_access.add_filter_by_location_name_whitelist(location)
             terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
             terminal_data_access.add_filter_by_is_available(True)
-            for terminal in terminal_data_access.load():
+            places[kind] = (location, terminal_data_access.load())
+            for terminal in places[kind][1]:
                 terminal_ids.append(terminal.get_id())
             if not terminal_ids:
                 helper.get_handler_tool().add_note(
@@ -157,6 +159,7 @@ class CommodityRoute(Tool):
                 )
                 return compression.dumps([]), ""
 
+        auto_load_terminal_ids = None
         if filter_require_auto_load:
             # Route rows have no is_auto_load; constrain both ends via terminal ids.
             auto_load_terminal_ids = []
@@ -175,6 +178,18 @@ class CommodityRoute(Tool):
 
             commodity_route_data_access.add_filter_by_id_terminal_origin(auto_load_terminal_ids)
             commodity_route_data_access.add_filter_by_id_terminal_destination(auto_load_terminal_ids)
+
+        conflicts = self.__filter_conflicts(
+            places, filter_star_system_whitelist, filter_star_system_blacklist, set(terminal_ids_exclude),
+            auto_load_terminal_ids, filter_commodity_whitelist, filter_commodity_blacklist, max_system_jumps,
+        )
+        if conflicts:
+            # A search can't find anything: say why instead of "no route"
+            helper.get_handler_tool().add_note(
+                "No search: the filters contradict each other. " + " ".join(conflicts)
+                + " Tell the user why and ask which filter to change or leave out."
+            )
+            return compression.dumps([]), ""
 
         if terminal_ids_exclude:
             commodity_route_data_access.add_filter_by_id_terminal_origin(terminal_ids_exclude, operation="NOT IN")
@@ -339,6 +354,56 @@ class CommodityRoute(Tool):
 
         return hop_info
 
+    def __filter_conflicts(
+        self,
+        places: dict[str, tuple[str, list]],
+        system_whitelist: list[str] | None,
+        system_blacklist: list[str] | None,
+        excluded_terminal_ids: set[int],
+        auto_load_terminal_ids: list[int] | None,
+        commodity_whitelist: list[str] | None,
+        commodity_blacklist: list[str] | None,
+        max_system_jumps: int | None,
+    ) -> list[str]:
+        """Filters that rule each other out, each as a sentence saying why (e.g. a start in Nyx with
+        only Stanton allowed)."""
+        conflicts = []
+        both = sorted({c.lower() for c in commodity_whitelist or []} & {c.lower() for c in commodity_blacklist or []})
+        if both:
+            conflicts.append(f"{', '.join(both)}: both the only commodities to trade and excluded.")
+        allowed = {name.lower() for name in system_whitelist or []}
+        banned = {name.lower() for name in system_blacklist or []}
+        if allowed & banned:
+            conflicts.append(f"{', '.join(sorted(allowed & banned))}: both the only star systems and excluded.")
+        systems: dict[str, set[str]] = {}
+        for kind, (location, terminals) in places.items():
+            names = {t.get_star_system_name() for t in terminals if t.get_star_system_name()}
+            systems[kind] = names
+            listed = " and ".join(sorted(names))
+            if allowed and names and not {n.lower() for n in names} & allowed:
+                conflicts.append(f"The {kind} {location} is in {listed}, but the search is limited to {', '.join(system_whitelist)}.")
+            if banned and names and {n.lower() for n in names} <= banned:
+                conflicts.append(f"The {kind} {location} is in {listed}, an excluded star system.")
+            ids = {t.get_id() for t in terminals}
+            if excluded_terminal_ids and ids <= excluded_terminal_ids:
+                conflicts.append(f"The {kind} {location} is an excluded location too.")
+            if auto_load_terminal_ids is not None and not ids & set(auto_load_terminal_ids):
+                conflicts.append(f"No terminal at the {kind} {location} has auto loading.")
+        start, end = systems.get("start"), systems.get("destination")
+        if max_system_jumps is not None and start and end:
+            jumps = self.__system_jumps() if max_system_jumps else {}
+            pairs = [0 if a == b else jumps.get((a, b)) for a in start for b in end]
+            known = [p for p in pairs if p is not None]
+            fewest = (0 if 0 in pairs else 1) if not max_system_jumps else (min(known) if known else None)
+            if fewest is not None and fewest > max_system_jumps:
+                where = (f"The start {places['start'][0]} ({' and '.join(sorted(start))}) and the destination "
+                         f"{places['destination'][0]} ({' and '.join(sorted(end))})")
+                conflicts.append(
+                    f"{where} are in different star systems, but no system jumps are allowed." if not max_system_jumps
+                    else f"{where} are {fewest} system jumps apart, but at most {max_system_jumps} are allowed."
+                )
+        return conflicts
+
     @staticmethod
     def __system_jumps() -> dict[tuple[str, str], int]:
         """Fewest jumps between every pair of connected star systems. UEX lists each gateway as a
@@ -486,6 +551,9 @@ class CommodityRoute(Tool):
                     })
                     entry["scu"] += trade.scu
                     entry["total_aUEC"] = round(entry["scu"] * trade.leg.price_sell)
+                    if trade.leg.demand is None:
+                        # Planned as if it took any amount
+                        entry["demand_unknown"] = True
                 stop["sell"] = list(sold.values())
             if buys:
                 stop["buy"] = []
@@ -498,6 +566,8 @@ class CommodityRoute(Tool):
                         "sell_at": terminals.get(trade.leg.destination, {}).get("terminal") if trade.sell_stop != index + 1 else None,
                         "warnings": commodity_info(trade.leg.id_commodity)[0],
                     }
+                    if trade.leg.demand is None:
+                        buy["demand_unknown"] = True
                     container_note = self.__container_note(
                         (leg_container_sizes or {}).get((trade.leg.id_commodity, trade.leg.origin, trade.leg.destination)),
                         ship_container_sizes or set(),

@@ -78,7 +78,7 @@ def test_a_ship_with_a_hangar_is_not_an_auto_load_filter(helper, market):
 
 def test_auto_load_and_the_start_location_must_both_hold(helper, market):
     assert search(helper, filter_start_location="Manual Outpost", filter_require_auto_load=True) == []
-    assert any("No route found. Filters set: auto loading only, start." in note for note in helper.notes), helper.notes
+    assert any("No terminal at the start Manual Outpost has auto loading." in note for note in helper.notes), helper.notes
 
     assert route_pairs(search(helper, filter_start_location="Auto City", filter_require_auto_load=True)) == {AUTO_CITY_TO_STATION}
 

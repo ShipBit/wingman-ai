@@ -3,8 +3,8 @@ import datetime
 import threading
 import time
 from typing import TYPE_CHECKING
-from os import path
-from services.file import get_writable_dir
+from os import makedirs, path
+from services.file import get_users_dir, get_writable_dir
 from services.printr import Printr
 
 from skills.uexcorp.uexcorp.handler.config_handler import ConfigHandler
@@ -47,6 +47,9 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
+        # Not versioned: a trade run outlasts a Core update
+        self.__state_path: str = path.join(get_users_dir(), "uexcorp")
+        makedirs(self.__state_path, exist_ok=True)
         self.__version_skill: str = 'v3.0.0-20261018'
         self.__version_uex: str | None = None
         self.__debug: bool = True
@@ -205,6 +208,9 @@ class Helper:
     def get_data_path(self) -> str:
         return self.__data_path
 
+    def get_state_path(self) -> str:
+        return self.__state_path
+
     def get_database(self) -> Database:
         return self.__database
 
@@ -260,7 +266,18 @@ class Helper:
             context += "\n\n" + self.get_handler_tool().get_tool_help_prompt()
         if self.__additional_context:
             context += "\n\n" + "\n".join(self.__additional_context)
+        context += self.__trade_run_context()
         return context
+
+    def __trade_run_context(self) -> str:
+        """After a restart the conversation no longer knows the run the player is flying."""
+        from skills.uexcorp.uexcorp.active_trade_route import ActiveTradeRoute as TradeRun
+        from skills.uexcorp.uexcorp.tool.active_trade_route import ActiveTradeRoute as Tool
+
+        if not self.get_handler_config().is_tool_enabled(Tool.TOOL_NAME):
+            return ""
+        note = TradeRun(self).prompt_note(Tool.TOOL_NAME)
+        return "\n\n" + note if note else ""
 
     def run_in_thread(self, function, *args) -> threading.Thread:
         if not self.__threaded_execution:

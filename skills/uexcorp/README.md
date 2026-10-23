@@ -53,7 +53,7 @@ first start. When the relay can't be reached:
 | Tool | What it does |
 | --- | --- |
 | `uex_get_trade_routes` | The best routes for a ship, budget, start, destination, number of stops (1-5, at most), star system jumps (`0` = one system only), round trips and more. Respects container sizes, loading docks, stock and demand. |
-| `uex_active_trade_route` | The route being flown: `set` (pick a route by its number), `get`, `next`, `record_buy` / `record_sell` (what you really bought or sold), `clear`, `show_hud` / `hide_hud`. |
+| `uex_active_trade_route` | The route being flown: `set` (pick a route by its number), `get`, `next`, `record_buy` / `record_sell` (what you really bought or sold, several at one stop add up), `undo_buy` / `undo_sell` (take back one recorded by mistake), `add_buy` / `add_sell` (a purchase or sale the plan doesn't have: another place, or a later stop of the route), `clear`, `show_hud` / `hide_hud`. |
 | `uex_get_commodity_information` | Prices, best buy and sell terminals for a commodity. |
 | `uex_get_location_or_terminal_information` | Star systems, planets, stations, terminals and what they offer. |
 | `uex_get_vehicle_information` | Ship and vehicle data, where to buy or rent. |
@@ -89,10 +89,13 @@ Configs saved before *Default trade route stops* and *Trade route ranking* exist
 
 ## Files
 
-Everything lives in `%APPDATA%\ShipBit\WingmanAI\<version>\skills\uexcorp\data\`:
+`active_trade_route.json` (the route being flown, the last search and the remembered ship) lives in
+`%APPDATA%\ShipBit\WingmanAI\uexcorp\`, outside the version folders: a run survives restarts and
+updates, and while one is active the skill prompt names its current stop.
+
+Everything else lives in `%APPDATA%\ShipBit\WingmanAI\<version>\skills\uexcorp\data\`:
 
 - `*_uexcorp.db`: the UEX data.
-- `active_trade_route.json`: the route being flown, the last search and the remembered ship.
 - `config\commodity_blacklist.yaml`, `config\terminal_blacklist.yaml`: commodities and terminals
   routes never use.
 - `debug.log` (and `debug.log.1`, the previous 5 MB): the skill's log, tool calls and responses.

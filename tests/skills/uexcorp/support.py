@@ -110,6 +110,9 @@ class FakeHelper:
     def get_data_path(self) -> str:
         return self._data_path
 
+    def get_state_path(self) -> str:
+        return self._data_path
+
     def get_handler_config(self):
         return self._config
 
