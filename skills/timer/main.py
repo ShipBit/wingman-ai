@@ -182,10 +182,18 @@ class Timer(Skill):
         if not is_known:
             return f"Error: Function '{function_name}' does not exist."
 
-        try:
-            function_arguments = json.loads(function_arguments_json)
-        except json.JSONDecodeError:
-            return "Error: Invalid JSON in function_arguments_json."
+        # Models often send the arguments as an object instead of a JSON string
+        if isinstance(function_arguments_json, dict):
+            function_arguments = function_arguments_json
+        elif not function_arguments_json:
+            function_arguments = {}
+        else:
+            try:
+                function_arguments = json.loads(function_arguments_json)
+            except (json.JSONDecodeError, TypeError):
+                return "Error: Invalid JSON in function_arguments_json."
+        if not isinstance(function_arguments, dict):
+            return "Error: function_arguments_json must be a JSON object."
 
         # set timer
         timer = ActualTimer(
