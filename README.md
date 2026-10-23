@@ -1,195 +1,217 @@
 # Wingman AI Core
 
-Official website: [https://www.wingman-ai.com](https://www.wingman-ai.com)
+**Your AI crew for Star Citizen and every other game.** Talk to your Wingmen in plain words. They press the keys, look things up for you and react on their own to what happens in the game.
 
-[![Wingman AI Showreel](https://img.youtube.com/vi/qR8FjmQJRGE/0.jpg)](https://youtu.be/qR8FjmQJRGE 'Wingman AI Showreel')
+Website and download: [wingman-ai.com](https://www.wingman-ai.com) · Community: [Discord](https://www.shipbit.de/discord)
 
-Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer. AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
+[![Never Fly Solo Again: Wingman AI 3 for Star Citizen](assets/wingman-video.webp)](https://youtu.be/Hcgmras9YFE 'Never Fly Solo Again: Wingman AI 3 for Star Citizen')
 
-![Wingman Flow](assets/wingman-flow.png)
+Wingman AI runs next to your game. You talk, an AI model of your choice understands what you mean, and your Wingman answers in its own voice and presses the keys you would press yourself. Each Wingman is a character with a backstory, a voice, commands and skills. You can set all of it up in the client without being a developer, and developers can extend everything in Python.
 
-The idea is simple, but the possibilities are endless. For example, you could:
+This repository is **Wingman AI Core**, the open source backend. It records your voice, talks to the AI providers, runs commands, skills and MCP servers, and exposes all of it through a REST and WebSocket API. Our [client](https://www.wingman-ai.com) for Windows, macOS and Linux is the app on top of it.
 
-- **Role play** with an AI while playing for more immersion. Have air traffic control (ATC) in _Star Citizen_ or _Flight Simulator_. Talk to Shadowheart in Baldur's Gate 3 and have her respond in her own (cloned) voice.
-- Get live data such as trade information, build guides, or wiki content and have it read to you in-game by a _character_ and voice you control.
-- Execute keystrokes in games/applications and create complex macros. Trigger them in natural conversations with **no need for exact phrases.** The AI understands the context of your dialog and is quite _smart_ in recognizing your intent. Say _"It's raining! I can't see a thing!"_ and have it trigger a command you simply named _WipeVisors_.
-- Automate tasks on your computer
-- improve accessibility
-- ... and much more
+Things you can say:
+
+- _"Power up my ship!"_ and your Wingman runs the macro that does it.
+- _"It's raining, I can't see anything."_ and it calls the command you named `TurnFlashlightOn`. No exact phrases to learn.
+- _"Where do I get the best price for Laranite?"_ and it looks it up live.
+- _"What did we do in our last session?"_ and it remembers.
+- _"Talk like a grumpy pirate from now on."_
+- _"What do you see on my screen right now?"_
+- _"Set a timer for ten minutes."_
+
+<p align="center">
+<img src="assets/wingman-client-chat.webp" width="32%" alt="Chat with a Wingman"> <img src="assets/wingman-client-commands.webp" width="32%" alt="Commands"> <img src="assets/wingman-client-settings.webp" width="32%" alt="Settings">
+</p>
+
+## Contents
+
+- [Features](#features)
+- [Star Citizen](#star-citizen)
+- [Providers & cost](#providers--cost)
+- [Installing Wingman AI](#installing-wingman-ai)
+- [Who are these Wingmen?](#who-are-these-wingmen)
+- [Can I configure Wingman AI Core without using your client?](#can-i-configure-wingman-ai-core-without-using-your-client)
+- [Does it support my language?](#does-it-support-my-language)
+- [Develop with Wingman AI](#develop-with-wingman-ai)
+- [Contributing](#contributing)
+- [Acknowledgements](#acknowledgements)
 
 ## Features
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px; gap: 8px;">
-<img src="assets/wingman-ui-1.png"></img> <img src="assets/wingman-ui-2.png"></img> <img src="assets/wingman-ui-3.png"></img> <img src="assets/wingman-ui-4.png"></img>
-</div>
+### Talk to it
 
-Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the following features:
+- **Push-to-talk or voice activation.** Voice activation uses Silero VAD to tell speech from noise.
+- **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice. For any other language, choose "Other" and name it.
+- **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT).
+- **Voice effects** like radio, AI or the sound of a small or large room, and **audio markups** ("emotions") such as a laugh or a sigh with voices that support them. Both work with every TTS provider.
 
-- **Push-to-talk or voice activation** to capture user audio
-- **AI providers** with different models:
-  - OpenAI
-  - Google (Gemini)
-  - Groq
-  - Mistral Cloud
-  - OpenRouter
-  - Cerebras
-  - Perplexity
-  - X.AI (Grok)
-  - Local LLM (any OpenAI-compatible API)
-  - Wingman Subscription (optional, Free, Pro or Ultra): chat models, speech recognition, Azure and Inworld speech and image generation through one account, no API keys. The plans differ in monthly usage (1x, 10x, 30x), in the voices they include and in Voice Activation.
-- **Speech-to-text providers** (STT) for transcription:
-  - Parakeet (local, default - bundled with CUDA for GPU acceleration)
-  - Parakeet on a remote server
-  - Wingman Subscription (cloud)
-- **Text-to-speech** (TTS) providers:
-  - PocketTTS (local, free - runs on the CPU, with extra voices cloned from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
-  - OpenAI-compatible (e.g. PocketTTS remote server, XVASynth)
-  - OpenAI TTS
-  - Edge TTS (free)
-  - Elevenlabs
-  - Hume
-  - Inworld (own key, or through the Wingman Subscription on Pro and Ultra)
-  - Azure TTS (through the Wingman Subscription, every plan)
-- **Sound effects** that work with every supported TTS provider
-- **Audio markups (aka "emotions")** that work with every supported TTS provider
-- **Speaks your language**: English, German, French, Spanish, Italian, Portuguese or Dutch, picked once for speech recognition, answers and voice
-- **Says it right**: abbreviations, units and numbers are spoken as words in your language, plus your own pronunciation rules and per-game lists (e.g. Star Citizen's aUEC or QT)
-- **HUD overlay** (Windows, macOS, Linux): messages, an info panel, progress bars and timers on top of your game, shared by your Wingmen, laid out per game with HUD profiles you place by dragging them on screen ([docs/hud.md](docs/hud.md))
-- **Command recording & execution** (keyboard & mouse)
-  - **AI-powered**: The LLM decides when to execute commands based on user input. Users don't need to say exact phrases.
-  - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
-  - Optional: Predetermined responses
-- **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
-- **Persistent memory**: Wingmen remember facts about you across sessions, and you can ask them to forget them again
-- **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, or locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server
-- **Star Citizen game log**: Wingman reads the game's log file and can react to missions, zones, injuries and trades
-- **Built-in Skills** - Internal Python modules that extend Wingman capabilities:
-  - **File Manager**: Read, write, list, and search files
-  - **Vision AI**: Screenshot analysis and visual understanding
-  - **Spotify**: Music playback control and search
-  - **Typing Assistant**: Types text into any application
-  - **Audio Device Changer**: Switch input/output devices
-  - **API Request**: Make HTTP requests to external services
-  - **Image Generation**: Creates images in 13 style presets, in square, portrait or landscape, and can build on an earlier image or one you attach ("the same character, but ...")
-  - **Timer**: Set timers and alarms
-  - **Quick Commands**: Fast command execution shortcuts
-  - **Radio Chatter**: Atmospheric radio effects
-  - **Thinking Sound**: Audio feedback during processing
-  - **Auto Screenshot**: Automated screen capture
-  - **Control Windows**: Window management operations
-  - **MSFS2020 Control**: Microsoft Flight Simulator 2020 integration
-  - **ATS Telemetry**: American Truck Simulator data integration
-  - **UEX Corp**: Star Citizen trading data (UEX Corp API)
-  - **Star Citizen Events**: Your Wingman reacts in character to what happens in Star Citizen (from the game log)
-  - **Star Citizen Accountant**: Tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
-  - **Voice Changer**: Changes the voice of your Wingman automatically
-  - **Microphone Status**: Shows the live mic state on the HUD
-- **MCP (Model Context Protocol) Client** - Connect external MCP servers for extended functionality:
-  - Wingman AI is a full MCP client supporting remote and local MCP servers
-  - Supports HTTP, STDIO, and SSE transports
-  - **Every subscription plan** gets access to our hosted MCP servers:
-    - **Web Search & Content Extraction**: Brave and Tavily search (no API key needed - proxied for subscribers)
-    - **Date & Time Utilities**: Time zone conversions and date calculations
-    - **Perplexity AI Search**: AI-powered search (BYOK - bring your own API key)
-    - **No Man's Sky Game Data**: Game information and wiki data
-    - **StarHead**: Star Citizen Game Data like ships, locations, and game mechanics
-    - **VerseTime**: Star Citizen time
-    - **Elite Dangerous**: Systems, stations and trade data
-    - **Galactapedia**: Star Citizen lore from RSI's Galactapedia
-    - **ElevenLabs** (OAuth, you authorize with your own ElevenLabs account): images, video, speech, transcription and voices ([docs/mcp-oauth.md](docs/mcp-oauth.md))
-  - Developers can connect their own custom MCP servers (local or remote)
-  - **Key difference**: Skills are built-in Python modules, MCP servers are external tools that can be developed in any language
-- **Directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
-- Wingman AI Core exposes a lot of its functionality via **REST services** (with an OpenAPI/Swagger spec) and can send and receive messages from clients, games etc. using **WebSockets**.
-- Sound Library to play mp3 or wav files in commands or Skills (similar to HCS Voice Packs for Voice Attack)
-- AI instant sound effects generation with Elevenlabs
+### Wingmen with a character
 
-We (Team ShipBit) offer an additional [client with a neat GUI](https://www.wingman-ai.com) that you can use to configure everything in Wingman AI Core.
+- **Backstory, voice and AI model per Wingman.** Describe its role in plain words, or tweak every part of the prompt.
+- **Persistent memory**: Wingmen remember facts about you across sessions, and keep track of missions and plans until they are done. You can see and change what they remember, and ask them to forget.
+- **Avatar studio**: the client paints an avatar from the backstory in a style of your choice.
+- **Filler lines**: while a tool runs, your Wingman says a short line in character instead of going silent.
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px; gap: 8px;">
-<img src="assets/wingman-ui-5.png"></img> <img src="assets/wingman-ui-6.png"></img> <img src="assets/wingman-ui-7.png"></img> <img src="assets/wingman-ui-8.png"></img>
-</div>
+### Commands
 
-## Is this a "Star Citizen" thing?
+- **Smart commands**: the AI picks the right command from what you said. Users don't need to say exact phrases.
+- **Instant activation**: exact phrases fire a command right away, without an AI round-trip. The Quick Commands skill learns these phrases for the commands you use often.
+- **Keyboard, mouse and joystick**: record single keys, macros and mouse movement by pressing the buttons.
+- A command can also play a sound file from the Sound Library or answer with a line you wrote.
 
-**No, it is not!** We presented an early prototype of Wingman AI in _Star Citizen_ on YouTube, which caused a lot of excitement and interest in the community. Star Citizen is a great game, we love it and it has a lot of interesting use-cases for Wingmen but it's not the only game we play and not the core of our interest. We're also not affiliated with CIG or _Star Citizen_ in any way.
+### HUD overlay
 
-The video that started it all:
+A transparent overlay on top of your game, on Windows, macOS and Linux. It is part of Core, no skill or MCP server needed. Your Wingmen show their replies there, pin info panels like your current trade run, and add progress bars and timers. HUD profiles lay it out per game, and you place them by dragging them on screen. Details in [docs/hud.md](docs/hud.md). Community member JayMatthew created it.
+
+### Star Citizen log reader
+
+Star Citizen writes a log file while you play. The log reader is part of Core: it follows that file and passes on missions, armistice zones, CrimeStat, injuries, your hangar and trades, so your Wingman knows what happens without you saying a word. It only reads the log file: no mods, nothing in the game's memory. Community member Mallachi created it, together with the Star Citizen Events and Accountant skills.
+
+<p align="center">
+<img src="assets/wingman-hud-overlay.webp" width="49%" alt="HUD overlay in Star Citizen"> <img src="assets/wingman-log-reader.webp" width="49%" alt="Log reader in Star Citizen">
+</p>
+
+### Skills
+
+Skills are Python modules that give a Wingman new abilities. Grant one to a Wingman and it decides when to use it. Built-in skills:
+
+- **General**
+  - **API Request**: sends HTTP requests to any API
+  - **Audio Device Changer**: routes a Wingman's voice to its own audio device
+  - **Auto Screenshot**: takes screenshots on command or when you get excited
+  - **Control Windows**: launches, switches, arranges and closes apps, and uses the clipboard
+  - **File Manager**: reads, writes and searches files, handles ZIP files and reads text aloud
+  - **Image Generation**: creates images in 13 styles, in square, portrait or landscape, and changes an earlier image or one you attach ("the same character, but ...")
+  - **Microphone Status**: shows the live mic state on the HUD
+  - **Quick Commands**: learns instant activation phrases for the commands you use often
+  - **Radio Chatter**: plays random radio chatter with voices you pick
+  - **Spotify**: plays songs, artists and playlists and controls playback
+  - **Thinking Sound**: plays a sound while the AI thinks
+  - **Timer**: delays reminders, commands and other actions
+  - **Typing Assistant**: types text into any app
+  - **Vision AI**: looks at your screen, reads text and describes what it sees
+  - **Voice Changer**: changes the voice of your Wingman automatically
+- **Star Citizen**
+  - **Star Citizen Events**: your Wingman reacts in character to what the log reader sees, and knows where you are and which missions you have
+  - **Star Citizen Accountant**: books trades and rewards from the game log and tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
+  - **UEX Corp**: trade routes, commodity prices, locations, ships and items from UEX community data
+- **Other games** (Windows only)
+  - **MSFS2020 Control**: controls Microsoft Flight Simulator 2020/2024 and reads its data via SimConnect
+  - **ATS Telemetry**: live data from American Truck Simulator and Euro Truck Simulator 2, with a dispatch mode that comments on what happens
+
+You can write your own skill, or let an AI coding agent like Claude Code, Codex or Cursor write it for you: see [Creating Custom Skills](#creating-custom-skills).
+
+### MCP servers
+
+Wingman AI is a full MCP (Model Context Protocol) client for local and remote servers, over HTTP, STDIO and SSE. Connect a Wingman to any MCP server by its URL, or build your own in any programming language. Skills are Python modules inside Core, MCP servers are separate programs.
+
+Every subscription plan, Free included, gets our hosted servers:
+
+- **Web Search**: Brave and Tavily search and page extraction, no API key needed
+- **Date & Time**: time zones and date calculations
+- **StarHead**: Star Citizen ships, components, locations and trade routes
+- **VerseTime**: local time, sunrise and sunset at Star Citizen locations
+- **Galactapedia**: Star Citizen lore from RSI's Galactapedia
+- **Elite Dangerous**: systems, stations, services, commodity prices and engineering
+- **No Man's Sky**: items, refiner and cooking recipes, expeditions
+- **Perplexity**: AI search with citations, with your own API key
+- **ElevenLabs**: images, video, speech, transcription and voices, signed in with your own ElevenLabs account ([docs/mcp-oauth.md](docs/mcp-oauth.md))
+
+### AI providers
+
+Speech-to-text, the AI model and text-to-speech are three separate steps. Take the Wingman Subscription for all of them, pick a provider for each, or run all three on your own computer.
+
+- **AI models**: OpenAI, Google (Gemini), Mistral, Groq, OpenRouter, Cerebras, Perplexity, xAI (Grok), any OpenAI-compatible local LLM (llama.cpp, Ollama, LM Studio), and the Wingman Subscription
+- **Speech-to-text**: Parakeet (local, the default, on the GPU with NVIDIA CUDA), Parakeet on your own server, and the Wingman Subscription
+- **Text-to-speech**:
+  - Pocket TTS (local and free, runs on the CPU, clones a voice from a few seconds of audio, with ready-made voices from native speakers: 49 German, 21 English, 20 French, 15 Spanish, 20 Italian, 20 Portuguese and 20 Dutch)
+  - Edge TTS (free), OpenAI, ElevenLabs, Hume, Inworld
+  - Azure and Inworld through the Wingman Subscription
+  - any OpenAI-compatible server, e.g. a remote Pocket TTS or XVASynth
+- **Image generation**: OpenAI and the Wingman Subscription
+- **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server.
+
+### For developers
+
+- **REST API** with an OpenAPI spec at `http://127.0.0.1:49111/docs`, and **WebSockets** to send and receive messages from clients, games or devices
+- **File-based configuration**: one folder per game or use case, one YAML file per Wingman. No database needed.
+- **Custom Wingmen and skills** in Python, with a [guide written for AI coding agents](skills/AGENTS.md)
+
+## Star Citizen
+
+Wingman AI is deeply rooted in the _Star Citizen_ community, and most of our members play it. On the first start the client asks whether you play it. Yes switches on everything below for the Computer and ATC Wingmen:
+
+- the [HUD overlay](#hud-overlay) and the [log reader](#star-citizen-log-reader)
+- the Star Citizen Events and Star Citizen Accountant skills
+- live data from UEX Corp and StarHead, local times from VerseTime and lore from Galactapedia
+- Star Citizen pronunciation and transcription lists, so terms like aUEC or QT come out right
+
+You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
+
+### Is it just for Star Citizen?
+
+**No.** Wingman AI is a universal tool that runs alongside any game or program, as your copilot or as a character to roleplay with. Have air traffic control in _Microsoft Flight Simulator_, or talk to Shadowheart in _Baldur's Gate 3_ in her own cloned voice.
+
+It does not hook into games. It presses system-wide keys, which of course reach the game, and in _Star Citizen_ it reads the log file the game writes anyway. It never reads or changes a game's memory. We're not affiliated with CIG or _Star Citizen_ in any way.
+
+The video that started it all, our first prototype from 2023:
 
 [![Early prototype on Wingman in Star Citizen](https://img.youtube.com/vi/hHy7OZQX_nQ/0.jpg)](https://www.youtube.com/watch?v=hHy7OZQX_nQ)
 
-Wingman AI is an external, universal tool that you can run alongside any game or program. It does not interact directly with _Star Citizen_ or any other game, other than its ability to trigger system-wide keystrokes, which of course can have an effect on the game. For _Star Citizen_, Wingman can also read the game's log file, so your Wingman knows about missions, zones and trades.
-However, if you find a way to interact with a game, either through an API or by reading the game's memory, you could - in theory - use it to directly trigger in-game actions or feed your models with live data. This is **not** the focus of Wingman AI, though.
-
-## Who is this for?
-
-The project is intended for two different groups of users:
-
-### Developers
-
-If you're a developer, you can just clone the repository and start building your own Wingmen. We try to keep the codebase as open and hackable as possible, with lots of hooks and extension points. The base classes you'll need are well documented, and we're happy to help you get started. We also provide a [development guide](#develop-with-wingman-ai) to help you with the setup. Wingman AI Core is currently 100% written in Python.
-
-### Gamers & other interested people
-
-If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. We offer an [easy-to-use client](https://www.wingman-ai.com) for Windows, macOS and Linux that you can use to configure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
-
 ## Providers & cost
 
-Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we offer the Wingman Subscription: one account for chat models, speech recognition, speech output and image generation, with a monthly usage allowance instead of pay-per-use bills. Free gives you a taste, Pro has 10x the usage of Free, Ultra 30x. Pro and Ultra add Voice Activation and more voices; Ultra includes every voice. Invite a friend and you both get a Usage Reset when they subscribe.
+Wingman AI Core is open source and free, and so is the client. The AI providers you use might not be. That's why we offer the **Wingman Subscription**: one account for chat models, speech recognition, voices and image generation, with a monthly usage allowance instead of pay-per-use bills and no API keys.
 
-Check out the pricing and features here: [Wingman Subscription](https://www.wingman-ai.com)
+- **Free** has almost every feature: as many Wingmen as you want, commands, skills, MCP servers, the HUD, the avatar studio and voices in every language, with a budget that refills every month. Only Voice Activation needs Pro or Ultra.
+- **Pro** gives you 10x the usage of Free, **Ultra** 30x. Both add Voice Activation and more voices, and Ultra includes every voice.
+- **Tell a friend**: share your invite link, and when a friend subscribes, you both get a Usage Reset.
 
-Wingman AI also ships free local providers: Parakeet for speech recognition and PocketTTS for speech output run on your own machine. You can also connect your own local LLM (see below).
+Compare the plans on [wingman-ai.com](https://www.wingman-ai.com).
 
-### Other providers
+You don't need the subscription to use Wingman AI: Parakeet, a local LLM and Pocket TTS run all three steps on your own computer, and you can bring your own API keys for the providers below.
 
-You can also use your own API key to use the following services:
+### OpenAI
 
-#### OpenAI
+OpenAI charges by usage: you pay for each call to their APIs instead of a flat fee. See their [pricing](https://platform.openai.com/docs/pricing). To create an API key:
 
-OpenAI charges by usage. That means: You don't pay a flat subscription fee, but rather for each call you make to their APIs. You can find more information about their [pricing](https://platform.openai.com/docs/pricing) on the OpenAI website. You will need to create your API key:
-
-- Navigate to [platform.openai.com](https://platform.openai.com/) and sign up or log in. You don't need ChatGPT Plus to use Wingman AI.
+- Sign up or log in at [platform.openai.com](https://platform.openai.com/). You don't need ChatGPT Plus to use Wingman AI.
 - Go to "Billing" and add a payment method. We recommend setting a low usage limit to avoid unexpected costs.
-- Go to [API keys](https://platform.openai.com/api-keys) and create one. Copy it! If you forget it, you can always create a new one.
+- Go to [API keys](https://platform.openai.com/api-keys) and create one. Copy it! If you lose it, you can always create a new one.
 
-#### ElevenLabs
+### ElevenLabs
 
-You don't have to use Elevenlabs as TTS provider, but their voices are great and you can generate instant sound effects with their API - fully integrated into Wingman AI. You can clone any voice with 3 minutes of clean audio, e.g. your friend, an actor or a recording of an NPC in your game.
+ElevenLabs has great voices, and Wingman AI can generate instant sound effects with their API. You can clone any voice with 3 minutes of clean audio, e.g. your friend, an actor or a recording of an NPC in your game.
 
-If you're interested in the service, please consider using our [referral link here](https://try.elevenlabs.io/8hh1fha2h14r). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
+If you're interested in the service, please consider using our [referral link](https://try.elevenlabs.io/8hh1fha2h14r). It costs you nothing extra and supports Wingman AI. We get 22% of all payments in your first year. Thank you!
 
-Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key. Enter that API key in Wingman AI when asked.
+Create your account, set up your payment method and create an API key. Enter that API key in Wingman AI when asked.
 
-#### Inworld
+### Inworld
 
-Inworld is a powerful and affordable alternative to ElevenLabs that's **included in the Wingman Subscription**: Pro gets two Inworld voices per language, Ultra gets all of them. It offers high-quality text-to-speech with advanced features like **audio markups for emotions** (anger, joy, sadness, etc.), allowing your Wingmen to speak with dynamic emotional expression.
+Inworld has high-quality voices with **audio markups for emotions** (anger, joy, sadness and more). It is **included in the Wingman Subscription**: Pro gets two Inworld voices per language, Ultra gets all of them. With your own API key from [Inworld AI](https://www.inworld.ai/) you can also **clone voices**, at a much lower price than ElevenLabs.
 
-Inworld also supports **voice cloning** when you bring your own API key (BYOK). With significantly lower pricing than ElevenLabs, Inworld is an excellent choice for users who want professional-quality TTS without breaking the bank.
+### Hume
 
-To use Inworld with your own API key, sign up at [Inworld AI](https://www.inworld.ai/), create a workspace, and generate an API key. Enter your API key in Wingman AI when prompted.
+Similar to ElevenLabs and Inworld, a bit less polished and quite affordable.
 
-#### Hume
+### Edge TTS
 
-Similar to Elevenlabs and Inworld but a bit less polished and quite affordable.
+Microsoft Edge TTS is free and needs no API key, but its voices sound less natural than the others. Each voice speaks only one language. When you switch the language, Wingman picks a matching voice for you.
 
-#### Edge TTS (Free)
+### Local LLMs
 
-Microsoft Edge TTS is actually free and you don't need an API key to use it. However, it's not as "good" as the others in terms of quality. Their voices are split by language, so the same voice can't speak different languages - you have to choose a new voice for the new language instead. Wingman does this for you, but it's still "Windows TTS" and not as good as the other providers.
+Use the "Local LLM" provider and connect any LLM with an OpenAI-compatible API, for example a llama.cpp server, Ollama or LM Studio.
 
-### Are local LLMs replacing OpenAI supported?
+### Local text-to-speech
 
-Yes. Use the "Local LLM" provider and connect any LLM offering an OpenAI-compatible API, for example a llama.cpp server, Ollama or LM Studio.
-
-### Can I use a local TTS provider?
-
-Yes! **PocketTTS** is bundled with Wingman AI and works out of the box as a local, free TTS provider. It runs on the CPU. It supports voice cloning with just a few seconds of reference audio.
-
-If you want to offload TTS to a separate machine (e.g. a more powerful GPU server), you can use the [PocketTTS OpenAI Streaming Server](https://github.com/teddybear082/pocket-tts-openai_streaming_server) — a server wrapper that exposes PocketTTS via an OpenAI-compatible API. Connect to it in Wingman AI using the "OpenAI-compatible" TTS provider and point it at your server's address.
+**Pocket TTS** is bundled with Wingman AI and works out of the box. It runs on the CPU and clones a voice from a few seconds of audio. To run it on another machine, e.g. a stronger GPU server, use the [Pocket TTS OpenAI Streaming Server](https://github.com/teddybear082/pocket-tts-openai_streaming_server) and connect to it with the "OpenAI-compatible" TTS provider.
 
 XVASynth (Windows only) is also supported and installable via Steam.
 
 ## Installing Wingman AI
+
+You install Wingman AI once. The client updates itself and Core when a new version comes out.
 
 ### Windows
 
@@ -213,6 +235,8 @@ You can also [run it from source](#develop-with-wingman-ai).
 
 ### Linux
 
+Linux support is still experimental. We need people who use it to help us make it better, so please report what doesn't work on [Discord](https://www.shipbit.de/discord) or in an issue.
+
 - Download the AppImage (x86_64) from [wingman-ai.com](https://www.wingman-ai.com), make it executable (`chmod +x WingmanAI_*.AppImage`) and start it.
 - It needs a distribution from 2024 or newer (glibc 2.39): Ubuntu 24.04, Fedora 40, Debian 13, current Arch, CachyOS, Nobara or newer.
 - Install PortAudio and the PipeWire ALSA plugin. Wingman uses the system's audio libraries, so your headset and the PipeWire/Pulse devices show up:
@@ -227,38 +251,31 @@ If Wingman does not start, run the AppImage from a terminal. Core's messages, su
 
 ## Who are these Wingmen?
 
-Our default Wingmen serve as examples and starting points for your own Wingmen, and you can easily reconfigure them using the client. You can also add your own Wingmen very easily.
+Our default Wingmen are examples and starting points for your own. You can change them in the client or add as many Wingmen of your own as you like.
 
-### Computer & ATC
+- **Computer** is your ship's board computer in _Star Citizen_. It comes with keybindings and commands for all ship systems.
+- **ATC** is air traffic control. It handles your calls to stations, like landing requests, departure clearances and emergencies, and stays in character.
+- **Clippy** lives in the "General" configuration, for everything outside of games.
 
-Our default Wingmen for _Star Citizen_ are Computer and ATC. There is also Clippy in the "General" configuration. By default, they use the Wingman Subscription. The basic process is as follows:
+By default, they use the Wingman Subscription.
 
-- Your speech is transcribed by the configured STT provider.
-- The transcript is then sent as text to the configured LLM, which responds with text and maybe function calls.
-- Wingman AI Core executes function calls which can be command executions or skill functions.
-- The response is then read out to you by the configured TTS provider.
-- Clients connected to Wingman AI Core are notified about progress and changes live and display them in the UI.
+### How a turn works
 
-Talking to a Wingman is like chatting with ChatGPT but with your voice. And it can actually do everything that Python can do. This means that you can customize their behavior by giving them a backstory as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation.
+1. Your speech is transcribed by the configured speech-to-text provider.
+2. The transcript goes to the AI model, together with the Wingman's backstory, its memory and what is happening in the game. The model answers with text and maybe tool calls.
+3. Wingman AI Core runs the tool calls: commands, skills or MCP servers.
+4. The answer is read out in the Wingman's voice.
+5. Clients connected to Core see every step live.
 
-The magic happens when you configure _commands_ or key bindings. The LLM will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `Request landing permission`).
-
-After the first start (and once after an update that brings it), the client asks whether you play _Star Citizen_. Yes switches on the Star Citizen features for Computer and ATC: the game log reader, the Star Citizen pronunciation and transcription lists, and Star Citizen skills and MCP servers like StarHead and VerseTime. No switches them off. You can change the answer, the game folder and every single feature later in **Settings > Star Citizen**.
+The AI picks a command by its name, so give each command a good one (e.g. `Request landing permission`).
 
 ### StarHead
 
 ![StarHead](https://star-head.de/assets/images/logo/LOGO_@290.png)
 
-StarHead is no longer a Wingman of its own. It is an MCP server that Computer and ATC use. It is tailored to _Star Citizen_ and uses the [StarHead API](https://star-head.de) to enrich your gaming experience with external data. Simply ask your Wingman for the best trade route, and it will ask you for your ship, location, and budget. It will then call the StarHead API and read the result back to you.
+[StarHead](https://star-head.de) is a community project with a huge database of _Star Citizen_ trade items, shop inventories and prices, kept up to date by its players. Computer and ATC use it as an MCP server. Ask for the best trade route, and your Wingman asks for your ship, location and budget, calls the StarHead API and reads the result back to you. You can ask follow-up questions, like the next stop or a route from a different location.
 
-Your Wingman remembers the conversation history and you can ask follow-up questions. For example, you can ask what the starting point of the route is, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
-
-StarHead is a community project that aims to provide a platform for _Star Citizen_ players to share their knowledge and experience. At the moment it is mainly focused on the trading aspect of _Star Citizen_. With a huge database of trade items, shop inventories and prices, it allows you to find the best trade routes and make the most profit. A large community of players is constantly working to keep the data up to date.
-
-For updates and more information, visit the [StarHead website](https://star-head.de) or follow @KNEBEL on
-
-- [Twitch](https://www.twitch.tv/knebeltv)
-- [YouTube](https://www.youtube.com/@Knebel_DE)
+For updates, visit the [StarHead website](https://star-head.de) or follow @KNEBEL on [Twitch](https://www.twitch.tv/knebeltv) and [YouTube](https://www.youtube.com/@Knebel_DE).
 
 ### Noteworthy community projects
 
@@ -302,11 +319,11 @@ Access secrets in code by using `secret_keeper.py`. You can access everything el
 
 ## Does it support my language?
 
-Wingman has one language setting for speech recognition, answers and voice. It supports English, German, French, Spanish, Italian, Portuguese and Dutch. Pick it once in the settings, and Wingman sets up Parakeet, the answer language and the PocketTTS voices to match.
+Wingman has one language setting for speech recognition, answers and voice. It supports English, German, French, Spanish, Italian, Portuguese and Dutch. Pick it once in the settings, and Wingman sets up Parakeet, the answer language and the Pocket TTS voices to match.
 
 For any other language, choose "Other" and name your language. Wingman then lets speech recognition detect the language, tells the AI to answer in it and uses a voice provider that has voices for it.
 
-The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
+You can trigger commands in your language without translating their `name`. The AI understands what you mean.
 
 ## Develop with Wingman AI
 
@@ -322,9 +339,11 @@ Run the tests with `pip install -r requirements-dev.txt` and `python -m pytest`.
 
 ### Creating Custom Skills
 
-Want to extend Wingman AI with your own skills? We have comprehensive documentation:
+Skills are small Python modules. Put your own into the `custom_skills` folder next to your `configs` folder, and Wingman AI loads it on the next start.
 
-- **[Skills Developer Guide](skills/README.md)** - Complete guide for creating custom skills, including:
+- **[Guide for AI coding agents](skills/AGENTS.md)**: let Claude Code, Codex or Cursor write the skill for you. Describe what it should do, and the agent also tells you when an MCP server is the better choice.
+- **[Migrating to v3](skills/MIGRATING-TO-V3.md)**: port a skill written for an older Skill API.
+- **[Skills Developer Guide](skills/README.md)**: the complete guide, including:
   - How skills work and are discovered
   - Tool-based vs hook-based skills
   - Skill vs MCP decision guide
