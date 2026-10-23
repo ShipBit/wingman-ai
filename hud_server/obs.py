@@ -7,6 +7,7 @@ encoder and the sockets deliver it in."""
 
 import asyncio
 import io
+import ipaddress
 import json
 import struct
 import threading
@@ -419,9 +420,24 @@ class ObsBroadcaster:
 
 def same_origin(headers) -> bool:
     """Whether a request comes from the /obs page or no web page at all. The
-    API allows every origin, but no other site may watch the HUD."""
+    API allows every origin, but no other site may watch the HUD. The host
+    must be an IP or localhost: a site whose name was rebound to this PC
+    sends its own name as both origin and host."""
+    host = headers.get("host") or ""
+    if not _is_address(urlsplit(f"//{host}").hostname):
+        return False
     origin = headers.get("origin")
-    return origin is None or urlsplit(origin).netloc == headers.get("host")
+    return origin is None or urlsplit(origin).netloc == host
+
+
+def _is_address(hostname: Optional[str]) -> bool:
+    if hostname == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(hostname or "")
+        return True
+    except ValueError:
+        return False
 
 
 def _png(image: Image.Image) -> bytes:

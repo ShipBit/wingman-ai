@@ -7,13 +7,12 @@ import struct
 
 import pytest
 from PIL import Image
-from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from hud_server.constants import GROUP_CHAT
 from hud_server.obs import _Client
 from hud_server.server import HudServer
-from tests.support import FakeHudBackend, FakeObs, hold_encoding, make_overlay, run_frames
+from tests.support import HUD_HOST, FakeHudBackend, FakeObs, hold_encoding, hud_client, make_overlay, run_frames
 
 SLOW = (30, 30)  # the size of the pictures hold_encoding stops on
 
@@ -105,7 +104,7 @@ def test_the_page_gets_the_windows_shown_before_it_connected():
         obs.show_window("atc", Image.new("RGBA", (40, 20), (255, 0, 0, 255)), 5, 6, 1.0)
         obs.move_window("atc", 50, 60, 0.5)
 
-        with TestClient(server.app).websocket_connect("/obs/ws") as ws:
+        with hud_client(server).websocket_connect("/obs/ws") as ws:
             assert receive(ws)["type"] == "init"
             _, header, png = receive_picture(ws, "atc")
 
@@ -124,7 +123,7 @@ def test_a_picture_still_encoding_is_not_sent_after_its_window_is_gone(monkeypat
     server = HudServer(backend=FakeHudBackend())
     obs = server.obs_broadcaster
     try:
-        with TestClient(server.app).websocket_connect("/obs/ws") as ws:
+        with hud_client(server).websocket_connect("/obs/ws") as ws:
             receive(ws)
             obs.show_window("slow", Image.new("RGBA", SLOW), 0, 0, 1.0)
             assert started.wait(5)
@@ -144,7 +143,7 @@ def test_the_newest_placement_wins_over_a_picture_still_encoding(monkeypatch):
     server = HudServer(backend=FakeHudBackend())
     obs = server.obs_broadcaster
     try:
-        with TestClient(server.app).websocket_connect("/obs/ws") as ws:
+        with hud_client(server).websocket_connect("/obs/ws") as ws:
             receive(ws)
             obs.show_window("atc", Image.new("RGBA", SLOW), 0, 0, 0.2)
             assert started.wait(5)
@@ -192,7 +191,7 @@ def test_a_client_that_stops_reading_gets_only_the_newest_of_each_window():
 
 def test_other_sites_cannot_watch_the_hud():
     server = HudServer(backend=FakeHudBackend())
-    client = TestClient(server.app)
+    client = hud_client(server)
     stranger = {"origin": "https://example.com"}
     try:
         with pytest.raises(WebSocketDisconnect):
@@ -200,8 +199,17 @@ def test_other_sites_cannot_watch_the_hud():
                 pass
         assert client.get("/obs/frame.png", headers=stranger).status_code == 403
 
+        # A site whose name now points at this PC sends its name as origin and host
+        rebound = {"origin": "http://evil.example:7862", "host": "evil.example:7862"}
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/obs/ws", headers=rebound):
+                pass
+        assert client.get("/obs/frame.png", headers={"host": "evil.example:7862"}).status_code == 403
+
         # The /obs page itself, on this server
-        with client.websocket_connect("/obs/ws", headers={"origin": "http://testserver"}) as ws:
+        with client.websocket_connect("/obs/ws", headers={"origin": f"http://{HUD_HOST}"}) as ws:
+            assert receive(ws)["type"] == "init"
+        with client.websocket_connect("/obs/ws", headers={"origin": "http://localhost:7862", "host": "localhost:7862"}) as ws:
             assert receive(ws)["type"] == "init"
     finally:
         server.obs_broadcaster.stop()
@@ -210,7 +218,7 @@ def test_other_sites_cannot_watch_the_hud():
 def test_a_stopped_stream_starts_again_for_the_next_page():
     server = HudServer(backend=FakeHudBackend())
     obs = server.obs_broadcaster
-    client = TestClient(server.app)
+    client = hud_client(server)
     try:
         with client.websocket_connect("/obs/ws") as ws:
             receive(ws)
@@ -234,7 +242,7 @@ def test_the_snapshot_shows_the_hud_without_a_page_connected():
         # Partly off screen: the shadow of a window at the edge
         obs.show_window("edge", Image.new("RGBA", (40, 20), (0, 0, 255, 255)), -10, 0, 1.0)
 
-        response = TestClient(server.app).get("/obs/frame.png")
+        response = hud_client(server).get("/obs/frame.png")
 
         frame = Image.open(io.BytesIO(response.content))
         assert frame.size == (1920, 1080)
@@ -248,7 +256,7 @@ def test_the_snapshot_shows_the_hud_without_a_page_connected():
 def test_the_page_is_served_for_the_browser_source():
     server = HudServer(backend=FakeHudBackend())
     try:
-        response = TestClient(server.app).get("/obs")
+        response = hud_client(server).get("/obs")
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]

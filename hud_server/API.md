@@ -704,7 +704,8 @@ Pictures, `state`, `hide` and `clear` carry a sequence number `seq` that rises
 with each change. They can arrive out of order, and a client that falls behind
 gets only the newest of each per window: a client ignores anything older than
 what it shows, and after a `clear` anything at or below its `seq`. Only pages
-of this server may connect: a handshake with another `Origin` is refused.
+of this server may connect: a handshake with another `Origin`, or with a `Host`
+that is not an IP address or `localhost`, is refused.
 
 Text messages (JSON):
 - `{"type": "init", "width": <w>, "height": <h>, "fps": <fps>}` on connect;
@@ -724,11 +725,14 @@ header.
 
 The HUD as it is now, as one transparent PNG the size of its screen.
 
-**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page
+**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
+to a `Host` that is not an IP address or `localhost`
 
 ### GET /obs/status
 
 Connected Browser Sources, the HUD screen's size and the number of windows shown.
+`width` and `height` are in the HUD's pixels (scaled on Windows), the size to
+give the Browser Source.
 
 **Response**: `200 OK`
 ```json

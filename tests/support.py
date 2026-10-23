@@ -221,6 +221,9 @@ class FakeHudBackend(HudBackend):
         return window.handler(event, x, y) if window.handler else None
 
 
+HUD_HOST = "127.0.0.1:7862"
+
+
 class FakeObs:
     """Stands in for the OBS broadcaster: what the overlay says is on screen."""
 
@@ -241,6 +244,13 @@ class FakeObs:
 
     def hide_window(self, name):
         self.shown.pop(name, None)
+
+
+def hud_client(server):
+    """A test client for the HUD server, reached on 127.0.0.1 as the /obs page is."""
+    from fastapi.testclient import TestClient
+
+    return TestClient(server.app, headers={"host": HUD_HOST})
 
 
 def hold_encoding(monkeypatch, size):
