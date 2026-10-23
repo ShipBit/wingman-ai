@@ -62,11 +62,11 @@ Things you can say:
 
 ### HUD overlay
 
-A transparent overlay on top of your game, on Windows, macOS and Linux. Your Wingmen show their replies there, pin info panels like your current trade run, and add progress bars and timers. HUD profiles lay it out per game, and you place them by dragging them on screen. Details in [docs/hud.md](docs/hud.md). Built by community member JayMatthew.
+A transparent overlay on top of your game, on Windows, macOS and Linux. It is part of Core, no skill or MCP server needed. Your Wingmen show their replies there, pin info panels like your current trade run, and add progress bars and timers. HUD profiles lay it out per game, and you place them by dragging them on screen. Details in [docs/hud.md](docs/hud.md). Community member JayMatthew created it.
 
 ### Star Citizen log reader
 
-Star Citizen writes a log file while you play. Wingman follows it and passes on missions, armistice zones, CrimeStat, injuries, your hangar and trades, so your Wingman knows what happens without you saying a word. It only reads the log file: no mods, nothing in the game's memory. Built by community member Mallachi, who also made the Star Citizen Events and Accountant skills.
+Star Citizen writes a log file while you play. The log reader is part of Core: it follows that file and passes on missions, armistice zones, CrimeStat, injuries, your hangar and trades, so your Wingman knows what happens without you saying a word. It only reads the log file: no mods, nothing in the game's memory. Community member Mallachi created it, together with the Star Citizen Events and Accountant skills.
 
 <p align="center">
 <img src="assets/wingman-hud-overlay.webp" width="49%" alt="HUD overlay in Star Citizen"> <img src="assets/wingman-log-reader.webp" width="49%" alt="Log reader in Star Citizen">
@@ -163,8 +163,8 @@ The video that started it all, our first prototype from 2023:
 
 Wingman AI Core is open source and free, and so is the client. The AI providers you use might not be. That's why we offer the **Wingman Subscription**: one account for chat models, speech recognition, voices and image generation, with a monthly usage allowance instead of pay-per-use bills and no API keys.
 
-- **Free** has almost every feature and as many Wingmen as you want, with a budget that refills every month.
-- **Pro** has 10x the usage of Free, **Ultra** 30x. Both add Voice Activation and more voices. Ultra includes every voice.
+- **Free** has every feature: as many Wingmen as you want, commands, skills, MCP servers, the HUD, the avatar studio and voices in every language, with a budget that refills every month.
+- **Pro** gives you 10x the usage of Free, **Ultra** 30x. Both add Voice Activation and more voices, and Ultra includes every voice.
 - **Tell a friend**: share your invite link, and when a friend subscribes, you both get a Usage Reset.
 
 Compare the plans on [wingman-ai.com](https://www.wingman-ai.com).
