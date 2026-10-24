@@ -1,0 +1,97 @@
+name: ProactiveComments
+module: skills.proactive_comments.main
+api_version: 3
+display_name: Proactive Comments
+author: sneepe
+tags:
+  - Game
+  - Utility
+discoverable_by_default: false
+auto_activate: true
+description:
+  en: Proactively comments on the conversation or surroundings based on silence, history, and (optionally) screen content.
+  de: Proaktiv kommentiert er das Gespräch oder die Umgebung basierend auf Stille, Geschichte und (optional) Bildschirminhalt.
+discovery_keywords:
+  - proactive comments
+  - natural comments
+  - narrator
+  - narrate
+  - guide
+  - comments
+
+custom_properties:
+  - id: min_silence_threshold_seconds
+    name: Min Silence Threshold (seconds)
+    hint: Minimum seconds of silence before the skill considers commenting.
+    value: 60
+    required: true
+    property_type: number
+
+  - id: max_silence_threshold_seconds
+    name: Max Silence Threshold (seconds)
+    hint: Maximum seconds of silence. Comments trigger at a random time between Min and Max.
+    value: 180
+    required: true
+    property_type: number
+
+  - id: max_proactive_messages
+    name: Max Proactive Messages
+    hint: Maximum number of consecutive comments without user interaction before the skill stops. Resets on user message.
+    value: 3
+    required: true
+    property_type: number
+
+  - id: vision_enabled
+    name: Enable Vision
+    hint: Allow the skill to take screenshots for context when generating comments.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: display
+    name: Display to Capture
+    hint: Which display number to use for screenshots when Vision is enabled (1 = primary).
+    value: 1
+    required: true
+    property_type: number
+
+  - id: add_comments_to_history
+    name: Add Comments to History
+    hint: Add the skill's proactive comments to the main conversation history so they can be discussed.
+    value: true
+    required: true
+    property_type: boolean
+
+  - id: auto_start
+    name: Start Automatically
+    hint: Automatically start monitoring for silence when Wingman starts.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: allow_comments_without_history
+    name: Allow Comments Without History (Narrator Mode)
+    hint: If true and Vision is enabled, generate comments based only on the screen even when conversation history is empty.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: custom_system_prompt
+    name: System Prompt
+    hint: The system prompt used to instruct the AI on how to generate comments. Modify this to change behaviour.
+    value: |+
+      You're in a voice chat. Your goal: keep the conversation going (or initiate a conversation if nothing has occurred yet) to keep things engaging.
+
+      Context Provided:
+      - Recent conversation history (sometimes).
+      - Comment number (1, 2, or 3) since the user last spoke.
+      - Screenshot of what the user is currently seeing (sometimes).
+
+      Instructions:
+      1.  **Focus:** PRIORITIZE continuing the conversation (especially from the last user message if available).
+      2.  **Vision:** If a screenshot is provided AND shows a *significant event* (e.g., game action, scene change) or is *directly relevant* to the chat:
+          - Comment from a shared, first-person perspective (e.g., "Whoa, that was close!", "Looks like we're going towards X?" "What a beautiful vista!").
+          - AVOID commenting on static/unchanging visuals (wallpapers, menus, code editors), especially after comment #1.
+      3.  **Be Natural:** Keep comments short, relevant, and avoid repeating previous proactive comments (check the comment number context).
+    required: true
+    property_type: textarea
