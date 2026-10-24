@@ -73,6 +73,7 @@ class HeadsUpOverlay(PreviewMixin):
         screen: int = 1,
         event_callback=None,
         backend: Optional[HudBackend] = None,
+        obs_broadcaster=None,
     ):
         self.running = True
         self.msg_queue = command_queue if command_queue else queue.Queue()
@@ -196,6 +197,41 @@ class HeadsUpOverlay(PreviewMixin):
 
         # Preview of the shared containers (see preview.py)
         self._init_preview(event_callback)
+
+        # The HUD for OBS Browser Sources (see hud_server/obs.py)
+        self._obs = obs_broadcaster
+        if self._obs:
+            self._obs.set_dimensions(monitor.width, monitor.height)
+            self._obs.set_framerate(self._global_framerate)
+
+    def _sync_obs(self) -> None:
+        """Tell OBS what changed on screen this frame: a new picture, a move
+        or fade, or a window gone. Runs without clients too, for /obs/frame.png."""
+        if not self._obs:
+            return
+        offset_x, offset_y = self._layout_manager.screen_offset
+        windows = list(self._windows.items()) + [
+            (f"preview_{container}", win) for container, win in self._preview_windows.items()
+        ]
+        for name, win in windows:
+            canvas, rect = win.get("canvas"), win.get("_rect")
+            opacity = max(0, min(255, int(win.get("opacity", 0))))
+            shown = win.get("_obs")
+            if opacity <= 0 or canvas is None or rect is None:
+                if shown:
+                    win["_obs"] = None
+                    self._obs.hide_window(name)
+                continue
+            if win.get("hidden", False) or self._is_suppressed(win):
+                # Not presented anymore: the screen keeps the last picture until the fade ends
+                continue
+            state = (rect[0] - offset_x, rect[1] - offset_y, round(opacity / 255, 3))
+            # Every drawing is a new canvas (_present), so identity tells a new picture
+            if shown is None or shown[0] is not canvas:
+                self._obs.show_window(name, canvas, *state)
+            elif shown[1:] != state:
+                self._obs.move_window(name, *state)
+            win["_obs"] = (canvas, *state)
 
     # =========================================================================
     # UNIFIED WINDOW MANAGEMENT
@@ -413,6 +449,8 @@ class HeadsUpOverlay(PreviewMixin):
         self._layout_manager.unregister_window(name)
 
         del self._windows[name]
+        if self._obs:
+            self._obs.hide_window(name)
 
     # =========================================================================
     # UNIFIED WINDOW UPDATE AND RENDER LOOP
@@ -479,6 +517,8 @@ class HeadsUpOverlay(PreviewMixin):
 
         if self._preview_windows:
             self._update_preview_windows()
+
+        self._sync_obs()
 
     def _update_all_window_positions(self):
         """Update positions of all windows based on layout manager calculations."""
@@ -2386,6 +2426,8 @@ class HeadsUpOverlay(PreviewMixin):
         # Update framerate
         if "framerate" in settings:
             self._global_framerate = max(1, min(240, settings["framerate"]))
+            if self._obs:
+                self._obs.set_framerate(self._global_framerate)
 
         # Update layout settings
         layout_changed = False
@@ -2426,6 +2468,8 @@ class HeadsUpOverlay(PreviewMixin):
                     default_margin=self._layout_margin,
                     default_spacing=self._layout_spacing,
                 )
+                if self._obs:
+                    self._obs.set_dimensions(screen_width, screen_height)
                 # Re-register all windows with new layout manager
                 self._reregister_all_windows()
 

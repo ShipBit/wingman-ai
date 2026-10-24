@@ -117,6 +117,33 @@ above them. A native Wayland game in fullscreen may cover it. Under gamescope (t
 Bazzite's game mode) the HUD marks its windows as an overlay, the way MangoHud
 does; that only works when Wingman AI runs inside that gamescope session.
 
+## Streaming and OBS Studio
+
+To capture the HUD in OBS Studio (e.g. on top of a game captured via Game Capture):
+
+1. Add a **Browser** source to your OBS scene.
+2. Set the URL to:
+   ```
+   http://127.0.0.1:7862/obs
+   ```
+3. Set the width and height to the HUD's screen size, as shown by
+   `http://127.0.0.1:7862/obs/status` (`width` and `height`). With Windows
+   display scaling that is less than the monitor's resolution: a 3840×2160
+   monitor at 125 % is `3072` × `1728`. Another size scales the HUD to fit,
+   and a larger one makes it look slightly blurry.
+4. Set **FPS** to match your HUD server framerate (e.g. `60`, OBS defaults new browser sources to 30).
+5. Place the Browser source above your Game Capture source.
+6. Tick **Refresh browser when scene becomes active**. When OBS starts before
+   Wingman AI, the page can't load yet; refresh it then (or press **Refresh**
+   in the source's properties). Once loaded, it reconnects on its own.
+
+The page shows the HUD on a transparent background, the size of the screen
+the HUD is on. Each window is sent only when it changes, so an idle HUD costs
+nothing. For a second streaming PC, set the HUD server's host to `0.0.0.0`
+(it listens on this PC only by default) and use the gaming PC's local IP in the
+URL instead of `127.0.0.1`. The page only connects through an IP address or
+`localhost`, not a host name.
+
 ## Skills on the HUD
 
 Skills write to the shared containers or draw a group of their own, such as
