@@ -183,12 +183,15 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
     )
     view = f'!playerView("{player_name}")' if player_name else '!playerView("<player name>")'
     senses = (
-        "You cannot see the player's screen, but you have senses: when the player speaks of what they see or "
-        f"where they look (this block, over there, in front of me, where I am looking), use {view} first. "
-        "When they speak of your surroundings (behind you, the water, the house, the lava), use !lookAround "
-        "first. Then act on the coordinates you got, for example with !goToCoordinates. "
-        "To get into a house or out of it, use !goThroughDoor with the door's coordinates; !goToCoordinates "
-        "stops at the wall. !lookAround also tells you whether you stand under a roof or under the open sky.\n"
+        "You cannot see the player's screen, but you have senses. When the player names a thing (torches, a chest, "
+        "sheep, flowers, logs), use !whereIs with its English name first: it finds the thing within 32 blocks no "
+        "matter where the player looks, then !collectBlocks or !goToCoordinates do the rest. When they speak of "
+        f"what they look at (this block, over there, where I am looking), use {view}; if it shows the player "
+        "looking at something else than the thing they named, search for the thing with !whereIs instead of asking. "
+        "When they speak of your surroundings (behind you, the water, the house, the lava), use !lookAround; it "
+        "also tells you whether you stand under a roof or under the open sky. To get into a house or out of it, "
+        "use !goThroughDoor with the door's coordinates; !goToCoordinates stops at the wall. "
+        "Never ask the player for coordinates: your senses give them to you.\n"
     )
     return (
         "You are $NAME, a player in Minecraft. You can converse with players, see, move, mine, "

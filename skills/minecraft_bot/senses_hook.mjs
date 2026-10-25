@@ -54,6 +54,6 @@ export async function load(url, context, nextLoad) {
         `import { wingmanSenses } from ${JSON.stringify(sensesUrl)};\n` +
         `import * as wingmanSkills from '../library/skills.js';\n` +
         `queryList.push(...wingmanSenses(wingmanSkills));\n`;
-    console.log('[Wingman] Senses added to the bot: !playerView, !lookAround, !turnTo, !goThroughDoor');
+    console.log('[Wingman] Senses added to the bot: !playerView, !lookAround, !whereIs, !turnTo, !goThroughDoor');
     return { ...result, source: source + addition };
 }

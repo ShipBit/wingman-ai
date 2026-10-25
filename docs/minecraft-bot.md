@@ -51,6 +51,7 @@ The player answers in the game chat, and your Wingman says the same lines to you
 
 The bot does not see your screen. It knows its own position, what blocks and creatures are near it, and it finds the nearest block of a kind. On its own, Mindcraft has no idea where *you* look, so "this block", "over there" and "behind you" mean nothing to it. The skill gives the bot three senses for exactly that:
 
+- **By name.** "Get the torches here", "is there a chest?", "find a sheep": the bot looks for the thing within 32 blocks, blocks and creatures, no matter where you look at that moment, and gets how many there are and the nearest with coordinates. "Torch" also finds torches on walls, "flower" every flower.
 - **Where you look.** "What is this?", "mine this", "go where I am looking", "the island over there, twenty blocks in that direction": the bot asks where you stand, which way you look and what your line of sight hits, block or creature, with coordinates, and acts on them.
 - **A look around.** "Behind you is lava", "go into the water", "go into the house": the bot asks what lies around it within 32 blocks, water, lava, doors, beds, chests, tables, furnaces, bells, hay, trees, ore, creatures and players, each with direction and distance from where it faces.
 - **Turning.** It can turn to face a spot without walking there.

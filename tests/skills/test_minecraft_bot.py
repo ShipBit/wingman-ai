@@ -220,6 +220,7 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert "The player you talk to is Yoda3001" in profile["conversing"]
     assert '!playerView("Yoda3001")' in profile["conversing"] and "!lookAround" in profile["conversing"]
     assert "!goThroughDoor" in profile["conversing"]
+    assert "use !whereIs with its English name first" in profile["conversing"]
     assert "a command alone is not an answer" in profile["conversing"]  # else the Wingman has nothing to say
     assert settings["max_commands"] == 10  # an order ends; a wall is not run into forever
     for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
@@ -243,7 +244,7 @@ def test_the_bots_senses_are_preloaded_into_mindcrafts_processes():
     senses = (mindcraft_module.SENSES_HOOK.parent / "senses.mjs").read_text(encoding="utf-8")
     assert "queryList.push(...wingmanSenses(wingmanSkills))" in hook  # appended to Mindcraft's queries.js as it loads
     assert "export function wingmanSenses" in senses
-    for command in ("'!playerView'", "'!lookAround'", "'!turnTo'", "'!goThroughDoor'"):
+    for command in ("'!playerView'", "'!lookAround'", "'!turnTo'", "'!goThroughDoor'", "'!whereIs'"):
         assert command in senses
 
 

@@ -15,6 +15,10 @@
 //                        it if needed: into a house or out of it. With
 //                        !goToCoordinates the bot stops at the wall, one
 //                        block from the spot, and is sure it is inside.
+//   !whereIs("torch")    a thing by name within 32 blocks, blocks and
+//                        creatures, whatever the player looks at right now:
+//                        how many and the nearest few with coordinates.
+//                        "torch" also finds wall_torch, "log" every log.
 //
 // Directions: Minecraft's -z is north and +x is east. Mineflayer's yaw is 0
 // when facing north and grows counter-clockwise seen from above, so a target
@@ -38,7 +42,26 @@ const KINDS = [
     ['hay', (name) => name === 'hay_block'],
     ['a tree', (name) => name.endsWith('_log')],
     ['ore', (name) => name.endsWith('_ore')],
+    ['a light', (name) => name.endsWith('torch') || name.endsWith('lantern') || name === 'campfire' || name === 'glowstone'],
 ];
+
+// What a word may mean when it is not a block name itself.
+const ALIASES = {
+    flower: ['poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet', 'tulip', 'oxeye_daisy', 'cornflower', 'lily_of_the_valley', 'sunflower', 'lilac', 'rose_bush', 'peony', 'torchflower'],
+    light: ['torch', 'lantern', 'campfire', 'glowstone', 'sea_lantern', 'shroomlight'],
+    tree: ['_log'],
+    wood: ['_log', '_wood'],
+    animal: ['cow', 'pig', 'sheep', 'chicken', 'horse', 'donkey', 'rabbit', 'goat', 'llama', 'wolf', 'cat', 'fox'],
+};
+
+// The name parts a search term stands for: "torches" -> ["torch"], "flower" -> the flowers.
+function searchTerms(name) {
+    let term = String(name || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (!term) return [];
+    if (ALIASES[term]) return ALIASES[term];
+    const singular = term.endsWith('es') ? term.slice(0, -2) : term.endsWith('s') ? term.slice(0, -1) : term;
+    return [...new Set([term, singular])];
+}
 
 function kindOf(name) {
     for (const [kind, test] of KINDS) {
@@ -347,7 +370,67 @@ function goThroughDoor(skills) {
     };
 }
 
+const whereIs = {
+    name: '!whereIs',
+    description:
+        'Find a thing by name within 32 blocks, blocks and creatures, no matter where the player looks: how many there are ' +
+        'and the nearest few with direction, distance and coordinates. The name is the English block or creature name or a ' +
+        'part of it: "torch" also finds wall_torch, "log" every kind of log, "flower" the flowers, "sheep" the sheep.',
+    params: {
+        name: { type: 'string', description: 'What to look for, in English: torch, chest, oak_log, flower, sheep, villager.' },
+    },
+    perform: function (agent, name) {
+        const bot = agent.bot;
+        const me = bot.entity.position;
+        const terms = searchTerms(name);
+        if (!terms.length) return 'Say what to look for, like !whereIs("torch").';
+        const matches = (candidate) => terms.some((term) => candidate.includes(term));
+
+        let positions = [];
+        try {
+            positions = bot.findBlocks({ matching: (block) => matches(block.name), maxDistance: AROUND, count: 400 });
+        } catch (err) {
+            positions = [];
+        }
+        const blocks = positions
+            .map((point) => ({ block: bot.blockAt(point), distance: point.distanceTo(me) }))
+            .filter((hit) => hit.block && matches(hit.block.name))
+            .sort((a, b) => a.distance - b.distance);
+        const creatures = Object.values(bot.entities)
+            .filter((entity) => entity && entity !== bot.entity && entity.position && !isClutter(entity) && matches(entityName(entity).toLowerCase()))
+            .map((entity) => ({ entity, distance: entity.position.distanceTo(me) }))
+            .filter((hit) => hit.distance <= AROUND)
+            .sort((a, b) => a.distance - b.distance);
+
+        if (!blocks.length && !creatures.length) {
+            return (
+                `Nothing named "${name}" within ${AROUND} blocks, no block and no creature. Block names are English and ` +
+                'lowercase, like torch, oak_log, cobblestone, chest; creatures like sheep, villager, zombie.'
+            );
+        }
+        const lines = [];
+        if (blocks.length) {
+            const counts = new Map();
+            for (const { block } of blocks) counts.set(block.name, (counts.get(block.name) || 0) + 1);
+            const kinds = [...counts.entries()].map(([kind, count]) => `${kind} ${count}`).join(', ');
+            const nearest = blocks
+                .slice(0, 5)
+                .map(({ block }) => `${block.name} ${whereFrom(bot, block.position)} at ${at(block.position)}`)
+                .join('; ');
+            lines.push(`${blocks.length} block${blocks.length === 1 ? '' : 's'} within ${AROUND} blocks (${kinds}). Nearest: ${nearest}.`);
+        }
+        if (creatures.length) {
+            const nearest = creatures
+                .slice(0, 5)
+                .map(({ entity }) => `${entityName(entity)} ${whereFrom(bot, entity.position)} at ${at(entity.position)}`)
+                .join('; ');
+            lines.push(`${creatures.length} creature${creatures.length === 1 ? '' : 's'} within ${AROUND} blocks. Nearest: ${nearest}.`);
+        }
+        return lines.join('\n');
+    },
+};
+
 // `skills` is Mindcraft's src/agent/library/skills.js, handed in by senses_hook.mjs.
 export function wingmanSenses(skills) {
-    return [playerView, lookAround, turnTo, goThroughDoor(skills)];
+    return [playerView, lookAround, turnTo, goThroughDoor(skills), whereIs];
 }
