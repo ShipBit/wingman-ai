@@ -222,6 +222,7 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert "!goThroughDoor" in profile["conversing"]
     assert "use !whereIs with its English name first" in profile["conversing"]
     assert "a command alone is not an answer" in profile["conversing"]  # else the Wingman has nothing to say
+    assert "Never say coordinates to the player" in profile["conversing"]
     assert settings["max_commands"] == 10  # an order ends; a wall is not run into forever
     for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
         assert placeholder in profile["conversing"]
@@ -381,6 +382,7 @@ def _skill(**properties):
     skill._restarting = False
     skill._gone_announced = False
     skill._last_spoken = None
+    skill.is_unloaded = False
     return skill
 
 
@@ -484,19 +486,66 @@ def test_halt_stops_the_bot_at_once_and_drops_the_backlog():
     assert skill._in_game is True  # halt is not leave
 
 
-def test_the_speaker_shows_every_line_but_speaks_only_a_fresh_newest_one():
+def test_the_speaker_shows_every_line_but_says_only_a_fresh_newest_one():
     skill = _skill()
     shown, spoken = _voice(skill)
     now = time.monotonic()
 
-    asyncio.run(MinecraftBot._say(skill, [("Trying again.", now - 40), ("Still nothing.", now - 30), ("Got it!", now - 1)]))
-    asyncio.run(MinecraftBot._say(skill, [("Long ago.", now - 2 * skill_module.FRESH_LINE_SECONDS)]))
-    asyncio.run(MinecraftBot._say(skill, [("Got it!", now)]))  # the same line again, a step retried
-    asyncio.run(MinecraftBot._say(skill, [("Done.", now)]))
+    said = [
+        asyncio.run(MinecraftBot._say(skill, [("Trying again.", now - 40), ("Still nothing.", now - 30), ("Got it!", now - 1)])),
+        asyncio.run(MinecraftBot._say(skill, [("Long ago.", now - 2 * skill_module.FRESH_LINE_SECONDS)])),
+        asyncio.run(MinecraftBot._say(skill, [("Got it!", now)])),  # the same line again, a step retried
+        asyncio.run(MinecraftBot._say(skill, [("Done.", now)])),
+    ]
 
     assert shown == ["Trying again.", "Still nothing.", "Got it!", "Long ago.", "Got it!", "Done."]
-    assert spoken == ["Got it!", "Done."]
+    assert said == ["Got it!", None, None, "Done."]
+    assert spoken == []  # saying is the loop's job, see the cut-off test
     assert list(skill._unreported) == shown
+
+
+def test_a_new_line_cuts_off_the_one_still_in_the_air():
+    skill = _skill()
+    events = []
+    playing = {"on": False}
+
+    async def speak(text, **kw):
+        events.append(f"speak {text}")
+        playing["on"] = True
+        await asyncio.sleep(0.6)
+        playing["on"] = False
+        events.append(f"done {text}")
+        return True
+
+    async def stop():
+        playing["on"] = False
+        events.append("stop")
+
+    class Audio:
+        @property
+        def is_playing(self):
+            return playing["on"]
+
+    skill.wingman = SimpleNamespace(
+        name="Computer",
+        conversation=SimpleNamespace(show=lambda text, **kw: asyncio.sleep(0)),
+        tts=SimpleNamespace(speak=speak, stop=stop),
+        audio=Audio(),
+    )
+
+    async def play_along():
+        skill._speaker_run = 1
+        loop = asyncio.create_task(MinecraftBot._speaker_loop(skill, 1))
+        skill._queue_line("Collecting.")
+        await asyncio.sleep(0.3)  # the first line is in the air
+        skill._queue_line("Done, got it!")
+        await asyncio.sleep(1.0)
+        skill._speaker_run = 2  # ends the loop
+        await asyncio.wait_for(loop, 3)
+
+    asyncio.run(play_along())
+
+    assert events == ["speak Collecting.", "stop", "speak Done, got it!", "done Done, got it!"]
 
 
 def test_tell_passes_the_message_on_as_the_player_and_returns_the_reply(monkeypatch):

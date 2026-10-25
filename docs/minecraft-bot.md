@@ -45,7 +45,7 @@ The skill is not discoverable by default. Open your Wingman in the client, turn 
 3. Give it work: "follow me", "collect ten oak logs", "craft a wooden pickaxe", "what do you have in your inventory?", "go to bed", "kill that zombie", "build a small shelter here". Mindcraft handles multi-step tasks on its own, for example it collects the logs it needs before it crafts.
 4. "Stop", "wait" or "do nothing" halts your player at once; it stays in the game and waits. "Leave the game" takes it out and shuts Mindcraft down.
 
-The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. When the bot talks faster than it can be spoken, only its newest line is read out; the rest is in the chat. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
+The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. A line that comes while another is still being spoken cuts it off, like someone correcting himself: the voice follows the game live. When the bot talks faster than it can be spoken, only its newest line is read out; the rest is in the chat. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
 
 ## What the bot can see
 

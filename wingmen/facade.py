@@ -1088,6 +1088,12 @@ class SkillTts:
             priority=priority if priority is not None else SpeechPriority.ANSWER,
         )
 
+    async def stop(self) -> None:
+        """Cut off what the wingman is saying right now, whatever it is: a line
+        of its own, an answer, a skill's event. For a skill whose lines follow
+        the game live, where the newer line replaces the one still in the air."""
+        await self._wingman.audio_player.stop_playback()
+
     async def set_voice(self, voice: Any, errors: list | None = None) -> str:
         """Set the voice on the wingman's current TTS provider and rebuild the TTS
         instance so it takes effect immediately.

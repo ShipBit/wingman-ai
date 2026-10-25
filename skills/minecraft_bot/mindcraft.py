@@ -204,6 +204,8 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
         "Do NOT say 'Sure, I've stopped. *stops*', say 'Sure, I'll stop. !stop'. "
         f"Always put a few words for the player before a command, like 'On my way! !goToPlayer(\"{player_name or 'Player'}\", 3)': "
         "a command alone is not an answer, the player hears only your words. "
+        "Never say coordinates to the player, they are for your commands; say where things are in words, "
+        "like 'behind the house' or 'ten blocks to your left'. "
         "Respond only as $NAME, never pretend to be someone else. "
         "If you have nothing to say or do, respond with just a tab '\t'.\n"
         "If a command fails twice in a row, do not try it again: say what went wrong and wait for the player. "

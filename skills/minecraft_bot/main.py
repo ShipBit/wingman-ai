@@ -561,7 +561,13 @@ class MinecraftBot(Skill):
     # ------------------------------------------------------------- the speaker
 
     async def _speaker_loop(self, run_id: int) -> None:
-        """Says what the bot says, on its own thread and loop. Stops when run_id is stale."""
+        """Says what the bot says, on its own thread and loop. Stops when run_id is stale.
+
+        A line is said in a task of its own, so the loop keeps reading the
+        queue. The next line to say cuts off the one still in the air, being
+        synthesized or playing: the voice follows the game live, like someone
+        who corrects himself mid-sentence, and nothing waits to be old news."""
+        speaking: Optional[asyncio.Task] = None
         while run_id == self._speaker_run and not self.is_unloaded:
             try:
                 first = await asyncio.to_thread(self._lines.get, True, 0.5)
@@ -570,27 +576,52 @@ class MinecraftBot(Skill):
             try:
                 if first is None:
                     await self._check_gone()
-                else:
-                    await self._say([first] + self._drain_lines())
+                    continue
+                text = await self._say([first] + self._drain_lines())
+                if text is None:
+                    continue
+                await self._hush()
+                if speaking is not None and not speaking.done():
+                    speaking.cancel()
+                speaking = asyncio.create_task(self._speak(text))
             except Exception as error:
                 self.log.warning(f"Could not relay a bot line: {error}", server_only=True)
+        if speaking is not None and not speaking.done():
+            speaking.cancel()
 
-    async def _say(self, batch: list[tuple[str, float]]) -> None:
-        """Show every line, speak only the newest, and that only while it is fresh.
+    async def _say(self, batch: list[tuple[str, float]]) -> Optional[str]:
+        """Show every line; the newest is the one to say, while it is fresh and not a repeat.
 
-        Speaking a line takes longer than the bot needs for its next one. When
+        Saying a line takes longer than the bot needs for its next one. When
         the voice falls behind, the lines in between are progress chatter that
         the newest supersedes; and nothing is said about a state that is over."""
         for text, _ in batch[:-1]:
-            await self._relay(text, speak=False)
+            await self._show(text)
         text, stamp = batch[-1]
+        await self._show(text)
+        if not self._flag("speak_bot_messages", True):
+            return None
         now = time.monotonic()
         last = self._last_spoken
         repeat = last is not None and last[0] == text and now - last[1] < REPEAT_SILENCE
-        speak = now - stamp < FRESH_LINE_SECONDS and not repeat
-        if speak:
-            self._last_spoken = (text, now)
-        await self._relay(text, speak=speak)
+        if now - stamp >= FRESH_LINE_SECONDS or repeat:
+            return None
+        self._last_spoken = (text, now)
+        return text
+
+    async def _hush(self) -> None:
+        """Cut off what is in the air, so the next line is the latest word."""
+        if self.wingman.audio.is_playing:
+            await self.wingman.tts.stop()
+
+    async def _speak(self, text: str) -> None:
+        """One line in the Wingman's voice; waits for the user, never talks over them."""
+        try:
+            await self.wingman.tts.speak(text, priority=SpeechPriority.EVENT)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self.log.warning(f"Could not speak a bot line: {error}", server_only=True)
 
     async def _check_gone(self) -> None:
         """A bot out of the game for longer than a restart takes is gone: noted in the chat, not spoken."""
@@ -602,14 +633,12 @@ class MinecraftBot(Skill):
         ):
             return
         self._gone_announced = True
-        await self._relay("I left the game.", speak=False)
+        await self._show("I left the game.")
 
-    async def _relay(self, line: str, *, speak: bool = True) -> None:
-        """A line the player said in the game, said here in the Wingman's voice, as its own."""
+    async def _show(self, line: str) -> None:
+        """A line the player said in the game, shown in the chat as the Wingman's own."""
         self._unreported.append(line)
         await self.wingman.conversation.show(line, skill_name=self.name)
-        if speak and self._flag("speak_bot_messages", True):
-            await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
 
     async def on_add_user_message(self, message: str) -> None:
         # The user is talking: what the bot said meanwhile goes to the model as

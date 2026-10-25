@@ -276,3 +276,11 @@ def test_a_spelling_a_skill_adds_is_shown_to_the_user(monkeypatch):
     assert len(shown) == 1
     text, source = shown[0]
     assert "Houston" in text and "Hurston" in text and source == "Bob"
+
+
+def test_stop_cuts_off_what_the_wingman_says():
+    player = SimpleNamespace(stop_playback=AsyncMock())
+
+    _run(facade.SkillTts(SimpleNamespace(audio_player=player)).stop())
+
+    player.stop_playback.assert_awaited_once()
