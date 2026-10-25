@@ -186,7 +186,9 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
         "You cannot see the player's screen, but you have senses: when the player speaks of what they see or "
         f"where they look (this block, over there, in front of me, where I am looking), use {view} first. "
         "When they speak of your surroundings (behind you, the water, the house, the lava), use !lookAround "
-        "first. Then act on the coordinates you got, for example with !goToCoordinates.\n"
+        "first. Then act on the coordinates you got, for example with !goToCoordinates. "
+        "To get into a house or out of it, use !goThroughDoor with the door's coordinates; !goToCoordinates "
+        "stops at the wall. !lookAround also tells you whether you stand under a roof or under the open sky.\n"
     )
     return (
         "You are $NAME, a player in Minecraft. You can converse with players, see, move, mine, "

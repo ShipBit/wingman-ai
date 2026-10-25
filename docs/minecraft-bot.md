@@ -54,6 +54,7 @@ The bot does not see your screen. It knows its own position, what blocks and cre
 - **Where you look.** "What is this?", "mine this", "go where I am looking", "the island over there, twenty blocks in that direction": the bot asks where you stand, which way you look and what your line of sight hits, block or creature, with coordinates, and acts on them.
 - **A look around.** "Behind you is lava", "go into the water", "go into the house": the bot asks what lies around it within 32 blocks, water, lava, doors, beds, chests, tables, furnaces, bells, hay, trees, ore, creatures and players, each with direction and distance from where it faces.
 - **Turning.** It can turn to face a spot without walking there.
+- **Doors.** "Go into the house", "come out": the bot walks through a door to its other side and opens it on the way. Without this it walks to the nearest reachable spot, which is outside the wall, and believes it is inside. The look around also tells it whether it stands under a roof.
 
 Point your crosshair at what you mean and the bot gets it right most of the time; a cliff edge or a far shore works, the sky does not. How well the bot uses its senses depends on the model: the prompt tells it when to use which.
 

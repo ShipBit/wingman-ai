@@ -11,6 +11,10 @@
 //                        coordinates. For "behind you", "the water", "the
 //                        house", "the lava".
 //   !turnTo(x, y, z)     face a position without moving.
+//   !goThroughDoor(x, y, z)  walk through a door to its other side, opening
+//                        it if needed: into a house or out of it. With
+//                        !goToCoordinates the bot stops at the wall, one
+//                        block from the spot, and is sure it is inside.
 //
 // Directions: Minecraft's -z is north and +x is east. Mineflayer's yaw is 0
 // when facing north and grows counter-clockwise seen from above, so a target
@@ -81,6 +85,86 @@ function entityName(entity) {
 // Dropped items, orbs and projectiles are not creatures.
 function isClutter(entity) {
     return entity.type === 'object' || entity.type === 'orb' || entity.name === 'item' || entity.name === 'experience_orb';
+}
+
+// A roof or the sky above the bot: whether it is inside.
+function roofAbove(bot) {
+    const head = bot.entity.position.offset(0, 2, 0);
+    for (let up = 0; up < 48; up++) {
+        const block = bot.blockAt(head.offset(0, up, 0));
+        if (!block) break;
+        if (block.name === 'air' || block.name === 'cave_air' || block.name === 'void_air') continue;
+        return `under a roof (${block.name}, ${up + 1} blocks above your head)`;
+    }
+    return 'under the open sky';
+}
+
+function doorProps(block) {
+    if (!block) return {};
+    try {
+        return (block.getProperties ? block.getProperties() : block._properties) || {};
+    } catch (err) {
+        return block._properties || {};
+    }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Into a house or out of it: stand before the door, open it, step to the far side.
+async function walkThroughDoor(bot, skills, x, y, z) {
+    const log = (message) => {
+        bot.output += message + '\n';
+    };
+    let door = bot.blockAt(vec(bot.entity.position, Math.floor(x), Math.floor(y), Math.floor(z)));
+    if (!door || !door.name.endsWith('_door')) {
+        log(`There is no door at (${x}, ${y}, ${z}), there is ${door ? door.name : 'nothing loaded'}. !lookAround names the nearest door with its coordinates.`);
+        return;
+    }
+    if (doorProps(door).half === 'upper') door = bot.blockAt(door.position.offset(0, -1, 0)) || door;
+    const base = door.position;
+    if (door.name.startsWith('iron_')) {
+        log(`The ${door.name} at ${at(base)} is iron: it opens only with a button, lever or pressure plate.`);
+        return;
+    }
+    const step = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] }[doorProps(door).facing];
+    if (!step) {
+        log(`Cannot tell which way the ${door.name} at ${at(base)} faces.`);
+        return;
+    }
+    const front = base.offset(step[0], 0, step[1]);
+    const back = base.offset(-step[0], 0, -step[1]);
+    const me = bot.entity.position;
+    const [near, far] = me.distanceTo(front) <= me.distanceTo(back) ? [front, back] : [back, front];
+    const beyond = far.offset(far.x - base.x, 0, far.z - base.z); // one block further in: the doorway itself is not "through"
+
+    await skills.goToPosition(bot, near.x, near.y, near.z, 1);
+    if (bot.interrupt_code) return;
+    const open = doorProps(bot.blockAt(base)).open;
+    if (open === false || open === 'false') {
+        try {
+            await bot.activateBlock(bot.blockAt(base));
+            await sleep(400);
+        } catch (err) {
+            log(`Could not open the ${door.name}: ${err.message}.`);
+        }
+    }
+    // The block the bot stands in decides the side: the doorway itself is neither.
+    const onFarSide = () => {
+        const node = bot.entity.position.floored();
+        return (far.x - base.x) * (node.x - base.x) + (far.z - base.z) * (node.z - base.z) > 0;
+    };
+    await skills.goToPosition(bot, beyond.x, beyond.y, beyond.z, 1);
+    if (bot.interrupt_code) return;
+    if (!onFarSide()) {
+        await skills.goToPosition(bot, far.x, far.y, far.z, 0);
+        if (bot.interrupt_code) return;
+    }
+    const here = bot.entity.position;
+    if (onFarSide()) {
+        log(`You went through the ${door.name} at ${at(base)} and stand on its other side now, at ${at(here)}, ${roofAbove(bot)}.`);
+    } else {
+        log(`You did not get through the ${door.name} at ${at(base)}; you stand at ${at(here)}. Something blocks the way behind it.`);
+    }
 }
 
 // "4 blocks south-east, 1 higher (to your left)": a place seen from the bot.
@@ -178,7 +262,7 @@ const lookAround = {
     perform: function (agent) {
         const bot = agent.bot;
         const me = bot.entity.position;
-        const lines = [`You face ${facingOf(bot.entity.yaw)}, standing at ${at(me)}.`];
+        const lines = [`You face ${facingOf(bot.entity.yaw)}, standing at ${at(me)}, ${roofAbove(bot)}.`];
 
         const nearest = new Map();
         let positions = [];
@@ -239,6 +323,31 @@ const turnTo = {
     },
 };
 
-export function wingmanSenses() {
-    return [playerView, lookAround, turnTo];
+function goThroughDoor(skills) {
+    return {
+        name: '!goThroughDoor',
+        description:
+            'Walk through the door at x, y, z to its other side, opening it if needed: this is how you get into a house ' +
+            'or out of it. Take the coordinates from !lookAround or !playerView. !goToCoordinates cannot do this, it stops at the wall.',
+        params: {
+            x: { type: 'float', description: "The door's x coordinate.", domain: [-Infinity, Infinity] },
+            y: { type: 'float', description: "The door's y coordinate.", domain: [-64, 320] },
+            z: { type: 'float', description: "The door's z coordinate.", domain: [-Infinity, Infinity] },
+        },
+        perform: async function (agent, x, y, z) {
+            if (!skills || typeof skills.goToPosition !== 'function') {
+                return 'Walking through doors is not available in this Mindcraft.';
+            }
+            const result = await agent.actions.runAction('action:goThroughDoor', async () => {
+                await walkThroughDoor(agent.bot, skills, x, y, z);
+            });
+            if (result.interrupted && !result.timedout) return;
+            return result.message;
+        },
+    };
+}
+
+// `skills` is Mindcraft's src/agent/library/skills.js, handed in by senses_hook.mjs.
+export function wingmanSenses(skills) {
+    return [playerView, lookAround, turnTo, goThroughDoor(skills)];
 }

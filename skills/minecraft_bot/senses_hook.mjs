@@ -52,7 +52,8 @@ export async function load(url, context, nextLoad) {
     const addition =
         `\n// Added by Wingman AI's Minecraft Bot skill (senses_hook.mjs).\n` +
         `import { wingmanSenses } from ${JSON.stringify(sensesUrl)};\n` +
-        `queryList.push(...wingmanSenses());\n`;
-    console.log('[Wingman] Senses added to the bot: !playerView, !lookAround, !turnTo');
+        `import * as wingmanSkills from '../library/skills.js';\n` +
+        `queryList.push(...wingmanSenses(wingmanSkills));\n`;
+    console.log('[Wingman] Senses added to the bot: !playerView, !lookAround, !turnTo, !goThroughDoor');
     return { ...result, source: source + addition };
 }
