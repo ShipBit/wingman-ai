@@ -443,6 +443,15 @@ class SkillAi:
             return completion.choices[0].message.content or ""
         return ""
 
+    async def sees_images(self) -> bool:
+        """False when the main model is known not to take images, so a skill
+        can say so instead of sending a screenshot the provider refuses. True
+        for a model the metadata does not list: it may well see."""
+        from services.model_metadata import conversation_model_id, get_model_metadata_service
+
+        model_id = conversation_model_id(self._wingman.config)
+        return not await get_model_metadata_service().known_without_vision(model_id)
+
     async def converse(self, user_message: str) -> str:
         """Conversation-aware reply: uses the wingman's own system prompt + live history
         and is subject to the normal auto-condensation. Use generate() for off-topic

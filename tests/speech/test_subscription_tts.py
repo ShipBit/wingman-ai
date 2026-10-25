@@ -98,10 +98,10 @@ def subscription():
     return ws
 
 
-def azure_speech(ws, player, streaming, voice="en-US-JennyMultilingualNeural"):
+def azure_speech(ws, player, streaming, voice="en-US-JennyMultilingualNeural", text="Hello"):
     asyncio.run(
         ws.generate_azure_speech(
-            text="Hello",
+            text=text,
             config=AzureTtsConfig(voice=voice, output_streaming=streaming),
             sound_config=SOUND,
             audio_player=player,
@@ -152,6 +152,31 @@ def test_a_used_up_allowance_says_so_instead_of_failing(backend, streaming):
 
     assert ws.printr.lines == [("Allowance used up.", LogType.ERROR)]
     assert player.played is None and player.streamed == b""
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_a_refused_text_shows_the_backends_reason(backend, streaming):
+    backend.responses.append(
+        FakeResponse(400, {"error": "bad_request", "message": "Text is too long. The limit is 5000 characters per request."})
+    )
+    ws, player = subscription(), FakeAudioPlayer()
+
+    azure_speech(ws, player, streaming=streaming)
+
+    assert ws.printr.lines == [
+        ("Text is too long. The limit is 5000 characters per request.", LogType.WARNING)
+    ]
+    assert player.played is None and player.streamed == b""
+
+
+@pytest.mark.parametrize("text", ["", "  \n "])
+def test_an_empty_text_is_not_sent(backend, text):
+    ws, player = subscription(), FakeAudioPlayer()
+
+    azure_speech(ws, player, streaming=True, text=text)
+
+    assert backend.requests == []
+    assert ws.printr.lines == []
 
 
 def test_inworld_always_asks_for_flash(backend):

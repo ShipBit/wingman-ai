@@ -869,6 +869,18 @@ class Wingman:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
+        # Some providers answer without a single choice (a filtered or
+        # aborted response). Every caller reads choices[0].
+        if completion is not None and not getattr(completion, "choices", None):
+            provider = self.config.features.conversation_provider.value
+            await printr.print_async(
+                f"{provider} sent an empty answer. Please try again.",
+                color=LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            return None
+
         return completion
 
     async def _llm_call(self, allow_tool_calls: bool = True):

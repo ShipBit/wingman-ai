@@ -626,6 +626,15 @@ class ConfigManager:
             ),
         )
 
+    @staticmethod
+    def _wingman_file_names(config_path: str) -> list[str]:
+        """The wingman YAML files of a config folder. Only its top level: a
+        backup or copied folder inside it must not add each wingman twice."""
+        files = next(walk(config_path), (None, None, []))[2]
+        return sorted(
+            f for f in files if f.endswith(".yaml") and not f.startswith(".")
+        )
+
     def parse_config(
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> Tuple[ConfigDirInfo, Config]:
@@ -636,23 +645,17 @@ class ConfigManager:
         config_path = path.join(self.config_dir, config_dir.directory)
         default_config = self.read_default_config()
 
-        for root, _, files in walk(config_path):
-            for filename in files:
-                if filename.endswith(".yaml") and not filename.startswith("."):
-                    wingman_config = self.read_config(path.join(root, filename))
-                    try:
-                        merged_config = self.merge_configs(
-                            default_config, wingman_config
-                        )
-                    except ConfigValidationError as e:
-                        # Re-raise with the source YAML file name prepended so the
-                        # user immediately knows which file to open and fix.
-                        raise ConfigValidationError(
-                            f"Invalid config in '{filename}':\n{e}"
-                        ) from None
-                    default_config["wingmen"][
-                        filename.replace(".yaml", "")
-                    ] = merged_config
+        for filename in self._wingman_file_names(config_path):
+            wingman_config = self.read_config(path.join(config_path, filename))
+            try:
+                merged_config = self.merge_configs(default_config, wingman_config)
+            except ConfigValidationError as e:
+                # Re-raise with the source YAML file name prepended so the
+                # user immediately knows which file to open and fix.
+                raise ConfigValidationError(
+                    f"Invalid config in '{filename}':\n{e}"
+                ) from None
+            default_config["wingmen"][filename.replace(".yaml", "")] = merged_config
 
         try:
             validated_config = Config(**default_config)
@@ -796,19 +799,17 @@ class ConfigManager:
         """Gets all wingmen configs for a given config."""
         config_path = path.join(self.config_dir, config_dir.directory)
         wingmen: list[WingmanConfigFileInfo] = []
-        for _, _, files in walk(config_path):
-            for filename in files:
-                if filename.endswith(".yaml") and not filename.startswith("."):
-                    base_file_name = filename.removesuffix(".yaml")
-                    wingman_file = WingmanConfigFileInfo(
-                        file=filename,
-                        name=base_file_name,
-                        is_deleted=False,
-                        avatar=self.__load_image_as_base64(
-                            self.get_wingman_avatar_path(config_dir, base_file_name)
-                        ),
-                    )
-                    wingmen.append(wingman_file)
+        for filename in self._wingman_file_names(config_path):
+            base_file_name = filename.removesuffix(".yaml")
+            wingman_file = WingmanConfigFileInfo(
+                file=filename,
+                name=base_file_name,
+                is_deleted=False,
+                avatar=self.__load_image_as_base64(
+                    self.get_wingman_avatar_path(config_dir, base_file_name)
+                ),
+            )
+            wingmen.append(wingman_file)
         return wingmen
 
     def _validate_wingman_name(self, name: str) -> str:
@@ -842,15 +843,10 @@ class ConfigManager:
         target_path = path.join(self.config_dir, config_dir.directory)
         wanted = name.casefold()
 
-        for _, _, files in walk(target_path):
-            for filename in files:
-                if not filename.endswith(".yaml") or filename.startswith("."):
-                    continue
-
-                if filename.removesuffix(".yaml").casefold() == wanted:
-                    return True
-
-        return False
+        return any(
+            filename.removesuffix(".yaml").casefold() == wanted
+            for filename in self._wingman_file_names(target_path)
+        )
 
     def duplicate_wingman_config(
         self,
