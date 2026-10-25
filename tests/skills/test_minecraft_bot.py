@@ -219,6 +219,7 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert "Speak German" in profile["conversing"]
     assert "The player you talk to is Yoda3001" in profile["conversing"]
     assert '!playerView("Yoda3001")' in profile["conversing"] and "!lookAround" in profile["conversing"]
+    assert "a command alone is not an answer" in profile["conversing"]  # else the Wingman has nothing to say
     assert settings["max_commands"] == 10  # an order ends; a wall is not run into forever
     for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
         assert placeholder in profile["conversing"]
@@ -522,7 +523,8 @@ def test_tell_without_a_reply_says_the_answer_comes_later(monkeypatch):
 
     result = asyncio.run(MinecraftBot.tell_minecraft_bot(skill, "build a house"))
 
-    assert result.startswith("Your player has not answered yet")
+    assert result.startswith("You have not said a word yet")
+    assert "first person" in result and "never 'he'" in result
     assert skill._bridge.sent == [("Andy", "Timo", "build a house")]  # the one player nearby
 
 

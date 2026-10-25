@@ -301,8 +301,10 @@ class MinecraftBot(Skill):
             # Spoken word for word, in the Wingman's voice: the turn ends with it.
             return reply, reply
         return (
-            "Your player has not answered yet; the answer is spoken when it comes. "
-            "Say one short word as the player, like 'Moment.'"
+            "You have not said a word yet; what you say is spoken as soon as you say it. "
+            "Answer now with a few words in the first person about what you are doing, in the "
+            "user's language, like 'Moment, bin unterwegs.' You are the one acting: "
+            "never 'he', never 'the bot'."
         )
 
     # ---------------------------------------------------------------- lifecycle

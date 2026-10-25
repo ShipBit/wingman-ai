@@ -164,9 +164,11 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
     character, so the Wingman's backstory is the bot's, and the bot answers
     in the user's language right away: no translation step in between.
 
-    Two rules of our own keep the bot out of loops: it gives up after two
-    failures and tells the player, and when giving or dropping an item fails
-    although the inventory lists it, it restarts once. Mineflayer's view of
+    Rules of our own: a few words before every command, because the player
+    hears only the bot's words and a bare command leaves the Wingman with
+    nothing to say for twenty seconds. Two keep the bot out of loops: it gives
+    up after two failures and tells the player, and when giving or dropping an
+    item fails although the inventory lists it, it restarts once. Mineflayer's view of
     the inventory goes stale after crafting in the 2x2 grid (ghost stacks stay
     in the crafting slots); a fresh login re-reads it, which is also why
     Mindcraft itself restarts the agent after smelting.
@@ -195,6 +197,8 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
         "Don't apologize, don't give instructions or make lists unless asked, don't refuse requests. "
         "Don't pretend to act, use commands immediately when requested. "
         "Do NOT say 'Sure, I've stopped. *stops*', say 'Sure, I'll stop. !stop'. "
+        f"Always put a few words for the player before a command, like 'On my way! !goToPlayer(\"{player_name or 'Player'}\", 3)': "
+        "a command alone is not an answer, the player hears only your words. "
         "Respond only as $NAME, never pretend to be someone else. "
         "If you have nothing to say or do, respond with just a tab '\t'.\n"
         "If a command fails twice in a row, do not try it again: say what went wrong and wait for the player. "
