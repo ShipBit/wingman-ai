@@ -34,6 +34,7 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from skills.minecraft_bot.llm_proxy import ContextTooLong, ProxyServer, RateLimiter, create_app
 from skills.minecraft_bot.mindcraft import (
     AGENT_EXITED_MARKER,
+    AGENT_RESTARTING_MARKER,
     MIN_NODE_MAJOR,
     MindcraftBridge,
     MindcraftError,
@@ -41,6 +42,7 @@ from skills.minecraft_bot.mindcraft import (
     canned_greeting,
     clean_bot_line,
     format_status,
+    is_system_line,
     keys_file_api_key,
     mindcraft_problem,
     node_version,
@@ -60,9 +62,21 @@ REPLY_SETTLE = 4.0
 query like !inventory makes the bot answer in two steps, a thought apart."""
 REPLY_MAX_EXTRA = 12.0
 """The most a reply may grow after its first line."""
+REPLY_MAX_LINES = 3
+"""A reply is at most this many lines. A bot working through an order says a
+line per step; the first steps are the answer, the rest is spoken as it comes."""
 SPAWN_GRACE = 1.0
 """Seconds after the bot spawned, so its first chat line is spoken and not taken for a reply."""
 DEFAULT_REQUESTS_PER_MINUTE = 10
+FRESH_LINE_SECONDS = 20.0
+"""A line of the bot older than this when its turn comes is shown but not spoken:
+the voice stays with the game instead of trailing it by a backlog."""
+REPEAT_SILENCE = 60.0
+"""The same line again within this time is shown but not spoken: a bot retrying
+a step says the same thing each time."""
+RESTART_GRACE = 30.0
+"""Seconds the bot may be out of the game before that counts as gone: Mindcraft
+restarts the agent after smelting and after !restart, and it is back in about ten."""
 
 
 class _ReplyCollector:
@@ -73,10 +87,16 @@ class _ReplyCollector:
         self._first = threading.Event()
         self._lock = threading.Lock()
 
-    def add(self, line: str) -> None:
+    def add(self, line: str) -> bool:
+        """Take the line into the reply. False when the reply is complete and the line is not part of it."""
         with self._lock:
+            if self.lines and self.lines[-1] == line:
+                return True  # the same line again, a bot retrying a step, adds nothing
+            if len(self.lines) >= REPLY_MAX_LINES:
+                return False
             self.lines.append(line)
         self._first.set()
+        return True
 
     def wait(self, first_timeout: float, settle: float, max_extra: float = REPLY_MAX_EXTRA) -> str:
         if not self._first.wait(first_timeout):
@@ -86,7 +106,7 @@ class _ReplyCollector:
         while time.monotonic() < deadline:
             with self._lock:
                 count = len(self.lines)
-            if count == seen:
+            if count == seen or count >= REPLY_MAX_LINES:
                 break
             seen = count
             time.sleep(min(settle, max(0.0, deadline - time.monotonic())))
@@ -140,12 +160,16 @@ class MinecraftBot(Skill):
         self._spawned = False
         self._agent_exited = False
         self._state: Optional[dict] = None
-        self._lines: "queue.Queue[str]" = queue.Queue()
+        self._lines: "queue.Queue[tuple[str, float]]" = queue.Queue()
         self._pending: Optional[_ReplyCollector] = None
         self._pending_lock = threading.Lock()
         self._services_lock = threading.Lock()
         self._unreported: deque[str] = deque(maxlen=12)
         self._speaker_run = 0
+        self._gone_since: Optional[float] = None
+        self._restarting = False
+        self._gone_announced = False
+        self._last_spoken: Optional[tuple[str, float]] = None
 
     # ------------------------------------------------------------------ config
 
@@ -224,17 +248,19 @@ class MinecraftBot(Skill):
     # ------------------------------------------------------------------- tools
 
     @tool(name="minecraft_bot", wait_response=True)
-    async def minecraft_bot(self, action: Literal["spawn", "stop", "status"]) -> str:
-        """Joins the running Minecraft game as your player, leaves it, or reports your player's state.
+    async def minecraft_bot(self, action: Literal["spawn", "halt", "leave", "status"] = "status") -> str:
+        """Joins the Minecraft game as your player, halts your player, takes it out of the game, or reports its state.
 
         Args:
-            action: spawn joins the game; stop leaves it and shuts Mindcraft down; status says where your player is, its health, what it is doing and what it carries.
+            action: spawn joins the game. halt stops everything your player is doing at once and leaves it standing in the game, waiting; use it when the user says stop, wait, hold on, enough or do nothing. leave takes your player out of the game and shuts Mindcraft down. status says where your player is, its health, what it is doing and what it carries.
         """
         await self._forget_a_dead_mindcraft()
         if action == "spawn":
             return await self._spawn()
-        if action == "stop":
-            return await self._stop()
+        if action == "halt":
+            return await self._halt()
+        if action == "leave":
+            return await self._leave()
         return format_status(
             self._state,
             running=bool(self._bridge and self._bridge.running),
@@ -253,13 +279,11 @@ class MinecraftBot(Skill):
         if not message:
             return "There was nothing to pass on."
         await self._forget_a_dead_mindcraft()
-        if not self._in_game:
+        if not self._in_game and not self._coming_back:
             spawned = await self._spawn()
             if not self._in_game:
                 return spawned
-        deadline = time.monotonic() + 15
-        while not self._ready and self._in_game and time.monotonic() < deadline:
-            await asyncio.sleep(0.5)
+        await self._wait_ready(RESTART_GRACE if self._coming_back else 15)
         if not self._in_game or not self._bridge:
             return f"{self._agent} is not in the game."
 
@@ -285,6 +309,11 @@ class MinecraftBot(Skill):
     async def _spawn(self) -> str:
         if self._in_game:
             return f"{self._agent} is already in the game."
+        if self._coming_back:
+            # Mindcraft is restarting the agent itself; a second create-agent
+            # would put two bots of the same name into one world.
+            if await self._wait_ready(RESTART_GRACE):
+                return f"{self._agent} is back in the game."
         try:
             await asyncio.to_thread(self._start_services)
         except MindcraftError as error:
@@ -305,12 +334,16 @@ class MinecraftBot(Skill):
             allow_coding=self._flag("allow_coding", False),
             persona=self._backstory(),
             language=self.wingman.language.name,
+            player_name=self._text("player_name"),
         )
         self._agent = bot
         self._in_game = False
         self._spawned = False
         self._agent_exited = False
         self._state = None
+        self._gone_since = None
+        self._restarting = False
+        self._gone_announced = False
         self._drain_lines()
 
         result = await asyncio.to_thread(self._bridge.create_agent, settings)
@@ -346,12 +379,38 @@ class MinecraftBot(Skill):
         """In the game and spawned: Mindcraft reports the login before the bot stands in the world."""
         return self._in_game and (self._spawned or self._state is not None)
 
-    def _drain_lines(self) -> None:
+    @property
+    def _coming_back(self) -> bool:
+        """Out of the game, but only for a moment: Mindcraft is restarting the agent."""
+        return (
+            not self._in_game
+            and self._restarting
+            and self._gone_since is not None
+            and time.monotonic() - self._gone_since < RESTART_GRACE
+            and bool(self._bridge and self._bridge.running)
+        )
+
+    async def _wait_ready(self, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while (
+            not self._ready
+            and (self._in_game or self._coming_back)
+            and time.monotonic() < deadline
+        ):
+            await asyncio.sleep(0.5)
+        return self._ready
+
+    def _drain_lines(self) -> list[tuple[str, float]]:
+        """Take everything that waits to be spoken off the queue."""
+        drained = []
         while True:
             try:
-                self._lines.get_nowait()
+                drained.append(self._lines.get_nowait())
             except queue.Empty:
-                return
+                return drained
+
+    def _queue_line(self, text: str) -> None:
+        self._lines.put((text, time.monotonic()))
 
     @staticmethod
     def _join_hints() -> str:
@@ -360,7 +419,22 @@ class MinecraftBot(Skill):
             "that its version is one Mineflayer supports, and that host and port in the skill settings match."
         )
 
-    async def _stop(self) -> str:
+    async def _halt(self) -> str:
+        """Stop the bot at once, in the game, without a model call: Mindcraft runs
+        a command a player types right away. !stop interrupts the action, !stfu
+        ends the bot's thinking about its last order and keeps it quiet until the
+        next message. In that order: a message from the player first lets the bot
+        talk again, so the silence has to come last."""
+        self._drain_lines()
+        if not self._in_game or not self._bridge:
+            return "Your player is not in the game; there was nothing to stop."
+        sender = self._player_name()
+        self._bridge.send_message(self._agent, sender, "!stop")
+        await asyncio.sleep(0.3)
+        self._bridge.send_message(self._agent, sender, "!stfu")
+        return f"{self._agent} stopped everything and stands still now, waiting for the next word."
+
+    async def _leave(self) -> str:
         name = self._agent if self._in_game else ""
         await asyncio.to_thread(self._stop_services)
         if name:
@@ -433,6 +507,9 @@ class MinecraftBot(Skill):
             self._in_game = False
             self._spawned = False
             self._state = None
+            self._gone_since = None
+            self._restarting = False
+            self._gone_announced = False
             self._drain_lines()
             if bridge:
                 bridge.shutdown()
@@ -453,6 +530,10 @@ class MinecraftBot(Skill):
         self.log.info(f"[Mindcraft] {line}", server_only=True)
         if AGENT_EXITED_MARKER in line:
             self._agent_exited = True
+            if self._gone_since is None:
+                self._gone_since = time.monotonic()
+        elif AGENT_RESTARTING_MARKER in line:
+            self._restarting = True
         elif self._agent and line.strip() == f"{self._agent} spawned.":
             self._spawned = True
 
@@ -460,26 +541,29 @@ class MinecraftBot(Skill):
         if agent != self._agent:
             return
         text = clean_bot_line(message)
-        if not text or text == canned_greeting(agent):
+        if not text or text == canned_greeting(agent) or is_system_line(text):
             return
         with self._pending_lock:
             pending = self._pending
-        if pending is not None:
-            pending.add(text)
+        if pending is not None and pending.add(text):
             return
-        self._lines.put(text)
+        self._queue_line(text)
 
     def _on_agents_status(self, agents: list) -> None:
         for agent in agents:
             if not isinstance(agent, dict) or agent.get("name") != self._agent:
                 continue
-            was_ready = self._ready
+            was_in_game = self._in_game
             self._in_game = bool(agent.get("in_game"))
-            if not self._in_game:
+            if self._in_game:
+                self._gone_since = None
+                self._restarting = False
+                self._gone_announced = False
+            else:
                 self._spawned = False
                 self._state = None
-            if was_ready and not self._in_game:
-                self._lines.put("I left the game.")
+                if was_in_game and self._gone_since is None:
+                    self._gone_since = time.monotonic()
 
     def _on_state_update(self, states: dict) -> None:
         state = states.get(self._agent)
@@ -492,22 +576,58 @@ class MinecraftBot(Skill):
         """Says what the bot says, on its own thread and loop. Stops when run_id is stale."""
         while run_id == self._speaker_run and not self.is_unloaded:
             try:
-                line = await asyncio.to_thread(self._lines.get, True, 0.5)
+                first = await asyncio.to_thread(self._lines.get, True, 0.5)
             except queue.Empty:
-                continue
+                first = None
             try:
-                await self._relay(line)
+                if first is None:
+                    await self._check_gone()
+                else:
+                    await self._say([first] + self._drain_lines())
             except Exception as error:
                 self.log.warning(f"Could not relay a bot line: {error}", server_only=True)
 
-    async def _relay(self, line: str) -> None:
+    async def _say(self, batch: list[tuple[str, float]]) -> None:
+        """Show every line, speak only the newest, and that only while it is fresh.
+
+        Speaking a line takes longer than the bot needs for its next one. When
+        the voice falls behind, the lines in between are progress chatter that
+        the newest supersedes; and nothing is said about a state that is over."""
+        for text, _ in batch[:-1]:
+            await self._relay(text, speak=False)
+        text, stamp = batch[-1]
+        now = time.monotonic()
+        last = self._last_spoken
+        repeat = last is not None and last[0] == text and now - last[1] < REPEAT_SILENCE
+        speak = now - stamp < FRESH_LINE_SECONDS and not repeat
+        if speak:
+            self._last_spoken = (text, now)
+        await self._relay(text, speak=speak)
+
+    async def _check_gone(self) -> None:
+        """A bot out of the game for longer than a restart takes is gone: noted in the chat, not spoken."""
+        if (
+            self._gone_since is None
+            or self._in_game
+            or self._gone_announced
+            or time.monotonic() - self._gone_since < RESTART_GRACE
+        ):
+            return
+        self._gone_announced = True
+        await self._relay("I left the game.", speak=False)
+
+    async def _relay(self, line: str, *, speak: bool = True) -> None:
         """A line the player said in the game, said here in the Wingman's voice, as its own."""
         self._unreported.append(line)
         await self.wingman.conversation.show(line, skill_name=self.name)
-        if self._flag("speak_bot_messages", True):
+        if speak and self._flag("speak_bot_messages", True):
             await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
 
     async def on_add_user_message(self, message: str) -> None:
+        # The user is talking: what the bot said meanwhile goes to the model as
+        # context and is not spoken over the exchange that follows.
+        for text, _ in self._drain_lines():
+            self._unreported.append(text)
         if not self._unreported:
             return
         lines = list(self._unreported)

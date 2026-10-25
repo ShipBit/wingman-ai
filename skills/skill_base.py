@@ -264,12 +264,16 @@ class ToolDefinition:
         )
 
     async def execute(self, parameters: dict[str, Any], skill_instance: "Skill") -> Any:
-        """Execute the tool function with the given parameters."""
-        # Bind self if this is an instance method
+        """Execute the tool function with the given parameters.
+
+        Only parameters the tool declares are passed on: a model now and then
+        invents one, and that must not crash the call."""
+        schema = self.tool_schema.get("function", {}).get("parameters", {})
+        allowed = set(schema.get("properties", {}).keys())
+        filtered = {key: value for key, value in (parameters or {}).items() if key in allowed}
         if self.is_async:
-            return await self.func(skill_instance, **parameters)
-        else:
-            return self.func(skill_instance, **parameters)
+            return await self.func(skill_instance, **filtered)
+        return self.func(skill_instance, **filtered)
 
 
 def tool(

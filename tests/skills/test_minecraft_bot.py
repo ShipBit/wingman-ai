@@ -9,6 +9,7 @@ import asyncio
 import json
 import queue
 import threading
+import time
 from collections import deque
 from types import SimpleNamespace
 
@@ -28,6 +29,7 @@ from skills.minecraft_bot.mindcraft import (
     clean_bot_line,
     conversing_prompt,
     format_status,
+    is_system_line,
     keys_file_api_key,
     mindcraft_problem,
     sanitize_bot_name,
@@ -206,12 +208,15 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
         allow_coding=False,
         persona="A grumpy old pirate who loves gold.",
         language="German",
+        player_name="Yoda3001",
     )
 
     profile = settings["profile"]
     assert profile["name"] == "Andy"
     assert "A grumpy old pirate who loves gold." in profile["conversing"]
     assert "Speak German" in profile["conversing"]
+    assert "The player you talk to is Yoda3001" in profile["conversing"]
+    assert settings["max_commands"] == 10  # an order ends; a wall is not run into forever
     for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
         assert placeholder in profile["conversing"]
     assert profile["model"] == {"api": "openai", "url": "http://127.0.0.1:5123/v1", "model": "wingman"}
@@ -247,6 +252,13 @@ def test_bot_lines_lose_the_command_syntax():
     assert clean_bot_line("Done! I collected 10 oak logs.") == "Done! I collected 10 oak logs."
     assert clean_bot_line("\t") == ""
     assert clean_bot_line("") == ""
+
+
+def test_mindcrafts_own_chat_lines_are_not_the_bots_words():
+    assert is_system_line("Agent stopped.")
+    assert is_system_line("Agent stopped. Self-prompting still active.")
+    assert is_system_line("Shutting up.")
+    assert not is_system_line("I stopped, what now?")
 
 
 def test_the_status_summarizes_mindcrafts_state():
@@ -346,7 +358,22 @@ def _skill(**properties):
     skill._services_lock = threading.Lock()
     skill._unreported = deque(maxlen=12)
     skill._speaker_run = 0
+    skill._gone_since = None
+    skill._restarting = False
+    skill._gone_announced = False
+    skill._last_spoken = None
     return skill
+
+
+def _voice(skill):
+    """A wingman that records what the skill shows and speaks."""
+    shown, spoken = [], []
+    skill.wingman = SimpleNamespace(
+        name="Computer",
+        conversation=SimpleNamespace(show=lambda text, **kw: shown.append(text) or asyncio.sleep(0)),
+        tts=SimpleNamespace(speak=lambda text, **kw: spoken.append(text) or asyncio.sleep(0)),
+    )
+    return shown, spoken
 
 
 def test_a_reply_goes_to_the_waiting_tell_and_not_to_the_speaker():
@@ -359,10 +386,12 @@ def test_a_reply_goes_to_the_waiting_tell_and_not_to_the_speaker():
     skill._pending = None
     skill._on_bot_output("Andy", "Done, I am here.")
     skill._on_bot_output("Andy", "*used stop*")
+    skill._on_bot_output("Andy", "*Timo used stop*")
+    skill._on_bot_output("Andy", "Agent stopped.")  # Mindcraft's answer to a forced !stop
     skill._on_bot_output("Andy", "Hello world! I am Andy")  # Mindcraft's canned hello at spawn
 
     assert collector.lines == ["Sure, coming!"]
-    assert skill._lines.get_nowait() == "Done, I am here."
+    assert skill._lines.get_nowait()[0] == "Done, I am here."
     assert skill._lines.empty()
 
 
@@ -379,7 +408,76 @@ def test_the_agents_status_tells_whether_the_bot_is_in_the_game():
     skill._on_agents_status([{"name": "Andy", "in_game": False}])
     assert skill._in_game is False
     assert skill._ready is False
-    assert skill._lines.get_nowait() == "I left the game."
+    assert skill._lines.empty()  # not announced: Mindcraft may be restarting the agent
+    assert skill._gone_since is not None
+
+
+def test_a_restart_by_mindcraft_is_a_moment_out_of_the_game_not_a_leave():
+    skill = _skill()
+    skill._bridge = FakeBridge(skill)
+    skill._in_game = True
+    skill._spawned = True
+
+    skill._on_mindcraft_log("Agent process exited with code 1 and signal null")
+    skill._on_agents_status([{"name": "Andy", "in_game": False}])
+    skill._on_mindcraft_log("Restarting agent...")
+    assert skill._coming_back is True
+
+    skill._on_agents_status([{"name": "Andy", "in_game": True}])
+    skill._on_mindcraft_log("Andy spawned.")
+    assert skill._coming_back is False and skill._ready is True
+    assert skill._gone_since is None
+
+    skill._on_agents_status([{"name": "Andy", "in_game": False}])
+    skill._on_mindcraft_log("Restarting agent...")
+    skill._gone_since -= 2 * skill_module.RESTART_GRACE
+    assert skill._coming_back is False  # gone too long: the next order spawns anew
+
+
+def test_a_bot_gone_for_good_is_noted_in_the_chat_once_and_not_spoken():
+    skill = _skill()
+    shown, spoken = _voice(skill)
+
+    skill._gone_since = time.monotonic() - 5
+    asyncio.run(MinecraftBot._check_gone(skill))
+    assert shown == []
+
+    skill._gone_since = time.monotonic() - 2 * skill_module.RESTART_GRACE
+    asyncio.run(MinecraftBot._check_gone(skill))
+    asyncio.run(MinecraftBot._check_gone(skill))
+    assert shown == ["I left the game."] and spoken == []
+
+
+def test_halt_stops_the_bot_at_once_and_drops_the_backlog():
+    skill = _skill(player_name="Timo")
+    skill._in_game = True
+    skill._spawned = True
+    skill._bridge = FakeBridge(skill)
+    skill._queue_line("Trying again.")
+    skill._queue_line("Still not working.")
+
+    result = asyncio.run(MinecraftBot.minecraft_bot(skill, "halt"))
+
+    # !stop first, !stfu last: a player's message lets the bot talk again, so the silence must come last
+    assert skill._bridge.sent == [("Andy", "Timo", "!stop"), ("Andy", "Timo", "!stfu")]
+    assert skill._lines.empty()
+    assert "stands still" in result
+    assert skill._in_game is True  # halt is not leave
+
+
+def test_the_speaker_shows_every_line_but_speaks_only_a_fresh_newest_one():
+    skill = _skill()
+    shown, spoken = _voice(skill)
+    now = time.monotonic()
+
+    asyncio.run(MinecraftBot._say(skill, [("Trying again.", now - 40), ("Still nothing.", now - 30), ("Got it!", now - 1)]))
+    asyncio.run(MinecraftBot._say(skill, [("Long ago.", now - 2 * skill_module.FRESH_LINE_SECONDS)]))
+    asyncio.run(MinecraftBot._say(skill, [("Got it!", now)]))  # the same line again, a step retried
+    asyncio.run(MinecraftBot._say(skill, [("Done.", now)]))
+
+    assert shown == ["Trying again.", "Still nothing.", "Got it!", "Long ago.", "Got it!", "Done."]
+    assert spoken == ["Got it!", "Done."]
+    assert list(skill._unreported) == shown
 
 
 def test_tell_passes_the_message_on_as_the_player_and_returns_the_reply(monkeypatch):
@@ -425,6 +523,27 @@ def test_a_reply_grows_while_lines_keep_coming_and_stops_when_they_stop():
     assert _ReplyCollector().wait(0.05, settle=0.3) == ""
 
 
+def test_a_reply_is_a_few_distinct_lines_and_a_retrying_bot_does_not_stutter():
+    collector = _ReplyCollector()
+    for line in ("Collecting.", "Collecting.", "Collecting.", "Nothing here, moving on.", "Found some!"):
+        assert collector.add(line) is True
+    assert collector.add("And a fourth step.") is False  # complete: that line is spoken on its own
+    assert collector.add("Found some!") is True  # the last line again is swallowed, not spoken twice
+
+    assert collector.wait(0.1, settle=5.0) == "Collecting. Nothing here, moving on. Found some!"
+
+
+def test_lines_beyond_a_complete_reply_go_to_the_speaker():
+    skill = _skill()
+    collector = _ReplyCollector()
+    skill._pending = collector
+    for line in ("One.", "Two.", "Three.", "Four."):
+        skill._on_bot_output("Andy", line)
+
+    assert collector.lines == ["One.", "Two.", "Three."]
+    assert skill._lines.get_nowait()[0] == "Four."
+
+
 def test_a_mindcraft_that_died_is_forgotten_and_the_settings_are_checked_first(tmp_path):
     skill = _skill(mindcraft_dir=str(tmp_path / "gone"))
     skill._in_game = True
@@ -447,8 +566,13 @@ def test_lines_the_bot_said_meanwhile_reach_the_conversation_as_a_note():
         conversation=SimpleNamespace(add_note=lambda text: notes.append(text) or asyncio.sleep(0)),
     )
     skill._unreported.extend(["Collected 10 oak logs.", "I am at the house."])
+    skill._queue_line("Hm, that did not work.")  # waiting to be spoken: told instead, not spoken over the user
 
     asyncio.run(MinecraftBot.on_add_user_message(skill, "what now?"))
     asyncio.run(MinecraftBot.on_add_user_message(skill, "and now?"))
 
-    assert notes == ["What you said in Minecraft meanwhile, as the player Andy: Collected 10 oak logs. | I am at the house."]
+    assert notes == [
+        "What you said in Minecraft meanwhile, as the player Andy: "
+        "Collected 10 oak logs. | I am at the house. | Hm, that did not work."
+    ]
+    assert skill._lines.empty()

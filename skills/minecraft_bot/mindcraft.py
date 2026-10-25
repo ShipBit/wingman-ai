@@ -35,6 +35,9 @@ MINDCRAFT_ENTRY = Path("src") / "mindcraft" / "mindcraft.js"
 MIN_NODE_MAJOR = 18
 READY_MARKER = "WINGMAN_MINDSERVER_READY"
 AGENT_EXITED_MARKER = "Agent process exited"
+AGENT_RESTARTING_MARKER = "Restarting agent..."
+"""Mindcraft restarts the agent process after !smeltItem and !restart (a fresh
+login re-reads the inventory) and after a crash. The bot is back in about ten seconds."""
 
 _COMMAND_NOTE = re.compile(r"\*[^*\n]*\bused\b[^*\n]*\*")
 _COMMAND_CALL = re.compile(r"!\w+(?:\([^)]*\))?")
@@ -100,6 +103,16 @@ def canned_greeting(bot_name: str) -> str:
     return f"Hello world! I am {bot_name}"
 
 
+_SYSTEM_LINES = ("Agent stopped.", "Shutting up.", "Exiting.", "Restarting.")
+
+
+def is_system_line(text: str) -> bool:
+    """A line Mindcraft puts into the chat itself, not the bot's character: the
+    result of a forced command like !stop or !stfu, or the good-bye before a restart."""
+    line = (text or "").strip()
+    return any(line.startswith(prefix) for prefix in _SYSTEM_LINES)
+
+
 def sanitize_bot_name(name: str, fallback: str = "Wingman") -> str:
     """A Minecraft player name: 3 to 16 letters, digits or underscores."""
     cleaned = _NAME_CHARS.sub("", (name or "").strip().replace(" ", "_").replace("-", "_"))
@@ -131,7 +144,7 @@ PERSONA_LIMIT = 1500
 DEFAULT_PERSONA = "a friendly, casual, effective and efficient player"
 
 
-def conversing_prompt(persona: str, language: str) -> str:
+def conversing_prompt(persona: str, language: str, player_name: str = "") -> str:
     """Mindcraft's chat prompt for the bot, with the Wingman's character and language.
 
     Built on Mindcraft's default (profiles/defaults/_default.json): the
@@ -139,20 +152,36 @@ def conversing_prompt(persona: str, language: str) -> str:
     inventory, command docs and examples. The Wingman and the bot are one
     character, so the Wingman's backstory is the bot's, and the bot answers
     in the user's language right away: no translation step in between.
+
+    Two rules of our own keep the bot out of loops: it gives up after two
+    failures and tells the player, and when giving or dropping an item fails
+    although the inventory lists it, it restarts once. Mineflayer's view of
+    the inventory goes stale after crafting in the 2x2 grid (ghost stacks stay
+    in the crafting slots); a fresh login re-reads it, which is also why
+    Mindcraft itself restarts the agent after smelting.
     """
     persona = " ".join((persona or "").split())
     if len(persona) > PERSONA_LIMIT:
         persona = persona[:PERSONA_LIMIT].rsplit(" ", 1)[0] + " ..."
+    player = (
+        f"The player you talk to is {player_name}; in commands like !goToPlayer use exactly that name.\n"
+        if player_name
+        else ""
+    )
     return (
         "You are $NAME, a player in Minecraft. You can converse with players, see, move, mine, "
         "build and interact with the world by using commands.\n"
         f"Your character: {persona or DEFAULT_PERSONA}\n"
+        f"{player}"
         "$SELF_PROMPT Be brief: one or two short sentences, spoken like a friend playing alongside. "
         "Don't apologize, don't give instructions or make lists unless asked, don't refuse requests. "
         "Don't pretend to act, use commands immediately when requested. "
         "Do NOT say 'Sure, I've stopped. *stops*', say 'Sure, I'll stop. !stop'. "
         "Respond only as $NAME, never pretend to be someone else. "
         "If you have nothing to say or do, respond with just a tab '\t'.\n"
+        "If a command fails twice in a row, do not try it again: say what went wrong and wait for the player. "
+        "If giving or dropping an item fails although your inventory lists it, your inventory view is stale: "
+        "use !restart once, then try again.\n"
         "Summarized memory:'$MEMORY'\n$STATS\n$INVENTORY\n$COMMAND_DOCS\n$EXAMPLES\n"
         f"Speak {language} in everything you say. Commands keep their exact syntax, "
         "like !collectBlocks(\"oak_log\", 10).\n"
@@ -172,13 +201,16 @@ def build_agent_settings(
     allow_coding: bool,
     persona: str = "",
     language: str = "English",
+    player_name: str = "",
 ) -> dict:
     """The settings object for Mindcraft's create-agent event.
 
     The bot's chat and embedding models point at the skill's proxy, so every
     thought goes through this Wingman's model. The prompt is kept small
-    (shortened command docs, one example, ten messages of history): it is the
-    user's plan that pays for it, and the facade caps a request anyway.
+    (shortened command docs, one example, fifteen messages of history): it is
+    the user's plan that pays for it, and the facade caps a request anyway.
+    An order ends after ten commands at most: a bot that keeps running into
+    the same wall stops instead of thinking forever.
     """
     model = {"api": "openai", "url": proxy_url, "model": "wingman"}
     return {
@@ -187,7 +219,7 @@ def build_agent_settings(
             "model": model,
             "embedding": dict(model),
             "cooldown": 2000,
-            "conversing": conversing_prompt(persona, language),
+            "conversing": conversing_prompt(persona, language, player_name),
         },
         "minecraft_version": version or "auto",
         "host": host or "127.0.0.1",
@@ -201,7 +233,8 @@ def build_agent_settings(
         "allow_vision": False,
         "allow_insecure_coding": bool(allow_coding),
         "code_timeout_mins": 10,
-        "max_messages": 10,
+        "max_messages": 15,
+        "max_commands": 10,
         "num_examples": 1,
         "relevant_docs_count": 3,
         "show_command_syntax": "none",

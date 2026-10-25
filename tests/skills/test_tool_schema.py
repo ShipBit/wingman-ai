@@ -4,6 +4,8 @@ The summary becomes the tool description, the `Args:` section the parameter
 descriptions. Other sections never reach the model.
 """
 
+import asyncio
+
 from skills.skill_base import tool
 
 
@@ -45,3 +47,18 @@ def test_explicit_description_still_takes_the_args_from_the_docstring():
     function = _function(take_screenshot)
     assert function["description"] == "Take a screenshot."
     assert function["parameters"]["properties"]["reason"]["description"] == "Why the screenshot is taken."
+
+
+def test_a_parameter_the_model_invented_is_dropped_not_fatal():
+    @tool()
+    async def minecraft(self, action: str = "status") -> str:
+        """Do something in the game.
+
+        Args:
+            action: What to do.
+        """
+        return action
+
+    definition = minecraft._tool_definition
+    assert asyncio.run(definition.execute({"action": "halt", "details": {}}, object())) == "halt"
+    assert asyncio.run(definition.execute({"details": {}}, object())) == "status"

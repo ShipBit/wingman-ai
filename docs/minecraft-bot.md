@@ -43,15 +43,17 @@ The skill is not discoverable by default. Open your Wingman in the client, turn 
 1. Start Minecraft, open a world, press Esc and choose *Open to LAN*.
 2. Talk to your Wingman: "Spawn the Minecraft bot", or just give an order: "Tell Andy to come to me". The bot joins the game by itself when it is not there yet; the first join takes ten to thirty seconds.
 3. Give it work: "follow me", "collect ten oak logs", "craft a wooden pickaxe", "what do you have in your inventory?", "go to bed", "kill that zombie", "build a small shelter here". Mindcraft handles multi-step tasks on its own, for example it collects the logs it needs before it crafts.
-4. "Stop" interrupts what the bot is doing. "Stop the Minecraft bot" removes it from the game and shuts Mindcraft down.
+4. "Stop", "wait" or "do nothing" halts your player at once; it stays in the game and waits. "Leave the game" takes it out and shuts Mindcraft down.
 
-The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
+The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. When the bot talks faster than it can be spoken, only its newest line is read out; the rest is in the chat. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
 
 ## The brake
 
 Every thought of the bot is one request on your Wingman's model and on your plan, about 2,000 to 3,000 tokens each. A quick order costs one or two requests. A bot that works towards a goal thinks again every few seconds until it is done, and a bot that keeps running into a wall keeps thinking too.
 
 *AI requests per minute* limits that. When the limit is reached, the bot waits for the next free slot; it does not fail. The default of 10 is enough for playing along and keeps a runaway bot from eating your monthly budget in an afternoon. Raise it if the bot feels slow on long tasks.
+
+An order also ends after ten commands at most, and the bot is told to give up after two failures in a row and say what went wrong. A bot that keeps running into the same wall stops instead of thinking forever. "Stop" halts it at any time.
 
 Small local models struggle with Mindcraft's command syntax, and a model with a small context window cannot take the bot's prompt at all. The bot works best with the subscription or a cloud model you bring your own key for.
 
@@ -61,5 +63,7 @@ Small local models struggle with Mindcraft's command syntax, and a model with a 
 - **"Mindcraft's packages are not installed"**: run `npm install` in the Mindcraft folder.
 - **The bot does not join the game.** The Wingman's answer ends with Mindcraft's last log lines. "Supported versions are ..." means the game's version is too new for Mineflayer; pick an older one in the launcher. "MC server not found" means no world is open to LAN, or host and port are wrong. On an online-mode server the bot needs the *Microsoft account* setting.
 - **The bot says "My brain disconnected, try again."** The model call failed. The Wingman's log says why, usually a provider error or the plan's quota.
+- **Your player leaves and is back ten seconds later.** That is Mindcraft, not a crash: after smelting, and when the bot restarts itself, it logs in again to re-read its inventory.
+- **The bot says it has an item but cannot give or drop it.** Mineflayer's view of the inventory goes stale after crafting in the 2x2 grid. The bot is told to restart itself once in that case, which re-reads the inventory. If it keeps failing, tell it to restart itself.
 - **`npm install` fails with C++ errors**: you are on Node.js 24 or newer. Install Node.js 22 LTS and run `npm install` again.
 - Mindcraft's own web page is at the port the Wingman's log mentions when the bot starts, `http://localhost:<port>`. It shows the bot's view of the world and its chat.
