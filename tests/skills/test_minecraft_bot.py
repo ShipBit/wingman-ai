@@ -32,8 +32,10 @@ from skills.minecraft_bot.mindcraft import (
     is_system_line,
     keys_file_api_key,
     mindcraft_problem,
+    node_options_with_senses,
     sanitize_bot_name,
 )
+from skills.minecraft_bot import mindcraft as mindcraft_module
 
 TOKEN = "wingman-test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -216,6 +218,7 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert "A grumpy old pirate who loves gold." in profile["conversing"]
     assert "Speak German" in profile["conversing"]
     assert "The player you talk to is Yoda3001" in profile["conversing"]
+    assert '!playerView("Yoda3001")' in profile["conversing"] and "!lookAround" in profile["conversing"]
     assert settings["max_commands"] == 10  # an order ends; a wall is not run into forever
     for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
         assert placeholder in profile["conversing"]
@@ -227,6 +230,19 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert settings["show_command_syntax"] == "none"
     assert settings["init_message"] is None  # Mindcraft's canned hello, no model call
     assert json.dumps(settings)  # what goes over the socket must be JSON
+
+
+def test_the_bots_senses_are_preloaded_into_mindcrafts_processes():
+    option = node_options_with_senses("")
+    assert option.startswith("--import=file:") and option.endswith("/senses_hook.mjs")
+    assert node_options_with_senses(" --max-old-space-size=4096 ") == f"--max-old-space-size=4096 {option}"
+
+    hook = mindcraft_module.SENSES_HOOK.read_text(encoding="utf-8")
+    senses = (mindcraft_module.SENSES_HOOK.parent / "senses.mjs").read_text(encoding="utf-8")
+    assert "queryList.push(...wingmanSenses())" in hook  # appended to Mindcraft's queries.js as it loads
+    assert "export function wingmanSenses" in senses
+    for command in ("'!playerView'", "'!lookAround'", "'!turnTo'"):
+        assert command in senses
 
 
 def test_the_bots_prompt_keeps_a_long_backstory_short_and_has_a_default():

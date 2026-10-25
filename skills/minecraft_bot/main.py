@@ -45,6 +45,7 @@ from skills.minecraft_bot.mindcraft import (
     is_system_line,
     keys_file_api_key,
     mindcraft_problem,
+    node_options_with_senses,
     node_version,
     sanitize_bot_name,
 )
@@ -483,6 +484,7 @@ class MinecraftBot(Skill):
             if not self._bridge or not self._bridge.running:
                 env = dict(os.environ)
                 env["OPENAI_API_KEY"] = self._token
+                env["NODE_OPTIONS"] = node_options_with_senses(env.get("NODE_OPTIONS", ""))
                 self._bridge = MindcraftBridge(
                     node=node,
                     mindcraft_dir=directory,

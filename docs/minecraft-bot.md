@@ -9,7 +9,7 @@ The bot is a [Mindcraft](https://github.com/mindcraft-bots/mindcraft) agent. Min
 ## What you need
 
 - **Minecraft Java Edition** in a version that Mineflayer supports. As of October 2026 that is every version up to 26.1.x; 26.2 and later are not supported yet. Pick an older version under *Installations* in the Minecraft launcher. Bedrock Edition does not work.
-- **Node.js 22 LTS** from [nodejs.org](https://nodejs.org/). On Windows, tick *Automatically install the necessary tools* in the installer: Mindcraft has a few native modules. Node.js 24 and newer fail to build them.
+- **Node.js 22 LTS** from [nodejs.org](https://nodejs.org/). On Windows, tick *Automatically install the necessary tools* in the installer: Mindcraft has a few native modules. Node.js 24 and newer fail to build them; 20 is the oldest the skill accepts.
 - **Mindcraft** itself. Open a terminal and run:
 
   ```bash
@@ -46,6 +46,18 @@ The skill is not discoverable by default. Open your Wingman in the client, turn 
 4. "Stop", "wait" or "do nothing" halts your player at once; it stays in the game and waits. "Leave the game" takes it out and shuts Mindcraft down.
 
 The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. When the bot talks faster than it can be spoken, only its newest line is read out; the rest is in the chat. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
+
+## What the bot can see
+
+The bot does not see your screen. It knows its own position, what blocks and creatures are near it, and it finds the nearest block of a kind. On its own, Mindcraft has no idea where *you* look, so "this block", "over there" and "behind you" mean nothing to it. The skill gives the bot three senses for exactly that:
+
+- **Where you look.** "What is this?", "mine this", "go where I am looking", "the island over there, twenty blocks in that direction": the bot asks where you stand, which way you look and what your line of sight hits, block or creature, with coordinates, and acts on them.
+- **A look around.** "Behind you is lava", "go into the water", "go into the house": the bot asks what lies around it within 32 blocks, water, lava, doors, beds, chests, tables, furnaces, bells, hay, trees, ore, creatures and players, each with direction and distance from where it faces.
+- **Turning.** It can turn to face a spot without walking there.
+
+Point your crosshair at what you mean and the bot gets it right most of the time; a cliff edge or a far shore works, the sky does not. How well the bot uses its senses depends on the model: the prompt tells it when to use which.
+
+Under the hood these are three commands added to Mindcraft while it loads (`senses_hook.mjs` and `senses.mjs` in the skill folder, preloaded through `NODE_OPTIONS`). Nothing in your Mindcraft folder is changed, and if a future Mindcraft looks different, the bot simply plays without them.
 
 ## The brake
 

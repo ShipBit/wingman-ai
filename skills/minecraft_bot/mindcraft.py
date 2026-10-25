@@ -31,8 +31,10 @@ from pathlib import Path
 from typing import Callable, Optional
 
 LAUNCHER = Path(__file__).parent / "launcher.mjs"
+SENSES_HOOK = Path(__file__).parent / "senses_hook.mjs"
 MINDCRAFT_ENTRY = Path("src") / "mindcraft" / "mindcraft.js"
-MIN_NODE_MAJOR = 18
+MIN_NODE_MAJOR = 20
+"""Mineflayer wants a current Node.js, and the senses hook needs module.register (Node 20.6)."""
 READY_MARKER = "WINGMAN_MINDSERVER_READY"
 AGENT_EXITED_MARKER = "Agent process exited"
 AGENT_RESTARTING_MARKER = "Restarting agent..."
@@ -96,6 +98,15 @@ def keys_file_api_key(directory: str) -> str:
         return ""
     value = keys.get("OPENAI_API_KEY") if isinstance(keys, dict) else ""
     return str(value).strip() if value else ""
+
+
+def node_options_with_senses(existing: str = "") -> str:
+    """NODE_OPTIONS for every process Mindcraft starts: Node preloads
+    senses_hook.mjs, which gives the bot the senses in senses.mjs (where the
+    player looks, what lies around the bot). What the user had in NODE_OPTIONS
+    stays in front of it."""
+    option = f"--import={SENSES_HOOK.resolve().as_uri()}"
+    return " ".join(part for part in ((existing or "").strip(), option) if part)
 
 
 def canned_greeting(bot_name: str) -> str:
@@ -168,11 +179,18 @@ def conversing_prompt(persona: str, language: str, player_name: str = "") -> str
         if player_name
         else ""
     )
+    view = f'!playerView("{player_name}")' if player_name else '!playerView("<player name>")'
+    senses = (
+        "You cannot see the player's screen, but you have senses: when the player speaks of what they see or "
+        f"where they look (this block, over there, in front of me, where I am looking), use {view} first. "
+        "When they speak of your surroundings (behind you, the water, the house, the lava), use !lookAround "
+        "first. Then act on the coordinates you got, for example with !goToCoordinates.\n"
+    )
     return (
         "You are $NAME, a player in Minecraft. You can converse with players, see, move, mine, "
         "build and interact with the world by using commands.\n"
         f"Your character: {persona or DEFAULT_PERSONA}\n"
-        f"{player}"
+        f"{player}{senses}"
         "$SELF_PROMPT Be brief: one or two short sentences, spoken like a friend playing alongside. "
         "Don't apologize, don't give instructions or make lists unless asked, don't refuse requests. "
         "Don't pretend to act, use commands immediately when requested. "
