@@ -110,3 +110,7 @@ SimConnect>=0.4.26
 # --- ats_telemetry skill ---
 pyproj>=3.6.1
 truck-telemetry>=0.0.3
+
+# --- minecraft_bot skill (Socket.IO client for Mindcraft's MindServer) ---
+python-socketio>=5.11.0
+websocket-client>=1.8.0

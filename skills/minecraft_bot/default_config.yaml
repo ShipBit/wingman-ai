@@ -1,0 +1,116 @@
+module: skills.minecraft_bot.main
+name: MinecraftBot
+api_version: 3
+display_name: Minecraft Bot
+author: ShipBit
+version: 1.0.0
+auto_activate: false
+discoverable_by_default: false
+tags:
+  - Game
+  - Game Integration
+description:
+  en: |
+    Puts an AI-controlled bot into your Minecraft Java world and lets you command it by voice: come here, follow me, collect wood, craft a pickaxe, build a shelter, fight that zombie. The bot plans and acts on its own (Mindcraft) and thinks with this Wingman's AI model, so it needs no extra API key. Needs Node.js and a Mindcraft checkout, see docs/minecraft-bot.md.
+  de: |
+    Lässt einen KI-gesteuerten Bot in deine Minecraft-Java-Welt beitreten, den du per Sprache steuerst: komm her, folg mir, sammle Holz, baue eine Spitzhacke, errichte einen Unterschlupf, greif den Zombie an. Der Bot plant und handelt selbständig (Mindcraft) und denkt mit dem KI-Modell dieses Wingmans, also ohne extra API-Key. Braucht Node.js und ein Mindcraft-Checkout, siehe docs/minecraft-bot.md.
+discovery_keywords:
+  - minecraft
+  - minecraft bot
+  - mindcraft
+  - spawn bot
+  - follow me
+  - collect wood
+  - mine ore
+  - craft
+  - build a house
+  - minecraft helper
+prompt: |
+  You command a Minecraft bot that plays in the user's world. It plans and acts on its own; you talk to it with tell_minecraft_bot. For anything the user wants done or asked in Minecraft, pass one short, direct instruction to the bot in English, as the user would say it to a player ("come to me", "collect 10 oak logs", "follow me", "what is in your inventory?"). Then tell the user briefly what the bot replied, in the user's language. Do not claim the bot did something it has not confirmed. Use minecraft_bot to spawn, stop or check on the bot; tell_minecraft_bot spawns it by itself when needed.
+custom_properties:
+  - id: mindcraft_dir
+    name: Mindcraft folder
+    hint: Your Mindcraft checkout (github.com/mindcraft-bots/mindcraft) after "npm install". The skill starts and stops it for you.
+    property_type: directory
+    required: true
+    value: ""
+  - id: node_executable
+    name: Node.js executable
+    hint: Leave "node" if Node.js is on your PATH, or set the full path to node.exe (Windows) or node (macOS, Linux). Node.js 22 LTS is recommended.
+    property_type: string
+    required: false
+    value: node
+  - id: bot_name
+    name: Bot name
+    hint: The bot's player name in Minecraft, 3 to 16 letters, digits or underscores. Empty uses this Wingman's name.
+    property_type: string
+    required: false
+    value: ""
+  - id: player_name
+    name: Your Minecraft name
+    hint: Your in-game player name, so that "come to me" and "follow me" work.
+    property_type: string
+    required: false
+    value: ""
+  - id: minecraft_host
+    name: Minecraft host
+    hint: Where the game runs. 127.0.0.1 for a world on this computer opened with "Open to LAN", or a server address.
+    property_type: string
+    required: false
+    value: 127.0.0.1
+  - id: minecraft_port
+    name: Minecraft port
+    hint: 0 finds a LAN world on this computer by itself. Otherwise the port the game shows in chat after "Open to LAN", or the server's port (usually 25565).
+    property_type: number
+    required: false
+    value: 0
+  - id: minecraft_version
+    name: Minecraft version
+    hint: auto detects the game's version. Set a version like 1.21.6 only if detection fails.
+    property_type: string
+    required: false
+    value: auto
+  - id: auth
+    name: Account
+    hint: Offline works for LAN worlds and offline-mode servers. Microsoft logs the bot in with the account of your Minecraft launcher, which online-mode servers require.
+    property_type: single_select
+    required: false
+    value: offline
+    options:
+      - label: Offline (LAN world)
+        value: offline
+      - label: Microsoft account
+        value: microsoft
+  - id: base_profile
+    name: Behavior
+    hint: How the bot behaves on its own. Survival hunts and defends itself, Assistant does not hunt, Creative skips the survival habits, God mode may cheat.
+    property_type: single_select
+    required: false
+    value: survival
+    options:
+      - label: Survival
+        value: survival
+      - label: Assistant
+        value: assistant
+      - label: Creative
+        value: creative
+      - label: God mode
+        value: god_mode
+  - id: requests_per_minute
+    name: AI requests per minute
+    hint: The brake. Every thought of the bot is a request on this Wingman's AI model and plan. A bot working on a goal thinks every few seconds, so keep this low.
+    property_type: number
+    required: false
+    value: 10
+  - id: speak_bot_messages
+    name: Speak what the bot says
+    hint: The Wingman reads out the bot's chat lines, like "Done, I collected 10 oak logs". Off shows them only in the chat.
+    property_type: boolean
+    required: false
+    value: true
+  - id: allow_coding
+    name: Let the bot write code
+    hint: Mindcraft's newAction lets the AI write and run JavaScript for free-form tasks like building a house. Powerful, but code written by an AI runs on your computer. Keep it off on public servers.
+    property_type: boolean
+    required: false
+    value: false

@@ -196,6 +196,11 @@ hiddenimports = [
     'pyrect',
     # spotify
     'spotipy',
+    # minecraft_bot
+    'socketio',
+    'engineio',
+    'websocket',
+    'bidict',
     # file_manager
     'pdfminer',
     'pdfminer.six',

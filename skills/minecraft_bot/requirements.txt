@@ -1,0 +1,4 @@
+python-socketio==5.17.0
+python-engineio==4.14.0
+bidict==0.24.1
+websocket-client==1.9.2
