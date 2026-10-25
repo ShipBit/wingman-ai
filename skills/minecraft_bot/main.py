@@ -57,15 +57,10 @@ if TYPE_CHECKING:
 SPAWN_TIMEOUT = 75.0
 """Seconds to wait for the bot to appear in the game after Mindcraft accepted it."""
 REPLY_TIMEOUT = 20.0
-"""Seconds tell_minecraft_bot waits for the bot's first line. The bot's thinking is one call on the user's model."""
-REPLY_SETTLE = 4.0
-"""After a line, a further line within this time still belongs to the same reply: a
-query like !inventory makes the bot answer in two steps, a thought apart."""
-REPLY_MAX_EXTRA = 12.0
-"""The most a reply may grow after its first line."""
-REPLY_MAX_LINES = 3
-"""A reply is at most this many lines. A bot working through an order says a
-line per step; the first steps are the answer, the rest is spoken as it comes."""
+"""Seconds tell_minecraft_bot waits for the bot's first line. The bot's thinking is one
+call on the user's model. That first line is the answer and is spoken at once; every
+later line is spoken as it comes. Waiting to join lines made the voice start seconds
+after the game chat and then read a block of old news."""
 SPAWN_GRACE = 1.0
 """Seconds after the bot spawned, so its first chat line is spoken and not taken for a reply."""
 DEFAULT_REQUESTS_PER_MINUTE = 10
@@ -81,38 +76,27 @@ restarts the agent after smelting and after !restart, and it is back in about te
 
 
 class _ReplyCollector:
-    """Catches the bot's lines while a tell_minecraft_bot call waits for them."""
+    """Catches the bot's first line while a tell_minecraft_bot call waits for it."""
 
     def __init__(self) -> None:
-        self.lines: list[str] = []
+        self.line = ""
         self._first = threading.Event()
         self._lock = threading.Lock()
 
     def add(self, line: str) -> bool:
-        """Take the line into the reply. False when the reply is complete and the line is not part of it."""
+        """Take the line as the reply. False once a reply is taken: that line is spoken on its own."""
         with self._lock:
-            if self.lines and self.lines[-1] == line:
-                return True  # the same line again, a bot retrying a step, adds nothing
-            if len(self.lines) >= REPLY_MAX_LINES:
+            if self.line:
                 return False
-            self.lines.append(line)
+            self.line = line
         self._first.set()
         return True
 
-    def wait(self, first_timeout: float, settle: float, max_extra: float = REPLY_MAX_EXTRA) -> str:
-        if not self._first.wait(first_timeout):
+    def wait(self, timeout: float) -> str:
+        if not self._first.wait(timeout):
             return ""
-        seen = 0
-        deadline = time.monotonic() + max_extra
-        while time.monotonic() < deadline:
-            with self._lock:
-                count = len(self.lines)
-            if count == seen or count >= REPLY_MAX_LINES:
-                break
-            seen = count
-            time.sleep(min(settle, max(0.0, deadline - time.monotonic())))
         with self._lock:
-            return " ".join(self.lines)
+            return self.line
 
 
 class _WingmanModel:
@@ -293,7 +277,7 @@ class MinecraftBot(Skill):
             self._pending = collector
         try:
             self._bridge.send_message(self._agent, self._player_name(), message)
-            reply = await asyncio.to_thread(collector.wait, REPLY_TIMEOUT, REPLY_SETTLE)
+            reply = await asyncio.to_thread(collector.wait, REPLY_TIMEOUT)
         finally:
             with self._pending_lock:
                 self._pending = None

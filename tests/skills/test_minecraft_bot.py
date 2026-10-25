@@ -409,7 +409,7 @@ def test_a_reply_goes_to_the_waiting_tell_and_not_to_the_speaker():
     skill._on_bot_output("Andy", "Agent stopped.")  # Mindcraft's answer to a forced !stop
     skill._on_bot_output("Andy", "Hello world! I am Andy")  # Mindcraft's canned hello at spawn
 
-    assert collector.lines == ["Sure, coming!"]
+    assert collector.line == "Sure, coming!"
     assert skill._lines.get_nowait()[0] == "Done, I am here."
     assert skill._lines.empty()
 
@@ -501,7 +501,6 @@ def test_the_speaker_shows_every_line_but_speaks_only_a_fresh_newest_one():
 
 def test_tell_passes_the_message_on_as_the_player_and_returns_the_reply(monkeypatch):
     monkeypatch.setattr(skill_module, "REPLY_TIMEOUT", 2.0)
-    monkeypatch.setattr(skill_module, "REPLY_SETTLE", 0.2)
     skill = _skill(player_name="Timo")
     skill._in_game = True
     skill._spawned = True
@@ -517,7 +516,6 @@ def test_tell_passes_the_message_on_as_the_player_and_returns_the_reply(monkeypa
 
 def test_tell_without_a_reply_says_the_answer_comes_later(monkeypatch):
     monkeypatch.setattr(skill_module, "REPLY_TIMEOUT", 0.2)
-    monkeypatch.setattr(skill_module, "REPLY_SETTLE", 0.0)
     skill = _skill()
     skill._in_game = True
     skill._state = {"nearby": {"humanPlayers": ["Timo"]}}  # spawned: a state has arrived
@@ -530,38 +528,25 @@ def test_tell_without_a_reply_says_the_answer_comes_later(monkeypatch):
     assert skill._bridge.sent == [("Andy", "Timo", "build a house")]  # the one player nearby
 
 
-def test_a_reply_grows_while_lines_keep_coming_and_stops_when_they_stop():
+def test_the_first_line_is_the_reply_and_later_lines_are_spoken_as_they_come():
     collector = _ReplyCollector()
+    threading.Timer(0.05, lambda: collector.add("Let me look.")).start()
 
-    def feed():
-        collector.add("Let me look.")
-        threading.Timer(0.15, lambda: collector.add("I carry 3 oak logs.")).start()
-
-    threading.Timer(0.05, feed).start()
-
-    assert collector.wait(1.0, settle=0.3) == "Let me look. I carry 3 oak logs."
-    assert _ReplyCollector().wait(0.05, settle=0.3) == ""
+    assert collector.wait(1.0) == "Let me look."
+    assert collector.add("I carry 3 oak logs.") is False  # not joined and not held back: spoken when it comes
+    assert _ReplyCollector().wait(0.05) == ""
 
 
-def test_a_reply_is_a_few_distinct_lines_and_a_retrying_bot_does_not_stutter():
-    collector = _ReplyCollector()
-    for line in ("Collecting.", "Collecting.", "Collecting.", "Nothing here, moving on.", "Found some!"):
-        assert collector.add(line) is True
-    assert collector.add("And a fourth step.") is False  # complete: that line is spoken on its own
-    assert collector.add("Found some!") is True  # the last line again is swallowed, not spoken twice
-
-    assert collector.wait(0.1, settle=5.0) == "Collecting. Nothing here, moving on. Found some!"
-
-
-def test_lines_beyond_a_complete_reply_go_to_the_speaker():
+def test_lines_after_the_reply_go_to_the_speaker():
     skill = _skill()
     collector = _ReplyCollector()
     skill._pending = collector
-    for line in ("One.", "Two.", "Three.", "Four."):
+    for line in ("One.", "Two.", "Three."):
         skill._on_bot_output("Andy", line)
 
-    assert collector.lines == ["One.", "Two.", "Three."]
-    assert skill._lines.get_nowait()[0] == "Four."
+    assert collector.line == "One."
+    assert skill._lines.get_nowait()[0] == "Two."
+    assert skill._lines.get_nowait()[0] == "Three."
 
 
 def test_a_mindcraft_that_died_is_forgotten_and_the_settings_are_checked_first(tmp_path):
