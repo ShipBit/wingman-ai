@@ -26,6 +26,7 @@ from skills.minecraft_bot.main import MinecraftBot, _ReplyCollector
 from skills.minecraft_bot.mindcraft import (
     build_agent_settings,
     clean_bot_line,
+    conversing_prompt,
     format_status,
     keys_file_api_key,
     mindcraft_problem,
@@ -203,10 +204,16 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
         auth="offline",
         base_profile="survival",
         allow_coding=False,
+        persona="A grumpy old pirate who loves gold.",
+        language="German",
     )
 
     profile = settings["profile"]
     assert profile["name"] == "Andy"
+    assert "A grumpy old pirate who loves gold." in profile["conversing"]
+    assert "Speak German" in profile["conversing"]
+    for placeholder in ("$NAME", "$MEMORY", "$STATS", "$INVENTORY", "$COMMAND_DOCS", "$EXAMPLES"):
+        assert placeholder in profile["conversing"]
     assert profile["model"] == {"api": "openai", "url": "http://127.0.0.1:5123/v1", "model": "wingman"}
     assert profile["embedding"] == profile["model"]
     assert settings["port"] == -1  # 0 means: find the LAN world
@@ -215,6 +222,14 @@ def test_the_agent_settings_point_the_bot_at_the_proxy():
     assert settings["show_command_syntax"] == "none"
     assert settings["init_message"] is None  # Mindcraft's canned hello, no model call
     assert json.dumps(settings)  # what goes over the socket must be JSON
+
+
+def test_the_bots_prompt_keeps_a_long_backstory_short_and_has_a_default():
+    assert "a friendly, casual" in conversing_prompt("", "English")
+    long_story = "word " * 1000
+    prompt = conversing_prompt(long_story, "English")
+    assert prompt.count("word") < 400
+    assert " ..." in prompt
 
 
 def test_bot_names_follow_minecrafts_rules():
@@ -378,7 +393,7 @@ def test_tell_passes_the_message_on_as_the_player_and_returns_the_reply(monkeypa
     result = asyncio.run(MinecraftBot.tell_minecraft_bot(skill, "come to me"))
 
     assert skill._bridge.sent == [("Andy", "Timo", "come to me")]
-    assert result == "Andy replied: On my way!"
+    assert result == ("On my way!", "On my way!")  # spoken word for word, no retelling
     assert skill._pending is None
     assert skill._lines.empty()
 
@@ -393,7 +408,7 @@ def test_tell_without_a_reply_says_the_answer_comes_later(monkeypatch):
 
     result = asyncio.run(MinecraftBot.tell_minecraft_bot(skill, "build a house"))
 
-    assert result.startswith("Delivered to Andy. No reply yet")
+    assert result.startswith("Your player has not answered yet")
     assert skill._bridge.sent == [("Andy", "Timo", "build a house")]  # the one player nearby
 
 
@@ -436,4 +451,4 @@ def test_lines_the_bot_said_meanwhile_reach_the_conversation_as_a_note():
     asyncio.run(MinecraftBot.on_add_user_message(skill, "what now?"))
     asyncio.run(MinecraftBot.on_add_user_message(skill, "and now?"))
 
-    assert notes == ["The Minecraft bot Andy said meanwhile: Collected 10 oak logs. | I am at the house."]
+    assert notes == ["What you said in Minecraft meanwhile, as the player Andy: Collected 10 oak logs. | I am at the house."]

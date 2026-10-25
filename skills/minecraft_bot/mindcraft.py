@@ -125,6 +125,41 @@ def clean_bot_line(text: str) -> str:
     return line
 
 
+PERSONA_LIMIT = 1500
+"""Characters of the Wingman's backstory that go into the bot's prompt."""
+
+DEFAULT_PERSONA = "a friendly, casual, effective and efficient player"
+
+
+def conversing_prompt(persona: str, language: str) -> str:
+    """Mindcraft's chat prompt for the bot, with the Wingman's character and language.
+
+    Built on Mindcraft's default (profiles/defaults/_default.json): the
+    $PLACEHOLDERS are filled by Mindcraft with the bot's name, memory, stats,
+    inventory, command docs and examples. The Wingman and the bot are one
+    character, so the Wingman's backstory is the bot's, and the bot answers
+    in the user's language right away: no translation step in between.
+    """
+    persona = " ".join((persona or "").split())
+    if len(persona) > PERSONA_LIMIT:
+        persona = persona[:PERSONA_LIMIT].rsplit(" ", 1)[0] + " ..."
+    return (
+        "You are $NAME, a player in Minecraft. You can converse with players, see, move, mine, "
+        "build and interact with the world by using commands.\n"
+        f"Your character: {persona or DEFAULT_PERSONA}\n"
+        "$SELF_PROMPT Be brief: one or two short sentences, spoken like a friend playing alongside. "
+        "Don't apologize, don't give instructions or make lists unless asked, don't refuse requests. "
+        "Don't pretend to act, use commands immediately when requested. "
+        "Do NOT say 'Sure, I've stopped. *stops*', say 'Sure, I'll stop. !stop'. "
+        "Respond only as $NAME, never pretend to be someone else. "
+        "If you have nothing to say or do, respond with just a tab '\t'.\n"
+        "Summarized memory:'$MEMORY'\n$STATS\n$INVENTORY\n$COMMAND_DOCS\n$EXAMPLES\n"
+        f"Speak {language} in everything you say. Commands keep their exact syntax, "
+        "like !collectBlocks(\"oak_log\", 10).\n"
+        "Conversation Begin:"
+    )
+
+
 def build_agent_settings(
     *,
     bot_name: str,
@@ -135,6 +170,8 @@ def build_agent_settings(
     auth: str,
     base_profile: str,
     allow_coding: bool,
+    persona: str = "",
+    language: str = "English",
 ) -> dict:
     """The settings object for Mindcraft's create-agent event.
 
@@ -150,6 +187,7 @@ def build_agent_settings(
             "model": model,
             "embedding": dict(model),
             "cooldown": 2000,
+            "conversing": conversing_prompt(persona, language),
         },
         "minecraft_version": version or "auto",
         "host": host or "127.0.0.1",

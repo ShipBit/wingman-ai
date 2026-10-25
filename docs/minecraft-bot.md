@@ -1,6 +1,6 @@
 # Minecraft Bot
 
-The Minecraft Bot skill puts an AI-controlled player into your Minecraft Java world. You talk to your Wingman, the Wingman passes your order on, and the bot walks over, follows you, collects wood, crafts, builds, fights and reports back in chat. Your Wingman reads out what the bot says.
+The Minecraft Bot skill puts your Wingman into your Minecraft Java world as a player. You talk to your Wingman as you would to a friend in the game, and its player walks over, follows you, collects wood, crafts, builds, fights and answers in the game chat. What it says there, your Wingman says to you in its own voice, word for word: the Wingman and the player are one character, with the Wingman's backstory and in your language.
 
 The bot is a [Mindcraft](https://github.com/mindcraft-bots/mindcraft) agent. Mindcraft is the open source project that gives a Mineflayer bot a language model as its brain and a library of actions such as `goToPlayer`, `collectBlocks`, `craftRecipe`, `smeltItem`, `attack` and `goal`. The skill starts Mindcraft for you, creates the bot and connects it to the game.
 
@@ -45,7 +45,7 @@ The skill is not discoverable by default. Open your Wingman in the client, turn 
 3. Give it work: "follow me", "collect ten oak logs", "craft a wooden pickaxe", "what do you have in your inventory?", "go to bed", "kill that zombie", "build a small shelter here". Mindcraft handles multi-step tasks on its own, for example it collects the logs it needs before it crafts.
 4. "Stop" interrupts what the bot is doing. "Stop the Minecraft bot" removes it from the game and shuts Mindcraft down.
 
-The bot answers in the game chat. Your Wingman speaks these lines in its own voice, and in your language when the local support model is loaded. What the bot said while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
+The player answers in the game chat, and your Wingman says the same lines to you. A line that comes later, like "Done, I have the logs", is spoken when it comes. What was said in the game while you were busy is given to the Wingman with your next message, so you can ask "did it work?".
 
 ## The brake
 

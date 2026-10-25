@@ -1,11 +1,15 @@
-"""Minecraft Bot: an AI-controlled player in the user's Minecraft world.
+"""Minecraft Bot: the Wingman as a player in the user's Minecraft world.
 
 The bot is a Mindcraft agent (github.com/mindcraft-bots/mindcraft). This skill
-starts Mindcraft, puts the bot into the game and passes the user's spoken
-instructions on to it. The bot's "brain" is this Wingman's own model: Mindcraft
-is pointed at a local OpenAI-compatible endpoint (llm_proxy.py) that answers
-through self.wingman.ai, so the bot needs no API key of its own and runs on
-the subscription, the user's key or a local model, whatever the Wingman uses.
+starts Mindcraft, puts the bot into the game and passes the user's words on to
+it. The bot's "brain" is this Wingman's own model: Mindcraft is pointed at a
+local OpenAI-compatible endpoint (llm_proxy.py) that answers through
+self.wingman.ai, so the bot needs no API key of its own and runs on the
+subscription, the user's key or a local model, whatever the Wingman uses.
+
+The Wingman and the bot are one character. What the bot says is spoken
+word for word in the Wingman's voice, not retold; the bot gets the Wingman's
+backstory and answers in the user's language.
 
 Threads: the Socket.IO client, the proxy server and Mindcraft's log reader run
 on their own threads. Their callbacks only touch thread-safe state (a queue,
@@ -23,12 +27,10 @@ import shutil
 import threading
 import time
 from collections import deque
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional
 
 from api.enums import SpeechPriority, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.skill_local_ai import SamplingPreset
 from skills.minecraft_bot.llm_proxy import ContextTooLong, ProxyServer, RateLimiter, create_app
 from skills.minecraft_bot.mindcraft import (
     AGENT_EXITED_MARKER,
@@ -49,7 +51,6 @@ from skills.skill_base import Skill, tool
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
-RELAY_PROMPT_FILE = Path(__file__).parent / "relay_prompt.md"
 SPAWN_TIMEOUT = 75.0
 """Seconds to wait for the bot to appear in the game after Mindcraft accepted it."""
 REPLY_TIMEOUT = 20.0
@@ -179,6 +180,12 @@ class MinecraftBot(Skill):
             return str(nearby[0])
         return "Player"
 
+    def _backstory(self) -> str:
+        try:
+            return str(self.wingman.config.prompts.backstory or "")
+        except Exception:
+            return ""
+
     def _config_error(self, message: str) -> WingmanInitializationError:
         return WingmanInitializationError(
             wingman_name=self.name,
@@ -205,23 +212,23 @@ class MinecraftBot(Skill):
     async def get_prompt(self) -> str | None:
         base = await super().get_prompt() or ""
         if self._in_game:
-            status = f"The bot {self._agent} is in the game."
+            status = f"You are in the Minecraft world right now, as the player {self._agent}."
         elif self._bridge and self._bridge.running:
-            status = f"The bot {self._agent} is not in the game right now."
+            status = f"You are not in the Minecraft world at the moment (your player is {self._agent})."
         else:
-            status = "The bot has not been spawned yet; tell_minecraft_bot spawns it when needed."
+            status = "You have not joined the Minecraft world yet; tell_minecraft_bot joins when needed."
         player = self._text("player_name")
-        who = f" The user's Minecraft name is {player}." if player else ""
+        who = f" The user plays as {player}." if player else ""
         return f"{base}\n{status}{who}".strip()
 
     # ------------------------------------------------------------------- tools
 
     @tool(name="minecraft_bot", wait_response=True)
     async def minecraft_bot(self, action: Literal["spawn", "stop", "status"]) -> str:
-        """Spawns the AI bot into the running Minecraft game, stops it, or reports its status.
+        """Joins the running Minecraft game as your player, leaves it, or reports your player's state.
 
         Args:
-            action: spawn puts the bot into the game; stop removes it and shuts Mindcraft down; status says where the bot is, its health, what it is doing and what it carries.
+            action: spawn joins the game; stop leaves it and shuts Mindcraft down; status says where your player is, its health, what it is doing and what it carries.
         """
         await self._forget_a_dead_mindcraft()
         if action == "spawn":
@@ -235,16 +242,16 @@ class MinecraftBot(Skill):
             bot_name=self._agent or self._bot_name(),
         )
 
-    @tool(name="tell_minecraft_bot", wait_response=True)
-    async def tell_minecraft_bot(self, message: str) -> str:
-        """Tells the Minecraft bot what to do or asks it something. The bot plans and acts on its own and answers in chat.
+    @tool(name="tell_minecraft_bot")
+    async def tell_minecraft_bot(self, message: str):
+        """Passes what the user said to your player in Minecraft, who acts on it and answers. The answer is spoken as your own words.
 
         Args:
-            message: One short instruction or question in English, addressed to the bot like to a player, e.g. "come to me", "follow me", "collect 10 oak logs", "craft a wooden pickaxe", "what is in your inventory?", "stop".
+            message: The user's words, as they said them and in their language, not rephrased, not translated, not in the third person, e.g. "Komm mal her", "Sammel zehn Eichenstämme", "Was hast du dabei?".
         """
         message = (message or "").strip()
         if not message:
-            return "There was nothing to tell the bot."
+            return "There was nothing to pass on."
         await self._forget_a_dead_mindcraft()
         if not self._in_game:
             spawned = await self._spawn()
@@ -266,8 +273,12 @@ class MinecraftBot(Skill):
             with self._pending_lock:
                 self._pending = None
         if reply:
-            return f"{self._agent} replied: {reply}"
-        return f"Delivered to {self._agent}. No reply yet; the bot's answer will be spoken when it comes."
+            # Spoken word for word, in the Wingman's voice: the turn ends with it.
+            return reply, reply
+        return (
+            "Your player has not answered yet; the answer is spoken when it comes. "
+            "Say one short word as the player, like 'Moment.'"
+        )
 
     # ---------------------------------------------------------------- lifecycle
 
@@ -292,6 +303,8 @@ class MinecraftBot(Skill):
             auth=self._text("auth", "offline"),
             base_profile=self._text("base_profile", "survival"),
             allow_coding=self._flag("allow_coding", False),
+            persona=self._backstory(),
+            language=self.wingman.language.name,
         )
         self._agent = bot
         self._in_game = False
@@ -488,27 +501,11 @@ class MinecraftBot(Skill):
                 self.log.warning(f"Could not relay a bot line: {error}", server_only=True)
 
     async def _relay(self, line: str) -> None:
+        """A line the player said in the game, said here in the Wingman's voice, as its own."""
         self._unreported.append(line)
-        text = await self._localize(line)
-        await self.wingman.conversation.show(f"{self._agent}: {text}", skill_name=self.name)
+        await self.wingman.conversation.show(line, skill_name=self.name)
         if self._flag("speak_bot_messages", True):
-            await self.wingman.tts.speak(text, priority=SpeechPriority.EVENT)
-
-    async def _localize(self, line: str) -> str:
-        """The bot speaks English; the user may not. The support model translates when it can."""
-        language = self.wingman.language
-        if (language.code or "en") == "en" or not self.wingman.local_ai.available:
-            return line
-        try:
-            template = RELAY_PROMPT_FILE.read_text(encoding="utf-8")
-        except OSError:
-            return line
-        prompt = template.format(language=language.name, line=line)
-        result = (await self.wingman.local_ai.generate(prompt, preset=SamplingPreset.PRECISE)).strip()
-        result = result.strip('"').strip()
-        if not result or len(result) > 4 * len(line) + 40:
-            return line
-        return result
+            await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
 
     async def on_add_user_message(self, message: str) -> None:
         if not self._unreported:
@@ -516,5 +513,5 @@ class MinecraftBot(Skill):
         lines = list(self._unreported)
         self._unreported.clear()
         await self.wingman.conversation.add_note(
-            f"The Minecraft bot {self._agent} said meanwhile: " + " | ".join(lines)
+            f"What you said in Minecraft meanwhile, as the player {self._agent}: " + " | ".join(lines)
         )
