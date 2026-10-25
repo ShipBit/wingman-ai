@@ -263,8 +263,49 @@ class ToolDefinition:
             func, name=self.name, description=self.description
         )
 
+    def _argument_problem(self, parameters: dict[str, Any]) -> Optional[str]:
+        """
+        What is wrong with the model's arguments, in words it can act on.
+
+        A wrong name raised a TypeError that only said "ERROR DURING PROCESSING"
+        to the model and an error to Sentry: on 3.2.11 `open_folder` got
+        `folder_path`, the parameter name of `load_folder_contents`.
+        """
+        signature = inspect.signature(self.func)
+        params = [p for name, p in signature.parameters.items() if name not in ("self", "cls")]
+        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params):
+            return None
+        names = [p.name for p in params]
+        unknown = [name for name in parameters if name not in names]
+        missing = [
+            p.name
+            for p in params
+            if p.default is inspect.Parameter.empty
+            and p.kind is not inspect.Parameter.VAR_POSITIONAL
+            and p.name not in parameters
+        ]
+        if not unknown and not missing:
+            return None
+        expected = ", ".join(
+            p.name if p.default is inspect.Parameter.empty else f"{p.name} (optional)"
+            for p in params
+            if p.kind is not inspect.Parameter.VAR_POSITIONAL
+        )
+        problems = []
+        if unknown:
+            problems.append(f"unknown argument {', '.join(unknown)}")
+        if missing:
+            problems.append(f"missing argument {', '.join(missing)}")
+        return (
+            f"The call to '{self.tool_name}' was not made: {'; '.join(problems)}. "
+            f"It takes: {expected or 'no arguments'}. Call it again with these names."
+        )
+
     async def execute(self, parameters: dict[str, Any], skill_instance: "Skill") -> Any:
         """Execute the tool function with the given parameters."""
+        problem = self._argument_problem(parameters)
+        if problem:
+            return problem
         # Bind self if this is an instance method
         if self.is_async:
             return await self.func(skill_instance, **parameters)
