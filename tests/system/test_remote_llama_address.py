@@ -37,3 +37,19 @@ def test_correcting_the_address_brings_the_client_back():
     remote.update_settings(_settings("http://192.168.1.50"))
 
     assert remote._support_client is not None
+
+
+def test_a_mistyped_address_is_a_warning_not_an_error_report(monkeypatch):
+    import providers.llama_cpp_remote as remote_module
+    from api.enums import LogType
+
+    colors = []
+    monkeypatch.setattr(
+        remote_module,
+        "printr",
+        SimpleNamespace(print=lambda text, color=None, **kw: colors.append(color)),
+    )
+
+    LlamaCppRemote(_settings("http://192.168.1.50:1432"))
+
+    assert colors == [LogType.WARNING]

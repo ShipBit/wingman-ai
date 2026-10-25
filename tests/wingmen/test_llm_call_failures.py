@@ -1,13 +1,17 @@
-"""What the main model call does with answers it cannot use.
+"""What the main model call does with answers and setups it cannot use.
 
 An answer without a single choice used to crash the turn on ``choices[0]``.
+An endpoint the user typed in that is no URL is theirs to correct: a warning
+and an initialization error, not an error report.
 """
 
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+
 import wingmen.wingman as wingman_module
-from api.enums import ConversationProvider, LogType
+from api.enums import ConversationProvider, LogType, WingmanInitializationErrorType
 from wingmen.wingman import Wingman
 
 
@@ -57,3 +61,24 @@ def test_an_answer_with_a_choice_is_passed_on(monkeypatch):
     assert asyncio.run(wingman.actual_llm_call([])) is completion
     assert lines.lines == []
 
+
+def test_an_endpoint_that_is_no_url_is_a_config_error(monkeypatch):
+    class Factory:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_tts(self, errors):
+            return None
+
+        async def create_llm(self, errors):
+            raise httpx.InvalidURL("Invalid port: '1234:1234'")
+
+    monkeypatch.setattr(wingman_module, "ProviderFactory", Factory)
+    wingman, lines = _wingman(monkeypatch)
+    wingman.settings = wingman.secret_keeper = wingman._shared_providers = None
+
+    errors = asyncio.run(wingman.validate())
+
+    assert [e.error_type for e in errors] == [WingmanInitializationErrorType.INVALID_CONFIG]
+    assert "1234:1234" in errors[0].message
+    assert [color for _text, color in lines.lines] == [LogType.WARNING]

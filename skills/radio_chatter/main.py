@@ -338,7 +338,9 @@ class RadioChatter(Skill):
                 messages = re.sub(r"^```(?:json)?\s*|\s*```$", "", messages).strip()
             messages = json.loads(messages)
         except json.JSONDecodeError as e:
-            self.log.error(
+            # The model wrote something else than the JSON it was asked for.
+            # That happens with small models; the next round tries again.
+            self.log.warning(
                 f"Radio chatter message generation failed due to invalid JSON: {str(e)}"
             )
             return

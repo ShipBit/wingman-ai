@@ -19,9 +19,10 @@ bodies and headers, local variables, the hostname and the IP (turned off in
 the Sentry project).
 
 Not sent at all: problems on the user's side (wrong key, quota, no internet,
-provider down or a model the provider does not know), mistakes in a user's own
-skill code, and asyncio noise from CPython bugs on Windows. See the filters at
-the end of this module.
+provider down or a model the provider does not know, a full disk, a proxy that
+breaks certificates, an MCP server waiting for authorization), mistakes in a
+user's own skill code, and asyncio noise from CPython bugs on Windows or from
+the interpreter shutting down. See the filters at the end of this module.
 
 The user decides in the client. The choice lives outside the versioned config
 folder, in ``WingmanAI/error_reporting.json``: Core reads it before the config
@@ -45,7 +46,8 @@ import sys
 import threading
 import uuid
 from os import path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterator, Optional
+from urllib.parse import urlparse
 
 from services.file import get_users_dir
 from services.system_manager import LOCAL_VERSION
@@ -90,6 +92,9 @@ _IGNORED_EXCEPTIONS = {
     # The conversation no longer fits the model's context window. Core shows
     # it to the user; it is a usage limit, not a bug.
     "ContextOverflowError",
+    # An OAuth MCP server waits for the user to press Authorize. It arrives
+    # inside the ExceptionGroup of the MCP transport.
+    "NeedsAuthorization",
 }
 
 # HTTP status codes of the openai SDK that mean the user's own provider said
@@ -99,7 +104,49 @@ _IGNORED_EXCEPTIONS = {
 # Pro goes through ``requests``), so this never hides a backend error. Other
 # 400s stay: they can be a payload Core built wrong.
 _IGNORED_OPENAI_STATUS = {401, 402, 403, 404, 408, 409, 413, 429}
-_MODEL_NOT_FOUND_HINTS = ("not found", "does not exist", "model_not_found")
+# 400s of the openai SDK that are the user's setup, not a payload Core built
+# wrong: an unknown model, a wrong key (some providers send it as 400), a local
+# server without a model loaded, an image sent to a model without vision.
+_OPENAI_USER_400_HINTS = (
+    "not found",
+    "does not exist",
+    "model_not_found",
+    "incorrect api key",
+    "no models loaded",
+    "does not support image",
+)
+
+# Any other HTTP client or provider SDK: a bad key (401, 403), no credit (402)
+# or a rate limit (429) from a service the user configured. Our own backend
+# (wingman-ai.com) stays reported: a 401 there can be a bug in Core's sign-in.
+_IGNORED_THIRD_PARTY_STATUS = {401, 402, 403, 429}
+_OWN_DOMAIN = "wingman-ai.com"
+# Modules whose exceptions are Core's own, not a provider SDK's.
+_CORE_MODULES = {
+    "api",
+    "builtins",
+    "hud_server",
+    "main",
+    "providers",
+    "services",
+    "skills",
+    "wingman_core",
+    "wingmen",
+}
+
+# The disk is full: ENOSPC and ERROR_DISK_FULL, and the text libraries put in
+# their own exceptions for it.
+_DISK_FULL_ERRNOS = {28}
+_DISK_FULL_WINERRORS = {112}
+_DISK_FULL_HINTS = (
+    "no space left on device",
+    "not enough space",
+    "not enough free disk space",
+)
+
+# A future submitted to an executor while Python shuts down: nothing is lost,
+# the process is ending.
+_SHUTDOWN_HINTS = ("cannot schedule new futures after shutdown",)
 
 # Windows error codes the asyncio proactor raises for sockets that were closed
 # under it: WSAEINVAL (10022), WSAECONNRESET (10054) and
@@ -376,8 +423,85 @@ def _is_openai_user_error(exc: BaseException) -> bool:
         return True
     if status == 400:
         text = f"{getattr(exc, 'message', '') or ''} {exc}".lower()
-        return any(hint in text for hint in _MODEL_NOT_FOUND_HINTS)
+        return any(hint in text for hint in _OPENAI_USER_400_HINTS)
     return False
+
+
+def _http_status(exc: BaseException) -> Optional[int]:
+    """The HTTP status of an HTTP client or SDK error: ``requests`` and
+    ``httpx`` keep it on ``response``, most SDKs on ``status_code``."""
+    response = getattr(exc, "response", None)
+    for value in (
+        getattr(response, "status_code", None),
+        getattr(exc, "status_code", None),
+        getattr(exc, "code", None),
+    ):
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
+
+
+def _http_host(exc: BaseException) -> Optional[str]:
+    """The host the failed request went to, when the error knows it."""
+    for owner in (getattr(exc, "response", None), exc):
+        if owner is None:
+            continue
+        try:
+            request = getattr(owner, "request", None)
+        except Exception:
+            # httpx raises when a response has no request attached.
+            request = None
+        for url in (getattr(owner, "url", None), getattr(request, "url", None)):
+            if url is None:
+                continue
+            host = getattr(url, "host", None) or urlparse(str(url)).hostname
+            if host:
+                return str(host).lower()
+    return None
+
+
+def _is_own_host(host: str) -> bool:
+    return host == _OWN_DOMAIN or host.endswith("." + _OWN_DOMAIN)
+
+
+def _is_third_party_refusal(exc: BaseException) -> bool:
+    """A service the user configured refused the key or the quota (see
+    _IGNORED_THIRD_PARTY_STATUS)."""
+    if _http_status(exc) not in _IGNORED_THIRD_PARTY_STATUS:
+        return False
+    host = _http_host(exc)
+    if host:
+        return not _is_own_host(host)
+    # No URL on the error: only an SDK's own exception counts, never one of
+    # Core's, whose status may well come from our backend.
+    module = (type(exc).__module__ or "").split(".")[0]
+    return module not in _CORE_MODULES and module not in ("requests", "httpx")
+
+
+def _is_disk_full(exc: BaseException) -> bool:
+    if isinstance(exc, OSError) and (
+        exc.errno in _DISK_FULL_ERRNOS
+        or getattr(exc, "winerror", None) in _DISK_FULL_WINERRORS
+    ):
+        return True
+    text = str(exc).lower()
+    return any(hint in text for hint in _DISK_FULL_HINTS)
+
+
+def _is_cert_verification_failure(exc: BaseException) -> bool:
+    """A proxy or antivirus on the user's network replaced the certificate
+    (seen on Hugging Face downloads). Our own hosts stay reported: a broken
+    certificate there would be ours to fix."""
+    names = {cls.__name__ for cls in type(exc).__mro__}
+    text = str(exc)
+    if "SSLCertVerificationError" not in names and "CERTIFICATE_VERIFY_FAILED" not in text:
+        return False
+    return _OWN_DOMAIN not in text.lower()
+
+
+def _is_shutdown_noise(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return isinstance(exc, RuntimeError) and any(h in text for h in _SHUTDOWN_HINTS)
 
 
 def _last_frame_file(exc: BaseException) -> str:
@@ -403,11 +527,36 @@ def _is_windows_asyncio_noise(exc: BaseException) -> bool:
     return False
 
 
+def _leaves(exc: BaseException) -> Iterator[BaseException]:
+    """The exceptions inside an ExceptionGroup, however deep (anyio task groups
+    wrap a transport's error in one or more), or the exception itself."""
+    nested = getattr(exc, "exceptions", None)
+    if isinstance(exc, BaseExceptionGroup) and nested:
+        for inner in nested:
+            yield from _leaves(inner)
+    else:
+        yield exc
+
+
+def _is_noise_leaf(exc: BaseException) -> bool:
+    return (
+        _is_ignored([cls.__name__ for cls in type(exc).__mro__])
+        or _is_openai_user_error(exc)
+        or _is_windows_asyncio_noise(exc)
+        or _is_third_party_refusal(exc)
+        or _is_disk_full(exc)
+        or _is_cert_verification_failure(exc)
+        or _is_shutdown_noise(exc)
+    )
+
+
 def _is_noise(exc: Optional[BaseException]) -> bool:
+    """Noise when the exception is, or for a group when every exception in
+    it is: one real bug among them still gets the group reported."""
     if exc is None:
         return False
     try:
-        return _is_openai_user_error(exc) or _is_windows_asyncio_noise(exc)
+        return all(_is_noise_leaf(leaf) for leaf in _leaves(exc))
     except Exception:
         return False
 

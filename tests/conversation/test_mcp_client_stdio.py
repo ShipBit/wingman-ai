@@ -1,4 +1,5 @@
-"""STDIO MCP servers get a real file for their stderr.
+"""STDIO MCP servers get a real file for their stderr, and an MCP server
+waiting for the user's authorization is a warning, not an error report.
 
 The MCP SDK hands its ``errlog`` to the subprocess, which needs a file with a
 fileno. Its default is ``sys.stderr``, which Printr replaces with a logger
@@ -9,9 +10,10 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import services.mcp_client as mcp_module
-from api.enums import LogType, McpTransportType
+from api.enums import LogType, McpAuthType, McpTransportType
 from api.interface import McpServerConfig
 from services.mcp_client import McpClient
+from services.mcp_oauth import NeedsAuthorization
 
 
 def _config(**kwargs) -> McpServerConfig:
@@ -95,3 +97,17 @@ def test_a_tool_call_gives_its_process_a_log_and_closes_it(monkeypatch, tmp_path
     assert asyncio.run(client._call_tool_stdio(connection, "tool", {})) == "result"
     assert errlogs[0].closed
 
+
+def test_a_server_waiting_for_authorization_is_a_warning(monkeypatch, tmp_path):
+    @asynccontextmanager
+    async def stdio_client(server, errlog):
+        # anyio wraps the transport's error in a group.
+        raise ExceptionGroup("transport", [NeedsAuthorization("Local Server")])
+        yield
+
+    lines = _patch(monkeypatch, tmp_path, stdio_client)
+
+    connection = asyncio.run(McpClient().connect(_config(auth=McpAuthType.OAUTH)))
+
+    assert "press Authorize" in connection.error
+    assert [color for _text, color in lines.lines] == [LogType.WARNING]

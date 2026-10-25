@@ -147,7 +147,7 @@ class McpClient:
             return open(os.devnull, "w", encoding="utf-8")
 
     @staticmethod
-    def _format_auth_error(config: McpServerConfig, exception: Exception) -> str:
+    def _auth_remedy(config: McpServerConfig, exception: Exception) -> Optional[str]:
         """
         Format authentication errors with clear instructions.
 
@@ -161,7 +161,8 @@ class McpClient:
             exception: The exception that occurred
 
         Returns:
-            Formatted error message
+            The message telling the user what to do, or None when it is not
+            an auth error.
         """
         if config.auth == McpAuthType.OAUTH:
             remedy = (
@@ -213,8 +214,7 @@ class McpClient:
                 ):
                     return remedy
 
-        # Return original error for non-auth issues
-        return str(exception)
+        return None
 
     @property
     def is_available(self) -> bool:
@@ -295,12 +295,15 @@ class McpClient:
                 # it has updated its own state
 
         except Exception as e:
-            # Format error with special handling for authentication errors
-            connection.error = self._format_auth_error(config, e)
+            # Format error with special handling for authentication errors.
+            # One the user fixes in the settings is a warning: it is not a
+            # bug, and an ERROR line would go to the error report.
+            remedy = self._auth_remedy(config, e)
+            connection.error = remedy or str(e)
             connection.is_connected = False
             await printr.print_async(
                 f"MCP connection failed ({config.display_name}): {connection.error}",
-                color=LogType.ERROR,
+                color=LogType.WARNING if remedy else LogType.ERROR,
                 source_name=self._wingman_name if self._wingman_name else None,
                 server_only=False,
             )
