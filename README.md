@@ -96,6 +96,8 @@ Skills are Python modules that give a Wingman new abilities. Grant one to a Wing
   - **Star Citizen Events**: your Wingman reacts in character to what the log reader sees, and knows where you are and which missions you have
   - **Star Citizen Accountant**: books trades and rewards from the game log and tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
   - **UEX Corp**: trade routes, commodity prices, locations, ships and items from UEX community data
+- **Minecraft**
+  - **Minecraft Bot**: an AI-controlled player in your Minecraft Java world that comes, follows, collects, crafts, builds and fights on your spoken orders, thinking with your Wingman's model. Setup in [docs/minecraft-bot.md](docs/minecraft-bot.md)
 - **Other games** (Windows only)
   - **MSFS2020 Control**: controls Microsoft Flight Simulator 2020/2024 and reads its data via SimConnect
   - **ATS Telemetry**: live data from American Truck Simulator and Euro Truck Simulator 2, with a dispatch mode that comments on what happens

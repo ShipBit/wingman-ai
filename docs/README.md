@@ -26,6 +26,7 @@ Learn how to create custom extensions for Wingman AI:
 
 Additional reference documentation:
 
+- **[Minecraft Bot](minecraft-bot.md)** - An AI-controlled player in your Minecraft world: what to install, the skill's settings, the brake on its thinking
 - **[The HUD](hud.md)** - The shared chat and info containers, HUD profiles per config, the preview and the per-Wingman switches
 - **[What Wingman AI shortens, and when](context-and-shortening.md)** - Every place where tool responses, the conversation or skill input get cut, cleared or summarized, with example scenarios
 - **[CI/CD Pipeline](ci-cd.md)** - How Core is built and staged
