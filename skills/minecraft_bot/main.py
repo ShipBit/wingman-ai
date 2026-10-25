@@ -223,6 +223,7 @@ class MinecraftBot(Skill):
         Args:
             action: spawn puts the bot into the game; stop removes it and shuts Mindcraft down; status says where the bot is, its health, what it is doing and what it carries.
         """
+        await self._forget_a_dead_mindcraft()
         if action == "spawn":
             return await self._spawn()
         if action == "stop":
@@ -244,6 +245,7 @@ class MinecraftBot(Skill):
         message = (message or "").strip()
         if not message:
             return "There was nothing to tell the bot."
+        await self._forget_a_dead_mindcraft()
         if not self._in_game:
             spawned = await self._spawn()
             if not self._in_game:
@@ -319,6 +321,13 @@ class MinecraftBot(Skill):
         self.log.warning(f"{bot} could not join the game. Mindcraft said:\n{tail}")
         return f"{bot} could not join the game. {self._join_hints()} Mindcraft's last lines:\n{tail}"
 
+    async def _forget_a_dead_mindcraft(self) -> None:
+        """A Mindcraft process that died takes the bot with it; the next spawn starts fresh."""
+        bridge = self._bridge
+        if bridge is not None and not bridge.running:
+            self.log.warning("Mindcraft is no longer running; the bot is gone.", server_only=True)
+            await asyncio.to_thread(self._stop_services)
+
     @property
     def _ready(self) -> bool:
         """In the game and spawned: Mindcraft reports the login before the bot stands in the world."""
@@ -348,12 +357,27 @@ class MinecraftBot(Skill):
     def _start_services(self) -> None:
         """Start the model proxy and Mindcraft. Blocking; runs in a worker thread."""
         with self._services_lock:
+            node = self._node()
+            directory = self._text("mindcraft_dir")
+            if not self._bridge or not self._bridge.running:
+                problem = mindcraft_problem(directory)
+                if problem:
+                    raise MindcraftError(problem)
+                version = node_version(node)
+                if version is None:
+                    raise MindcraftError(
+                        f"Could not run '{node} --version'. Install Node.js 22 LTS or set the path to node in the skill settings."
+                    )
+                if version[0] < MIN_NODE_MAJOR:
+                    raise MindcraftError(
+                        f"Node.js {'.'.join(map(str, version))} is too old. Mindcraft needs Node.js {MIN_NODE_MAJOR} or newer; 22 LTS is recommended."
+                    )
+
             if not self._proxy or not self._proxy.running:
                 self._token = secrets.token_urlsafe(24)
                 limiter = RateLimiter(
                     lambda: self._number("requests_per_minute", DEFAULT_REQUESTS_PER_MINUTE)
                 )
-                directory = self._text("mindcraft_dir")
                 tokens = {self._token}
                 users_key = keys_file_api_key(directory)
                 if users_key:
@@ -370,20 +394,6 @@ class MinecraftBot(Skill):
                 self._proxy.start()
 
             if not self._bridge or not self._bridge.running:
-                node = self._node()
-                directory = self._text("mindcraft_dir")
-                problem = mindcraft_problem(directory)
-                if problem:
-                    raise MindcraftError(problem)
-                version = node_version(node)
-                if version is None:
-                    raise MindcraftError(
-                        f"Could not run '{node} --version'. Install Node.js 22 LTS or set the path to node in the skill settings."
-                    )
-                if version[0] < MIN_NODE_MAJOR:
-                    raise MindcraftError(
-                        f"Node.js {'.'.join(map(str, version))} is too old. Mindcraft needs Node.js {MIN_NODE_MAJOR} or newer; 22 LTS is recommended."
-                    )
                 env = dict(os.environ)
                 env["OPENAI_API_KEY"] = self._token
                 self._bridge = MindcraftBridge(

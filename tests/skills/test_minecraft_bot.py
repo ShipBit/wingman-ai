@@ -254,6 +254,8 @@ def test_the_status_summarizes_mindcrafts_state():
     assert "not in the game" in format_status(None, running=True, in_game=False, bot_name="Andy")
     idle = {"action": {"current": "Stopped", "kind": "stopped"}}
     assert "waiting for instructions" in format_status(idle, running=True, in_game=True, bot_name="Andy")
+    hunting = {"action": {"current": "mode:self_defense", "kind": "acting"}}
+    assert "Doing: self defense on its own." in format_status(hunting, running=True, in_game=True, bot_name="Andy")
 
 
 def test_mindcraft_problem_says_what_is_missing(tmp_path):
@@ -287,6 +289,9 @@ class FakeBridge:
         self.sent = []
         self.running = True
         self.port = 8080
+
+    def shutdown(self, timeout=0):
+        self.running = False
 
     def send_message(self, agent, sender, message):
         self.sent.append((agent, sender, message))
@@ -403,6 +408,20 @@ def test_a_reply_grows_while_lines_keep_coming_and_stops_when_they_stop():
 
     assert collector.wait(1.0, settle=0.3) == "Let me look. I carry 3 oak logs."
     assert _ReplyCollector().wait(0.05, settle=0.3) == ""
+
+
+def test_a_mindcraft_that_died_is_forgotten_and_the_settings_are_checked_first(tmp_path):
+    skill = _skill(mindcraft_dir=str(tmp_path / "gone"))
+    skill._in_game = True
+    skill._spawned = True
+    skill._bridge = FakeBridge(skill)
+    skill._bridge.running = False
+
+    result = asyncio.run(MinecraftBot.tell_minecraft_bot(skill, "come here"))
+
+    assert skill._bridge is None and skill._in_game is False
+    assert result.startswith("Could not start Mindcraft: The Mindcraft folder does not exist")
+    assert skill._proxy is None  # nothing was started for a configuration that cannot work
 
 
 def test_lines_the_bot_said_meanwhile_reach_the_conversation_as_a_note():

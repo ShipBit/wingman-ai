@@ -20,7 +20,6 @@ MindServer events used (src/mindcraft/mindserver.js in Mindcraft):
 from __future__ import annotations
 
 import json
-import os
 import platform
 import re
 import socket
@@ -212,6 +211,9 @@ def format_status(state: Optional[dict], *, running: bool, in_game: bool, bot_na
         parts.append("Doing: nothing, waiting for instructions.")
     elif kind == "thinking":
         parts.append("Doing: thinking about its goal.")
+    elif str(action.get("current") or "").startswith("mode:"):
+        # Mindcraft's automatic behaviors, like "mode:hunting" or "mode:self_defense"
+        parts.append(f"Doing: {action['current'][5:].replace('_', ' ')} on its own.")
     elif action.get("current"):
         parts.append(f"Doing: {action['current']}.")
     nearby = state.get("nearby") or {}

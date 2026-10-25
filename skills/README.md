@@ -2427,6 +2427,7 @@ class GameStatsTracker(Skill):
 - [ats_telemetry](ats_telemetry/) - American/Euro Truck Simulator telemetry (auto-activated)
 - [sc_game_events](sc_game_events/) - Reacts to Star Citizen log events in character (`sc_gamelog.on`, support model, `language`)
 - [sc_accountant](sc_accountant/) - Books trades and rewards from the Star Citizen log, with its own dashboard
+- [minecraft_bot](minecraft_bot/) - Drives a Mindcraft bot in Minecraft; runs a Node.js process, a Socket.IO client and a local endpoint that lets the bot think with `ai.generate(messages=...)`
 
 **HUD:**
 
