@@ -1,25 +1,37 @@
 """
 Proactive comments skill.
 
-Comments based on the ongoing conversation with the user or, optionally, via vision (vision_enabled).
-In optional narrator mode (allow_comments_without_history), will comment up to a set number of times (max_proactive_messages) without further user input.
-The user can customize the minimum (min_silence_threshold_seconds) and maximum (max_silence_threshold_seconds) intervals for comments to generate.
-The exact comment time will be randomly set within that range each cycle.
-The skill must be set in default_config.yaml to autostart, else the loop does not run.
+After a random stretch of silence (interval_range) the Wingman says something
+on its own: about the conversation so far or, with vision_enabled, about the
+screen. It says at most max_proactive_messages lines until the user talks
+again. With allow_comments_without_history it also talks when there is no
+conversation yet (narrator mode, needs vision).
+
+The skill is auto-activated, so prepare() runs when the Wingman loads and
+auto_start can start the comments right away.
 """
 
 import asyncio
-import time
 import random
+import time
 from typing import TYPE_CHECKING, Optional
 
-from api.enums import LogSource, LogType
+from api.enums import SpeechPriority
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.image_generation import vision_base64
-from skills.skill_base import Skill, tool
+from services.skill_local_ai import SamplingPreset
+from skills.skill_base import Skill, command_action, tool
 
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
+
+# How often the background loop looks at the clock.
+TICK_SECONDS = 2
+# Messages from the history that go into the prompt, and their length each.
+HISTORY_MESSAGES = 10
+HISTORY_CHARS = 500
+# Longest line the skill says.
+COMMENT_CHARS = 400
 
 
 class ProactiveComments(Skill):
@@ -32,536 +44,255 @@ class ProactiveComments(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        # Configurable properties (defaults; overridden in validate())
-        self.min_silence_threshold_seconds: int = 60
-        self.max_silence_threshold_seconds: int = 180
-        self.max_proactive_messages: int = 3
-        self.vision_enabled: bool = False
-        self.add_comments_to_history: bool = True
-        self.custom_system_prompt: Optional[str] = None
-        self.auto_start: bool = False
-        self.allow_comments_without_history: bool = False
+        self.is_running = False
+        self.loaded = False
+        # A new run id ends the loop of the old one.
+        self.run_id = 0
+        self.last_activity = time.monotonic()
+        self.silence_target = 0
+        # Lines said since the user last talked.
+        self.proactive_message_count = 0
+        # Lines said but not yet noted in the history.
+        self.unnoted: list[str] = []
 
-        # Internal state
-        self.last_message_time: float = time.time()
-        self.proactive_message_count: int = 0
-        self.last_known_message_count: int = 0
-        self.is_running: bool = False
-        self._task: Optional[asyncio.Task] = None
-        self.current_silence_target: float = 0
+    # --- custom properties, read fresh every time ---------------------------------
 
-    def _get_display(self) -> int:
-        """Retrieve the display number fresh at runtime."""
+    def _prop(self, property_id: str):
         errors: list[WingmanInitializationError] = []
-        display = self.retrieve_custom_property_value("display", errors)
+        return self.retrieve_custom_property_value(property_id, errors)
+
+    def _interval(self) -> tuple[int, int]:
+        value = self._prop("interval_range") or [60, 180]
+        low, high = int(value[0]), int(value[1])
+        return max(10, low), max(10, low, high)
+
+    def _max_messages(self) -> int:
+        return max(1, int(self._prop("max_proactive_messages") or 3))
+
+    def _vision_enabled(self) -> bool:
+        return bool(self._prop("vision_enabled"))
+
+    def _display(self) -> int:
         try:
-            return max(1, int(display)) if display is not None else 1
+            return max(1, int(self._prop("display") or 1))
         except (TypeError, ValueError):
             return 1
 
+    def _add_to_history(self) -> bool:
+        return bool(self._prop("add_comments_to_history"))
+
+    def _narrator_mode(self) -> bool:
+        return bool(self._prop("allow_comments_without_history"))
+
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-
-        min_silence = self.retrieve_custom_property_value(
-            "min_silence_threshold_seconds", errors
-        )
-        if min_silence is not None:
-            self.min_silence_threshold_seconds = min_silence
-
-        max_silence = self.retrieve_custom_property_value(
-            "max_silence_threshold_seconds", errors
-        )
-        if max_silence is not None:
-            self.max_silence_threshold_seconds = max_silence
-
-        max_messages = self.retrieve_custom_property_value(
-            "max_proactive_messages", errors
-        )
-        if max_messages is not None:
-            self.max_proactive_messages = max_messages
-
-        vision_enabled = self.retrieve_custom_property_value("vision_enabled", errors)
-        if vision_enabled is not None:
-            self.vision_enabled = vision_enabled
-
-        # Validate display property exists (value retrieved fresh at runtime)
-        self.retrieve_custom_property_value("display", errors)
-
-        add_history = self.retrieve_custom_property_value(
-            "add_comments_to_history", errors
-        )
-        if add_history is not None:
-            self.add_comments_to_history = add_history
-
-        custom_prompt = self.retrieve_custom_property_value(
-            "custom_system_prompt", errors
-        )
-        if custom_prompt is None:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="System Prompt is missing or not configured in the skill settings.",
-                )
-            )
-        elif not isinstance(custom_prompt, str):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="System Prompt must be a string.",
-                )
-            )
-        elif not custom_prompt.strip():
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="System Prompt cannot be empty.",
-                )
-            )
-        else:
-            self.custom_system_prompt = custom_prompt
-
-        auto_start = self.retrieve_custom_property_value("auto_start", errors)
-        if auto_start is not None:
-            self.auto_start = auto_start
-        if not isinstance(self.auto_start, bool):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Start Automatically must be a boolean.",
-                )
-            )
-
-        narrator_mode = self.retrieve_custom_property_value(
-            "allow_comments_without_history", errors
-        )
-        if narrator_mode is not None:
-            self.allow_comments_without_history = narrator_mode
-        if not isinstance(self.allow_comments_without_history, bool):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Allow Comments Without History must be a boolean.",
-                )
-            )
-
-        # Range validations
-        if (
-            not isinstance(self.min_silence_threshold_seconds, int)
-            or self.min_silence_threshold_seconds <= 0
+        for property_id in (
+            "interval_range",
+            "max_proactive_messages",
+            "vision_enabled",
+            "display",
+            "add_comments_to_history",
+            "auto_start",
+            "allow_comments_without_history",
         ):
+            self.retrieve_custom_property_value(property_id, errors)
+        prompt = self.retrieve_custom_property_value("custom_system_prompt", errors)
+        if not isinstance(prompt, str) or not prompt.strip():
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
-                    message="Min Silence Threshold must be a positive integer.",
+                    message="Proactive Comments: the System Prompt is empty.",
                 )
             )
-        if (
-            not isinstance(self.max_silence_threshold_seconds, int)
-            or self.max_silence_threshold_seconds <= 0
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Max Silence Threshold must be a positive integer.",
-                )
-            )
-        if (
-            isinstance(self.min_silence_threshold_seconds, int)
-            and isinstance(self.max_silence_threshold_seconds, int)
-            and self.min_silence_threshold_seconds > self.max_silence_threshold_seconds
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Min Silence Threshold cannot be greater than Max Silence Threshold.",
-                )
-            )
-        if (
-            not isinstance(self.max_proactive_messages, int)
-            or self.max_proactive_messages <= 0
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Max Proactive Messages must be a positive integer.",
-                )
-            )
-        if not isinstance(self.vision_enabled, bool):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Enable Vision must be a boolean.",
-                )
-            )
-        if not isinstance(self.add_comments_to_history, bool):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Add Comments to History must be a boolean.",
-                )
-            )
-
         return errors
 
+    # --- lifecycle ------------------------------------------------------------------
+
     async def prepare(self) -> None:
-        """Initialize state and start the background monitoring task."""
-        self.last_message_time = time.time()
-        self.proactive_message_count = 0
-        self.last_known_message_count = 0
-        await self._set_new_silence_target()
-
-        self.is_running = self.auto_start
-
-        if not self._task or self._task.done():
-            self._task = asyncio.ensure_future(
-                self._monitor_silence_and_comments()
-            )
-
-        if self.is_running:
-            self.log.info("Proactive Comments: monitoring auto-started.")
+        await super().prepare()
+        self.loaded = True
+        if self._prop("auto_start") and not self.is_running:
+            self._start()
 
     async def unload(self) -> None:
-        """Stop the background monitoring task and clean up."""
-        await self._stop_monitoring()
+        self.loaded = False
+        self.is_running = False
+        self.run_id += 1
+        await super().unload()
 
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await asyncio.wait_for(self._task, timeout=1.0)
-            except asyncio.CancelledError:
-                self.log.info(
-                    "Proactive Comments: monitoring task cancelled during unload."
-                )
-            except asyncio.TimeoutError:
-                self.log.warning(
-                    "Proactive Comments: monitoring task did not cancel within timeout."
-                )
-            except Exception as e:
-                self.log.warning(
-                    f"Proactive Comments: error awaiting task cancellation: {e}"
-                )
-        self._task = None
-
-    # Monitoring helpers
-    async def _start_monitoring(self) -> bool:
-        """Activate monitoring and reset state. Returns True if newly started."""
-        if not self.is_running:
-            self.is_running = True
-            self.last_message_time = time.time()
-            self.proactive_message_count = 0
-            try:
-                self.last_known_message_count = len(
-                    self.wingman.conversation.history()
-                )
-            except AttributeError:
-                self.last_known_message_count = 0
-            await self._set_new_silence_target()
-            self.log.info("Proactive Comments: STARTED monitoring.")
-            return True
-        self.log.info("Proactive Comments: already running.")
-        return False
-
-    async def _stop_monitoring(self) -> bool:
-        """Deactivate monitoring. Returns True if was running."""
-        if self.is_running:
-            self.is_running = False
-            self.log.info("Proactive Comments: STOPPED monitoring.")
-            return True
-        return False
-
-    async def _set_new_silence_target(self) -> None:
-        """Pick a new random silence wait time between min and max."""
-        try:
-            min_wait = max(1, self.min_silence_threshold_seconds)
-            max_wait = max(min_wait, self.max_silence_threshold_seconds)
-            self.current_silence_target = random.randint(min_wait, max_wait)
-            if self.settings.debug_mode:
-                self.log.info(
-                    f"Proactive Comments: new silence target {self.current_silence_target}s "
-                    f"(min={min_wait}, max={max_wait})"
-                )
-        except Exception as e:
-            self.current_silence_target = self.min_silence_threshold_seconds
-            self.log.warning(
-                f"Proactive Comments: error setting silence target ({e}), "
-                f"falling back to min={self.current_silence_target}s"
-            )
-            
-    # Core monitoring loop
-    async def _monitor_silence_and_comments(self) -> None:
-        """Background task: watch for silence, then fire a proactive comment."""
-        while True:
-            try:
-                if not self.is_running:
-                    await asyncio.sleep(1)
-                    continue
-
-                now = time.time()
-                new_message_detected = False
-
-                # ---- Detect new messages in conversation history ---- #
-                try:
-                    messages = self.wingman.conversation.history()
-                    current_count = len(messages)
-
-                    if current_count > self.last_known_message_count:
-                        new_message_detected = True
-                        num_new = current_count - self.last_known_message_count
-                        new_msgs = messages[-num_new:]
-
-                        user_found = any(
-                            (
-                                msg.get("role") == "user"
-                                if isinstance(msg, dict)
-                                else getattr(msg, "role", None) == "user"
-                            )
-                            for msg in new_msgs
-                        )
-
-                        self.last_message_time = time.time()
-                        await self._set_new_silence_target()
-
-                        if user_found and self.proactive_message_count != 0:
-                            if self.settings.debug_mode:
-                                self.log.info(
-                                    "Proactive Comments: user message detected — resetting count."
-                                )
-                            self.proactive_message_count = 0
-
-                        self.last_known_message_count = current_count
-
-                except AttributeError:
-                    pass
-                except Exception as msg_err:
-                    self.log.warning(
-                        f"Proactive Comments: error checking message history: {msg_err}"
-                    )
-
-                time_since_last = now - self.last_message_time
-
-                if self.settings.debug_mode:
-                    self.log.info(
-                        f"Proactive Comments loop: silence={time_since_last:.1f}s / "
-                        f"target={self.current_silence_target:.1f}s, "
-                        f"count={self.proactive_message_count}/{self.max_proactive_messages}, "
-                        f"newMsg={new_message_detected}"
-                    )
-
-                # Fire if silence threshold reached
-                if (
-                    time_since_last >= self.current_silence_target
-                    and self.proactive_message_count < self.max_proactive_messages
-                    and not new_message_detected
-                ):
-                    screenshot_base64: Optional[str] = None
-                    if self.vision_enabled:
-                        screenshot_base64 = await self._capture_screen()
-
-                    await self._generate_proactive_comment(screenshot_base64)
-
-                await asyncio.sleep(5)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.log.error(f"Proactive Comments: error in monitoring loop: {e}")
-                await asyncio.sleep(30)
-
-    # Optional screenshot capture                                                 #
-    async def _capture_screen(self) -> Optional[str]:
-        """Capture the configured display and return a base64 JPEG string, or None."""
-        display = self._get_display()
-        try:
-            image = await self.wingman.screen.capture(display)
-        except RuntimeError as e:
-            self.log.warning(f"Proactive Comments: could not capture screen: {e}")
-            return None
-        except Exception as e:
-            self.log.warning(f"Proactive Comments: unexpected capture error: {e}")
-            return None
-
-        jpeg_base64 = await asyncio.to_thread(vision_base64, image)
-        return jpeg_base64
-
-    # Comment generation
-    async def _generate_proactive_comment(
-        self, screenshot_base64: Optional[str]
-    ) -> None:
-        """Generate and speak a proactive comment, optionally with a screenshot."""
-        try:
-            # Gather conversation history
-            history: list = []
-            try:
-                history = self.wingman.conversation.history()[-10:]
-            except AttributeError:
-                pass
-            except Exception as hist_err:
-                self.log.warning(
-                    f"Proactive Comments: error getting conversation history: {hist_err}"
-                )
-                return
-
-            # Enforce narrator-mode gate
-            if not history and not self.allow_comments_without_history:
-                if self.settings.debug_mode:
-                    self.log.info(
-                        "Proactive Comments: no history and narrator mode OFF — skipping."
-                    )
-                return
-
-            if not history:
-                history_text = "(No previous conversation history)"
-                if self.settings.debug_mode:
-                    self.log.info(
-                        "Proactive Comments: no history — proceeding (narrator mode ON)."
-                    )
-            else:
-                history_text = "\n".join(
-                    f"{getattr(msg, 'role', 'unknown')}: {getattr(msg, 'content', '')}"
-                    for msg in history
-                    if isinstance(getattr(msg, "content", None), str)
-                )
-
-            system_prompt = self.custom_system_prompt or ""
-
-            task_description = (
-                f"## Proactive Comment Context:\n"
-                f"This will be proactive comment number {self.proactive_message_count + 1} "
-                f"(out of {self.max_proactive_messages}) since the last user interaction.\n\n"
-                f"## Your Task:\n"
-                f"Based on the context (history or lack thereof, comment number, and the "
-                f"potentially relevant screenshot below if provided), please provide a short, "
-                f"natural comment to break the silence, following the system prompt instructions."
+    async def on_add_user_message(self, message: str) -> None:
+        self.last_activity = time.monotonic()
+        self.proactive_message_count = 0
+        # Runs before the user's message is added, so the note lands in front
+        # of it. A line added with add_assistant comes back appended to the
+        # Wingman's next answers.
+        lines, self.unnoted = self.unnoted, []
+        if lines and self._add_to_history():
+            await self.wingman.conversation.add_note(
+                "while the user was quiet you said this on your own, "
+                "do not say it again: " + " / ".join(lines)
             )
 
-            user_text = f"## Recent Conversation History:\n{history_text}\n\n{task_description}"
+    async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
+        self.last_activity = time.monotonic()
 
-            use_screenshot = self.vision_enabled and screenshot_base64
+    # --- background loop ------------------------------------------------------------
 
-            if use_screenshot:
-                user_text += " Here is a screenshot of what the user is currently seeing:"
+    def _start(self) -> None:
+        self.is_running = True
+        self.run_id += 1
+        self.last_activity = time.monotonic()
+        self.proactive_message_count = 0
+        self._new_silence_target()
+        self.wingman.run_in_thread(self._loop, self.run_id)
 
-            # Build prompt and image data-URL for the main model
-            image_url: Optional[str] = None
-            if use_screenshot:
-                image_url = f"data:image/jpeg;base64,{screenshot_base64}"
+    def _is_active(self, run_id: int) -> bool:
+        return run_id == self.run_id and self.is_running and self.loaded
 
-            if self.settings.debug_mode:
-                self.log.info("Proactive Comments: generating proactive comment…")
+    def _new_silence_target(self) -> None:
+        low, high = self._interval()
+        self.silence_target = random.randint(low, high)
 
-            comment_text = await self.wingman.ai.generate(
-                user_text,
-                system=system_prompt,
-                image=image_url,
-            )
-
-            if not comment_text or len(comment_text.strip()) < 5:
-                self.log.warning(
-                    "Proactive Comments: LLM returned an empty or too-short response."
-                )
-                return
-
-            comment_text = comment_text.strip()
-
-            # Speak the comment
-            self.wingman.run_in_thread(self.wingman.tts.speak, comment_text)
-
-            # Print to the UI
-            await self.printr.print_async(
-                comment_text,
-                color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman.name,
-                skill_name=self.name,
-            )
-
-            # Optionally add to conversation history
-            if self.add_comments_to_history:
-                try:
-                    await self.wingman.conversation.add_assistant(comment_text)
-                except AttributeError:
-                    self.log.warning(
-                        "Proactive Comments: wingman does not support conversation.add_assistant."
-                    )
-                except Exception as add_err:
-                    self.log.warning(
-                        f"Proactive Comments: error adding comment to history: {add_err}"
-                    )
-
-            self.proactive_message_count += 1
-            self.last_message_time = time.time()
-            await self._set_new_silence_target()
-
-        except Exception as e:
-            self.log.error(f"Proactive Comments: error generating comment: {e}")
-
-
-    # Tools
-    @tool(
-        name="proactive_comment_status",
-        description=(
-            "Check the status of the Proactive Comments skill "
-            "(running/stopped, silence timer, message count)."
-        ),
-        summarize=False,
-    )
-    async def proactive_comment_status(self) -> str:
-        """Check the status of the Proactive Comments skill."""
-        now = time.time()
-        time_since_last = (now - self.last_message_time) if self.is_running else -1
-        status_text = "ACTIVE (Monitoring)" if self.is_running else "INACTIVE (Stopped)"
-        target_info = (
-            f" Target silence: {self.current_silence_target:.1f}s"
-            if self.is_running
-            else ""
-        )
-        silence_str = f"{time_since_last:.1f}s" if time_since_last >= 0 else "N/A"
+    def _should_wait(self) -> bool:
+        """The user talks to a wingman or a voice plays. Radio chatter does not
+        count: a comment talks over it."""
         return (
-            f"Proactive Comments Status: {status_text}. "
-            f"Silence since last message: {silence_str}.{target_info} "
-            f"Proactive Count: {self.proactive_message_count}/{self.max_proactive_messages}."
+            self.wingman.conversation.user_busy
+            or self.wingman.audio.is_playing_at_least(SpeechPriority.EVENT)
         )
 
-    @tool(
-        name="force_proactive_comment",
-        description="Force the Proactive Comments skill to make a comment immediately (if running).",
-        wait_response=True,
-    )
-    async def force_proactive_comment(self) -> str:
-        """Force the Proactive Comments skill to make a comment right now."""
-        if not self.is_running:
-            return "Proactive Comments skill is not running. Cannot force a comment."
+    async def _loop(self, run_id: int) -> None:
+        """Runs on its own thread and event loop until the run id changes."""
+        while self._is_active(run_id):
+            await asyncio.sleep(TICK_SECONDS)
+            if not self._is_active(run_id):
+                return
+            try:
+                if self._should_wait():
+                    # Silence starts when the user and the Wingman are done.
+                    self.last_activity = time.monotonic()
+                    continue
+                if time.monotonic() - self.last_activity < self.silence_target:
+                    continue
+                if self.proactive_message_count >= self._max_messages():
+                    continue
+                await self._comment(run_id)
+                self.last_activity = time.monotonic()
+                self._new_silence_target()
+            except Exception as e:
+                self.log.error(f"Proactive Comments: {e}", server_only=True)
+                self.last_activity = time.monotonic()
 
-        self.log.info("Proactive Comments: force comment requested.")
-        screenshot_base64: Optional[str] = None
-        if self.vision_enabled:
-            screenshot_base64 = await self._capture_screen()
+    # --- the comment ----------------------------------------------------------------
 
-        await self._generate_proactive_comment(screenshot_base64)
-        return "Attempting to generate a proactive comment. Listen for audio output or check the chat."
+    def _history_text(self) -> str:
+        lines = []
+        for message in self.wingman.conversation.history():
+            role = message.get("role")
+            if role not in ("user", "assistant"):
+                continue
+            content = message.get("content")
+            if isinstance(content, list):
+                content = " ".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if isinstance(content, str) and content.strip():
+                lines.append(f"{role}: {content.strip()[:HISTORY_CHARS]}")
+        return "\n".join(lines[-HISTORY_MESSAGES:])
+
+    async def _capture_screen(self) -> Optional[str]:
+        """The configured display as base64 JPEG, or None."""
+        if not await self.wingman.ai.sees_images():
+            self.log.warning(
+                "Proactive Comments: the main model does not take images, vision is skipped.",
+                server_only=True,
+            )
+            return None
+        try:
+            image = await self.wingman.screen.capture(self._display())
+        except RuntimeError as e:
+            self.log.warning(f"Proactive Comments: could not capture the screen: {e}")
+            return None
+        return await asyncio.to_thread(vision_base64, image)
+
+    async def _comment(self, run_id: int) -> None:
+        history_text = self._history_text()
+        screenshot = await self._capture_screen() if self._vision_enabled() else None
+        if not history_text and not (screenshot and self._narrator_mode()):
+            return
+
+        language = self.wingman.language.name
+        system = (
+            f"{self._prop('custom_system_prompt')}\n\n"
+            f"You are {self.wingman.name}. Stay IN CHARACTER:\n"
+            f"{self.wingman.config.prompts.backstory or ''}\n\n"
+            f"Rules:\n"
+            f"- One or two short sentences, spoken aloud.\n"
+            f"- Do NOT use markdown, lists or emojis.\n"
+            f"- Write in {language}."
+        )
+        parts = [
+            "Recent conversation:\n" + (history_text or "(no conversation yet)"),
+            f"This is comment {self.proactive_message_count + 1} of at most "
+            f"{self._max_messages()} since the user last spoke.",
+        ]
+        if screenshot:
+            parts.append("The attached screenshot shows what the user sees right now.")
+        prompt = "\n\n".join(parts) + f"\n\nYour comment, in {language}:"
+
+        if screenshot:
+            line = await self.wingman.ai.generate(
+                prompt, system=system, image=f"data:image/jpeg;base64,{screenshot}"
+            )
+        elif self.wingman.local_ai.available:
+            line = await self.wingman.local_ai.generate(
+                prompt, system=system, preset=SamplingPreset.CREATIVE
+            )
+        else:
+            line = await self.wingman.ai.generate(prompt, system=system)
+        line = line.strip().strip('"').strip()[:COMMENT_CHARS]
+        if len(line) < 5:
+            return
+        if not self._is_active(run_id) or self._should_wait():
+            # Turned off, or the user started talking while the line was written.
+            return
+
+        self.proactive_message_count += 1
+        self.unnoted.append(line)
+        await self.wingman.conversation.show(line, skill_name=self.config.display_name)
+        await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
+
+    # --- tools ----------------------------------------------------------------------
 
     @tool(
         name="turn_on_proactive_comments",
-        description="Turn on the Proactive Comments skill to allow proactive comments.",
+        description="Turn on proactive comments: you speak up on your own when it is quiet for a while.",
     )
-    async def turn_on_proactive_comments(self) -> str:
-        """Turn on the Proactive Comments skill."""
-        started = await self._start_monitoring()
-        return (
-            "Proactive Comments are now enabled."
-            if started
-            else "Proactive Comments were already enabled."
-        )
+    @command_action(
+        label="Turn proactive comments on",
+        description="The Wingman speaks up on its own when it is quiet for a while.",
+        respond="speak",
+    )
+    def turn_on_proactive_comments(self) -> str:
+        if self.is_running:
+            return "Proactive comments were already on."
+        self._start()
+        return "Proactive comments are now on."
 
     @tool(
         name="turn_off_proactive_comments",
-        description="Turn off the Proactive Comments skill to prevent proactive comments.",
+        description="Turn off proactive comments.",
     )
-    async def turn_off_proactive_comments(self) -> str:
-        """Turn off the Proactive Comments skill."""
-        stopped = await self._stop_monitoring()
-        return (
-            "Proactive Comments are now disabled."
-            if stopped
-            else "Proactive Comments were already disabled."
-        )
+    @command_action(
+        label="Turn proactive comments off",
+        description="The Wingman only talks when spoken to.",
+        respond="speak",
+    )
+    def turn_off_proactive_comments(self) -> str:
+        if not self.is_running:
+            return "Proactive comments were already off."
+        self.is_running = False
+        self.run_id += 1
+        return "Proactive comments are now off."

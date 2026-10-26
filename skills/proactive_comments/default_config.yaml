@@ -9,89 +9,84 @@ tags:
 discoverable_by_default: false
 auto_activate: true
 description:
-  en: Proactively comments on the conversation or surroundings based on silence, history, and (optionally) screen content.
-  de: Proaktiv kommentiert er das Gespräch oder die Umgebung basierend auf Stille, Geschichte und (optional) Bildschirminhalt.
+  en: Speaks up on its own when it is quiet for a while, about the conversation or (optionally) what is on your screen.
+  de: Meldet sich von selbst, wenn es eine Weile still ist, zum Gespräch oder (optional) zu dem, was auf deinem Bildschirm ist.
 discovery_keywords:
   - proactive comments
   - natural comments
   - narrator
   - narrate
-  - guide
-  - comments
+  - comment on my game
+  - talk on your own
+  - break the silence
 
 custom_properties:
-  - id: min_silence_threshold_seconds
-    name: Min Silence Threshold (seconds)
-    hint: Minimum seconds of silence before the skill considers commenting.
-    value: 60
+  - id: interval_range
+    name: Silence (sec)
+    hint: How long it has to be quiet before the Wingman speaks up. A random time in this range each time.
+    value: [60, 180]
     required: true
-    property_type: number
-
-  - id: max_silence_threshold_seconds
-    name: Max Silence Threshold (seconds)
-    hint: Maximum seconds of silence. Comments trigger at a random time between Min and Max.
-    value: 180
-    required: true
-    property_type: number
+    property_type: range_slider
+    options:
+      - label: "min"
+        value: 10
+      - label: "max"
+        value: 900
+      - label: "step"
+        value: 10
 
   - id: max_proactive_messages
-    name: Max Proactive Messages
-    hint: Maximum number of consecutive comments without user interaction before the skill stops. Resets on user message.
+    name: Max comments in a row
+    hint: How many times the Wingman speaks up before you say something again.
     value: 3
     required: true
     property_type: number
 
   - id: vision_enabled
-    name: Enable Vision
-    hint: Allow the skill to take screenshots for context when generating comments.
+    name: Look at the screen
+    hint: Take a screenshot for every comment. Needs a main model that sees images.
     value: false
     required: true
     property_type: boolean
 
   - id: display
-    name: Display to Capture
-    hint: Which display number to use for screenshots when Vision is enabled (1 = primary).
+    name: Display to capture
+    hint: Which display to take the screenshot of (1 = the first).
     value: 1
     required: true
     property_type: number
 
   - id: add_comments_to_history
-    name: Add Comments to History
-    hint: Add the skill's proactive comments to the main conversation history so they can be discussed.
+    name: Remember comments
+    hint: The Wingman remembers what it said on its own, so you can talk about it.
     value: true
     required: true
     property_type: boolean
 
   - id: auto_start
-    name: Start Automatically
-    hint: Automatically start monitoring for silence when Wingman starts.
+    name: Start automatically
+    hint: Turn the comments on when the Wingman starts. Otherwise ask the Wingman to turn them on.
     value: false
     required: true
     property_type: boolean
 
   - id: allow_comments_without_history
-    name: Allow Comments Without History (Narrator Mode)
-    hint: If true and Vision is enabled, generate comments based only on the screen even when conversation history is empty.
+    name: Narrator mode
+    hint: Speak up about the screen even before you said anything. Needs Look at the screen.
     value: false
     required: true
     property_type: boolean
 
   - id: custom_system_prompt
-    name: System Prompt
-    hint: The system prompt used to instruct the AI on how to generate comments. Modify this to change behaviour.
-    value: |+
-      You're in a voice chat. Your goal: keep the conversation going (or initiate a conversation if nothing has occurred yet) to keep things engaging.
+    name: Prompt
+    hint: Tells the Wingman what to talk about when it speaks up on its own.
+    value: |
+      You are in a voice chat and it has been quiet for a while. Say something to keep the conversation going, or to start one.
 
-      Context Provided:
-      - Recent conversation history (sometimes).
-      - Comment number (1, 2, or 3) since the user last spoke.
-      - Screenshot of what the user is currently seeing (sometimes).
-
-      Instructions:
-      1.  **Focus:** PRIORITIZE continuing the conversation (especially from the last user message if available).
-      2.  **Vision:** If a screenshot is provided AND shows a *significant event* (e.g., game action, scene change) or is *directly relevant* to the chat:
-          - Comment from a shared, first-person perspective (e.g., "Whoa, that was close!", "Looks like we're going towards X?" "What a beautiful vista!").
-          - AVOID commenting on static/unchanging visuals (wallpapers, menus, code editors), especially after comment #1.
-      3.  **Be Natural:** Keep comments short, relevant, and avoid repeating previous proactive comments (check the comment number context).
+      Rules:
+      - Continue the conversation first, especially the user's last message.
+      - Comment on the screenshot only when it shows something that happens or matters to the chat (game action, a new scene). Speak as if you are there with the user: "Whoa, that was close!", "Are we heading to X?"
+      - Do NOT comment on things that do not change (wallpaper, menus, code editors), especially after the first comment.
+      - Do NOT repeat what you said before.
     required: true
     property_type: textarea
