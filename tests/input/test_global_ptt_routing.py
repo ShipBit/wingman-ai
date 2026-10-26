@@ -39,8 +39,9 @@ def tower(*configs):
 
 
 class FakeJev:
-    def __init__(self, pick):
+    def __init__(self, pick, active=True):
         self.pick = pick
+        self.active = active
         self.asked = []
 
     def update_settings(self, _settings):
@@ -85,9 +86,15 @@ def test_without_name_and_star_jev_picks():
     assert jev.asked == [("Requesting permission to land.", ["Computer", "ATC"])]
 
 
-def test_nobody_answers_when_jev_does_not_pick():
+def test_when_the_jev_call_fails_the_last_speaker_answers():
+    """Someone who held the key wants an answer: nothing happening looks broken."""
     t = tower(config("Computer"), config("ATC"))
-    assert core(FakeJev(None))._wingman_for_global_ptt("Hello there.", t) is None
+    assert core(FakeJev(None))._wingman_for_global_ptt("Hello there.", t).name == "ATC"
+
+
+def test_without_jev_nobody_answers():
+    t = tower(config("Computer"), config("ATC"))
+    assert core(FakeJev(None, active=False))._wingman_for_global_ptt("Hello there.", t) is None
 
 
 def test_a_single_wingman_answers_without_asking():

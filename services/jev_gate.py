@@ -63,14 +63,6 @@ Calibration separates unsure from sure, not two commands that genuinely
 overlap — a description on each of them does that, and moved exactly those
 cases to 0.99. See the findings file."""
 
-WINGMAN_CONFIDENCE = _threshold("WINGMAN_JEV_WINGMAN_CONFIDENCE", 0.7)
-"""How sure Jev has to be before a sentence without a name goes to the
-wingman it picked. Below it nobody answers, as with voice activation.
-
-Measured 2026-10-26, 42 sentences x 2 (evals/jev_bench/run_wingman_pick.py):
-at 0.7 Jev picked for 77 of 84 and was wrong on none; at 0.5 the variants
-with less to go on started to be wrong."""
-
 MAX_COMMAND_OPTIONS = 254
 """How many commands fit in one question. TypeSafe's limit is 255 options and
 one of them is the "no command" escape hatch."""
@@ -239,8 +231,13 @@ class JevGate:
         last_answer_from: Optional[str] = None,
     ) -> Optional[str]:
         """The wingman a sentence from the global push-to-talk key is for,
-        when it named none and no wingman is the default. None: off, no
-        access, or not sure enough, and then nobody answers.
+        when it named none and no wingman is the default. None only when Jev
+        is off, has no access or the call failed.
+
+        No confidence gate, unlike everywhere else Jev decides: someone who
+        held the key wants an answer, and nothing happening looks broken. So
+        the most likely wingman answers even when Jev is unsure. Measured
+        2026-10-26 on 42 sentences x 2: 98.8% right taking the top pick.
 
         Blocking: called on the transcription thread, which waits for the
         answer anyway before anything can be said.
@@ -254,14 +251,7 @@ class JevGate:
                 wingman_questions(configs),
             ),
         )
-        picked = read_wingman(result, WINGMAN_CONFIDENCE)
-        if result.ok and not picked:
-            printr.print(
-                f"Jev: no wingman at {WINGMAN_CONFIDENCE} or above, nobody answers.",
-                color=LogType.SYSTEM,
-                server_only=True,
-            )
-        return picked
+        return read_wingman(result, 0.0)
 
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.

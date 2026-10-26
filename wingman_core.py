@@ -2066,8 +2066,9 @@ class WingmanCore(WebSocketUser):
 
     def _wingman_for_global_ptt(self, text: str, tower) -> Wingman | None:
         """Who answers the global push-to-talk key: the wingman named in the
-        first words, else the one with the star, else the one Jev picks when
-        System One is on. Otherwise nobody, as with voice activation."""
+        first words, else the one with the star, else the one Jev thinks most
+        likely when System One is on. If that call fails, the wingman who
+        answered last. Otherwise nobody: there is no one to guess from."""
         target = tower.get_addressed_wingman(text) or tower.get_default_wingman()
         if target:
             return target
@@ -2083,7 +2084,15 @@ class WingmanCore(WebSocketUser):
         target = next((w for w in tower.wingmen if w.name == name), None)
         if target:
             self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
-        else:
+        elif self.routing_jev.active:
+            # Jev is on but the call failed: whoever spoke last is the best guess.
+            target = next((w for w in tower.wingmen if w.name == self._last_answer_from), None)
+            if target:
+                self.printr.print(
+                    f"Jev gave no answer, {target.name} answered last and gets '{text}'.",
+                    server_only=True,
+                )
+        if not target:
             self.printr.print(
                 f"Dropped '{text}': no name, no default wingman and no pick.",
                 server_only=True,
