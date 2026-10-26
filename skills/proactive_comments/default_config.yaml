@@ -1,0 +1,92 @@
+name: ProactiveComments
+module: skills.proactive_comments.main
+api_version: 3
+display_name: Proactive Comments
+author: sneepe
+tags:
+  - Game
+  - Utility
+discoverable_by_default: false
+auto_activate: true
+description:
+  en: Speaks up on its own when it is quiet for a while, about the conversation or (optionally) what is on your screen.
+  de: Meldet sich von selbst, wenn es eine Weile still ist, zum Gespräch oder (optional) zu dem, was auf deinem Bildschirm ist.
+discovery_keywords:
+  - proactive comments
+  - natural comments
+  - narrator
+  - narrate
+  - comment on my game
+  - talk on your own
+  - break the silence
+
+custom_properties:
+  - id: interval_range
+    name: Silence (sec)
+    hint: How long it has to be quiet before the Wingman speaks up. A random time in this range each time.
+    value: [60, 180]
+    required: true
+    property_type: range_slider
+    options:
+      - label: "min"
+        value: 10
+      - label: "max"
+        value: 900
+      - label: "step"
+        value: 10
+
+  - id: max_proactive_messages
+    name: Max comments in a row
+    hint: How many times the Wingman speaks up before you say something again.
+    value: 3
+    required: true
+    property_type: number
+
+  - id: vision_enabled
+    name: Look at the screen
+    hint: Take a screenshot for every comment. Needs a main model that sees images.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: display
+    name: Display to capture
+    hint: Which display to take the screenshot of (1 = the first).
+    value: 1
+    required: true
+    property_type: number
+
+  - id: add_comments_to_history
+    name: Remember comments
+    hint: The Wingman remembers what it said on its own, so you can talk about it.
+    value: true
+    required: true
+    property_type: boolean
+
+  - id: auto_start
+    name: Start automatically
+    hint: Turn the comments on when the Wingman starts. Otherwise ask the Wingman to turn them on.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: allow_comments_without_history
+    name: Narrator mode
+    hint: Speak up about the screen even before you said anything. Needs Look at the screen.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: custom_system_prompt
+    name: Prompt
+    hint: Tells the Wingman what to talk about when it speaks up on its own.
+    value: |
+      You are in a voice chat and it has been quiet for a while. Say something to keep the conversation going, or to start one.
+
+      Rules:
+      - Continue the conversation first, especially the user's last message.
+      - Comment on the screenshot only when it shows something that happens or matters to the chat (game action, a new scene). Speak as if you are there with the user: "Whoa, that was close!", "Are we heading to X?"
+      - Do NOT comment on things that do not change (wallpaper, menus, code editors), especially after the first comment.
+      - Do NOT repeat what you said before.
+    required: true
+    property_type: textarea
