@@ -35,6 +35,11 @@ from services.websocket_user import WebSocketUser
 from wingman_core import WingmanCore
 
 
+PICKABLE_KEYS = {"esc", *(f"f{n}" for n in range(1, 25))}
+"""Keys the recorder offers as buttons because pressing them does not work:
+Esc ends the recording, the F keys are taken by the app or the system."""
+
+
 class CommandHandler:
     def __init__(self, connection_manager: ConnectionManager, core: WingmanCore):
         self.source_name = "WebSocket Command Handler"
@@ -284,8 +289,30 @@ class CommandHandler:
             self.timeout_task.cancel()
 
         actions: list[CommandActionConfig] = []
+        picked = (command.add_key or "").lower()
+        if picked not in PICKABLE_KEYS:
+            picked = ""
 
-        if command.recording_device == RecordingDevice.KEYBOARD:
+        if command.recording_device == RecordingDevice.KEYBOARD and picked:
+            # Picked from a button: kept by name, which every OS resolves.
+            key_action = CommandActionConfig(
+                keyboard=CommandKeyboardConfig(
+                    hotkey=picked,
+                    keys=[KeyStroke(scan_code=None, extended=False, name=picked)],
+                )
+            )
+            if command.recording_type == KeyboardRecordingType.SINGLE:
+                actions = [key_action]
+            else:
+                actions = [
+                    *(
+                        self._get_actions_from_recorded_keys(recorded_keys)
+                        if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED
+                        else self._get_actions_from_recorded_hotkey(recorded_keys)
+                    ),
+                    key_action,
+                ]
+        elif command.recording_device == RecordingDevice.KEYBOARD:
             actions = (
                 self._get_actions_from_recorded_keys(recorded_keys)
                 if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED

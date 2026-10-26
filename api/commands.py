@@ -57,6 +57,11 @@ class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
     recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
     recording_device: RecordingDevice = RecordingDevice.KEYBOARD
+    add_key: Optional[str] = None
+    """A key the user picked from a button instead of pressing it: Esc stops
+    the recording and the F keys belong to the app, so neither can be
+    recorded. A single recording becomes this key, a macro gets it appended.
+    Only the names in ``services.command_handler.PICKABLE_KEYS``."""
 
 
 class ClientLoggedInCommand(WebSocketCommandModel):
