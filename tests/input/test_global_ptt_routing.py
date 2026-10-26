@@ -108,3 +108,14 @@ def test_an_unsure_answer_picks_nobody():
     assert read_wingman(result("ATC", 0.9), 0.7) == "ATC"
     assert read_wingman(result("ATC", 0.5), 0.7) is None
     assert read_wingman(SimpleNamespace(ok=False), 0.7) is None
+
+
+def test_a_switched_off_wingman_is_neither_addressed_nor_offered():
+    """Switched off Wingmen live in tower.disabled_wingmen, not in tower.wingmen,
+    so their name, their ⭐ and Jev all pass them by."""
+    jev = FakeJev("Lore")
+    t = tower(config("Computer"), config("Lore"))
+    t.disabled_wingmen = [config("ATC", default=True)]
+    target = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
+    assert target.name == "Lore"
+    assert jev.asked == [("ATC, requesting permission to land.", ["Computer", "Lore"])]
