@@ -23,13 +23,16 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Optional
 
 from api.enums import LogType
-from api.interface import CommandConfig, SettingsConfig
+from api.interface import CommandConfig, SettingsConfig, WingmanConfig
 from providers.typesafe_jev import JevClient, JevResult
 from services.jev_decisions import (
     command_questions,
     read_command,
     read_vocabulary,
+    read_wingman,
     vocabulary_questions,
+    wingman_questions,
+    wingman_state,
 )
 from services.printr import Printr
 
@@ -219,6 +222,36 @@ class JevGate:
                 server_only=True,
             )
         return picked
+
+    def pick_wingman(
+        self,
+        transcript: str,
+        configs: list[WingmanConfig],
+        recent: Optional[dict[str, dict[str, str]]] = None,
+        last_answer_from: Optional[str] = None,
+    ) -> Optional[str]:
+        """The wingman a sentence from the global push-to-talk key is for,
+        when it named none and no wingman is the default. None only when Jev
+        is off, has no access or the call failed.
+
+        No confidence gate, unlike everywhere else Jev decides: someone who
+        held the key wants an answer, and nothing happening looks broken. So
+        the most likely wingman answers even when Jev is unsure. Measured
+        2026-10-26 on 42 sentences x 2: 98.8% right taking the top pick.
+
+        Blocking: called on the transcription thread, which waits for the
+        answer anyway before anything can be said.
+        """
+        if not self.active or len(configs) < 2:
+            return None
+        result = self._record(
+            "Wingman choice",
+            self.client.system_one(
+                wingman_state(transcript, recent or {}, last_answer_from),
+                wingman_questions(configs),
+            ),
+        )
+        return read_wingman(result, 0.0)
 
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.

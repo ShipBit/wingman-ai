@@ -313,3 +313,16 @@ def test_a_hold_for_a_wingman_whose_config_was_unloaded_goes_nowhere():
     assert controller.state == ListenState.OFF
     # The next key works as usual.
     assert controller.ptt_down("key:2", object())
+
+
+
+def test_the_global_key_sends_its_clip_for_any_wingman():
+    """The global push-to-talk key: the transcript picks the wingman afterwards."""
+    controller, rec, _ = make()
+    assert controller.ptt_down("key:29:1", lc.ANY_WINGMAN)
+    assert controller.state == ListenState.HELD
+    speak(controller, speech_frames=10, silence_frames=0)
+    release(controller, "key:29:1")
+    assert len(rec.utterances) == 1
+    assert rec.utterances[0][1] is lc.ANY_WINGMAN
+    assert controller.state == ListenState.OFF

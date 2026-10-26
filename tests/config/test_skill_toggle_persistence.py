@@ -23,7 +23,7 @@ from services.config_service import ConfigService
 from tests.support import template
 
 # A Wingman file without `discoverable_skills` or `discoverable_mcps`.
-WINGMAN = {"name": "Computer", "description": "test", "record_key": "end"}
+WINGMAN = {"name": "Computer", "description": "test", "record_bindings": []}
 
 
 def toggled(method: str, name: str, enabled: bool, on_disk: dict) -> WingmanConfig:

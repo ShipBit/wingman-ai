@@ -179,7 +179,11 @@ class Tower:
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:
-        """The wingman addressed in the text, else the default one.
+        """The wingman addressed in the text, else the default one."""
+        return self.get_addressed_wingman(text) or self.get_default_wingman()
+
+    def get_addressed_wingman(self, text: str) -> Wingman | None:
+        """The wingman named in the text.
 
         A name is matched by sound, not by spelling: the speech model writes
         "Eva" for Ava and "Computa" for Computer, and an exact word match then
@@ -192,14 +196,13 @@ class Tower:
             found = find_name(words, wingman.config.name)
             if found is not None and found[2] < best[0]:
                 best = (found[2], wingman)
-        if best[1] is not None:
-            return best[1]
+        return best[1]
 
-        # Check if there is a default wingman defined in the config
+    def get_default_wingman(self) -> Wingman | None:
+        """The wingman with the star: it answers what names nobody."""
         for wingman in self.wingmen:
             if wingman.config.is_voice_activation_default:
                 return wingman
-
         return None
 
     def get_wingman_by_name(self, wingman_name: str):

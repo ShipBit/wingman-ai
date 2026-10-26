@@ -11,8 +11,24 @@ pronunciation:
   presets:
     - wingman
     - star_citizen
-cancel_tts_key: "shift+y"
-cancel_tts_joystick_button: null
+# Stop a wingman mid-answer ("shut up"): keys, mouse or joystick buttons.
+cancel_tts_bindings:
+  - device: keyboard
+    keys:
+      - name: shift
+        scan_code: null
+        extended: false
+      - name: "y"
+        scan_code: null
+        extended: false
+# Push-to-talk for every wingman: hold it and say the wingman's name.
+# The period key, known by its place on the keyboard so every layout finds it.
+global_ptt_bindings:
+  - device: keyboard
+    keys:
+      - name: "."
+        scan_code: null
+        extended: false
 stt:
   # Which provider transcribes what you say: parakeet (on this machine, or
   # on a server of yours) or wingman_pro (the subscription's cloud service).
@@ -36,7 +52,16 @@ stt:
     temperature: 0.0
 voice_activation:
   enabled: false
-  mute_toggle_key: "shift+x"
+  # Switch the microphone on and off while voice activation is on.
+  mute_toggle_bindings:
+    - device: keyboard
+      keys:
+        - name: shift
+          scan_code: null
+          extended: false
+        - name: x
+          scan_code: null
+          extended: false
   # How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
   # whisper. Applies to push-to-talk too, where it trims silence off the clip.
   sensitivity: 0.5

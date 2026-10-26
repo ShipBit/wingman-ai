@@ -631,6 +631,25 @@ class ConversationManager:
     # Role helper
     # ------------------------------------------------------------------
 
+    def last_exchange(self, limit: int = 200) -> dict[str, str]:
+        """The user's last words and the last thing this wingman said, each
+        cut to `limit` characters. For deciding who a follow-up without a name
+        is for. Tool calls and notes are skipped; empty when nothing was said."""
+        exchange: dict[str, str] = {}
+        for message in reversed(self.messages):
+            role = self.turn_role(message)
+            if role not in ("user", "assistant") or role in exchange:
+                continue
+            content = (
+                message.get("content") if isinstance(message, Mapping) else getattr(message, "content", None)
+            )
+            text = " ".join((self._extract_text_content(content) or "").split())
+            if text:
+                exchange[role] = text if len(text) <= limit else text[: limit - 1] + "…"
+            if len(exchange) == 2:
+                break
+        return exchange
+
     def turn_role(self, message) -> str:
         """The role for counting turns: a note is not the user starting one.
         It stays with the turn before it, so it is cut, dropped or summarised

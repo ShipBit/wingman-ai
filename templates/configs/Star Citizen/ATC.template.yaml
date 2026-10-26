@@ -29,7 +29,13 @@ prompts:
     - Efficient and precise in instructions
     - Calm under pressure
     - Occasional dry humor befitting a seasoned controller
-record_key: delete
+record_bindings:
+  # Known by name: each OS has its own scan code for it.
+  - device: keyboard
+    keys:
+      - name: delete
+        scan_code: null
+        extended: false
 inworld:
   voice_id: Brian
 wingman_pro:

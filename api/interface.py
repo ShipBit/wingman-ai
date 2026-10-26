@@ -24,6 +24,7 @@ from api.enums import (
     WingmanInitializationErrorType,
     WingmanProTtsProvider,
     PerplexityModel,
+    RecordingDevice,
 )
 
 
@@ -534,6 +535,49 @@ class SoundConfig(BaseModel):
     """The volume for playback. 0.0 - 1.0"""
 
 
+class CommandJoystickConfig(BaseModel):
+    button: Optional[int] = None
+    """The joystick button to press. Optional."""
+
+    name: Optional[str] = None
+    """The joystick name to use. Optional."""
+
+    guid: Optional[str] = None
+    """The joystick GUID to use. Optional."""
+
+
+class KeyStroke(BaseModel):
+    """One keyboard key. On Windows left and right Ctrl (also Alt, Enter and
+    the arrows against the numpad) share a scan code and differ only in
+    `extended`, so a key is the pair, never the scan code alone."""
+
+    scan_code: Optional[int] = None
+    """None: the key is known by name only (templates, and keys saved without
+    a code before 3.2.12). It is then looked up on the machine that runs it,
+    since scan codes differ between Windows, macOS and Linux."""
+    extended: bool
+    name: str
+    """Shown to the user. Matching uses scan_code and extended when there is a
+    scan code."""
+
+
+class InputBinding(BaseModel):
+    """One way to trigger something: a key combination, a mouse button or a
+    joystick button. Mouse and joystick may come with keyboard keys that must
+    be held as well, like Ctrl + Mouse 4."""
+
+    device: RecordingDevice
+    keys: list[KeyStroke]
+    """Keyboard: the whole combination. Mouse and joystick: the keys held with
+    the button, usually none."""
+
+    mouse_button: Optional[str] = None
+    """Set when device is mouse."""
+
+    joystick: Optional[CommandJoystickConfig] = None
+    """Set when device is joystick."""
+
+
 class VoiceActivationSettings(BaseModel):
     """Hands-free listening. Off means the user holds a wingman's record key.
     Which provider transcribes is not decided here but in ``SttSettings``:
@@ -542,10 +586,9 @@ class VoiceActivationSettings(BaseModel):
     enabled: bool
     """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
 
-    mute_toggle_key: str
-    """If you want to use a key to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
-
-    mute_toggle_key_codes: Optional[list[int]] = None
+    mute_toggle_bindings: list[InputBinding]
+    """Keys that switch the microphone on and off while voice activation is on,
+    to talk to other people without the Wingman listening."""
 
     sensitivity: float = 0.5
     """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
@@ -706,7 +749,12 @@ class CommandKeyboardConfig(BaseModel):
     """The hotkey codes. Can be a single key like 65 or a combination like 162+160+65. Optional."""
 
     hotkey_extended: Optional[bool] = None
-    """Whether the hotkey is an extended key. Optional."""
+    """Whether the hotkey is an extended key. Optional. One flag for the whole
+    combination: older recordings only. A combination with `keys` ignores it."""
+
+    keys: Optional[list[KeyStroke]] = None
+    """The keys with an extended flag each, written by recordings since 3.2.12.
+    None in older actions, which then play exactly as they always did."""
 
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
@@ -733,17 +781,6 @@ class CommandMouseConfig(BaseModel):
 
     move_to: Optional[list[int]] = None
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
-
-
-class CommandJoystickConfig(BaseModel):
-    button: Optional[int] = None
-    """The joystick button to press. Optional."""
-
-    name: Optional[str] = None
-    """The joystick name to use. Optional."""
-
-    guid: Optional[str] = None
-    """The joystick GUID to use. Optional."""
 
 
 class CommandSkillActionConfig(BaseModel):
@@ -1330,14 +1367,9 @@ class WingmanConfig(NestedConfig):
     """The "friendly" name of this Wingman. Can be changed by the user."""
     description: Optional[str] = None
     """A short description of this Wingman."""
-    record_key: Optional[str] = None
-    """The "push-to-talk" key for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
-    record_key_codes: Optional[list[int]] = None
-    """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
-    record_mouse_button: Optional[str] = None
-    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
-    record_joystick_button: Optional[CommandJoystickConfig] = None
-    """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
+    record_bindings: list[InputBinding]
+    """The "push-to-talk" keys, mouse and joystick buttons for this wingman.
+    Keep one pressed while talking. Each binding belongs to one wingman only."""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
     persistent_memory: bool = True
@@ -1754,9 +1786,11 @@ class SettingsConfig(BaseModel):
     """Speak a short line, written by the support model in the user's language,
     while a slow tool runs and the Wingman has not said anything yet."""
     pronunciation: PronunciationSettings
-    cancel_tts_key: Optional[str] = None
-    cancel_tts_key_codes: Optional[list[int]] = None
-    cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
+    cancel_tts_bindings: list[InputBinding]
+    """Stop the Wingman mid-answer ("shut up"). One setting for every Wingman."""
+    global_ptt_bindings: list[InputBinding]
+    """Push-to-talk for every Wingman at once: hold it and say the Wingman's
+    name, like with voice activation."""
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
     spoken_language: SpokenLanguage

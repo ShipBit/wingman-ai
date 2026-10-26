@@ -63,6 +63,20 @@ class ListenState(str, Enum):
 PLAYBACK_TAIL_S = 0.5
 
 
+class _AnyWingman:
+    """Holds the gate for the global push-to-talk key, where a wingman would.
+    The clip is a push-to-talk clip like any other; who answers is decided
+    from the transcript afterwards."""
+
+    name = ""
+
+    def __repr__(self) -> str:
+        return "ANY_WINGMAN"
+
+
+ANY_WINGMAN = _AnyWingman()
+
+
 class ListenController:
     def __init__(
         self,
