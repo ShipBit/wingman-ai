@@ -130,21 +130,6 @@ class AudioLibrary:
             asyncio.get_event_loop(), self.on_playback_started, self.on_playback_finish
         )
 
-        async def actual_start_playback(
-            audio_file: AudioFile,
-            audio_player: AudioPlayer,
-            volume: list,
-        ):
-            full_path = path.join(
-                self.audio_library_path, audio_file.path, audio_file.name
-            )
-            await audio_player.play_audio_file(
-                filename=full_path,
-                volume=volume,
-                wingman_name=playback_key,
-                publish_event=False,
-            )
-
         volume = [(audio_file.volume or 1.0) * volume_modifier]
         self.current_playbacks[playback_key] = [
             audio_player,
@@ -152,7 +137,7 @@ class AudioLibrary:
             selected_file,
         ]
         self.__threaded_execution(
-            actual_start_playback, selected_file, audio_player, volume
+            self._play_file, selected_file, audio_player, volume, playback_key
         )
         if audio_file.wait:
             while True:
@@ -160,6 +145,30 @@ class AudioLibrary:
                 status = self.get_playback_status(selected_file)
                 if not status[1]:  # no audio player
                     break
+
+    async def _play_file(
+        self,
+        audio_file: AudioFile,
+        audio_player: AudioPlayer,
+        volume: list,
+        playback_key: str,
+    ):
+        full_path = path.join(self.audio_library_path, audio_file.path, audio_file.name)
+        try:
+            await audio_player.play_audio_file(
+                filename=full_path,
+                volume=volume,
+                wingman_name=playback_key,
+                publish_event=False,
+            )
+        except Exception as e:
+            # The file exists but cannot be read: still downloading, locked by
+            # another program, or no audio inside. That is the user's file, not
+            # a crash of ours, so it is a warning and never reaches Sentry.
+            # The player never reaches its own finished callback here, so the
+            # client is told from here and its play button does not stay lit.
+            await self.on_playback_finish(playback_key)
+            printr.toast_warning(f"{audio_file.name} could not be played: {e}")
 
     async def stop_playback(
         self,

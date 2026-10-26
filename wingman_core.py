@@ -98,6 +98,7 @@ from services.file import (
     get_prompt,
 )
 from services.audio.device_names import with_full_names
+from services.backstory import parse_enhanced_backstory
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
 from services.star_citizen.game_folder import inspect_game_folder
@@ -4419,26 +4420,11 @@ class WingmanCore(WebSocketUser):
                 detail="Backstory enhancement failed — empty response.",
             )
 
-        # Parse JSON response: {"backstory": "...", "summary": "..."}
-        # Strip markdown code fences if the model wrapped the JSON
-        import re as _re
-        import json as _json
-        stripped = result_text.strip()
-        fence_match = _re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$", stripped)
-        if fence_match:
-            stripped = fence_match.group(1).strip()
-        try:
-            parsed = _json.loads(stripped)
-            enhanced = parsed.get("backstory", result_text)
-            summary = parsed.get("summary", "")
-        except (_json.JSONDecodeError, AttributeError):
-            # Model didn't return valid JSON — use raw text as backstory
-            enhanced = result_text
-            summary = ""
+        enhanced, summary = parse_enhanced_backstory(result_text)
 
         raw_model = getattr(completion, "model", None) or ""
         # Strip date suffixes like "-2025-04-14" for a friendlier display name
-        model_name = _re.sub(r"-\d{4}-\d{2}-\d{2}$", "", raw_model)
+        model_name = re.sub(r"-\d{4}-\d{2}-\d{2}$", "", raw_model)
         usage = getattr(completion, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
