@@ -7,6 +7,7 @@ and so do Alt and AltGr, Enter and numpad Enter, and the arrow keys against
 the numpad. macOS and Linux report no flag; there it is always False.
 """
 
+import platform
 from functools import lru_cache
 from typing import Iterable, Optional
 
@@ -56,16 +57,46 @@ def stroke_from_event(event) -> KeyStroke:
     )
 
 
+# Keys known by where they sit as well as by the character the layout prints
+# on them. Looking "." up through the layout alone has failed: on AZERTY the
+# period needs Shift, and users had to record the key again before it worked.
+# A scan code names a position on the board, not a character, so these hold
+# on every layout. They come from the OS tables, not from one machine:
+#   Windows  scan code 0x34, the key right of comma (US and German alike)
+#   macOS    kVK_ANSI_Period = 0x2F (HIToolbox Events.h)
+#   Linux    KEY_DOT = 52 (input-event-codes.h, also _nixkeyboard's table)
+# Only AZERTY differs: the key at that place prints ":". The layout lookup
+# still runs next to it, so the key that prints "." works there too.
+_PHYSICAL_KEYS = {
+    ".": {"Windows": 52, "Darwin": 47, "Linux": 52},
+}
+_PHYSICAL_KEYS["period"] = _PHYSICAL_KEYS["."]
+
+
+def physical_code(name: str, system: Optional[str] = None) -> Optional[int]:
+    """The physical code of a key from _PHYSICAL_KEYS on this OS, or None."""
+    codes = _PHYSICAL_KEYS.get(name)
+    if not codes:
+        return None
+    return codes.get(system or platform.system())
+
+
 @lru_cache(maxsize=256)
 def _codes_for_name(name: str) -> tuple[int, ...]:
-    """Scan codes the keyboard library knows for a key name on this OS. Empty
-    when the name is unknown here."""
+    """Scan codes for a key name on this OS: the physical code for the keys
+    that have one, and what the keyboard library maps the name to on the
+    current layout. Either one is enough. Empty when neither knows the name."""
     import keyboard.keyboard as keyboard
 
+    codes: list[int] = []
+    code = physical_code(name)
+    if code is not None:
+        codes.append(code)
     try:
-        return tuple(keyboard.key_to_scan_codes(name, error_if_missing=False))
+        codes.extend(keyboard.key_to_scan_codes(name, error_if_missing=False))
     except Exception:
-        return ()
+        pass
+    return tuple(dict.fromkeys(codes))
 
 
 def stroke_is_held(stroke: KeyStroke, held: Iterable[HeldKey]) -> bool:

@@ -85,7 +85,8 @@ def test_settings_shut_up_and_mute():
     assert [(k.scan_code, k.name) for k in keyboard.keys] == [(42, "shift"), (21, "y")]
     assert joystick.joystick.button == 2
     assert [k.name for k in parsed.voice_activation.mute_toggle_bindings[0].keys] == ["shift", "x"]
-    assert parsed.global_ptt_bindings == []
+    (period,) = parsed.global_ptt_bindings
+    assert [(k.name, k.scan_code) for k in period.keys] == [(".", None)]
 
 
 def test_settings_without_any_key():

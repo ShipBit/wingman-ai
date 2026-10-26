@@ -97,3 +97,54 @@ def test_mouse_and_joystick_hooks_are_needed_for_any_binding():
     assert ib.uses_mouse(bindings)
     assert ib.joystick_configs(bindings) == [stick]
     assert not ib.uses_mouse([keys(F1)])
+
+
+def test_the_period_key_is_found_by_its_place_on_every_os():
+    """The default global push-to-talk key. Looked up through the layout it was
+    missing on some, so it is the physical key on each OS."""
+    assert ib.physical_code(".", "Windows") == 52
+    assert ib.physical_code(".", "Linux") == 52
+    assert ib.physical_code(".", "Darwin") == 47
+    assert ib.physical_code("period", "Darwin") == 47
+    assert ib.physical_code("end", "Windows") is None
+
+
+def test_the_period_binding_matches_the_physical_key_and_the_layouts_key(monkeypatch):
+    """On AZERTY the layout puts "." on another key: both work."""
+    import keyboard.keyboard as keyboard
+
+    monkeypatch.setattr(ib.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(keyboard, "key_to_scan_codes", lambda name, error_if_missing=False: (51,))
+    ib._codes_for_name.cache_clear()
+    try:
+        binding = InputBinding(
+            device=RecordingDevice.KEYBOARD, keys=[KeyStroke(name=".", extended=False)]
+        )
+        assert ib.matches(binding, [(52, False)], key=(52, False))
+        assert ib.matches(binding, [(51, False)], key=(51, False))
+        assert not ib.matches(binding, [(53, False)], key=(53, False))
+    finally:
+        ib._codes_for_name.cache_clear()
+
+
+def test_the_period_still_works_when_the_layout_knows_no_period(monkeypatch):
+    import keyboard.keyboard as keyboard
+
+    def unknown(name, error_if_missing=False):
+        raise ValueError(name)
+
+    monkeypatch.setattr(ib.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(keyboard, "key_to_scan_codes", unknown)
+    ib._codes_for_name.cache_clear()
+    try:
+        assert ib._codes_for_name(".") == (52,)
+    finally:
+        ib._codes_for_name.cache_clear()
+
+
+def test_the_template_default_is_the_period_key():
+    from api.interface import SettingsConfig
+    from tests.support import template
+
+    (binding,) = SettingsConfig(**template("settings.yaml")).global_ptt_bindings
+    assert [(k.name, k.scan_code) for k in binding.keys] == [(".", None)]

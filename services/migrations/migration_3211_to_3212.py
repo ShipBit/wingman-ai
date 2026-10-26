@@ -8,7 +8,7 @@ Every key, mouse and joystick binding becomes a list of bindings:
   `cancel_tts_joystick_button`) -> `cancel_tts_bindings`
 - mute (`voice_activation.mute_toggle_key`, `mute_toggle_key_codes`)
   -> `voice_activation.mute_toggle_bindings`
-- new: `global_ptt_bindings`, empty
+- new: `global_ptt_bindings`, the period key
 
 Each key now carries the extended flag that tells left from right Ctrl on
 Windows. Old bindings stored scan codes without it, so the flag is guessed
@@ -19,9 +19,18 @@ Command actions are not touched: they keep playing exactly as before.
 """
 
 import platform
+from copy import deepcopy
 
 from services.input_bindings import legacy_joystick, legacy_keyboard, legacy_mouse
 from services.migrations.base_migration import BaseMigration
+
+
+DEFAULT_GLOBAL_PTT = {
+    "device": "keyboard",
+    "keys": [{"name": ".", "scan_code": None, "extended": False}],
+}
+"""The period key, matched by its place on the keyboard (see
+services/input_bindings._PHYSICAL_KEYS), so it works on every layout."""
 
 
 def _bindings(*candidates) -> list[dict]:
@@ -50,7 +59,7 @@ class Migration3211To3212(BaseMigration):
         for field in ("cancel_tts_key", "cancel_tts_key_codes", "cancel_tts_joystick_button"):
             old.pop(field, None)
 
-        old.setdefault("global_ptt_bindings", [])
+        old.setdefault("global_ptt_bindings", [deepcopy(DEFAULT_GLOBAL_PTT)])
 
         va = old.get("voice_activation")
         if isinstance(va, dict):

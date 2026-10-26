@@ -22,7 +22,13 @@ cancel_tts_bindings:
         scan_code: null
         extended: false
 # Push-to-talk for every wingman: hold it and say the wingman's name.
-global_ptt_bindings: []
+# The period key, known by its place on the keyboard so every layout finds it.
+global_ptt_bindings:
+  - device: keyboard
+    keys:
+      - name: "."
+        scan_code: null
+        extended: false
 stt:
   # Which provider transcribes what you say: parakeet (on this machine, or
   # on a server of yours) or wingman_pro (the subscription's cloud service).
