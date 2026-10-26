@@ -159,16 +159,72 @@ def test_get_available_voices_hides_builtin_stems(tmp_path, monkeypatch):
     assert sorted(custom_ids) == ["Bob", "Carol"]
 
 
+def failing_download(error):
+    """A downloader that fails like the real one: its own RuntimeError with
+    the last attempt's error as the cause."""
+
+    def download(url, dest, log=None):
+        raise RuntimeError(f"Could not download {url}: {error}") from error
+
+    return download
+
+
 def test_get_voice_state_surfaces_download_failure(tmp_path, monkeypatch):
+    import requests
+
+    from providers.pocket_tts import BuiltinVoiceDownloadError
+
     provider, _ = make_provider(tmp_path, monkeypatch, model="german")
     provider.model = object()
     monkeypatch.setattr(
         "providers.pocket_tts.download_url_to_path",
-        lambda url, dest, log=None: (_ for _ in ()).throw(RuntimeError("offline")),
+        failing_download(requests.ConnectionError("offline")),
     )
 
-    with pytest.raises(ValueError, match="could not be downloaded"):
+    with pytest.raises(BuiltinVoiceDownloadError, match="Check your internet connection"):
         provider.get_voice_state("alba")
+
+
+def _http_404():
+    import requests
+
+    response = requests.Response()
+    response.status_code = 404
+    return requests.HTTPError("404 Client Error: Not Found", response=response)
+
+
+@pytest.mark.parametrize("error", [PermissionError("access denied"), _http_404()])
+def test_a_failure_that_is_no_network_error_does_not_blame_the_internet(
+    tmp_path, monkeypatch, error
+):
+    """A file the disk refuses, or one the server does not have any more:
+    the connection works, so the message must not send the user to it."""
+    provider, _ = make_provider(tmp_path, monkeypatch, model="german")
+    provider.model = object()
+    monkeypatch.setattr(
+        "providers.pocket_tts.download_url_to_path", failing_download(error)
+    )
+
+    with pytest.raises(ValueError) as raised:
+        provider.get_voice_state("alba")
+    assert "internet" not in str(raised.value)
+    assert str(error) in str(raised.value)
+
+
+def test_a_builtin_voice_on_a_custom_model_is_a_warning(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from api.enums import LogType
+    from providers.pocket_tts import BuiltinVoiceUnavailableError
+
+    provider, _ = make_provider(tmp_path, monkeypatch, model="my_config.yaml")
+    provider.model = object()
+    lines = []
+    provider.printr = SimpleNamespace(print=lambda text, color=None, **kw: lines.append(color))
+
+    with pytest.raises(BuiltinVoiceUnavailableError, match="custom model"):
+        provider.get_voice_state("alba")
+    assert lines == [LogType.WARNING]
 
 
 def test_get_voice_state_redownloads_stale_builtin_file(tmp_path, monkeypatch):

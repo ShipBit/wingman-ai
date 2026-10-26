@@ -1,5 +1,6 @@
 from typing import Optional
 
+import httpx
 from openai import OpenAI
 
 from api.enums import LogType
@@ -43,10 +44,11 @@ class LlamaCppRemote:
         try:
             return OpenAI(base_url=url, api_key="not-needed")
         except Exception as e:
+            # An address the user typed in is a warning, not a bug in Core.
             printr.print(
                 f"Invalid address for the remote {role} server ({url}): {e}. "
                 "Enter the host without a port (e.g. http://127.0.0.1) and the port separately.",
-                color=LogType.ERROR,
+                color=LogType.WARNING if isinstance(e, httpx.InvalidURL) else LogType.ERROR,
                 server_only=True,
             )
             return None

@@ -25,7 +25,6 @@ from api.commands import (
 )
 from api.enums import (
     CommandTag,
-    ConversationProvider,
     CoreState,
     LocalAiMode,
     LogSource,
@@ -117,7 +116,7 @@ from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
 from services.image_processing import process_images, validate_image_mime
-from services.model_metadata import ModelMetadataService
+from services.model_metadata import conversation_model_id, get_model_metadata_service
 from services.audio import (
     AudioInput,
     GateParams,
@@ -988,7 +987,7 @@ class WingmanCore(WebSocketUser):
             pocket_tts=self.pocket_tts,
         )
 
-        self.model_metadata_service = ModelMetadataService()
+        self.model_metadata_service = get_model_metadata_service()
 
         # Microphone: one stream, one voice gate, one state machine. Push-to-talk
         # and voice activation only differ in who opens the gate.
@@ -2513,6 +2512,13 @@ class WingmanCore(WebSocketUser):
     def get_startup_errors(self):
         return self.startup_errors
 
+    def _loaded_wingman(self, wingman_name: str):
+        """The loaded Wingman of that name, or None. There is no Tower before
+        sign-in or while the config reloads, and the client may already call."""
+        if not self.tower:
+            return None
+        return self.tower.get_wingman_by_name(wingman_name)
+
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
@@ -2538,7 +2544,7 @@ class WingmanCore(WebSocketUser):
     async def ask_wingman_conversation_provider(
         self, wingman_name: str, text: str = Body(...)
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
 
         if wingman and text:
             if isinstance(wingman, OpenAiWingman):
@@ -2546,13 +2552,14 @@ class WingmanCore(WebSocketUser):
 
                 completion = await wingman.actual_llm_call(messages=messages)
 
-                return completion.choices[0].message.content
+                if completion and completion.choices:
+                    return completion.choices[0].message.content
 
         return None
 
     # POST /generate-image
     async def generate_image(self, text: str, wingman_name: str):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
 
         if wingman and text:
             if isinstance(wingman, OpenAiWingman):
@@ -2608,7 +2615,7 @@ class WingmanCore(WebSocketUser):
         wingman_name: str = Form(""),
         images: list[UploadFile] = None,
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not text:
             return
 
@@ -2619,34 +2626,7 @@ class WingmanCore(WebSocketUser):
                     status_code=422, detail="Maximum 2 images allowed per message."
                 )
 
-            # Resolve the active conversation model ID from the wingman config.
-            # The model lives under the provider-specific sub-config, not features.
-            model_id = ""
-            if hasattr(wingman, "config") and hasattr(wingman.config, "features"):
-                provider = wingman.config.features.conversation_provider
-                cfg = wingman.config
-                if provider == ConversationProvider.OPENAI and cfg.openai:
-                    model_id = cfg.openai.conversation_model or ""
-                elif provider == ConversationProvider.MISTRAL and cfg.mistral:
-                    model_id = cfg.mistral.conversation_model or ""
-                elif provider == ConversationProvider.GROQ and cfg.groq:
-                    model_id = cfg.groq.conversation_model or ""
-                elif provider == ConversationProvider.CEREBRAS and cfg.cerebras:
-                    model_id = cfg.cerebras.conversation_model or ""
-                elif provider == ConversationProvider.GOOGLE and cfg.google:
-                    model_id = cfg.google.conversation_model or ""
-                elif provider == ConversationProvider.OPENROUTER and cfg.openrouter:
-                    model_id = cfg.openrouter.conversation_model or ""
-                elif provider == ConversationProvider.LOCAL_LLM and cfg.local_llm:
-                    model_id = cfg.local_llm.conversation_model or ""
-                elif provider == ConversationProvider.WINGMAN_PRO and cfg.wingman_pro:
-                    model_id = cfg.wingman_pro.conversation_deployment or ""
-                elif provider == ConversationProvider.PERPLEXITY and cfg.perplexity:
-                    pmodel = cfg.perplexity.conversation_model
-                    model_id = pmodel.value if hasattr(pmodel, "value") else str(pmodel)
-                elif provider == ConversationProvider.XAI and cfg.xai:
-                    model_id = cfg.xai.conversation_model or ""
-
+            model_id = conversation_model_id(getattr(wingman, "config", None))
             if model_id:
                 supports_vision = await self.model_metadata_service.supports_vision(model_id)
                 if not supports_vision:
@@ -2682,7 +2662,7 @@ class WingmanCore(WebSocketUser):
     async def send_audio_to_wingman(
         self, wingman_name: str, file: UploadFile = File(...)
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman:
             return
 
@@ -2701,13 +2681,13 @@ class WingmanCore(WebSocketUser):
     # POST /reset-conversation-history
     async def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
-            wingman = self.tower.get_wingman_by_name(wingman_name)
+            wingman = self._loaded_wingman(wingman_name)
             if wingman:
                 await wingman.reset_conversation_history()
                 self.printr.toast(
                     f"Conversation history cleared for {wingman_name}.",
                 )
-        else:
+        elif self.tower:
             for wingman in self.tower.wingmen:
                 await wingman.reset_conversation_history()
             self.printr.toast(
@@ -2717,7 +2697,7 @@ class WingmanCore(WebSocketUser):
 
     # POST /condense-conversation
     async def condense_conversation(self, wingman_name: str):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman:
             self.printr.toast_warning(
                 f"Cannot summarize: Wingman '{wingman_name}' not found."
@@ -2732,7 +2712,7 @@ class WingmanCore(WebSocketUser):
 
     # GET /wingman-context
     def get_wingman_context(self, wingman_name: str) -> str:
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not hasattr(wingman, "get_last_context"):
             return ""
         return wingman.get_last_context()
@@ -2741,7 +2721,7 @@ class WingmanCore(WebSocketUser):
     def get_wingman_conversation(
         self, wingman_name: str, strip_nulls: bool = True
     ) -> list[dict]:
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not hasattr(wingman, "get_conversation_messages"):
             return []
         return wingman.get_conversation_messages(strip_nulls=strip_nulls)
@@ -4399,17 +4379,19 @@ class WingmanCore(WebSocketUser):
             {"role": "user", "content": backstory},
         ]
 
+        # 424, not 500: the provider failed (and actual_llm_call already told
+        # the user why). A 5xx would be reported as a bug in Core.
         try:
             completion = await wingman.actual_llm_call(messages)
         except Exception as e:
             raise HTTPException(
-                status_code=500,
+                status_code=424,
                 detail=f"LLM call failed: {e}",
             )
 
         if not completion or not completion.choices:
             raise HTTPException(
-                status_code=500,
+                status_code=424,
                 detail="Backstory enhancement failed — no response from LLM.",
             )
 

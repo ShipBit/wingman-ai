@@ -302,6 +302,176 @@ def test_same_status_outside_openai_is_reported(sentry):
     assert len(sentry.events) == 1
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Incorrect API key provided: sk-xx***",
+        "No models loaded. Please load a model in the developer page",
+        "This model does not support image input",
+    ],
+)
+def test_openai_bad_requests_from_the_users_setup_are_dropped(sentry, message):
+    error_reporting.set_enabled(True)
+    log_error("Provider said no", openai_error("BadRequestError", 400, message))
+    flush()
+
+    assert sentry.events == []
+
+
+def requests_error(status: int, url: str):
+    import requests
+
+    response = requests.Response()
+    response.status_code = status
+    response.url = url
+    return requests.HTTPError(f"{status} Client Error for url: {url}", response=response)
+
+
+def httpx_error(status: int, url: str):
+    import httpx
+
+    request = httpx.Request("GET", url)
+    response = httpx.Response(status, request=request)
+    return httpx.HTTPStatusError(f"{status} for {url}", request=request, response=response)
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 429])
+@pytest.mark.parametrize("make", [requests_error, httpx_error])
+def test_a_third_party_refusing_key_or_quota_is_dropped(sentry, make, status):
+    error_reporting.set_enabled(True)
+    log_error("Provider said no", make(status, "https://api.example-tts.com/v1/speak"))
+    flush()
+
+    assert sentry.events == []
+
+
+@pytest.mark.parametrize("make", [requests_error, httpx_error])
+def test_our_backend_refusing_is_reported(sentry, make):
+    error_reporting.set_enabled(True)
+    log_error("Backend said no", make(401, "https://api.wingman-ai.com/api/v1/audio/speech"))
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_a_third_party_server_error_is_reported(sentry):
+    error_reporting.set_enabled(True)
+    log_error("Provider broke", requests_error(400, "https://api.example-tts.com/v1/speak"))
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_a_provider_sdk_refusal_without_url_is_dropped(sentry):
+    cls = type("ApiError", (Exception,), {"__module__": "elevenlabs.core.api_error"})
+    exc = cls("status_code: 401, body: invalid api key")
+    exc.status_code = 401
+
+    error_reporting.set_enabled(True)
+    log_error("Provider said no", exc)
+    flush()
+
+    assert sentry.events == []
+
+
+def test_cores_own_refusal_without_url_is_reported(sentry):
+    cls = type("SubscriptionError", (Exception,), {"__module__": "providers.wingman_subscription"})
+    exc = cls("unauthorized")
+    exc.status_code = 401
+
+    error_reporting.set_enabled(True)
+    log_error("Our own 401", exc)
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_mcp_authorization_inside_an_exception_group_is_dropped(sentry):
+    from services.mcp_oauth import NeedsAuthorization
+
+    error_reporting.set_enabled(True)
+    group = ExceptionGroup("outer", [ExceptionGroup("inner", [NeedsAuthorization("Server")])])
+    sentry_sdk.capture_exception(group)
+    flush()
+
+    assert sentry.events == []
+
+
+def test_an_exception_group_with_a_real_bug_is_reported(sentry):
+    from services.mcp_oauth import NeedsAuthorization
+
+    error_reporting.set_enabled(True)
+    group = ExceptionGroup("outer", [NeedsAuthorization("Server"), ValueError("bug")])
+    sentry_sdk.capture_exception(group)
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def disk_full_windows():
+    exc = OSError(28, "There is not enough space on the disk")
+    exc.winerror = 112
+    return exc
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        OSError(28, "No space left on device"),
+        disk_full_windows(),
+        RuntimeError("[enforce fail at inline_container.cc:778] . not enough space on the disk"),
+    ],
+)
+def test_a_full_disk_is_dropped(sentry, exc):
+    error_reporting.set_enabled(True)
+    log_error("Could not write", exc)
+    flush()
+
+    assert sentry.events == []
+
+
+def test_a_proxy_breaking_certificates_is_dropped(sentry):
+    import ssl
+
+    exc = ssl.SSLCertVerificationError(
+        1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate"
+    )
+    error_reporting.set_enabled(True)
+    log_error("Download failed", exc)
+    log_error(
+        "Download failed",
+        RuntimeError(
+            "HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded "
+            "(Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]')))"
+        ),
+    )
+    flush()
+
+    assert sentry.events == []
+
+
+def test_a_broken_certificate_of_our_own_host_is_reported(sentry):
+    error_reporting.set_enabled(True)
+    log_error(
+        "Backend unreachable",
+        RuntimeError(
+            "HTTPSConnectionPool(host='api.wingman-ai.com', port=443): "
+            "(Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]')))"
+        ),
+    )
+    flush()
+
+    assert len(sentry.events) == 1
+
+
+def test_futures_scheduled_during_shutdown_are_dropped(sentry):
+    error_reporting.set_enabled(True)
+    log_error("Late", RuntimeError("cannot schedule new futures after shutdown"))
+    flush()
+
+    assert sentry.events == []
+
+
 def test_skill_and_context_errors_are_dropped(sentry):
     from services.context_budget import ContextOverflowError
     from wingmen.facade import FacadeError

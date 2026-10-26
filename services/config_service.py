@@ -1357,7 +1357,9 @@ class ConfigService:
 
     # GET /config
     async def get_config(self, config_name: Optional[str] = "") -> ConfigWithDirInfo:
-        if config_name and len(config_name) > 0:
+        # No name (or an unknown one) loads the default config.
+        config_dir = None
+        if config_name:
             config_dir = self.config_manager.get_config_dir(config_name)
 
         loaded_config_dir, config = self.config_manager.parse_config(config_dir)
@@ -1447,6 +1449,9 @@ class ConfigService:
     # GET config/wingmen
     async def get_wingmen_config_files(self, config_name: str):
         config_dir = self.config_manager.get_config_dir(config_name)
+        # A config the client still shows after it was renamed or deleted.
+        if not config_dir:
+            return []
         return self.config_manager.get_wingmen_configs(config_dir)
 
     # DELETE config/wingman

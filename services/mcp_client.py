@@ -28,13 +28,16 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import os
+import re
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
 
 from api.enums import LogType, McpAuthType, McpTransportType
 from api.interface import McpServerConfig, McpToolInfo
+from services.file import get_writable_dir
 from services.mcp_oauth import NeedsAuthorization
 from services.printr import Printr
 
@@ -87,6 +90,7 @@ class McpConnection:
     write_stream: Any = None
     context_manager: Any = None
     session_context: Any = None
+    errlog: Optional[TextIO] = None  # the STDIO server's stderr
 
     # SSE-specific: dedicated thread with its own event loop
     sse_thread: Optional[threading.Thread] = None
@@ -124,7 +128,26 @@ class McpClient:
         self._wingman_name = wingman_name
 
     @staticmethod
-    def _format_auth_error(config: McpServerConfig, exception: Exception) -> str:
+    def _open_server_errlog(config: McpServerConfig, mode: str = "a") -> TextIO:
+        """A file for the stderr of a STDIO server, in the logs folder.
+
+        stdio_client passes its errlog to the subprocess, which needs a real
+        file with a fileno. Its default is sys.stderr, which Printr replaces
+        with a logger stream that has none, so every STDIO server failed to
+        start. Falls back to os.devnull when the logs folder is not writable.
+        """
+        name = re.sub(r"[^A-Za-z0-9_.-]", "_", config.name or "") or "server"
+        try:
+            return open(
+                os.path.join(get_writable_dir("logs"), f"mcp-{name}.log"),
+                mode,
+                encoding="utf-8",
+            )
+        except OSError:
+            return open(os.devnull, "w", encoding="utf-8")
+
+    @staticmethod
+    def _auth_remedy(config: McpServerConfig, exception: Exception) -> Optional[str]:
         """
         Format authentication errors with clear instructions.
 
@@ -138,7 +161,8 @@ class McpClient:
             exception: The exception that occurred
 
         Returns:
-            Formatted error message
+            The message telling the user what to do, or None when it is not
+            an auth error.
         """
         if config.auth == McpAuthType.OAUTH:
             remedy = (
@@ -190,8 +214,7 @@ class McpClient:
                 ):
                     return remedy
 
-        # Return original error for non-auth issues
-        return str(exception)
+        return None
 
     @property
     def is_available(self) -> bool:
@@ -272,12 +295,15 @@ class McpClient:
                 # it has updated its own state
 
         except Exception as e:
-            # Format error with special handling for authentication errors
-            connection.error = self._format_auth_error(config, e)
+            # Format error with special handling for authentication errors.
+            # One the user fixes in the settings is a warning: it is not a
+            # bug, and an ERROR line would go to the error report.
+            remedy = self._auth_remedy(config, e)
+            connection.error = remedy or str(e)
             connection.is_connected = False
             await printr.print_async(
                 f"MCP connection failed ({config.display_name}): {connection.error}",
-                color=LogType.ERROR,
+                color=LogType.WARNING if remedy else LogType.ERROR,
                 source_name=self._wingman_name if self._wingman_name else None,
                 server_only=False,
             )
@@ -340,8 +366,10 @@ class McpClient:
                 env=config.env,
             )
 
-            # Create the stdio client context
-            context_manager = stdio_client(server_params)
+            # Create the stdio client context. A fresh log per connect; the
+            # per-call processes in _call_tool_stdio append to it.
+            connection.errlog = self._open_server_errlog(config, "w")
+            context_manager = stdio_client(server_params, errlog=connection.errlog)
 
             # Enter the context to get streams
             streams = await context_manager.__aenter__()
@@ -637,6 +665,14 @@ class McpClient:
                 )
             connection.context_manager = None
 
+        # Only after the transport is closed: the process writes to it until then.
+        if connection.errlog:
+            try:
+                connection.errlog.close()
+            except OSError:
+                pass
+            connection.errlog = None
+
         connection.read_stream = None
         connection.write_stream = None
 
@@ -690,11 +726,15 @@ class McpClient:
             env=config.env,
         )
 
-        async with stdio_client(server_params) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                return self._parse_tool_result(result)
+        with self._open_server_errlog(config) as errlog:
+            async with stdio_client(server_params, errlog=errlog) as (
+                read_stream,
+                write_stream,
+            ):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(tool_name, arguments)
+                    return self._parse_tool_result(result)
 
     async def _call_tool_sse(
         self,

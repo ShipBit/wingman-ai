@@ -61,6 +61,14 @@ class VisionAI(Skill):
     async def analyse_screen(self, prompt: str):
         function_response = ""
 
+        # A screenshot to a model without vision ends in a refusal of the
+        # provider and an empty answer. Say why instead, before the capture.
+        if not await self.wingman.ai.sees_images():
+            return (
+                "The main AI model of this Wingman cannot see images. Tell the user "
+                "to pick a model with vision in the Wingman's settings to use this."
+            )
+
         # The screen through Core: under Wayland the desktop takes the shot
         try:
             display = int(self._get_display())

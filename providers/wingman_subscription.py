@@ -270,6 +270,8 @@ class WingmanSubscription:
         language: Optional[str] = None,
         preview: bool = False,
     ):
+        if not text or not text.strip():
+            return  # the backend refuses an empty input with a 400
         data = {
             "provider": "inworld",
             "input": text,
@@ -322,6 +324,8 @@ class WingmanSubscription:
         language: Optional[str] = None,
         preview: bool = False,
     ):
+        if not text or not text.strip():
+            return  # the backend refuses an empty input with a 400
         data = {
             "provider": "azure",
             "input": text,
@@ -360,6 +364,21 @@ class WingmanSubscription:
             # Without this branch a used-up allowance surfaced as "Error during
             # TTS playback".
             self.send_quota_error(response)
+            return True
+        if response.status_code == 400:
+            # The backend says what is wrong with the request, e.g. a text over
+            # its 5000 characters. Raising made that an "Error during TTS
+            # playback" with a bare status line, and an error report.
+            message = ""
+            try:
+                message = (response.json().get("message") or "").strip()
+            except Exception:
+                pass
+            self.printr.print(
+                text=message or "Wingman Pro could not speak this text.",
+                color=LogType.WARNING,
+                source_name=self.wingman_name,
+            )
             return True
         response.raise_for_status()
         return False

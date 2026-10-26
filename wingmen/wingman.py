@@ -18,6 +18,7 @@ from typing import (
     Optional,
     TYPE_CHECKING,
 )
+import httpx
 from openai import APIConnectionError
 from openai.types.chat import ChatCompletion
 from api.interface import (
@@ -359,6 +360,18 @@ class Wingman:
             )
             self.tts = await factory.create_tts(errors)
             self.llm = await factory.create_llm(errors)
+        except httpx.InvalidURL as e:
+            # An endpoint the user typed in, like "localhost:1234:1234". Theirs
+            # to correct in the settings, so a warning and not an error report.
+            message = f"Invalid server address in the provider settings: {e}."
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message=message,
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+            printr.print(message, color=LogType.WARNING, server_only=True)
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -867,6 +880,18 @@ class Wingman:
                 source_name=self.name,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return None
+
+        # Some providers answer without a single choice (a filtered or
+        # aborted response). Every caller reads choices[0].
+        if completion is not None and not getattr(completion, "choices", None):
+            provider = self.config.features.conversation_provider.value
+            await printr.print_async(
+                f"{provider} sent an empty answer. Please try again.",
+                color=LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
             return None
 
         return completion
