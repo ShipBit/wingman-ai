@@ -187,13 +187,19 @@ def any_matches(bindings: Iterable[InputBinding], held: Iterable[HeldKey], **eve
 
 
 def joystick_configs(bindings: Iterable[InputBinding]) -> list[CommandJoystickConfig]:
-    return [
-        binding.joystick
-        for binding in bindings
-        if binding.device == RecordingDevice.JOYSTICK
-        and binding.joystick is not None
-        and binding.joystick.guid
-    ]
+    """One entry per joystick that any binding uses. The joystick loop sends
+    a button event once for every entry with that joystick's GUID, so two
+    bindings on one stick listed twice made mute toggle twice, which is no
+    toggle at all."""
+    by_guid: dict[str, CommandJoystickConfig] = {}
+    for binding in bindings:
+        if (
+            binding.device == RecordingDevice.JOYSTICK
+            and binding.joystick is not None
+            and binding.joystick.guid
+        ):
+            by_guid.setdefault(binding.joystick.guid, binding.joystick)
+    return list(by_guid.values())
 
 
 def uses_mouse(bindings: Iterable[InputBinding]) -> bool:

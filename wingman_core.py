@@ -158,6 +158,9 @@ MIN_ECHO_RUN = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
+# How long the global push-to-talk key must be held before the client shows
+# a recording. Its default is the period: a typed one is up well before this.
+GLOBAL_PTT_ANNOUNCE_S = 0.3
 
 
 def _key_source(key) -> str:
@@ -914,6 +917,11 @@ class WingmanCore(WebSocketUser):
         )
         # Picks the wingman for a global push-to-talk sentence that named none.
         self._last_answer_from: Optional[str] = None
+        # Whether the global key was held long enough to show the recording.
+        self._global_ptt_announced = False
+        self._global_ptt_timer: Optional[threading.Timer] = None
+        # Keyboard keys held when a joystick button went down while recording.
+        self._joystick_recording_held: list = []
         self.routing_jev = JevGate(
             wingman_name="Routing", settings=self.settings_service.settings
         )
@@ -1421,6 +1429,10 @@ class WingmanCore(WebSocketUser):
                     running = False
                 elif event.type == pygame.JOYBUTTONDOWN:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
+                    if self._joystick_recording_active:
+                        # The keys held with the button, taken on the way down:
+                        # they may be let go before the button comes up.
+                        self._joystick_recording_held = list(self.key_events.values())
                     # In recording mode, skip normal press handling
                     if not self._joystick_recording_active:
                         for joystick_config in self._joystick_configs:
@@ -1861,18 +1873,39 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
             return
-        self.printr.print(
-            "Recording started",
-            command_tag=CommandTag.RECORDING_STARTED,
-        )
         if label:
             self.printr.print(f"Global push-to-talk: {label}", server_only=True)
+        # The default global key is the period, which people also type. A tap
+        # while typing must not flash the recording indicator in the client:
+        # it is announced only once the key is really held.
+        self._global_ptt_announced = False
+        timer = threading.Timer(GLOBAL_PTT_ANNOUNCE_S, self._announce_global_ptt, args=(source,))
+        timer.daemon = True
+        self._global_ptt_timer = timer
+        timer.start()
+
+    def _announce_global_ptt(self, source: str) -> None:
+        # A release cancels this timer, so a key still holding is a real hold.
+        if (
+            self.listen_controller.held_source == source
+            and self.listen_controller.held_wingman is ANY_WINGMAN
+        ):
+            self._global_ptt_announced = True
+            self.printr.print(
+                "Recording started",
+                command_tag=CommandTag.RECORDING_STARTED,
+            )
 
     def _ptt_up(self, source: str) -> None:
         wingman = self.listen_controller.held_wingman
         name = wingman.name if wingman else ""
         if not self.listen_controller.ptt_up(source):
             return
+        if wingman is ANY_WINGMAN:
+            if self._global_ptt_timer:
+                self._global_ptt_timer.cancel()
+            if not self._global_ptt_announced:
+                return
         self.printr.print(
             f"Recording stopped ({name})",
             source_name=name,
@@ -1890,6 +1923,12 @@ class WingmanCore(WebSocketUser):
         """The clip behind a push-to-talk key held no speech."""
         name = wingman.name if wingman else ""
         gate = self.voice_gate
+        if wingman is ANY_WINGMAN and not self._global_ptt_announced:
+            # A period typed somewhere, not a try to talk: the log only.
+            self.printr.print(
+                "Global push-to-talk tapped without speech.", server_only=True
+            )
+            return
         self.printr.print(
             f"Skipped recording ({name}) - no speech detected "
             f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
@@ -2094,9 +2133,9 @@ class WingmanCore(WebSocketUser):
                 )
         if not target:
             self.printr.print(
-                f"Dropped '{text}': no name, no default wingman and no pick.",
-                server_only=True,
-                color=LogType.INFO,
+                f"Nobody answered '{text}': say a Wingman's name, give one the ⭐ "
+                "or switch on Fast decisions.",
+                color=LogType.WARNING,
             )
         return target
 

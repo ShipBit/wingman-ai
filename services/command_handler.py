@@ -210,10 +210,13 @@ class CommandHandler:
 
         self.recorded_keys = []
         self.is_joystick_recording = True
+        self.core._joystick_recording_held = []
         result = await self.core.record_joystick_action()
         if result and self.is_joystick_recording:
             self.recorded_keys.append(result)
-            self._recorded_modifiers = self._held_strokes()
+            held = self.core._joystick_recording_held or list(self.core.key_events.values())
+            self.core._joystick_recording_held = []
+            self._recorded_modifiers = [input_bindings.stroke_from_event(e) for e in held]
 
         stop_command = StopRecordingCommand(
             command="stop_recording", recording_device=RecordingDevice.JOYSTICK
@@ -277,6 +280,10 @@ class CommandHandler:
         if self.keyboard_hook_callback:
             keyboard.unhook(self.keyboard_hook_callback)
             self.keyboard_hook_callback = None
+            # While the recorder suppressed the keyboard, Core saw no key-ups.
+            # A key let go then would stay "held" and its next press would be
+            # taken for an auto-repeat and ignored.
+            self.core.key_events.clear()
         if command.recording_device == RecordingDevice.JOYSTICK:
             self.is_joystick_recording = False
             self.core.cancel_joystick_recording()

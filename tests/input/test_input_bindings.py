@@ -148,3 +148,17 @@ def test_the_template_default_is_the_period_key():
 
     (binding,) = SettingsConfig(**template("settings.yaml")).global_ptt_bindings
     assert [(k.name, k.scan_code) for k in binding.keys] == [(".", None)]
+
+
+def test_two_bindings_on_one_joystick_listen_once():
+    """The joystick loop dispatches once per listed joystick: mute and
+    push-to-talk on the same stick listed twice made mute toggle twice."""
+    stick = CommandJoystickConfig(guid="abc", button=1, name="Stick")
+    other_button = CommandJoystickConfig(guid="abc", button=3, name="Stick")
+    second = CommandJoystickConfig(guid="def", button=1, name="Throttle")
+    bindings = [
+        InputBinding(device=RecordingDevice.JOYSTICK, keys=[], joystick=stick),
+        InputBinding(device=RecordingDevice.JOYSTICK, keys=[], joystick=other_button),
+        InputBinding(device=RecordingDevice.JOYSTICK, keys=[], joystick=second),
+    ]
+    assert [c.guid for c in ib.joystick_configs(bindings)] == ["abc", "def"]
