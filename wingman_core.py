@@ -122,6 +122,7 @@ from services.audio import (
     AudioInput,
     GateParams,
     ListenController,
+    ANY_WINGMAN,
     ListenState,
     SileroVad,
     TranscriptionWorker,
@@ -132,6 +133,7 @@ from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
 from services import input_bindings
+from services.jev_gate import JevGate
 from services import speech_text
 from services.printr import Printr
 from services.user_activity import user_activity
@@ -170,10 +172,6 @@ def _key_source(key) -> str:
 
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
-
-
-# Stands for the global push-to-talk binding where a wingman would be.
-_GLOBAL_PTT = object()
 
 
 class SubscriptionNotSignedIn(Exception):
@@ -913,6 +911,10 @@ class WingmanCore(WebSocketUser):
         self.settings_service.vocabulary_changed_callback = self._broadcast_vocabulary
         self.settings_service.settings_events.subscribe(
             "input_bindings_changed", self.on_input_bindings_changed
+        )
+        # Picks the wingman for a global push-to-talk sentence that named none.
+        self.routing_jev = JevGate(
+            wingman_name="Routing", settings=self.settings_service.settings
         )
         self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
@@ -1788,7 +1790,7 @@ class WingmanCore(WebSocketUser):
             for wingman in self.tower.wingmen
             for binding in wingman.get_record_bindings()
         ]
-        candidates += [(binding, _GLOBAL_PTT) for binding in settings.global_ptt_bindings]
+        candidates += [(binding, ANY_WINGMAN) for binding in settings.global_ptt_bindings]
         owner = input_bindings.best_match(candidates, held, **event)
         if owner is None:
             return
@@ -1803,7 +1805,7 @@ class WingmanCore(WebSocketUser):
             source = f"{joystick_config.guid}{joystick_config.button}"
             label = f"joystick button {joystick_config.button}"
 
-        if owner is _GLOBAL_PTT:
+        if owner is ANY_WINGMAN:
             self._global_ptt_down(source, label)
         else:
             self._ptt_down(source, owner, label)
@@ -1850,7 +1852,7 @@ class WingmanCore(WebSocketUser):
     def _global_ptt_down(self, source: str, label: str = "") -> None:
         """The global push-to-talk key: the spoken name picks the wingman, as
         with voice activation."""
-        if not self.listen_controller.ptt_down(source, None):
+        if not self.listen_controller.ptt_down(source, ANY_WINGMAN):
             self.printr.print(
                 f"Global push-to-talk ignored: "
                 f"'{self.listen_controller.held_source}' still holds the microphone.",
@@ -2030,7 +2032,10 @@ class WingmanCore(WebSocketUser):
         tower = self.tower
         if not tower:
             return
-        target = wingman or tower.get_wingman_from_text(text)
+        if wingman is ANY_WINGMAN:
+            target = self._wingman_for_global_ptt(text, tower)
+        else:
+            target = wingman or tower.get_wingman_from_text(text)
         if not target:
             return
         if target not in tower.wingmen:
@@ -2057,6 +2062,28 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
+
+    def _wingman_for_global_ptt(self, text: str, tower) -> Wingman | None:
+        """Who answers the global push-to-talk key: the wingman named in the
+        first words, else the one with the star, else the one Jev picks when
+        System One is on. Otherwise nobody, as with voice activation."""
+        target = tower.get_addressed_wingman(text) or tower.get_default_wingman()
+        if target:
+            return target
+        if len(tower.wingmen) == 1:
+            return tower.wingmen[0]
+        self.routing_jev.update_settings(self.settings_service.settings)
+        name = self.routing_jev.pick_wingman(text, [w.config for w in tower.wingmen])
+        target = next((w for w in tower.wingmen if w.name == name), None)
+        if target:
+            self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
+        else:
+            self.printr.print(
+                f"Dropped '{text}': no name, no default wingman and no pick.",
+                server_only=True,
+                color=LogType.INFO,
+            )
+        return target
 
     def _is_stop(self, words: list[str]) -> bool:
         """Whether the whole utterance is a stop command. The phrases are read

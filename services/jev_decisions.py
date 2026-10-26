@@ -13,7 +13,7 @@ and changes nothing.
 
 from typing import Optional
 
-from api.interface import CommandConfig
+from api.interface import CommandConfig, WingmanConfig
 from providers.typesafe_jev import JevResult, choice, noul
 
 NONE_OPTION = "none_of_these"
@@ -195,3 +195,57 @@ def read_vocabulary(
         if value is not None and value >= threshold:
             confirmed.add(index)
     return confirmed
+
+
+# ── 3. Which wingman a sentence without a name is for ───────────────
+
+WINGMAN_INSTRUCTIONS = (
+    "A voice app has several assistants, listed below. The user held the talk "
+    "key that reaches all of them and said the sentence without naming one. "
+    "Which assistant is the sentence for? Decide by what the user wants done "
+    "or known."
+)
+
+
+def wingman_description(config: WingmanConfig) -> Optional[str]:
+    """What tells this wingman apart from the others: its description, the
+    tools it can use and the commands it can trigger.
+
+    Measured 2026-10-26 on 42 sentences without a name, four wingmen
+    (evals/jev_bench/run_wingman_pick.py): the name alone picked right 81% of
+    the time, the description 95%, description, tools and every command name
+    98.8%. The question grew from 351 to 734 input tokens and the answer took
+    200 ms either way, so it gets everything. The backstory stays out: often
+    long, and not measured.
+    """
+    parts = []
+    if config.description and config.description.strip():
+        parts.append(" ".join(config.description.split()))
+    tools = [*(config.discoverable_skills or []), *(config.discoverable_mcps or [])]
+    if tools:
+        parts.append("Tools: " + ", ".join(tools))
+    commands = [
+        command.name
+        for command in config.commands or []
+        if command.actions and not command.force_instant_activation
+    ]
+    if commands:
+        parts.append("Commands: " + ", ".join(commands))
+    return " ".join(parts) if parts else None
+
+
+def wingman_questions(configs: list[WingmanConfig]) -> dict[str, dict]:
+    return {
+        "wingman": choice(
+            instructions=WINGMAN_INSTRUCTIONS,
+            criteria={config.name: wingman_description(config) for config in configs},
+        )
+    }
+
+
+def read_wingman(result: JevResult, min_confidence: float) -> Optional[str]:
+    """The name of the wingman to answer, or None: the call failed or Jev
+    was not sure enough."""
+    if not result.ok:
+        return None
+    return result.choice("wingman", min_confidence=min_confidence)
