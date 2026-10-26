@@ -101,3 +101,17 @@ def test_settings_without_any_key():
     parsed = SettingsConfig(**out)
     assert parsed.cancel_tts_bindings == []
     assert parsed.voice_activation.mute_toggle_bindings == []
+
+
+def test_everyone_gets_the_period_key():
+    for before in ({}, {"global_ptt_bindings": []}, {"global_ptt_bindings": None}):
+        out = _migration().migrate_settings(dict(before))
+        assert out["global_ptt_bindings"] == [
+            {"device": "keyboard", "keys": [{"name": ".", "scan_code": None, "extended": False}]}
+        ]
+
+
+def test_a_chosen_global_key_stays():
+    chosen = [{"device": "mouse", "keys": [], "mouse_button": "x2"}]
+    out = _migration().migrate_settings({"global_ptt_bindings": list(chosen)})
+    assert out["global_ptt_bindings"] == chosen

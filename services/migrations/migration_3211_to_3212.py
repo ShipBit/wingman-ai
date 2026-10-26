@@ -59,7 +59,10 @@ class Migration3211To3212(BaseMigration):
         for field in ("cancel_tts_key", "cancel_tts_key_codes", "cancel_tts_joystick_button"):
             old.pop(field, None)
 
-        old.setdefault("global_ptt_bindings", [deepcopy(DEFAULT_GLOBAL_PTT)])
+        # Everyone gets the period key, also a settings file that already
+        # carries the field empty (a development build of 3.2.12).
+        if not old.get("global_ptt_bindings"):
+            old["global_ptt_bindings"] = [deepcopy(DEFAULT_GLOBAL_PTT)]
 
         va = old.get("voice_activation")
         if isinstance(va, dict):
