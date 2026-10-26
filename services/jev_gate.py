@@ -32,6 +32,7 @@ from services.jev_decisions import (
     read_wingman,
     vocabulary_questions,
     wingman_questions,
+    wingman_state,
 )
 from services.printr import Printr
 
@@ -230,7 +231,13 @@ class JevGate:
             )
         return picked
 
-    def pick_wingman(self, transcript: str, configs: list[WingmanConfig]) -> Optional[str]:
+    def pick_wingman(
+        self,
+        transcript: str,
+        configs: list[WingmanConfig],
+        recent: Optional[dict[str, dict[str, str]]] = None,
+        last_answer_from: Optional[str] = None,
+    ) -> Optional[str]:
         """The wingman a sentence from the global push-to-talk key is for,
         when it named none and no wingman is the default. None: off, no
         access, or not sure enough, and then nobody answers.
@@ -242,7 +249,10 @@ class JevGate:
             return None
         result = self._record(
             "Wingman choice",
-            self.client.system_one({"transcript": transcript}, wingman_questions(configs)),
+            self.client.system_one(
+                wingman_state(transcript, recent or {}, last_answer_from),
+                wingman_questions(configs),
+            ),
         )
         picked = read_wingman(result, WINGMAN_CONFIDENCE)
         if result.ok and not picked:

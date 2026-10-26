@@ -913,6 +913,7 @@ class WingmanCore(WebSocketUser):
             "input_bindings_changed", self.on_input_bindings_changed
         )
         # Picks the wingman for a global push-to-talk sentence that named none.
+        self._last_answer_from: Optional[str] = None
         self.routing_jev = JevGate(
             wingman_name="Routing", settings=self.settings_service.settings
         )
@@ -2073,7 +2074,12 @@ class WingmanCore(WebSocketUser):
         if len(tower.wingmen) == 1:
             return tower.wingmen[0]
         self.routing_jev.update_settings(self.settings_service.settings)
-        name = self.routing_jev.pick_wingman(text, [w.config for w in tower.wingmen])
+        name = self.routing_jev.pick_wingman(
+            text,
+            [w.config for w in tower.wingmen],
+            recent={w.name: w.conversation.last_exchange() for w in tower.wingmen},
+            last_answer_from=self._last_answer_from,
+        )
         target = next((w for w in tower.wingmen if w.name == name), None)
         if target:
             self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
@@ -2458,6 +2464,8 @@ class WingmanCore(WebSocketUser):
         self.listen_controller.set_voice_activation(is_enabled)
 
     async def on_playback_started(self, wingman_name: str):
+        # For a follow-up on the global push-to-talk key that names nobody.
+        self._last_answer_from = wingman_name
         await self.printr.print_async(
             text=f"Playback started ({wingman_name})",
             source_name=wingman_name,

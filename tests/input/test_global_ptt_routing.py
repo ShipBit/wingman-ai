@@ -4,7 +4,12 @@ words, else the one with the star, else the one Jev picks."""
 from types import SimpleNamespace
 
 from api.interface import CommandConfig, WingmanConfig
-from services.jev_decisions import read_wingman, wingman_description, wingman_questions
+from services.jev_decisions import (
+    read_wingman,
+    wingman_description,
+    wingman_questions,
+    wingman_state,
+)
 from services.tower import Tower
 from tests.support import template
 from wingman_core import WingmanCore
@@ -22,7 +27,14 @@ def config(name, default=False, **fields):
 
 def tower(*configs):
     t = Tower.__new__(Tower)
-    t.wingmen = [SimpleNamespace(name=c.name, config=c) for c in configs]
+    t.wingmen = [
+        SimpleNamespace(
+            name=c.name,
+            config=c,
+            conversation=SimpleNamespace(last_exchange=lambda c=c: {"user": f"hi {c.name}"}),
+        )
+        for c in configs
+    ]
     return t
 
 
@@ -34,14 +46,16 @@ class FakeJev:
     def update_settings(self, _settings):
         pass
 
-    def pick_wingman(self, text, configs):
+    def pick_wingman(self, text, configs, recent=None, last_answer_from=None):
         self.asked.append((text, [c.name for c in configs]))
+        self.context = (recent, last_answer_from)
         return self.pick
 
 
 def core(jev):
     c = WingmanCore.__new__(WingmanCore)
     c.routing_jev = jev
+    c._last_answer_from = "ATC"
     c.settings_service = SimpleNamespace(settings=None)
     c.printr = SimpleNamespace(print=lambda *a, **k: None)
     return c
@@ -119,3 +133,37 @@ def test_a_switched_off_wingman_is_neither_addressed_nor_offered():
     target = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
     assert target.name == "Lore"
     assert jev.asked == [("ATC, requesting permission to land.", ["Computer", "Lore"])]
+
+
+def test_jev_hears_the_last_exchanges_and_who_answered_last():
+    jev = FakeJev("ATC")
+    t = tower(config("Computer"), config("ATC"))
+    core(jev)._wingman_for_global_ptt("Which pad was it?", t)
+    recent, last = jev.context
+    assert recent == {"Computer": {"user": "hi Computer"}, "ATC": {"user": "hi ATC"}}
+    assert last == "ATC"
+
+
+def test_the_state_leaves_out_what_is_empty():
+    assert wingman_state("Gear down.", {"Computer": {}}, None) == {"transcript": "Gear down."}
+    state = wingman_state("Which pad?", {"ATC": {"user": "Land", "assistant": "Pad 4"}}, "ATC")
+    assert state == {
+        "transcript": "Which pad?",
+        "last_answer_from": "ATC",
+        "recent": {"ATC": {"user": "Land", "assistant": "Pad 4"}},
+    }
+
+
+def test_the_last_exchange_skips_tool_calls_and_cuts_long_answers():
+    from services.conversation_manager import ConversationManager
+
+    manager = ConversationManager.__new__(ConversationManager)
+    manager.messages = [
+        {"role": "user", "content": "Where do I sell laranite?"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "1"}]},
+        {"role": "tool", "content": "{}"},
+        {"role": "assistant", "content": "Area18 " + "x" * 300},
+    ]
+    exchange = manager.last_exchange(limit=50)
+    assert exchange["user"] == "Where do I sell laranite?"
+    assert exchange["assistant"].startswith("Area18 ") and len(exchange["assistant"]) == 50

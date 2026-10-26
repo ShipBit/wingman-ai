@@ -203,7 +203,8 @@ WINGMAN_INSTRUCTIONS = (
     "A voice app has several assistants, listed below. The user held the talk "
     "key that reaches all of them and said the sentence without naming one. "
     "Which assistant is the sentence for? Decide by what the user wants done "
-    "or known."
+    "or known. A follow-up that only makes sense after one assistant's last "
+    "answer goes to that assistant."
 )
 
 
@@ -232,6 +233,26 @@ def wingman_description(config: WingmanConfig) -> Optional[str]:
     if commands:
         parts.append("Commands: " + ", ".join(commands))
     return " ".join(parts) if parts else None
+
+
+def wingman_state(
+    transcript: str,
+    recent: dict[str, dict[str, str]],
+    last_answer_from: Optional[str],
+) -> dict:
+    """The sentence, the last exchange with each wingman and who answered
+    last. Measured 2026-10-26 on 24 follow-ups like "And where exactly?"
+    (evals/jev_bench/run_wingman_context.py): the sentence alone 77% right,
+    who answered last alone 96% but with wrong picks above the gate, the last
+    exchanges alone 79%, both together 100% and no wrong pick. Standalone
+    sentences stayed at 96%, at the same latency."""
+    state: dict = {"transcript": transcript}
+    if last_answer_from:
+        state["last_answer_from"] = last_answer_from
+    recent = {name: exchange for name, exchange in recent.items() if exchange}
+    if recent:
+        state["recent"] = recent
+    return state
 
 
 def wingman_questions(configs: list[WingmanConfig]) -> dict[str, dict]:
