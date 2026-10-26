@@ -57,6 +57,12 @@ custom_properties:
     value: 1000
     required: false
     property_type: number
+  - id: place_radius_km
+    name: Place radius (km)
+    hint: This close to a known place you are "at" it, and the skill says so without a distance. A place is one point in the data, but a station or a city is kilometres across, and the rotation model leaves a kilometre or two even when calibrated. Up to five times this radius you are "near" it.
+    value: 5
+    required: false
+    property_type: number
   - id: show_in_hud
     name: Show in HUD
     hint: Show each reading as a HUD message when the HUD is on.

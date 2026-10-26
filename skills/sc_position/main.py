@@ -31,6 +31,7 @@ from skills.sc_position import geo
 from skills.sc_position.calibration import Calibration, CalibrationStore
 from skills.sc_position.reader import PositionReader, ReadError
 from skills.sc_position.waypoints import Waypoint, WaypointStore
+from skills.sc_position.wording import describe
 from skills.skill_base import Skill, command_action, tool
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ DEFAULT_KEYS = {"chat_input_key": "enter", "chat_toggle_key": "f12", "paste_key"
 DELAY_MS = (50, 150, 1000)
 """Minimum, default and maximum of "key_delay_ms"."""
 DEFAULT_TOLERANCE_M = 1000.0
+DEFAULT_PLACE_KM = 5.0
 HUD_SECONDS = 15
 LISTED = 10
 
@@ -80,6 +82,13 @@ class ScPosition(Skill):
         except (TypeError, ValueError):
             metres = DEFAULT_TOLERANCE_M
         return max(10.0, metres)
+
+    def _place_km(self) -> float:
+        try:
+            km = float(self.retrieve_custom_property_value("place_radius_km", []))
+        except (TypeError, ValueError):
+            km = DEFAULT_PLACE_KM
+        return max(0.1, km)
 
     def _show_in_hud(self) -> bool:
         return bool(self.retrieve_custom_property_value("show_in_hud", []))
@@ -135,41 +144,11 @@ class ScPosition(Skill):
 
     def _describe(self, fix: geo.Fix, waypoint: "Waypoint | None") -> tuple[str, str]:
         """What to tell the model, and the short HUD line."""
-        when = _utc(fix.measured_at).strftime("%H:%M:%S UTC")
-        if fix.body.is_system:
-            away = geo.format_distance(geo.distance_km(fix.local_km, (0.0, 0.0, 0.0)))
-            where = f"open space, {away} from the centre of {fix.body.name}"
-            hud = f"{fix.body.name} · open space"
-        else:
-            height = geo.format_distance(max(0.0, fix.alt_km))
-            where = f"{height} above {fix.body.name}, lat {fix.lat:.2f}, lon {fix.lon:.2f}"
-            hud = f"{fix.body.name} · {height} up"
-        if fix.nearest:
-            near = geo.format_distance(fix.nearest_km)
-            where += f"; nearest known place {fix.nearest.name} ({near})"
-            hud += f" · {fix.nearest.name} {near}"
-        text = f"Position at {when}: {where}."
-        if fix.body.rotates and self._calibration().get(fix.body.name) is None:
-            text += (
-                f" The rotation of {fix.body.name} is not calibrated yet, so places and "
-                "waypoints on it can be off by several km; the user can say where they "
-                "are to calibrate it."
-            )
-        if waypoint is None:
-            return text, hud
-        if waypoint.body != fix.body.name:
-            text += f" Waypoint '{waypoint.name}' is on {waypoint.body}, not here."
-            hud += f" · {waypoint.name}: on {waypoint.body}"
-            return text, hud
-        target = geo.body_fixed(fix.body, waypoint.lat, waypoint.lon, waypoint.alt_m / 1000)
-        distance = geo.distance_km(fix.local_km, target)
-        bearing = geo.bearing_deg(fix.lat, fix.lon, waypoint.lat, waypoint.lon)
-        point = geo.compass(bearing)
-        arrived = distance * 1000 <= waypoint.tolerance_m
-        text += f" Waypoint '{waypoint.name}': {geo.format_distance(distance)} away, bearing {bearing:.0f}° ({point})."
-        text += " Arrived (within tolerance)." if arrived else f" Not yet within {geo.format_distance(waypoint.tolerance_m / 1000)}."
-        hud += f" · → {waypoint.name} {geo.format_distance(distance)} {point}" + (" ✓" if arrived else "")
-        return text, hud
+        return describe(
+            fix, waypoint,
+            calibrated=not fix.body.rotates or self._calibration().get(fix.body.name) is not None,
+            place_km=self._place_km(),
+        )
 
     async def _show(self, line: str) -> None:
         if self._show_in_hud():

@@ -321,3 +321,74 @@ def test_a_broken_file_loads_as_empty(tmp_path):
 
     assert store.all() == []
     assert store.active() is None
+
+
+# --- wording ---------------------------------------------------------------------
+
+from skills.sc_position.wording import describe  # noqa: E402
+
+
+def _fix_at(bodies, body_name: str, place: str, offset_km: tuple = (0.0, 0.0, 0.0), alt_km=None):
+    """A fix on `body_name`, `offset_km` away from `place` in the body-fixed frame."""
+    body = next(b for b in bodies if b.name == body_name)
+    poi = geo.find_poi(body, place)
+    local = (poi.x + offset_km[0], poi.y + offset_km[1], poi.z + offset_km[2])
+    if alt_km is not None:
+        lat, lon, _ = geo.lat_lon_alt(body, local)
+        local = geo.body_fixed(body, lat, lon, alt_km)
+    lat, lon, alt = geo.lat_lon_alt(body, local)
+    nearest, nearest_km = geo.nearest_pois(body, local, 1)[0]
+    return geo.Fix(body=body, lat=lat, lon=lon, alt_km=alt, local_km=local, global_m=(0, 0, 0),
+                   measured_at=PORT_TRESSLER_TIME, nearest=nearest, nearest_km=nearest_km)
+
+
+def test_within_the_place_radius_the_pilot_is_at_the_place(bodies):
+    fix = _fix_at(bodies, "microTech", "Port Tressler", (1.0, 1.0, 0.0))
+
+    text, hud = describe(fix, None, calibrated=True, place_km=5)
+
+    assert "at Port Tressler (127 km above microTech)" in text
+    assert "lat" not in text and "km from" not in text
+    assert hud.startswith("Port Tressler · microTech 127 km up")
+
+
+def test_up_to_five_radii_the_pilot_is_near_the_place(bodies):
+    fix = _fix_at(bodies, "microTech", "Port Tressler", (12.0, 0.0, 0.0))
+
+    text, hud = describe(fix, None, calibrated=True, place_km=5)
+
+    assert "near Port Tressler, 12.0 km from it" in text
+    assert hud.startswith("near Port Tressler 12.0 km")
+
+
+def test_far_away_the_nearest_place_is_a_reference_with_coordinates(bodies):
+    fix = _fix_at(bodies, "microTech", "Port Tressler", (60.0, 0.0, 0.0))
+
+    text, hud = describe(fix, None, calibrated=True, place_km=5)
+
+    assert "lat " in text and "nearest known place Port Tressler (60.0 km)" in text
+    assert "at Port Tressler" not in text
+
+
+def test_on_the_surface_the_pilot_is_on_the_body(bodies):
+    fix = _fix_at(bodies, "Daymar", "Shubin Mining Facility SCD-1", alt_km=0.02)
+
+    text, hud = describe(fix, None, calibrated=False, place_km=5)
+
+    assert "at Shubin Mining Facility SCD-1 (on Daymar)" in text
+    assert "not calibrated" in text
+    assert "Daymar surface" in hud
+
+
+def test_a_waypoint_reports_arrival_or_the_way(bodies):
+    fix = _fix_at(bodies, "microTech", "Port Tressler", (1.0, 1.0, 0.0))
+    here = Waypoint(name="Hangar", body="microTech", lat=fix.lat, lon=fix.lon, alt_m=fix.alt_km * 1000,
+                    tolerance_m=500, measured_at="", global_m=[])
+    elsewhere = Waypoint(name="Cave", body="Daymar", lat=0, lon=0, alt_m=0, tolerance_m=500,
+                         measured_at="", global_m=[])
+
+    text, hud = describe(fix, here, calibrated=True, place_km=5)
+    assert "Waypoint 'Hangar': arrived" in text and hud.endswith("Hangar ✓")
+
+    text, hud = describe(fix, elsewhere, calibrated=True, place_km=5)
+    assert "Waypoint 'Cave' is on Daymar, not here" in text
