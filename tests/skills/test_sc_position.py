@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from skills.sc_position import geo
+from skills.sc_position.calibration import Calibration, CalibrationStore
 from skills.sc_position.reader import ANSWER_PREFIX, COMMAND, PositionReader, ReadError
 from skills.sc_position.waypoints import Waypoint, WaypointStore
 from tests.support import REPO_ROOT
@@ -152,22 +153,22 @@ async def _no_sleep(_seconds: float) -> None:
     pass
 
 
-def _reader(game: FakeGame) -> PositionReader:
+def _reader(game: FakeGame, chat_hidden: bool) -> PositionReader:
     return PositionReader(
         press=game.press, read_clipboard=game.read_clipboard, write_clipboard=game.write_clipboard,
-        sleep=_no_sleep, now=lambda: 1234.5,
+        sleep=_no_sleep, now=lambda: 1234.5, chat_hidden=chat_hidden,
     )
 
 
 def test_reads_the_position_when_the_chat_is_visible():
     game = FakeGame(chat_visible=True)
 
-    reading = _run(_reader(game).read())
+    reading = _run(_reader(game, chat_hidden=False).read())
 
     assert reading.text == PORT_TRESSLER_LINE
     assert reading.measured_at == 1234.5
     assert not reading.toggled_chat
-    assert "f12" not in game.presses
+    assert game.presses == ["enter", "ctrl+v", "enter"]
     assert game.chat_visible
     assert game.clipboard == "something the user copied"
 
@@ -175,23 +176,110 @@ def test_reads_the_position_when_the_chat_is_visible():
 def test_shows_a_hidden_chat_and_hides_it_again():
     game = FakeGame(chat_visible=False)
 
-    reading = _run(_reader(game).read())
+    reading = _run(_reader(game, chat_hidden=True).read())
 
     assert reading.text.startswith(ANSWER_PREFIX)
     assert reading.toggled_chat
-    assert game.presses.count("f12") == 2
+    assert game.presses == ["f12", "enter", "ctrl+v", "enter", "f12"]
     assert not game.chat_visible
     assert game.clipboard == "something the user copied"
+
+
+def test_a_wrong_setting_fails_once_and_names_the_setting():
+    # The chat is visible but the setting says hidden: one sequence, no
+    # second try with the other state (its keys would reach the game).
+    game = FakeGame(chat_visible=True)
+
+    with pytest.raises(ReadError, match="switch off 'Chat is hidden'"):
+        _run(_reader(game, chat_hidden=True).read())
+
+    assert game.presses == ["f12", "enter", "ctrl+v", "enter", "f12"]
+    assert game.chat_visible
+    assert game.clipboard == "something the user copied"
+
+    game = FakeGame(chat_visible=False)
+
+    with pytest.raises(ReadError, match="switch on 'Chat is hidden'"):
+        _run(_reader(game, chat_hidden=False).read())
+
+    assert game.presses == ["enter", "ctrl+v", "enter"]
+    assert not game.chat_visible
 
 
 def test_no_answer_is_an_error_and_leaves_things_as_they_were():
     game = FakeGame(chat_visible=False, answers=False)
 
     with pytest.raises(ReadError):
-        _run(_reader(game).read())
+        _run(_reader(game, chat_hidden=True).read())
 
     assert not game.chat_visible
     assert game.clipboard == "something the user copied"
+
+
+# --- calibration -----------------------------------------------------------------
+
+def _measurement_at(bodies, body_name: str, place: str, t: float, true_offset_deg: float):
+    """Global metres of a pilot standing at `place`, in a world whose body
+    has turned `true_offset_deg` further than the model says."""
+    body = next(b for b in bodies if b.name == body_name)
+    poi = geo.find_poi(body, place)
+    gx, gy, gz = geo.from_body_fixed(body, (poi.x, poi.y, poi.z), t, true_offset_deg)
+    return body, poi, (gx * 1000, gy * 1000, gz * 1000)
+
+
+def test_a_drifted_rotation_is_corrected_by_one_known_place(bodies):
+    body, poi, (x, y, z) = _measurement_at(bodies, "microTech", "Port Tressler", PORT_TRESSLER_TIME, 4.1)
+
+    before = geo.locate(bodies, x, y, z, PORT_TRESSLER_TIME)
+    delta = geo.calibration_delta(before.local_km, poi)
+    after = geo.locate(bodies, x, y, z, PORT_TRESSLER_TIME, {"microTech": delta})
+
+    assert before.nearest.name == "Port Tressler" and before.nearest_km > 50
+    assert math.isclose(delta, 4.1, abs_tol=1e-6)
+    assert after.correction_deg == delta
+    assert after.nearest.name == "Port Tressler" and after.nearest_km < 0.001
+
+
+def test_the_correction_is_the_shortest_turn(bodies):
+    body, poi, (x, y, z) = _measurement_at(bodies, "Daymar", "Shubin Mining Facility SCD-1", PORT_TRESSLER_TIME, -170.0)
+
+    fix = geo.locate(bodies, x, y, z, PORT_TRESSLER_TIME)
+    delta = geo.calibration_delta(fix.local_km, poi)
+
+    assert math.isclose(delta, -170.0, abs_tol=1e-6)
+    assert -180 < delta <= 180
+
+
+def test_from_body_fixed_inverts_to_body_fixed(bodies):
+    body = next(b for b in bodies if b.name == "Daymar")
+    local = (100.0, -200.0, 50.0)
+
+    gx, gy, gz = geo.from_body_fixed(body, local, PORT_TRESSLER_TIME, 2.5)
+    back = geo.to_body_fixed(body, gx, gy, gz, PORT_TRESSLER_TIME, 2.5)
+
+    assert all(math.isclose(a, b, abs_tol=1e-6) for a, b in zip(back, local))
+
+
+def test_places_are_found_loosely(bodies):
+    micro = next(b for b in bodies if b.name == "microTech")
+
+    assert geo.find_poi(micro, "port tressler").name == "Port Tressler"
+    assert geo.find_poi(micro, "PORT").name.startswith("Port")
+    assert geo.find_poi(micro, "nowhere") is None
+    assert geo.find_poi(micro, "") is None
+
+
+def test_calibrations_survive_a_restart(tmp_path):
+    path = tmp_path / "calibration.json"
+    store = CalibrationStore(path)
+    store.set(Calibration(body="microTech", delta_deg=4.1, place="Port Tressler",
+                          calibrated_at="2026-10-26T17:28:54+00:00", residual_m=900.0))
+
+    again = CalibrationStore(path)
+
+    assert again.get("microTech").place == "Port Tressler"
+    assert again.deltas() == {"microTech": 4.1}
+    assert again.get("Daymar") is None
 
 
 # --- waypoints ---------------------------------------------------------------------

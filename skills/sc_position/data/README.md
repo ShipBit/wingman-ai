@@ -15,8 +15,11 @@ whichever is larger. The entry `Stanton` with `system: true` is the frame for
 open space, at the origin and without rotation.
 
 Rotation model: a body turns `0.1 / rotation_hours` degrees per second, counted
-from 2020-01-01 00:00 UTC, plus `rotation_adjust_deg`. Verified against Port
-Tressler on 2026-10-26 with a current game build (1.6 km off).
+from 2020-01-01 00:00 UTC, plus `rotation_adjust_deg`. The offsets drift with
+the game: on 2026-10-26, with a current build and a checked clock, microTech
+was about four degrees off (56 km at Port Tressler). The skill therefore
+stores a correction per body that the user measures once at a known place
+(the calibrate_position tool); the values here are the starting point.
 
 Pyro and Nyx are not in the data yet.
 

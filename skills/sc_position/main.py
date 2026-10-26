@@ -12,10 +12,12 @@ Planets and moons turn, so a fixed point on a surface wanders in global
 coordinates. Waypoints are stored body-fixed: latitude, longitude and height
 on a body, with the time of the measurement. The body data and the rotation
 model come from the community tool Star-Citizen-Navigation (MIT), see
-data/README.md. Stanton only, so far.
+data/README.md. Stanton only, so far. The model's rotation offsets drift, so
+the user calibrates a body once by saying where they are (calibrate_position).
 
 The command is pasted into the chat, never typed, and only on request: a tool
-call or the "Read position" command on a key. See reader.py for why.
+call or the "Read position" command. See reader.py for why, and for why the
+user has to say whether their chat is hidden.
 """
 
 import asyncio
@@ -26,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from api.interface import SettingsConfig, SkillConfig
 from skills.sc_position import geo
+from skills.sc_position.calibration import Calibration, CalibrationStore
 from skills.sc_position.reader import PositionReader, ReadError
 from skills.sc_position.waypoints import Waypoint, WaypointStore
 from skills.skill_base import Skill, command_action, tool
@@ -39,7 +42,11 @@ DELAY_MS = (50, 150, 1000)
 """Minimum, default and maximum of "key_delay_ms"."""
 DEFAULT_TOLERANCE_M = 1000.0
 HUD_SECONDS = 15
-LISTED_WAYPOINTS = 10
+LISTED = 10
+
+
+def _utc(t: float) -> datetime:
+    return datetime.fromtimestamp(t, timezone.utc)
 
 
 class ScPosition(Skill):
@@ -54,6 +61,10 @@ class ScPosition(Skill):
     def _key(self, name: str) -> str:
         value = self.retrieve_custom_property_value(name, [])
         return str(value).strip().lower() if value else DEFAULT_KEYS[name]
+
+    def _chat_hidden(self) -> bool:
+        value = self.retrieve_custom_property_value("chat_hidden", [])
+        return True if value is None else bool(value)
 
     def _delay(self) -> float:
         low, default, high = DELAY_MS
@@ -75,8 +86,14 @@ class ScPosition(Skill):
 
     # --- data ---------------------------------------------------------------------
 
-    def _store(self) -> WaypointStore:
-        return WaypointStore(Path(self.get_generated_files_dir()) / "waypoints.json")
+    def _files(self) -> Path:
+        return Path(self.get_generated_files_dir())
+
+    def _waypoints(self) -> WaypointStore:
+        return WaypointStore(self._files() / "waypoints.json")
+
+    def _calibration(self) -> CalibrationStore:
+        return CalibrationStore(self._files() / "calibration.json")
 
     def _get_bodies(self) -> tuple:
         if not self._bodies:
@@ -102,6 +119,7 @@ class ScPosition(Skill):
             write_clipboard=self.wingman.clipboard.write,
             sleep=asyncio.sleep,
             now=time.time,
+            chat_hidden=self._chat_hidden(),
             chat_input_key=self._key("chat_input_key"),
             chat_toggle_key=self._key("chat_toggle_key"),
             paste_key=self._key("paste_key"),
@@ -109,16 +127,15 @@ class ScPosition(Skill):
         )
         reading = await reader.read()
         x, y, z = geo.parse_clipboard(reading.text)
-        if reading.toggled_chat:
-            self.log.info("The chat was hidden; shown for the command and hidden again.", server_only=True)
-        return geo.locate(self._get_bodies(), x, y, z, reading.measured_at)
+        return geo.locate(
+            self._get_bodies(), x, y, z, reading.measured_at, self._calibration().deltas()
+        )
 
     # --- wording --------------------------------------------------------------------
 
-    @staticmethod
-    def _describe(fix: geo.Fix, waypoint: "Waypoint | None") -> tuple[str, str]:
+    def _describe(self, fix: geo.Fix, waypoint: "Waypoint | None") -> tuple[str, str]:
         """What to tell the model, and the short HUD line."""
-        when = datetime.fromtimestamp(fix.measured_at, timezone.utc).strftime("%H:%M:%S UTC")
+        when = _utc(fix.measured_at).strftime("%H:%M:%S UTC")
         if fix.body.is_system:
             away = geo.format_distance(geo.distance_km(fix.local_km, (0.0, 0.0, 0.0)))
             where = f"open space, {away} from the centre of {fix.body.name}"
@@ -132,6 +149,12 @@ class ScPosition(Skill):
             where += f"; nearest known place {fix.nearest.name} ({near})"
             hud += f" · {fix.nearest.name} {near}"
         text = f"Position at {when}: {where}."
+        if fix.body.rotates and self._calibration().get(fix.body.name) is None:
+            text += (
+                f" The rotation of {fix.body.name} is not calibrated yet, so places and "
+                "waypoints on it can be off by several km; the user can say where they "
+                "are to calibrate it."
+            )
         if waypoint is None:
             return text, hud
         if waypoint.body != fix.body.name:
@@ -157,9 +180,8 @@ class ScPosition(Skill):
         names = [w.name for w in store.all()]
         if not names:
             return ""
-        shown = ", ".join(names[:LISTED_WAYPOINTS])
-        more = f" (and {len(names) - LISTED_WAYPOINTS} more)" if len(names) > LISTED_WAYPOINTS else ""
-        return f" Saved waypoints: {shown}{more}."
+        more = f" (and {len(names) - LISTED} more)" if len(names) > LISTED else ""
+        return f" Saved waypoints: {', '.join(names[:LISTED])}{more}."
 
     # --- tools --------------------------------------------------------------------------
 
@@ -185,11 +207,10 @@ class ScPosition(Skill):
         tolerance = float(tolerance_m) if tolerance_m and tolerance_m > 0 else self._default_tolerance()
         waypoint = Waypoint(
             name=name, body=fix.body.name, lat=fix.lat, lon=fix.lon, alt_m=fix.alt_km * 1000,
-            tolerance_m=tolerance,
-            measured_at=datetime.fromtimestamp(fix.measured_at, timezone.utc).isoformat(timespec="seconds"),
+            tolerance_m=tolerance, measured_at=_utc(fix.measured_at).isoformat(timespec="seconds"),
             global_m=list(fix.global_m),
         )
-        self._store().add(waypoint)
+        self._waypoints().add(waypoint)
         text, hud = self._describe(fix, None)
         await self._show(f"Saved {name} · {hud}")
         return f"Saved waypoint '{name}' on {fix.body.name}, tolerance {geo.format_distance(tolerance / 1000)}. {text}"
@@ -206,7 +227,7 @@ class ScPosition(Skill):
         """Args:
         waypoint: A saved waypoint to measure against. Empty uses the active one, if any.
         """
-        store = self._store()
+        store = self._waypoints()
         if waypoint and waypoint.strip():
             target = store.find(waypoint)
             if target is None:
@@ -223,6 +244,55 @@ class ScPosition(Skill):
         await self._show(hud)
         return text if target else text + self._listed(store)
 
+    @tool(
+        description=(
+            "Calibrate the rotation of the body the user is on: the user names the known "
+            "place they are at right now, e.g. 'I am at Port Tressler'. Use when a reported "
+            "distance to the place the user is at is clearly wrong, or when a body is "
+            "reported as not calibrated."
+        )
+    )
+    async def calibrate_position(self, place: str) -> str:
+        """Args:
+        place: The known place the user is at right now, as the game names it.
+        """
+        place = (place or "").strip()
+        if not place:
+            return "Which place is the user at?"
+        try:
+            fix = await self._measure()
+        except (RuntimeError, ValueError) as error:
+            return f"Could not read the position: {error}"
+        if not fix.body.rotates:
+            return f"{fix.body.name} does not rotate; there is nothing to calibrate here."
+        poi = geo.find_poi(fix.body, place)
+        if poi is None:
+            near = ", ".join(p.name for p, _ in geo.nearest_pois(fix.body, fix.local_km, LISTED))
+            return f"'{place}' is not a known place on {fix.body.name}. Known places nearby: {near}."
+        delta = geo.calibration_delta(fix.local_km, poi)
+        total = (fix.correction_deg + delta + 180.0) % 360.0 - 180.0
+        corrected = geo.to_body_fixed(
+            fix.body, fix.global_m[0] / 1000, fix.global_m[1] / 1000, fix.global_m[2] / 1000,
+            fix.measured_at, total,
+        )
+        residual_km = geo.distance_km(corrected, (poi.x, poi.y, poi.z))
+        minutes = abs(delta) / (0.1 / fix.body.rotation_hours) / 60
+        self._calibration().set(
+            Calibration(
+                body=fix.body.name, delta_deg=total, place=poi.name,
+                calibrated_at=_utc(fix.measured_at).isoformat(timespec="seconds"),
+                residual_m=residual_km * 1000,
+            )
+        )
+        await self._show(f"Calibrated {fix.body.name} at {poi.name} · {delta:+.2f}°")
+        return (
+            f"Calibrated {fix.body.name} at {poi.name}: rotation corrected by {delta:+.2f}° "
+            f"(the model was {minutes:.1f} minutes {'behind' if delta > 0 else 'ahead'}); "
+            f"remaining offset to the place {geo.format_distance(residual_km)}. "
+            f"Waypoints saved on {fix.body.name} before this calibration are in the old "
+            "frame and should be saved again."
+        )
+
     @command_action(
         label="Read position",
         description=(
@@ -232,7 +302,7 @@ class ScPosition(Skill):
         respond="ai",
     )
     async def read_position(self) -> str:
-        store = self._store()
+        store = self._waypoints()
         try:
             fix = await self._measure()
         except (RuntimeError, ValueError) as error:

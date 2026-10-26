@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
+
+from skills.sc_position.store import read_json, write_json
 
 
 @dataclass
@@ -37,10 +36,7 @@ class WaypointStore:
         if self._loaded:
             return
         self._loaded = True
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return
+        data = read_json(self.path)
         if not isinstance(data, dict):
             return
         self._active = data.get("active") or None
@@ -92,16 +88,7 @@ class WaypointStore:
         self._save()
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(
+        write_json(
+            self.path,
             {"active": self._active, "waypoints": [asdict(w) for w in self._waypoints]},
-            indent=1, ensure_ascii=False,
         )
-        fd, temporary = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(payload)
-            os.replace(temporary, self.path)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)

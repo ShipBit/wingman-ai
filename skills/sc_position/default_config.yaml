@@ -8,8 +8,8 @@ tags:
   - Star Citizen
   - Game Integration
 description:
-  en: Reads your position in Star Citizen through the game's /showlocation chat command and tells you the body, your height above it, the nearest known place, and distance and bearing to waypoints you saved. Stanton only, so far. Put "Read position" on a key in Commands to read it without talking.
-  de: Liest deine Position in Star Citizen über den Chat-Befehl /showlocation des Spiels und sagt dir Himmelskörper, Höhe, den nächsten bekannten Ort und Entfernung und Richtung zu gespeicherten Wegpunkten. Bisher nur Stanton. Lege "Read position" in den Commands auf eine Taste, um die Position ohne Sprechen zu lesen.
+  en: Reads your position in Star Citizen through the game's /showlocation chat command and tells you the body, your height above it, the nearest known place, and distance and bearing to waypoints you saved. Stanton only, so far. Say where you are once per body to calibrate its rotation.
+  de: Liest deine Position in Star Citizen über den Chat-Befehl /showlocation des Spiels und sagt dir Himmelskörper, Höhe, den nächsten bekannten Ort und Entfernung und Richtung zu gespeicherten Wegpunkten. Bisher nur Stanton. Sag einmal pro Himmelskörper, wo du bist, um seine Rotation zu kalibrieren.
 discovery_keywords:
   - where am i
   - my position
@@ -21,9 +21,15 @@ discovery_keywords:
   - save this place
   - mark this spot
 custom_properties:
+  - id: chat_hidden
+    name: Chat is hidden
+    hint: On when you play with the chat window hidden (F12), which most players do. The skill then shows the chat for the command and hides it again. Off when your chat is visible. A wrong setting sends the keys into the game instead of the chat (Ctrl is crouch), so set it the way you play.
+    value: true
+    required: false
+    property_type: boolean
   - id: chat_toggle_key
     name: Chat toggle key
-    hint: The game's key that shows and hides the chat window. Only used when the chat is hidden; it is hidden again afterwards.
+    hint: The game's key that shows and hides the chat window. Used when "Chat is hidden" is on.
     value: f12
     required: false
     property_type: string

@@ -9,9 +9,10 @@ together with the time of the measurement that turns one into the other.
 The rotation model is the community's (Star-Citizen-Navigation, MIT, see
 data/README.md): a body turns 0.1 / rotation_hours degrees per second,
 counted from the first second of 2020 (UTC), plus an offset measured per
-body. Checked against Port Tressler on 2026-10-26 with a current game build:
-1.6 km off. The longitude sign follows that tool; which way is east has not
-been checked in the game yet.
+body. The offsets drift: on 2026-10-26 microTech was about four degrees off
+(56 km at Port Tressler). A correction per body, measured by the user at a
+known place, is added on top (calibration_delta). The longitude sign follows
+that tool; which way is east has not been checked in the game yet.
 
 Pure functions. Only load_bodies reads a file.
 """
@@ -81,6 +82,8 @@ class Fix:
     measured_at: float
     nearest: Optional[Poi]
     nearest_km: float
+    correction_deg: float = 0.0
+    """The calibration that was applied to the body's rotation."""
 
 
 def parse_clipboard(text: str) -> tuple[float, float, float]:
@@ -114,12 +117,14 @@ def load_bodies(path) -> tuple[Body, ...]:
     return tuple(bodies)
 
 
-def rotation_deg(body: Body, t: float) -> float:
-    """How far `body` has turned at Unix time `t`, in degrees."""
+def rotation_deg(body: Body, t: float, correction_deg: float = 0.0) -> float:
+    """How far `body` has turned at Unix time `t`, in degrees, with the
+    user's correction for that body on top."""
     if not body.rotates:
         return 0.0
     degrees_per_second = 0.1 / body.rotation_hours
-    return (degrees_per_second * (t - ROTATION_REFERENCE) + body.rotation_adjust_deg) % 360.0
+    turned = degrees_per_second * (t - ROTATION_REFERENCE)
+    return (turned + body.rotation_adjust_deg + correction_deg) % 360.0
 
 
 def resolve_body(bodies, x_km: float, y_km: float, z_km: float) -> Optional[Body]:
@@ -137,15 +142,23 @@ def resolve_body(bodies, x_km: float, y_km: float, z_km: float) -> Optional[Body
     return next((body for body in bodies if body.is_system), None)
 
 
-def to_body_fixed(body: Body, x_km: float, y_km: float, z_km: float, t: float) -> tuple:
+def _rotate(x: float, y: float, degrees: float) -> tuple[float, float]:
+    angle = math.radians(degrees)
+    return x * math.cos(angle) - y * math.sin(angle), x * math.sin(angle) + y * math.cos(angle)
+
+
+def to_body_fixed(
+    body: Body, x_km: float, y_km: float, z_km: float, t: float, correction_deg: float = 0.0
+) -> tuple:
     """Global km at time `t` into the body's own, rotating frame."""
-    lx, ly, lz = x_km - body.x, y_km - body.y, z_km - body.z
-    angle = math.radians(-rotation_deg(body, t))
-    return (
-        lx * math.cos(angle) - ly * math.sin(angle),
-        lx * math.sin(angle) + ly * math.cos(angle),
-        lz,
-    )
+    lx, ly = _rotate(x_km - body.x, y_km - body.y, -rotation_deg(body, t, correction_deg))
+    return lx, ly, z_km - body.z
+
+
+def from_body_fixed(body: Body, local: tuple, t: float, correction_deg: float = 0.0) -> tuple:
+    """The inverse of to_body_fixed: where a body-fixed point is in global km at time `t`."""
+    gx, gy = _rotate(local[0], local[1], rotation_deg(body, t, correction_deg))
+    return gx + body.x, gy + body.y, local[2] + body.z
 
 
 def lat_lon_alt(body: Body, local: tuple) -> tuple[float, float, float]:
@@ -170,24 +183,53 @@ def body_fixed(body: Body, lat: float, lon: float, alt_km: float) -> tuple:
     )
 
 
-def locate(bodies, x_m: float, y_m: float, z_m: float, t: float) -> Fix:
-    """Resolve a measurement in global metres taken at Unix time `t`."""
+def locate(
+    bodies, x_m: float, y_m: float, z_m: float, t: float, corrections: Optional[dict] = None
+) -> Fix:
+    """Resolve a measurement in global metres taken at Unix time `t`.
+    `corrections` maps body names to calibration degrees."""
     x, y, z = x_m / 1000, y_m / 1000, z_m / 1000
     body = resolve_body(bodies, x, y, z)
     if body is None:
         raise ValueError("no body data")
-    local = to_body_fixed(body, x, y, z, t)
+    correction = float((corrections or {}).get(body.name, 0.0))
+    local = to_body_fixed(body, x, y, z, t, correction)
     lat, lon, alt = lat_lon_alt(body, local)
-    nearest, nearest_km = None, math.inf
-    for poi in body.pois:
-        distance = math.dist(local, (poi.x, poi.y, poi.z))
-        if distance < nearest_km:
-            nearest, nearest_km = poi, distance
+    near = nearest_pois(body, local, 1)
+    nearest, nearest_km = near[0] if near else (None, 0.0)
     return Fix(
         body=body, lat=lat, lon=lon, alt_km=alt, local_km=local,
         global_m=(x_m, y_m, z_m), measured_at=t,
-        nearest=nearest, nearest_km=nearest_km if nearest else 0.0,
+        nearest=nearest, nearest_km=nearest_km, correction_deg=correction,
     )
+
+
+def nearest_pois(body: Body, local: tuple, count: int) -> list:
+    """The `count` named places closest to a body-fixed point, with their distance in km."""
+    ranked = sorted((math.dist(local, (poi.x, poi.y, poi.z)), poi) for poi in body.pois)
+    return [(poi, distance) for distance, poi in ranked[:count]]
+
+
+def find_poi(body: Body, name: str) -> Optional[Poi]:
+    """The place called `name` on `body`: the same name first, then one that
+    starts with it, then one that contains it. Case does not matter."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return None
+    for match in (lambda n: n == wanted, lambda n: n.startswith(wanted), lambda n: wanted in n):
+        for poi in body.pois:
+            if match(poi.name.lower()):
+                return poi
+    return None
+
+
+def calibration_delta(local: tuple, poi: Poi) -> float:
+    """Degrees to add to the body's rotation so that a measurement `local`
+    (body-fixed, taken at `poi`) lands on the place's azimuth. Latitude and
+    height stay: the axis is right, only the phase is off. In (-180, 180]."""
+    measured = math.degrees(math.atan2(local[1], local[0]))
+    known = math.degrees(math.atan2(poi.y, poi.x))
+    return (measured - known + 180.0) % 360.0 - 180.0
 
 
 def distance_km(a: tuple, b: tuple) -> float:
