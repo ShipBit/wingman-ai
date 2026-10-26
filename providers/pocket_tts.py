@@ -177,6 +177,10 @@ def _is_network_error(error: BaseException) -> bool:
     seen: set[int] = set()
     current: Optional[BaseException] = error
     while current is not None and id(current) not in seen:
+        if isinstance(current, requests.HTTPError):
+            # The server answered (a 404 for a moved file, a 500): the
+            # connection works, the download itself is broken.
+            return False
         if isinstance(current, _NETWORK_ERRORS):
             return True
         seen.add(id(current))

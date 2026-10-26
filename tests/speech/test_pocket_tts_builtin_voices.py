@@ -185,18 +185,30 @@ def test_get_voice_state_surfaces_download_failure(tmp_path, monkeypatch):
         provider.get_voice_state("alba")
 
 
-def test_a_failure_that_is_no_network_error_does_not_blame_the_internet(tmp_path, monkeypatch):
+def _http_404():
+    import requests
+
+    response = requests.Response()
+    response.status_code = 404
+    return requests.HTTPError("404 Client Error: Not Found", response=response)
+
+
+@pytest.mark.parametrize("error", [PermissionError("access denied"), _http_404()])
+def test_a_failure_that_is_no_network_error_does_not_blame_the_internet(
+    tmp_path, monkeypatch, error
+):
+    """A file the disk refuses, or one the server does not have any more:
+    the connection works, so the message must not send the user to it."""
     provider, _ = make_provider(tmp_path, monkeypatch, model="german")
     provider.model = object()
     monkeypatch.setattr(
-        "providers.pocket_tts.download_url_to_path",
-        failing_download(PermissionError("access denied")),
+        "providers.pocket_tts.download_url_to_path", failing_download(error)
     )
 
     with pytest.raises(ValueError) as raised:
         provider.get_voice_state("alba")
     assert "internet" not in str(raised.value)
-    assert "access denied" in str(raised.value)
+    assert str(error) in str(raised.value)
 
 
 def test_a_builtin_voice_on_a_custom_model_is_a_warning(tmp_path, monkeypatch):
