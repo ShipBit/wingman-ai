@@ -610,7 +610,7 @@ class ConfigManager:
         wingman_config = {
             "name": "",
             "description": "",
-            "record_key": "",
+            "record_bindings": [],
             "disabled": False,
             "commands": [],
             "skills": [],
@@ -887,10 +887,7 @@ class ConfigManager:
         source_config_raw["name"] = cleaned_name
 
         # Clear push-to-talk binding in the duplicate so the user can rebind.
-        source_config_raw["record_key"] = ""
-        source_config_raw["record_key_codes"] = None
-        source_config_raw["record_mouse_button"] = ""
-        source_config_raw["record_joystick_button"] = None
+        source_config_raw["record_bindings"] = []
         source_config_raw["is_voice_activation_default"] = False
 
         target_config_path = path.join(

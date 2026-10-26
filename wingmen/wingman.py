@@ -24,6 +24,7 @@ from openai.types.chat import ChatCompletion
 from api.interface import (
     BenchmarkResult,
     CommandConfig,
+    InputBinding,
     SettingsConfig,
     SkillConfig,
     SoundConfig,
@@ -289,16 +290,8 @@ class Wingman:
 
     # ──────────────────────────────── Record keys ─────────────────────────────── #
 
-    def get_record_key(self) -> str | int:
-        return self.config.record_key_codes or self.config.record_key
-
-    def get_record_mouse_button(self) -> str:
-        return self.config.record_mouse_button
-
-    def get_record_joystick_button(self) -> str:
-        if not self.config.record_joystick_button:
-            return None
-        return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
+    def get_record_bindings(self) -> list[InputBinding]:
+        return self.config.record_bindings
 
     # ──────────────────────────────── Secrets ──────────────────────────────────── #
 

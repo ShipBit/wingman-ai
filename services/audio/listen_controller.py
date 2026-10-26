@@ -106,6 +106,10 @@ class ListenController:
         self._heard_while_playing = False
         self.held_source: Optional[str] = None
         self.held_wingman: Optional["Wingman"] = None
+        # The global push-to-talk key holds the gate without a wingman: the
+        # spoken name picks one. A hold without a wingman and without this
+        # is a capture (the microphone test).
+        self.held_global = False
         self._state = ListenState.OFF
 
     # --- reading ---
@@ -159,8 +163,9 @@ class ListenController:
         self._heard_while_playing = False
         return playing
 
-    def ptt_down(self, source: str, wingman: "Wingman") -> bool:
-        """Returns False when another source already holds the gate."""
+    def ptt_down(self, source: str, wingman: Optional["Wingman"]) -> bool:
+        """Returns False when another source already holds the gate. Without a
+        wingman it is the global key: the text picks the wingman."""
         with self._lock:
             if self.held_source == source and self._release_in is not None:
                 # Pressed again inside the grace period: keep holding.
@@ -175,6 +180,7 @@ class ListenController:
                 self._finish_release()
             self.held_source = source
             self.held_wingman = wingman
+            self.held_global = wingman is None
             self._cancel_release()
             self._watch_hold(source)
             self._apply()
@@ -223,7 +229,7 @@ class ListenController:
             if self.held_source != source:
                 return
             self._hold_timer = None
-            if self.held_wingman is not None:
+            if self.held_wingman is not None or self.held_global:
                 # A push-to-talk key: let the clip go the normal way.
                 self._finish_release()
             else:
@@ -244,14 +250,16 @@ class ListenController:
     def _finish_release(self) -> None:
         """Called under the lock from feed(), the watchdog, or a new key."""
         wingman = self.held_wingman
+        held = wingman is not None or self.held_global
         utterance = self._gate.release()
         playing = self._take_heard_while_playing()
         self.held_source = None
         self.held_wingman = None
+        self.held_global = False
         self._cancel_release()
         self._cancel_hold_watch()
         self._apply()
-        if utterance is not None and wingman is not None:
+        if utterance is not None and held:
             self._on_utterance(utterance, wingman, playing)
         else:
             self._on_dropped(wingman)
@@ -278,6 +286,7 @@ class ListenController:
                 return False
             self.held_source = source
             self.held_wingman = None
+            self.held_global = False
             self._capture_parts = []
             self._watch_hold(source)
             self._apply()
@@ -326,7 +335,12 @@ class ListenController:
                 if self._release_in <= 0:
                     self._finish_release()
                     return
-            if utterance is not None and state == ListenState.HELD and wingman is None:
+            if (
+                utterance is not None
+                and state == ListenState.HELD
+                and wingman is None
+                and not self.held_global
+            ):
                 # A capture (the mic test): the caller collects the clip from
                 # capture_stop, so a piece cut off here is kept, not dispatched.
                 self._capture_parts.append(utterance)

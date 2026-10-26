@@ -13,6 +13,7 @@ from api.interface import (
     AudioFile,
     BenchmarkResult,
     CommandActionConfig,
+    InputBinding,
     HudProfilesState,
     ScGameLogStatus,
     TokenUsage,
@@ -104,6 +105,9 @@ class ToastCommand(WebSocketCommandModel):
 class ActionsRecordedCommand(WebSocketCommandModel):
     command: Literal["actions_recorded"] = "actions_recorded"
     actions: list[CommandActionConfig]
+    binding: Optional[InputBinding] = None
+    """For a single recording: the key combination, mouse or joystick button
+    (with the keys held along) as a binding. None for macros."""
 
 
 class VoiceActivationMutedCommand(WebSocketCommandModel):

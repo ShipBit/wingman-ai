@@ -18,7 +18,7 @@ from services.tower import Tower
 from tests.support import template
 from wingmen.wingman import Wingman
 
-WINGMAN = {"name": "Computer", "description": "test", "record_key": "end"}
+WINGMAN = {"name": "Computer", "description": "test", "record_bindings": []}
 
 
 def config(**fields) -> WingmanConfig:

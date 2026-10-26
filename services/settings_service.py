@@ -340,14 +340,18 @@ class SettingsService:
         self.config_manager.settings_config.filler_responses = settings.filler_responses
         self.config_manager.settings_config.pronunciation = settings.pronunciation
 
-        # cancel TTS ("shut up") bindings
-        self.config_manager.settings_config.cancel_tts_key = settings.cancel_tts_key
-        self.config_manager.settings_config.cancel_tts_key_codes = (
-            settings.cancel_tts_key_codes
-        )
-        self.config_manager.settings_config.cancel_tts_joystick_button = (
-            settings.cancel_tts_joystick_button
-        )
+        # Bindings that belong to no wingman: shut up and global push-to-talk.
+        # Mute came in with voice_activation above.
+        self.config_manager.settings_config.cancel_tts_bindings = settings.cancel_tts_bindings
+        self.config_manager.settings_config.global_ptt_bindings = settings.global_ptt_bindings
+        if (
+            settings.cancel_tts_bindings != old.cancel_tts_bindings
+            or settings.global_ptt_bindings != old.global_ptt_bindings
+            or settings.voice_activation.mute_toggle_bindings
+            != old.voice_activation.mute_toggle_bindings
+        ):
+            # A new mouse or joystick button needs its hook now, not after a restart.
+            await self.settings_events.publish("input_bindings_changed", None)
 
         # HUD server. hud_profiles are not taken from the page: they have their
         # own endpoints (/hud/profiles) and a drag in the preview changes them

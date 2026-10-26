@@ -313,3 +313,26 @@ def test_a_hold_for_a_wingman_whose_config_was_unloaded_goes_nowhere():
     assert controller.state == ListenState.OFF
     # The next key works as usual.
     assert controller.ptt_down("key:2", object())
+
+
+def test_the_global_key_sends_the_clip_without_a_wingman():
+    """The global push-to-talk key: the text picks the wingman afterwards."""
+    controller, rec, _ = make()
+    assert controller.ptt_down("key:29:1", None)
+    assert controller.state == ListenState.HELD
+    speak(controller, speech_frames=10, silence_frames=0)
+    release(controller, "key:29:1")
+    assert len(rec.utterances) == 1
+    assert rec.utterances[0][1] is None
+    assert controller.state == ListenState.OFF
+
+
+def test_the_global_key_is_no_capture():
+    """A long global hold is cut and sent like any push-to-talk clip, never
+    kept back as a microphone test would be."""
+    controller, rec, gate = make()
+    controller.ptt_down("key:29:1", None)
+    for _ in range(int(5 * 16000 / FRAME_SAMPLES) + 5):
+        controller.feed(SPEECH)
+    assert rec.utterances, "the cut-off piece went out"
+    assert controller._capture_parts == []

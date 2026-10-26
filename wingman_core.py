@@ -46,6 +46,7 @@ from api.interface import (
     AvatarVariant,
     BenchmarkResult,
     CommandJoystickConfig,
+    InputBinding,
     Config,
     ConfigWithDirInfo,
     CoreStatusResponse,
@@ -130,6 +131,7 @@ from services.audio import (
 from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
+from services import input_bindings
 from services import speech_text
 from services.printr import Printr
 from services.user_activity import user_activity
@@ -160,12 +162,18 @@ def _key_source(key) -> str:
     """What identifies a key while it is held. The scan code, not the name:
     the hook may name the same key differently on the way down and up
     ("shift" against "left shift"), and a release under another name would
-    leave the key held for good."""
-    return f"key:{key.scan_code}"
+    leave the key held for good. With the extended flag, since left and right
+    Ctrl share a scan code on Windows."""
+    scan_code, extended = input_bindings.held_key(key)
+    return f"key:{scan_code}:{int(extended)}"
 
 
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-zäöüßàâçéèêëîïôûùüÿñáíóú']+", text.lower())
+
+
+# Stands for the global push-to-talk binding where a wingman would be.
+_GLOBAL_PTT = object()
 
 
 class SubscriptionNotSignedIn(Exception):
@@ -904,6 +912,9 @@ class WingmanCore(WebSocketUser):
         self.settings_service.stt_done_callback = self._broadcast_ready
         self.settings_service.vocabulary_changed_callback = self._broadcast_vocabulary
         self.settings_service.settings_events.subscribe(
+            "input_bindings_changed", self.on_input_bindings_changed
+        )
+        self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
         )
         self.settings_service.settings_events.subscribe(
@@ -1352,28 +1363,28 @@ class WingmanCore(WebSocketUser):
         self.audio_player.voice_state = status
         self._run_on_main_loop(self.audio_player.voice_events.publish("changed", status))
 
+    def _settings_bindings(self) -> list[InputBinding]:
+        """The bindings that belong to no wingman: shut up, mute, global PTT."""
+        settings = self.settings_service.settings
+        return [
+            *settings.cancel_tts_bindings,
+            *settings.voice_activation.mute_toggle_bindings,
+            *settings.global_ptt_bindings,
+        ]
+
+    def _all_bindings(self, wingman_configs) -> list[InputBinding]:
+        bindings = list(self._settings_bindings())
+        for wingman_config in wingman_configs:
+            bindings.extend(wingman_config.record_bindings)
+        return bindings
+
     def is_mouse_configured(self, config: Config) -> bool:
-        return any(
-            config.wingmen[wingman].record_mouse_button for wingman in config.wingmen
-        )
+        return input_bindings.uses_mouse(self._all_bindings(config.wingmen.values()))
 
     def is_joystick_configured(self, config: Config) -> bool:
-        is_any_wingman_joystick_configured = any(
-            config.wingmen[wingman].record_joystick_button for wingman in config.wingmen
+        return bool(
+            input_bindings.joystick_configs(self._all_bindings(config.wingmen.values()))
         )
-
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings,
-            "cancel_tts_joystick_button",
-            None,
-        )
-
-        is_cancel_tts_joystick_configured = (
-            cancel_tts_joystick_button is not None
-            and cancel_tts_joystick_button.guid is not None
-        )
-
-        return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
 
     async def start_joysticks(self):
         # This runs on its own thread, and pygame.init() starts EVERY pygame
@@ -1446,17 +1457,9 @@ class WingmanCore(WebSocketUser):
 
     def _build_joystick_configs(self, config: Config) -> list:
         """Build the list of joystick configs from wingman and settings config."""
-        joystick_configs: list[CommandJoystickConfig] = [
-            config.wingmen[wingman].record_joystick_button
-            for wingman in config.wingmen
-            if config.wingmen[wingman].record_joystick_button
-        ]
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
+        return input_bindings.joystick_configs(
+            self._all_bindings(config.wingmen.values())
         )
-        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
-            joystick_configs.append(cancel_tts_joystick_button)
-        return joystick_configs
 
     async def init_joystick(self, config: Config):
         # Update the configs that the joystick loop reads dynamically
@@ -1557,10 +1560,8 @@ class WingmanCore(WebSocketUser):
         if not self.tower:
             return
 
-        # Check if any wingman has a mouse button configured
-        needs_mouse = any(
-            wingman.get_record_mouse_button() for wingman in self.tower.wingmen
-        )
+        wingman_configs = [wingman.config for wingman in self.tower.wingmen]
+        needs_mouse = input_bindings.uses_mouse(self._all_bindings(wingman_configs))
 
         # Register mouse hook if needed and not already registered
         if needs_mouse and not self._mouse_hook_registered:
@@ -1572,17 +1573,9 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
-        # Check if any wingman has a joystick button configured
-        needs_joystick = any(
-            wingman.get_record_joystick_button() for wingman in self.tower.wingmen
+        needs_joystick = bool(
+            input_bindings.joystick_configs(self._all_bindings(wingman_configs))
         )
-
-        # Also check for cancel TTS joystick button in settings
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
-        )
-        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
-            needs_joystick = True
 
         joystick_running = (
             self._joystick_thread is not None and self._joystick_thread.is_alive()
@@ -1607,6 +1600,9 @@ class WingmanCore(WebSocketUser):
             # No joystick needed anymore — clear configs so the loop idles,
             # but keep the thread alive for future recordings.
             self._joystick_configs = []
+
+    async def on_input_bindings_changed(self, _):
+        await self.refresh_input_hooks()
 
     async def on_wingman_config_saved(self, wingman_config):
         """Called when a wingman config is saved. Refreshes input hooks if needed."""
@@ -1759,89 +1755,58 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
-    def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
-        codes = []
-
-        if isinstance(hotkey, str):
-            hotkey_codes = keyboard.parse_hotkey(hotkey)
-            codes = [item[0] for tup in hotkey_codes for item in tup]
-
-        if isinstance(hotkey, list):
-            codes = hotkey
-
-        if not codes:
-            return False
-
-        # check if all hotkey codes are in the key events code list
-        is_pressed = all(code in self.key_events for code in codes)
-
-        return is_pressed
-
     def on_press(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
     ):
-        is_mute_hotkey_pressed = self.is_hotkey_pressed(
-            self.settings_service.settings.voice_activation.mute_toggle_key_codes
-            or self.settings_service.settings.voice_activation.mute_toggle_key
-        )
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and is_mute_hotkey_pressed
+        settings = self.settings_service.settings
+        held = list(self.key_events)
+        event = {}
+        if key is not None:
+            event["key"] = input_bindings.held_key(key)
+        elif mouse_button is not None:
+            event["mouse_button"] = mouse_button
+        elif joystick_config is not None:
+            event["joystick"] = joystick_config
+        else:
+            return
+
+        if settings.voice_activation.enabled and input_bindings.any_matches(
+            settings.voice_activation.mute_toggle_bindings, held, **event
         ):
             self.listen_controller.toggle_muted()
 
-        is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
-            self.settings_service.settings.cancel_tts_key_codes
-            or self.settings_service.settings.cancel_tts_key
-        )
-        if is_cancel_tts_hotkey_pressed:
+        if input_bindings.any_matches(settings.cancel_tts_bindings, held, **event):
             self.ensure_async(self.stop_playback())
 
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
-        )
-        if (
-            joystick_config
-            and cancel_tts_joystick_button is not None
-            and cancel_tts_joystick_button.guid is not None
-            and cancel_tts_joystick_button.button is not None
-            and joystick_config.guid == cancel_tts_joystick_button.guid
-            and joystick_config.button == cancel_tts_joystick_button.button
-        ):
-            self.ensure_async(self.stop_playback())
+        if not self.tower or self.listen_controller.held_source is not None:
+            return
 
-        if self.tower and self.listen_controller.held_source is None:
-            wingman = None
-            for potential_wingman in self.tower.wingmen:
-                if key:
-                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(
-                        potential_wingman.get_record_key()
-                    ):
-                        wingman = potential_wingman
-                        break
-                if mouse_button:
-                    if potential_wingman.get_record_mouse_button() == mouse_button:
-                        wingman = potential_wingman
-                        break
-                if joystick_config:
-                    if (
-                        potential_wingman.get_record_joystick_button()
-                        == f"{joystick_config.guid}{joystick_config.button}"
-                    ):
-                        wingman = potential_wingman
-                        break
+        # A wingman's own binding first, then the global one that lets the
+        # spoken name pick the wingman. The binding needing more keys wins.
+        candidates = [
+            (binding, wingman)
+            for wingman in self.tower.wingmen
+            for binding in wingman.get_record_bindings()
+        ]
+        candidates += [(binding, _GLOBAL_PTT) for binding in settings.global_ptt_bindings]
+        owner = input_bindings.best_match(candidates, held, **event)
+        if owner is None:
+            return
 
-            if wingman:
-                if key:
-                    source = _key_source(key)
-                    label = f"key '{key.name}'"
-                elif mouse_button:
-                    source = mouse_button
-                    label = f"mouse button '{mouse_button}'"
-                else:
-                    source = f"{joystick_config.guid}{joystick_config.button}"
-                    label = f"joystick button {joystick_config.button}"
-                self._ptt_down(source, wingman, label)
+        if key is not None:
+            source = _key_source(key)
+            label = f"key '{key.name}'"
+        elif mouse_button is not None:
+            source = mouse_button
+            label = f"mouse button '{mouse_button}'"
+        else:
+            source = f"{joystick_config.guid}{joystick_config.button}"
+            label = f"joystick button {joystick_config.button}"
+
+        if owner is _GLOBAL_PTT:
+            self._global_ptt_down(source, label)
+        else:
+            self._ptt_down(source, owner, label)
 
     def on_release(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
@@ -1882,6 +1847,24 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
+    def _global_ptt_down(self, source: str, label: str = "") -> None:
+        """The global push-to-talk key: the spoken name picks the wingman, as
+        with voice activation."""
+        if not self.listen_controller.ptt_down(source, None):
+            self.printr.print(
+                f"Global push-to-talk ignored: "
+                f"'{self.listen_controller.held_source}' still holds the microphone.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return
+        self.printr.print(
+            "Recording started",
+            command_tag=CommandTag.RECORDING_STARTED,
+        )
+        if label:
+            self.printr.print(f"Global push-to-talk: {label}", server_only=True)
+
     def _ptt_up(self, source: str) -> None:
         wingman = self.listen_controller.held_wingman
         name = wingman.name if wingman else ""
@@ -1914,13 +1897,13 @@ class WingmanCore(WebSocketUser):
         )
 
     def on_key(self, key):
+        held = input_bindings.held_key(key)
         if key.event_type == "down":
-            if key.scan_code not in self.key_events:
-                self.key_events[key.scan_code] = key
+            if held not in self.key_events:
+                self.key_events[held] = key
             self.on_press(key=key)
         elif key.event_type == "up":
-            if key.scan_code in self.key_events:
-                del self.key_events[key.scan_code]
+            self.key_events.pop(held, None)
             self.on_release(key=key)
 
     def on_mouse(self, event):

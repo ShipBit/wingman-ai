@@ -22,9 +22,12 @@ from api.interface import (
     CommandKeyboardConfig,
     CommandMouseConfig,
     ConfigWithDirInfo,
+    InputBinding,
+    KeyStroke,
 )
 from mouse import mouse
 from services import error_reporting
+from services import input_bindings
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -41,6 +44,8 @@ class CommandHandler:
         self.printr: Printr = Printr()
         self.timeout_task = None
         self.recorded_keys = []
+        # Keyboard keys held with a recorded mouse or joystick button.
+        self._recorded_modifiers: list[KeyStroke] = []
         self.keyboard_hook_callback = None
         # Recording twice must not hook twice, a stop from the client after
         # the click already stopped must not unhook twice.
@@ -144,10 +149,22 @@ class CommandHandler:
                     return False
         return True
 
+    def _held_strokes(self) -> list[KeyStroke]:
+        """The keyboard keys held right now, for a mouse or joystick binding
+        like Ctrl + Mouse 4."""
+        return [
+            input_bindings.stroke_from_event(event)
+            for event in list(self.core.key_events.values())
+        ]
+
     def on_mouse(self, event):
         # Check if event is of type ButtonEvent
         if not isinstance(event, mouse.ButtonEvent):
             return
+
+        if event.event_type == "down":
+            # Taken on the way down: the keys may be let go before the button.
+            self._recorded_modifiers = self._held_strokes()
 
         if event.event_type == "up":
             self.recorded_keys.append(event)
@@ -170,6 +187,7 @@ class CommandHandler:
         )
 
         self.recorded_keys = []
+        self._recorded_modifiers = []
         if not self._mouse_hooked:
             mouse.hook(self.on_mouse)
             self._mouse_hooked = True
@@ -190,6 +208,7 @@ class CommandHandler:
         result = await self.core.record_joystick_action()
         if result and self.is_joystick_recording:
             self.recorded_keys.append(result)
+            self._recorded_modifiers = self._held_strokes()
 
         stop_command = StopRecordingCommand(
             command="stop_recording", recording_device=RecordingDevice.JOYSTICK
@@ -287,7 +306,16 @@ class CommandHandler:
                 mouse_config.mouse.button = recorded_keys[0].button
                 actions.append(mouse_config)
 
-        command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
+        binding = None
+        if command.recording_type == KeyboardRecordingType.SINGLE and actions:
+            binding = self._binding_from_action(
+                actions[0], self._recorded_modifiers
+            )
+        self._recorded_modifiers = []
+
+        command = ActionsRecordedCommand(
+            command="actions_recorded", actions=actions, binding=binding
+        )
         await self.connection_manager.broadcast(command)
 
         self.recorded_keys = []
@@ -459,6 +487,26 @@ class CommandHandler:
         await asyncio.sleep(timeout)
         await self.handle_stop_recording(None, None)
 
+    @staticmethod
+    def _binding_from_action(
+        action: CommandActionConfig, modifiers: list[KeyStroke]
+    ) -> InputBinding | None:
+        if action.keyboard and action.keyboard.keys:
+            return InputBinding(
+                device=RecordingDevice.KEYBOARD, keys=action.keyboard.keys
+            )
+        if action.mouse and action.mouse.button:
+            return InputBinding(
+                device=RecordingDevice.MOUSE,
+                keys=modifiers,
+                mouse_button=action.mouse.button,
+            )
+        if action.joystick and action.joystick.guid:
+            return InputBinding(
+                device=RecordingDevice.JOYSTICK, keys=modifiers, joystick=action.joystick
+            )
+        return None
+
     def _get_actions_from_recorded_keys(self, recorded, compressed=False):
         actions: list[CommandActionConfig] = []
 
@@ -595,9 +643,8 @@ class CommandHandler:
         return actions
 
     def _get_actions_from_recorded_hotkey(self, recorded):
-        # legacy function used for single key recording
+        # used for single key recording and simple macros
         actions: list[CommandActionConfig] = []
-        extended: None | bool = None
 
         key_down_time = {}  # Track initial down times for keys
         last_up_time = None  # Track the last up time to measure durations of inactivity
@@ -610,13 +657,8 @@ class CommandHandler:
         # Process recorded key events to calculate press durations and inactivity
         for key in recorded:
             key_name = key.name.lower()
-            key_code = key.scan_code
-            key_extended = key.is_extended
-            if extended is None:
-                extended = key_extended
-            elif extended != key_extended:
-                # fallback to advanced mode, if mixed extended flags are detected
-                return self._get_actions_from_recorded_keys(recorded, True)
+            # Right Ctrl and left Ctrl share a scan code; the flag tells them apart.
+            key_code = input_bindings.held_key(key)
             if key.event_type == "down":
                 # Ignore further processing if 'esc' was pressed
                 if key_name == "esc":
@@ -662,7 +704,16 @@ class CommandHandler:
                         key_config.keyboard.hotkey_codes = [
                             key.scan_code for key in keys_pressed
                         ]
-                        key_config.keyboard.hotkey_extended = bool(key_extended)
+                        # One flag per key. The single flag stays for a
+                        # combination whose keys agree, as older Cores read it.
+                        strokes = [
+                            input_bindings.stroke_from_event(key) for key in keys_pressed
+                        ]
+                        key_config.keyboard.keys = strokes
+                        flags = {stroke.extended for stroke in strokes}
+                        key_config.keyboard.hotkey_extended = (
+                            flags.pop() if len(flags) == 1 else None
+                        )
 
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)

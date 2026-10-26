@@ -9,7 +9,7 @@ from wingman_core import _words
 
 def _core():
     core = wingman_core.WingmanCore.__new__(wingman_core.WingmanCore)
-    va = VoiceActivationSettings(enabled=True, mute_toggle_key="x")
+    va = VoiceActivationSettings(enabled=True, mute_toggle_bindings=[])
     core.settings_service = SimpleNamespace(settings=SimpleNamespace(voice_activation=va))
     return core
 
