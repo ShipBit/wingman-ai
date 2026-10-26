@@ -1899,8 +1899,11 @@ class WingmanCore(WebSocketUser):
     def on_key(self, key):
         held = input_bindings.held_key(key)
         if key.event_type == "down":
-            if held not in self.key_events:
-                self.key_events[held] = key
+            if held in self.key_events:
+                # Auto-repeat of a held key: it would toggle mute again and
+                # again. The binding fired on the first press already.
+                return
+            self.key_events[held] = key
             self.on_press(key=key)
         elif key.event_type == "up":
             self.key_events.pop(held, None)
