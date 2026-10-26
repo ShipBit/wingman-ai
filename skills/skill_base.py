@@ -262,6 +262,11 @@ class ToolDefinition:
         self.tool_name, self.tool_schema = _generate_tool_schema(
             func, name=self.name, description=self.description
         )
+        self._parameters = [
+            p
+            for name, p in inspect.signature(func).parameters.items()
+            if name not in ("self", "cls")
+        ]
 
     def _argument_problem(self, parameters: dict[str, Any]) -> Optional[str]:
         """
@@ -271,8 +276,7 @@ class ToolDefinition:
         to the model and an error to Sentry: on 3.2.11 `open_folder` got
         `folder_path`, the parameter name of `load_folder_contents`.
         """
-        signature = inspect.signature(self.func)
-        params = [p for name, p in signature.parameters.items() if name not in ("self", "cls")]
+        params = self._parameters
         if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params):
             return None
         names = [p.name for p in params]

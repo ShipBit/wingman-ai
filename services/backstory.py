@@ -32,4 +32,7 @@ def parse_enhanced_backstory(result_text: str) -> tuple[str, str]:
         return result_text, ""
     if not isinstance(parsed, dict):
         return result_text, ""
-    return _as_text(parsed.get("backstory", result_text)), _as_text(parsed.get("summary"))
+    backstory = parsed.get("backstory")
+    if backstory is None:
+        backstory = result_text
+    return _as_text(backstory), _as_text(parsed.get("summary"))

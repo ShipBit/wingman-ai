@@ -14,8 +14,9 @@ class _UnreadablePlayer:
 
 def test_an_unreadable_file_warns_and_frees_the_playback(monkeypatch, tmp_path):
     warnings = []
+    finished = []
     monkeypatch.setattr(audio_library_module.printr, "toast_warning", warnings.append)
-    library = AudioLibrary()
+    library = AudioLibrary(callback_playback_finished=finished.append)
     library.audio_library_path = str(tmp_path)
     library.current_playbacks["Illusions.mp3"] = ["player", [1.0], "file"]
 
@@ -27,3 +28,4 @@ def test_an_unreadable_file_warns_and_frees_the_playback(monkeypatch, tmp_path):
 
     assert len(warnings) == 1 and "Illusions.mp3" in warnings[0]
     assert "Illusions.mp3" not in library.current_playbacks
+    assert finished == ["file"]

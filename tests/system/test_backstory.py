@@ -24,3 +24,9 @@ def test_plain_text_is_the_backstory():
 
 def test_json_that_is_not_an_object_is_the_backstory():
     assert parse_enhanced_backstory('["a", "b"]') == ('["a", "b"]', "")
+
+
+def test_a_null_backstory_keeps_the_raw_text():
+    raw = '{"backstory": null, "summary": "S"}'
+
+    assert parse_enhanced_backstory(raw) == (raw, "S")

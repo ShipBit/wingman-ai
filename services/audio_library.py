@@ -165,7 +165,9 @@ class AudioLibrary:
             # The file exists but cannot be read: still downloading, locked by
             # another program, or no audio inside. That is the user's file, not
             # a crash of ours, so it is a warning and never reaches Sentry.
-            self.current_playbacks.pop(playback_key, None)
+            # The player never reaches its own finished callback here, so the
+            # client is told from here and its play button does not stay lit.
+            await self.on_playback_finish(playback_key)
             printr.toast_warning(f"{audio_file.name} could not be played: {e}")
 
     async def stop_playback(
