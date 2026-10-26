@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from api.interface import WingmanConfig
     from wingmen.facade import (
+        SkillClipboard,
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
         SkillSettings, SkillSystemOne, SkillScGameLog, SkillStarCitizen, SkillUi, SkillHud, SpokenLanguageInfo,
@@ -68,6 +69,7 @@ class WingmanContext:
         self.__sc_gamelog = None
         self.__star_citizen = None
         self.__screen = None
+        self.__clipboard = None
         self.__ui = None
         self.__hud = None
         self.__secrets = None
@@ -252,6 +254,14 @@ class WingmanContext:
             from wingmen.facade import SkillScreen
             self.__screen = SkillScreen()
         return self.__screen
+
+    @property
+    def clipboard(self) -> "SkillClipboard":
+        """The system clipboard, text in and out, on every OS."""
+        if self.__clipboard is None:
+            from wingmen.facade import SkillClipboard
+            self.__clipboard = SkillClipboard()
+        return self.__clipboard
 
     @property
     def secrets(self) -> "SkillSecrets":

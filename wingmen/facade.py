@@ -1659,6 +1659,33 @@ class SkillScreen:
         return await asyncio.to_thread(capture, display, region)
 
 
+class SkillClipboard:
+    """The system clipboard (`self.wingman.clipboard`): text in, text out.
+
+    Windows, macOS and Linux (wl-clipboard under Wayland, xclip or xsel under
+    X11). Both calls run off the event loop. A game or another program may
+    write the clipboard at any time, so read it right when you need it.
+    """
+
+    async def read(self) -> str:
+        """The clipboard's text, "" when it holds none (an image, a file).
+        Raises RuntimeError with what the user has to do when the clipboard
+        cannot be reached, e.g. install xclip."""
+        import asyncio
+
+        from services.clipboard import read_text
+
+        return await asyncio.to_thread(read_text)
+
+    async def write(self, text: str) -> None:
+        """Put `text` on the clipboard, replacing what was there."""
+        import asyncio
+
+        from services.clipboard import write_text
+
+        await asyncio.to_thread(write_text, str(text))
+
+
 class SkillStarCitizen:
     """Where Star Citizen is installed (`self.wingman.star_citizen`).
 

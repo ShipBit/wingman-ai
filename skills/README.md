@@ -1821,6 +1821,18 @@ Core asks the desktop there: Spectacle on KDE, grim on Sway and Hyprland, the
 screenshot portal elsewhere (the desktop may ask the user once). See
 `skills/vision_ai` and `skills/auto_screenshot`.
 
+### `self.wingman.clipboard` — the system clipboard
+
+| Member | Description |
+| --- | --- |
+| `await .read()` | The clipboard's text, `""` when it holds none (an image, a file). Raises `RuntimeError` with what the user has to do, e.g. install xclip on Linux. |
+| `await .write(text)` | Puts `text` on the clipboard, replacing what was there. |
+
+Windows, macOS and Linux (wl-clipboard under Wayland, xclip or xsel under
+X11); both calls run off the event loop. A game or another program may write
+the clipboard at any time, so read it right when you need it. See
+`skills/sc_position`, which reads a game's answer from it.
+
 ### `self.wingman.star_citizen` — where Star Citizen is installed
 
 The StarCitizen folder that holds LIVE, PTU and the other environments. The
@@ -2454,6 +2466,7 @@ self.wingman.audio.is_playing          # Is the wingman speaking?
 ```python
 await self.wingman.conversation.show(text)              # A line in the chat, as said by this Wingman
 await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
+text = await self.wingman.clipboard.read()               # the system clipboard; .write(text) sets it
 await self.wingman.hud.add_info(title, markdown)         # shared info panel; False when the HUD is off
 icon = self.wingman.hud.group("status", anchor="top_right")  # a group of your own, profile look
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()

@@ -1,0 +1,3728 @@
+{
+ "source": "https://github.com/Valalol/Star-Citizen-Navigation (Database.json)",
+ "license": "MIT",
+ "retrieved": "2026-10-26",
+ "units": "km",
+ "rotation_model": "degrees = (0.1 / rotation_hours) * seconds since 2020-01-01T00:00:00Z + rotation_adjust_deg",
+ "bodies": [
+  {
+   "name": "Stanton",
+   "system": true,
+   "x": 0.0,
+   "y": 0.0,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 0.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": []
+  },
+  {
+   "name": "Aberdeen",
+   "x": 12905757.636,
+   "y": 40955.551,
+   "z": 0.0,
+   "radius_km": 274.0,
+   "om_radius_km": 402.708,
+   "reach_km": 1644.0,
+   "rotation_hours": 2.5999999,
+   "rotation_adjust_deg": 116.9448295,
+   "pois": [
+    {
+     "name": "Comm Array ST1-92",
+     "x": -435.359,
+     "y": -45.214,
+     "z": 24.0
+    },
+    {
+     "name": "HDMS Anderson",
+     "x": -26.95,
+     "y": 180.221,
+     "z": 206.879
+    },
+    {
+     "name": "HDMS Norgaard",
+     "x": -141.572,
+     "y": 195.318,
+     "z": 132.098
+    },
+    {
+     "name": "HDES Dobbs (NA) [F]",
+     "x": 270.579,
+     "y": 47.399,
+     "z": -11.404
+    },
+    {
+     "name": "Barton Flats Aid Shelter",
+     "x": 54.341,
+     "y": 217.12,
+     "z": -159.881
+    },
+    {
+     "name": "Klescher Rehabilitation Facility",
+     "x": 44.975,
+     "y": 221.563,
+     "z": -156.583
+    },
+    {
+     "name": "Aberdeen Cave N60 [F]",
+     "x": 56.811,
+     "y": -124.615,
+     "z": 238.532
+    },
+    {
+     "name": "Aberdeen Cave N73 [F]",
+     "x": 77.253,
+     "y": 19.426,
+     "z": 263.113
+    },
+    {
+     "name": "Aberdeen Cave S32 [S]",
+     "x": 175.926,
+     "y": -151.288,
+     "z": -146.452
+    },
+    {
+     "name": "Aberdeen Cave S11 [F]",
+     "x": -177.482,
+     "y": 203.524,
+     "z": -53.401
+    },
+    {
+     "name": "Aberdeen Cave S22 [FVS]",
+     "x": 230.506,
+     "y": -109.038,
+     "z": -103.946
+    },
+    {
+     "name": "Caterpillar E Wreck",
+     "x": -61.992,
+     "y": 94.045,
+     "z": 251.031
+    },
+    {
+     "name": "Constellation D Wreck",
+     "x": -207.122,
+     "y": 163.655,
+     "z": 75.824
+    },
+    {
+     "name": "Freelancer D Wreck",
+     "x": 239.132,
+     "y": 116.815,
+     "z": 68.701
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 153.456,
+     "y": 48.444,
+     "z": 223.125
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": -160.52,
+     "y": 187.065,
+     "z": 122.157
+    },
+    {
+     "name": "Kleschler Main Prison Building",
+     "x": 45.451,
+     "y": 221.637,
+     "z": -156.357
+    },
+    {
+     "name": "North Borehole",
+     "x": 44.954,
+     "y": 221.791,
+     "z": -156.272
+    },
+    {
+     "name": "South Borehole",
+     "x": 44.975,
+     "y": 221.563,
+     "z": -156.583
+    },
+    {
+     "name": "Norgaard Racetrack",
+     "x": -106.085,
+     "y": 188.879,
+     "z": 169.721
+    },
+    {
+     "name": "Anderson Racetrack",
+     "x": -65.273,
+     "y": 167.277,
+     "z": 208.06
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-1",
+     "x": 398.7,
+     "y": 165.147,
+     "z": 143.309
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-2",
+     "x": 305.152,
+     "y": 305.152,
+     "z": 44.783
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-3",
+     "x": 165.147,
+     "y": 398.7,
+     "z": -32.601
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-4",
+     "x": 0.0,
+     "y": 431.55,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-1",
+     "x": -165.147,
+     "y": 398.7,
+     "z": 30.149
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-2",
+     "x": -305.152,
+     "y": 305.152,
+     "z": -165.676
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-3",
+     "x": -398.7,
+     "y": 165.147,
+     "z": -41.227
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-4",
+     "x": -431.55,
+     "y": 0.0,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-1",
+     "x": -398.7,
+     "y": -165.147,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-2",
+     "x": -305.152,
+     "y": -305.152,
+     "z": 43.201
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-3",
+     "x": -165.147,
+     "y": -398.7,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-4",
+     "x": 0.0,
+     "y": -431.55,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-1",
+     "x": 165.147,
+     "y": -398.7,
+     "z": -46.427
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-2",
+     "x": 305.152,
+     "y": -305.152,
+     "z": 40.687
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-3",
+     "x": 431.55,
+     "y": 0.0,
+     "z": -64.975
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-4",
+     "x": 416.845,
+     "y": -111.693,
+     "z": 10.625
+    }
+   ]
+  },
+  {
+   "name": "ARC-L1",
+   "x": 16729134.637,
+   "y": -19937006.925,
+   "z": 8.077,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 11027.6,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R ARC-L1 Wide Forest Station",
+     "x": 85.394,
+     "y": -5041.26,
+     "z": 2231.69
+    },
+    {
+     "name": "Child Cloud S3 L1 01",
+     "x": 14.494,
+     "y": 11.481,
+     "z": 2.815
+    }
+   ]
+  },
+  {
+   "name": "ARC-L2",
+   "x": 20446718.503,
+   "y": -24367450.991,
+   "z": 8.077,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 8680.1,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R ARC-L2 Lively Pathway Station",
+     "x": 4287.404,
+     "y": -602.53,
+     "z": -301.922
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": -397.004,
+     "y": -633.34,
+     "z": 414.04
+    }
+   ]
+  },
+  {
+   "name": "ARC-L3",
+   "x": -25043446.884,
+   "y": 14458841.788,
+   "z": 8.077,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 10471.3,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R ARC-L3 Modern Express Station",
+     "x": -2078.603,
+     "y": 4413.445,
+     "z": -1900.839
+    }
+   ]
+  },
+  {
+   "name": "ARC-L4",
+   "x": 28478354.916,
+   "y": 5021502.483,
+   "z": 8.077,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 7088.6,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R ARC-L4 Faint Glen Station",
+     "x": -2214.759,
+     "y": -2598.304,
+     "z": 951.655
+    }
+   ]
+  },
+  {
+   "name": "ARC-L5",
+   "x": -9890422.516,
+   "y": -27173732.225,
+   "z": 8.077,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 11170.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R ARC-L5 Yellow Core Station",
+     "x": -5329.061,
+     "y": -1424.447,
+     "z": 874.389
+    }
+   ]
+  },
+  {
+   "name": "ArcCorp",
+   "x": 18587664.74,
+   "y": -22151916.92,
+   "z": 0.0,
+   "radius_km": 800.0,
+   "om_radius_km": 1151.453,
+   "reach_km": 4800.0,
+   "rotation_hours": 3.1099999,
+   "rotation_adjust_deg": 230.8844272,
+   "pois": [
+    {
+     "name": "Comm Array ST3-90",
+     "x": 758.384,
+     "y": -636.36,
+     "z": 24.0
+    },
+    {
+     "name": "Area 04",
+     "x": -314.306,
+     "y": -601.435,
+     "z": 423.659
+    },
+    {
+     "name": "Area 06",
+     "x": -745.806,
+     "y": -111.306,
+     "z": 267.38
+    },
+    {
+     "name": "Area 11",
+     "x": 508.204,
+     "y": 397.589,
+     "z": 472.922
+    },
+    {
+     "name": "Area 17",
+     "x": -310.29,
+     "y": -601.811,
+     "z": -425.98
+    },
+    {
+     "name": "Area 18",
+     "x": -747.409,
+     "y": -116.734,
+     "z": -262.094
+    },
+    {
+     "name": "Area 20",
+     "x": 506.937,
+     "y": 401.104,
+     "z": -471.308
+    },
+    {
+     "name": "Baijini Point",
+     "x": -771.961,
+     "y": -321.347,
+     "z": -359.509
+    },
+    {
+     "name": "Pecheco Rooftop Landing Pad 4",
+     "x": -745.947,
+     "y": -95.668,
+     "z": -275.19
+    },
+    {
+     "name": "Pecheco Rooftop Landing Pad 3",
+     "x": -751.415,
+     "y": -97.217,
+     "z": -259.02
+    },
+    {
+     "name": "Pecheco Rooftop Landing Pad 2",
+     "x": -750.33,
+     "y": -123.446,
+     "z": -250.326
+    },
+    {
+     "name": "Pecheco Rooftop Landing Pad 1",
+     "x": -748.099,
+     "y": -155.028,
+     "z": -239.836
+    },
+    {
+     "name": "Riker Memorial Spaceport",
+     "x": -748.361,
+     "y": -103.663,
+     "z": -263.811
+    },
+    {
+     "name": "Area 18 Ring Building 1",
+     "x": -746.977,
+     "y": -151.57,
+     "z": -243.007
+    },
+    {
+     "name": "Area 18 Ring Building 2",
+     "x": -752.158,
+     "y": -112.024,
+     "z": -248.42
+    }
+   ]
+  },
+  {
+   "name": "Arial",
+   "x": 12892673.309,
+   "y": -31476.129,
+   "z": 0.0,
+   "radius_km": 344.5,
+   "om_radius_km": 501.541,
+   "reach_km": 2067.0,
+   "rotation_hours": 5.51000023,
+   "rotation_adjust_deg": 38.5142349,
+   "pois": [
+    {
+     "name": "Comm Array ST1-13",
+     "x": -78.76,
+     "y": 505.628,
+     "z": 24.0
+    },
+    {
+     "name": "HDMS Bezdek",
+     "x": 26.735,
+     "y": -234.698,
+     "z": 251.505
+    },
+    {
+     "name": "HDMS Lathan",
+     "x": 339.193,
+     "y": 33.686,
+     "z": 55.843
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": -140.054,
+     "y": -74.604,
+     "z": 306.556
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": 216.54,
+     "y": -124.124,
+     "z": 238.389
+    },
+    {
+     "name": "Freelancer D Wreck",
+     "x": -210.193,
+     "y": 258.978,
+     "z": -89.443
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 223.891,
+     "y": -230.405,
+     "z": 126.733
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": 21.29,
+     "y": -234.274,
+     "z": 252.404
+    },
+    {
+     "name": "Bezdek Racetrack",
+     "x": 26.455,
+     "y": -242.616,
+     "z": 244.112
+    },
+    {
+     "name": "Lathan Racetrack",
+     "x": 340.664,
+     "y": 20.664,
+     "z": 53.42
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-1",
+     "x": 483.266,
+     "y": 128.035,
+     "z": 148.684
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-2",
+     "x": 408.158,
+     "y": 289.104,
+     "z": -69.09
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-3",
+     "x": 369.263,
+     "y": 338.002,
+     "z": 26.231
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-4",
+     "x": 244.84,
+     "y": 438.758,
+     "z": 59.005
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-5",
+     "x": 163.997,
+     "y": 476.455,
+     "z": -22.027
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-1",
+     "x": -55.623,
+     "y": 505.369,
+     "z": -96.565
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-2",
+     "x": -227.287,
+     "y": 459.371,
+     "z": 42.414
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-3",
+     "x": -379.127,
+     "y": 351.065,
+     "z": -57.754
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-4",
+     "x": -497.702,
+     "y": 153.723,
+     "z": -2.081
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-5",
+     "x": -516.448,
+     "y": -84.461,
+     "z": 64.172
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-1",
+     "x": -430.203,
+     "y": -297.922,
+     "z": -50.986
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-2",
+     "x": -37.804,
+     "y": -515.433,
+     "z": 102.436
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-3",
+     "x": 147.109,
+     "y": -491.089,
+     "z": -20.691
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-4",
+     "x": 408.158,
+     "y": -297.923,
+     "z": 174.645
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-5",
+     "x": 498.755,
+     "y": -49.009,
+     "z": 0.0
+    }
+   ]
+  },
+  {
+   "name": "Calliope",
+   "x": 22398369.308,
+   "y": 37168840.679,
+   "z": 0.0,
+   "radius_km": 240.0,
+   "om_radius_km": 352.246,
+   "reach_km": 1440.0,
+   "rotation_hours": 4.59000015,
+   "rotation_adjust_deg": 212.4774149,
+   "pois": [
+    {
+     "name": "Comm Array ST4-31",
+     "x": 189.547,
+     "y": 354.905,
+     "z": 24.0
+    },
+    {
+     "name": "Rayari Anvik Research Outpost",
+     "x": -184.632,
+     "y": -127.794,
+     "z": 84.724
+    },
+    {
+     "name": "Rayari Kaltag Research Outpost",
+     "x": 205.267,
+     "y": 6.261,
+     "z": -124.485
+    },
+    {
+     "name": "Shubin Mining Facility SMCa-6",
+     "x": 50.066,
+     "y": 233.437,
+     "z": 24.936
+    },
+    {
+     "name": "Shubin Mining Facility SMCa-8",
+     "x": 160.166,
+     "y": 168.987,
+     "z": -58.4
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-1",
+     "x": 231.078,
+     "y": -34.373,
+     "z": -55.893
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-10",
+     "x": -222.726,
+     "y": -74.372,
+     "z": -49.719
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-11",
+     "x": 72.393,
+     "y": -187.928,
+     "z": 130.918
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-14",
+     "x": 228.587,
+     "y": -21.222,
+     "z": 71.196
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-3",
+     "x": 239.598,
+     "y": -11.458,
+     "z": 8.683
+    },
+    {
+     "name": "Shubin Processing Facility SPMC-5",
+     "x": -229.991,
+     "y": 66.814,
+     "z": 19.274
+    },
+    {
+     "name": "Raven's Roost",
+     "x": 33.908,
+     "y": -106.4,
+     "z": -212.484
+    },
+    {
+     "name": "Calliope Cave N13 [F]",
+     "x": 207.343,
+     "y": -107.085,
+     "z": 55.951
+    },
+    {
+     "name": "Calliope Cave N25 [F]",
+     "x": 213.196,
+     "y": -40.556,
+     "z": 102.893
+    },
+    {
+     "name": "Calliope Cave N40 [F]",
+     "x": 181.3,
+     "y": -3.049,
+     "z": 157.24
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 218.632,
+     "y": -7.016,
+     "z": 99.078
+    },
+    {
+     "name": "Caterpillar C Wreck",
+     "x": 232.099,
+     "y": -41.336,
+     "z": 45.893
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": 234.805,
+     "y": -46.699,
+     "z": 16.919
+    },
+    {
+     "name": "Starfarer B Wreck",
+     "x": 152.525,
+     "y": 184.796,
+     "z": -14.616
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": 225.967,
+     "y": -35.194,
+     "z": 73.738
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": 199.393,
+     "y": -126.188,
+     "z": 45.985
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": -281.286,
+     "y": -200.211,
+     "z": 75.512
+    }
+   ]
+  },
+  {
+   "name": "Cellin",
+   "x": -18987611.119,
+   "y": -2709009.661,
+   "z": 0.0,
+   "radius_km": 260.0,
+   "om_radius_km": 380.53,
+   "reach_km": 1560.0,
+   "rotation_hours": 4.44999981,
+   "rotation_adjust_deg": 253.6008872,
+   "pois": [
+    {
+     "name": "Comm Array ST2-28",
+     "x": 242.244,
+     "y": 347.193,
+     "z": 24.0
+    },
+    {
+     "name": "Gallete Family Farms",
+     "x": -89.471,
+     "y": 106.717,
+     "z": 220.041
+    },
+    {
+     "name": "Hickes Research Outpost",
+     "x": 3.27,
+     "y": 13.091,
+     "z": -260.316
+    },
+    {
+     "name": "Terra Mills HydroFarm",
+     "x": 100.137,
+     "y": 27.701,
+     "z": 239.024
+    },
+    {
+     "name": "Tram & Myers Mining",
+     "x": -241.164,
+     "y": 2.396,
+     "z": -98.7
+    },
+    {
+     "name": "Security Post Kareah",
+     "x": 11.62,
+     "y": -419.839,
+     "z": 200.0
+    },
+    {
+     "name": "Ashburn Channel Aid Shelter",
+     "x": 3.024,
+     "y": -257.942,
+     "z": -37.129
+    },
+    {
+     "name": "Flanagan's Ravine Aid Shelter",
+     "x": -194.282,
+     "y": 151.722,
+     "z": 84.997
+    },
+    {
+     "name": "Julep Ravine Aid Shelter",
+     "x": -111.528,
+     "y": -56.297,
+     "z": -228.95
+    },
+    {
+     "name": "Mogote Aid Shelter",
+     "x": -198.664,
+     "y": 50.79,
+     "z": 160.875
+    },
+    {
+     "name": "Security Post Dipur",
+     "x": 197.701,
+     "y": 57.544,
+     "z": -159.946
+    },
+    {
+     "name": "Security Post Lespin",
+     "x": -214.319,
+     "y": -149.144,
+     "z": 3.974
+    },
+    {
+     "name": "Security Post Criska",
+     "x": 252.522,
+     "y": 62.924,
+     "z": 13.871
+    },
+    {
+     "name": "NT-999-XV",
+     "x": 146.832,
+     "y": 135.254,
+     "z": 167.474
+    },
+    {
+     "name": "Cellin Stash House (Private Property)",
+     "x": 97.749,
+     "y": -173.764,
+     "z": 167.078
+    },
+    {
+     "name": "Abandoned Outpost",
+     "x": 130.062,
+     "y": 184.915,
+     "z": 130.356
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 36.776,
+     "y": -152.501,
+     "z": 208.899
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": -243.602,
+     "y": 85.479,
+     "z": 38.769
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": -231.142,
+     "y": 109.975,
+     "z": 50.933
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": 125.553,
+     "y": 138.117,
+     "z": -182.239
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 38.688,
+     "y": 166.478,
+     "z": 196.317
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": 112.178,
+     "y": -163.73,
+     "z": 169.625
+    },
+    {
+     "name": "Hickes Racetrack",
+     "x": -11.498,
+     "y": 14.263,
+     "z": -260.15
+    },
+    {
+     "name": "Terra Mills Racetrack",
+     "x": 32.091,
+     "y": 66.701,
+     "z": 250.043
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": 205.624,
+     "y": -349.446,
+     "z": 52.604
+    }
+   ]
+  },
+  {
+   "name": "Clio",
+   "x": 22476728.221,
+   "y": 37091020.074,
+   "z": 0.0,
+   "radius_km": 337.17,
+   "om_radius_km": 489.85,
+   "reach_km": 2023.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 359.9997019,
+   "pois": [
+    {
+     "name": "Comm Array ST4-59",
+     "x": -318.257,
+     "y": 390.837,
+     "z": 24.0
+    },
+    {
+     "name": "Rayari Cantwell Research Outpost",
+     "x": -217.175,
+     "y": 215.278,
+     "z": 142.842
+    },
+    {
+     "name": "Rayari McGrath Research Outpost",
+     "x": -325.904,
+     "y": -85.713,
+     "z": -18.786
+    },
+    {
+     "name": "Clio Cave N66 [F]",
+     "x": -6.584,
+     "y": 137.809,
+     "z": 308.281
+    },
+    {
+     "name": "Clio Cave N67 [F]",
+     "x": -11.324,
+     "y": 131.045,
+     "z": 311.056
+    },
+    {
+     "name": "Clio Cave N71 [F]",
+     "x": 26.403,
+     "y": 105.022,
+     "z": 319.751
+    },
+    {
+     "name": "Clio Cave N76 [F]",
+     "x": 12.477,
+     "y": 77.049,
+     "z": 328.531
+    },
+    {
+     "name": "Caterpillar B Wreck",
+     "x": -142.973,
+     "y": 98.286,
+     "z": 289.667
+    },
+    {
+     "name": "Caterpillar C Wreck",
+     "x": -235.054,
+     "y": 222.127,
+     "z": 97.407
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 253.201,
+     "y": 178.404,
+     "z": 134.714
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": 237.915,
+     "y": 197.092,
+     "z": 136.426
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": -125.554,
+     "y": 242.328,
+     "z": 198.088
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": 6.513,
+     "y": 175.082,
+     "z": 288.415
+    },
+    {
+     "name": "Starfarer B Wreck",
+     "x": 76.745,
+     "y": 235.733,
+     "z": 229.346
+    },
+    {
+     "name": "Snake Pit",
+     "x": -327.835,
+     "y": -78.887,
+     "z": -13.657
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": -142.43,
+     "y": 447.386,
+     "z": 76.016
+    }
+   ]
+  },
+  {
+   "name": "CRU-L1",
+   "x": -17065957.376,
+   "y": -2398464.0,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 5952.1,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R CRU-L1 Ambitious Dream Station",
+     "x": -2796.346,
+     "y": -1018.271,
+     "z": -20.043
+    }
+   ]
+  },
+  {
+   "name": "CRU-L2",
+   "x": -20858376.485,
+   "y": -2931474.402,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 200.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": []
+  },
+  {
+   "name": "CRU-L3",
+   "x": 18962164.826,
+   "y": 2664965.041,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 200.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": []
+  },
+  {
+   "name": "CRU-L4",
+   "x": -7173168.64,
+   "y": -17754204.16,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 9443.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R CRU-L4 Shallow Fields Station",
+     "x": -599.664,
+     "y": 4147.667,
+     "z": -2174.785
+    }
+   ]
+  },
+  {
+   "name": "CRU-L5",
+   "x": -11789008.988,
+   "y": 15089246.107,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 10536.2,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R CRU-L5 Beautiful Glen Station",
+     "x": 3996.778,
+     "y": 1989.652,
+     "z": -2796.44
+    }
+   ]
+  },
+  {
+   "name": "Crusader",
+   "x": -18962176.0,
+   "y": -2664960.0,
+   "z": 0.0,
+   "radius_km": 7450.01,
+   "om_radius_km": 10758.023,
+   "reach_km": 44700.1,
+   "rotation_hours": 5.0999999,
+   "rotation_adjust_deg": 300.5161454,
+   "pois": [
+    {
+     "name": "Comm Array ST2-55",
+     "x": -1387.917,
+     "y": 8802.204,
+     "z": 24.0
+    },
+    {
+     "name": "Port Olisar",
+     "x": 5965.0,
+     "y": -472.142,
+     "z": 5667.009
+    },
+    {
+     "name": "Orison",
+     "x": 5295.517,
+     "y": -863.194,
+     "z": 5282.237
+    },
+    {
+     "name": "August Dunlow Spaceport",
+     "x": 5295.536,
+     "y": -871.476,
+     "z": 5281.923
+    },
+    {
+     "name": "Main Hall",
+     "x": 5333.899,
+     "y": -781.652,
+     "z": 5252.534
+    },
+    {
+     "name": "Crusader-Tumbril-Krueger",
+     "x": 5207.253,
+     "y": -921.274,
+     "z": 5278.643
+    },
+    {
+     "name": "Anvil",
+     "x": 5214.345,
+     "y": -767.269,
+     "z": 5296.022
+    },
+    {
+     "name": "Aegis",
+     "x": 5216.197,
+     "y": -818.481,
+     "z": 5294.565
+    },
+    {
+     "name": "RSI",
+     "x": 5209.644,
+     "y": -869.355,
+     "z": 5284.502
+    },
+    {
+     "name": "Fleet Week 2022 Event Halls",
+     "x": 5333.063,
+     "y": -778.502,
+     "z": 5253.85
+    },
+    {
+     "name": "Habitation clusters",
+     "x": 5329.333,
+     "y": -794.336,
+     "z": 5254.738
+    },
+    {
+     "name": "Shipyard clusters",
+     "x": 5322.096,
+     "y": -819.404,
+     "z": 5257.88
+    }
+   ]
+  },
+  {
+   "name": "Daymar",
+   "x": -18930539.54,
+   "y": -2610158.765,
+   "z": 0.0,
+   "radius_km": 295.0,
+   "om_radius_km": 430.027,
+   "reach_km": 1770.0,
+   "rotation_hours": 2.48000002,
+   "rotation_adjust_deg": 30.5679523,
+   "pois": [
+    {
+     "name": "Comm Array ST2-47",
+     "x": -435.617,
+     "y": -146.996,
+     "z": 24.0
+    },
+    {
+     "name": "ArcCorp Mining Area 141",
+     "x": -18.167,
+     "y": 180.362,
+     "z": -232.76
+    },
+    {
+     "name": "Bountiful Harvest Hydroponics",
+     "x": 57.552,
+     "y": -92.267,
+     "z": -274.246
+    },
+    {
+     "name": "Kudre Ore",
+     "x": 146.617,
+     "y": -177.093,
+     "z": -184.862
+    },
+    {
+     "name": "Shubin Mining Facility SCD-1",
+     "x": 126.025,
+     "y": -149.581,
+     "z": 221.253
+    },
+    {
+     "name": "Covalex Shipping Hub Gundo",
+     "x": -241.198,
+     "y": 437.977,
+     "z": -300.0
+    },
+    {
+     "name": "Kudre Ore Mine (Closed) [F]",
+     "x": 81.008,
+     "y": -280.683,
+     "z": 43.649
+    },
+    {
+     "name": "Dunlow Ridge Aid Shelter",
+     "x": -51.85,
+     "y": 280.932,
+     "z": 75.331
+    },
+    {
+     "name": "Eager Flats Aid Shelter",
+     "x": 200.545,
+     "y": -104.917,
+     "z": 190.097
+    },
+    {
+     "name": "Tamdon Plains Aid Shelter",
+     "x": -138.114,
+     "y": -24.463,
+     "z": -259.849
+    },
+    {
+     "name": "Wolf Point Aid Shelter",
+     "x": -4.42,
+     "y": 279.067,
+     "z": 95.733
+    },
+    {
+     "name": "NT-999-XVI",
+     "x": 251.045,
+     "y": 153.85,
+     "z": -23.796
+    },
+    {
+     "name": "TPF",
+     "x": 38.49,
+     "y": 203.592,
+     "z": -210.032
+    },
+    {
+     "name": "The Garden",
+     "x": -175.415,
+     "y": 146.965,
+     "z": 186.269
+    },
+    {
+     "name": "Security Post Thaquray",
+     "x": -6.477,
+     "y": -90.411,
+     "z": 281.124
+    },
+    {
+     "name": "Security Post Moluto",
+     "x": 189.063,
+     "y": 33.693,
+     "z": -223.998
+    },
+    {
+     "name": "Security Post Prashad",
+     "x": -223.514,
+     "y": 65.899,
+     "z": 181.092
+    },
+    {
+     "name": "Brio's Breaker Yard",
+     "x": -176.683,
+     "y": -161.257,
+     "z": 173.852
+    },
+    {
+     "name": "Daymar Stash House (Nuen Waste Management)",
+     "x": -18.943,
+     "y": 293.341,
+     "z": 25.478
+    },
+    {
+     "name": "Abandoned Outpost",
+     "x": 73.139,
+     "y": 285.904,
+     "z": 1.906
+    },
+    {
+     "name": "Daymar Cave N24 [F]",
+     "x": 108.06,
+     "y": 250.3,
+     "z": 113.124
+    },
+    {
+     "name": "Daymar Cave S24 [F]",
+     "x": -259.272,
+     "y": -68.976,
+     "z": -122.777
+    },
+    {
+     "name": "Daymar Cave S29 [F]",
+     "x": 61.883,
+     "y": -249.125,
+     "z": -145.427
+    },
+    {
+     "name": "Daymar Cave S38 [S]",
+     "x": 146.356,
+     "y": -177.106,
+     "z": -185.07
+    },
+    {
+     "name": "Daymar Cave N09 [FVS]",
+     "x": -272.652,
+     "y": 102.062,
+     "z": 48.645
+    },
+    {
+     "name": "Caterpillar D Wreck",
+     "x": -171.449,
+     "y": -162.799,
+     "z": 177.207
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": 283.816,
+     "y": 70.563,
+     "z": -42.287
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": 276.18,
+     "y": 65.714,
+     "z": -80.365
+    },
+    {
+     "name": "Freelancer C Wreck",
+     "x": 4.771,
+     "y": -38.41,
+     "z": 292.843
+    },
+    {
+     "name": "Javelin Wreck",
+     "x": 102.055,
+     "y": 267.619,
+     "z": -70.856
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": -65.419,
+     "y": 231.089,
+     "z": 172.041
+    },
+    {
+     "name": "Shubin Racetrack",
+     "x": 133.661,
+     "y": -147.06,
+     "z": 218.401
+    },
+    {
+     "name": "ArcCorp Racetrack",
+     "x": -21.248,
+     "y": 174.903,
+     "z": -237.073
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": -83.332,
+     "y": 289.069,
+     "z": 341.706
+    }
+   ]
+  },
+  {
+   "name": "Delamar",
+   "x": -10531703.478,
+   "y": 18241438.664,
+   "z": 0.0,
+   "radius_km": 75.0,
+   "om_radius_km": 118.89,
+   "reach_km": 450.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": []
+  },
+  {
+   "name": "Euterpe",
+   "x": 22488109.736,
+   "y": 37081123.565,
+   "z": 0.0,
+   "radius_km": 213.0,
+   "om_radius_km": 314.061,
+   "reach_km": 1278.0,
+   "rotation_hours": 4.28000021,
+   "rotation_adjust_deg": 269.2381553,
+   "pois": [
+    {
+     "name": "Comm Array ST4-64",
+     "x": 362.788,
+     "y": 88.702,
+     "z": 24.0
+    },
+    {
+     "name": "Bud's Growery",
+     "x": 50.173,
+     "y": -172.259,
+     "z": 115.271
+    },
+    {
+     "name": "Devlin Scrap & Salvage",
+     "x": 14.506,
+     "y": 211.267,
+     "z": 25.886
+    },
+    {
+     "name": "Euterpe Cave N02 [F]",
+     "x": 136.39,
+     "y": 163.644,
+     "z": 11.151
+    },
+    {
+     "name": "Euterpe Cave N10 [F]",
+     "x": -192.561,
+     "y": -82.292,
+     "z": 40.531
+    },
+    {
+     "name": "Euterpe Cave N12 [F]",
+     "x": -192.196,
+     "y": -80.447,
+     "z": 45.437
+    },
+    {
+     "name": "Euterpe Cave S38 [F]",
+     "x": -33.199,
+     "y": 162.934,
+     "z": -133.722
+    },
+    {
+     "name": "Euterpe Cave S51 [F]",
+     "x": 114.707,
+     "y": -65.951,
+     "z": -167.163
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 67.368,
+     "y": 196.703,
+     "z": -47.203
+    },
+    {
+     "name": "Caterpillar D Wreck",
+     "x": 200.332,
+     "y": 34.467,
+     "z": -65.065
+    },
+    {
+     "name": "Caterpillar E Wreck",
+     "x": 145.497,
+     "y": -63.948,
+     "z": -142.486
+    },
+    {
+     "name": "Caterpillar C Wreck",
+     "x": 180.074,
+     "y": 69.715,
+     "z": -90.12
+    },
+    {
+     "name": "Caterpillar B Wreck",
+     "x": 145.418,
+     "y": 152.345,
+     "z": -33.789
+    },
+    {
+     "name": "Freelancer A Wreck",
+     "x": 138.738,
+     "y": -91.03,
+     "z": -134.409
+    },
+    {
+     "name": "Freelancer C Wreck",
+     "x": 4.195,
+     "y": -200.346,
+     "z": -73.424
+    },
+    {
+     "name": "Freelancer D Wreck",
+     "x": -213.175,
+     "y": -2.543,
+     "z": 7.976
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": 116.976,
+     "y": -158.184,
+     "z": -82.049
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": -87.49,
+     "y": -187.25,
+     "z": -52.153
+    },
+    {
+     "name": "Starfarer B Wreck",
+     "x": 44.458,
+     "y": -170.185,
+     "z": 120.272
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": -12.14,
+     "y": -209.638,
+     "z": 36.04
+    },
+    {
+     "name": "Starfarer D Wreck",
+     "x": -119.3,
+     "y": -77.344,
+     "z": 158.908
+    }
+   ]
+  },
+  {
+   "name": "HUR-L1",
+   "x": 11565411.328,
+   "y": 0.0,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 8073.2,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R HUR-L1 Green Glade Station",
+     "x": -3998.772,
+     "y": -262.923,
+     "z": -484.614
+    },
+    {
+     "name": "Child Cloud S1 L1",
+     "x": 45.724,
+     "y": -3.315,
+     "z": -27.087
+    }
+   ]
+  },
+  {
+   "name": "HUR-L2",
+   "x": 14135502.848,
+   "y": 0.0,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 9214.8,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R HUR-L2 Faithful Dream Station",
+     "x": 4132.733,
+     "y": -1967.281,
+     "z": -527.795
+    },
+    {
+     "name": "Child Cloud S1 L2",
+     "x": 32.909,
+     "y": 28.128,
+     "z": 0.178
+    }
+   ]
+  },
+  {
+   "name": "HUR-L3",
+   "x": -12850457.6,
+   "y": -1.123,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 12140.1,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R HUR-L3 Thundering Express Station",
+     "x": 5714.048,
+     "y": -1553.268,
+     "z": 1335.042
+    },
+    {
+     "name": "Child Cloud S1 L3",
+     "x": -13.979,
+     "y": 0.333,
+     "z": 22.762
+    }
+   ]
+  },
+  {
+   "name": "HUR-L4",
+   "x": 6425228.288,
+   "y": 11128823.808,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 9520.4,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R HUR-L4 Melodic Fields Station",
+     "x": 2399.286,
+     "y": -4056.978,
+     "z": 666.284
+    },
+    {
+     "name": "Child Cloud S1 L4",
+     "x": 7.986,
+     "y": 14.97,
+     "z": -11.285
+    }
+   ]
+  },
+  {
+   "name": "HUR-L5",
+   "x": 6425227.776,
+   "y": -11128823.808,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 2161.0,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R HUR-L5 High Course Station",
+     "x": 495.238,
+     "y": 461.677,
+     "z": -842.035
+    },
+    {
+     "name": "Child Cloud S1 L5",
+     "x": -0.151,
+     "y": 6.533,
+     "z": 41.323
+    }
+   ]
+  },
+  {
+   "name": "Hurston",
+   "x": 12850457.093,
+   "y": 0.0,
+   "z": 0.0,
+   "radius_km": 1000.0,
+   "om_radius_km": 1436.815,
+   "reach_km": 6000.0,
+   "rotation_hours": 2.48000002,
+   "rotation_adjust_deg": 19.3888861,
+   "pois": [
+    {
+     "name": "Comm Array ST1-61",
+     "x": 919.253,
+     "y": -771.345,
+     "z": 24.0
+    },
+    {
+     "name": "Lorville",
+     "x": -328.989,
+     "y": -752.435,
+     "z": 572.12
+    },
+    {
+     "name": "Everus Harbor",
+     "x": -507.742,
+     "y": -903.464,
+     "z": 496.489
+    },
+    {
+     "name": "HDMS Edmond",
+     "x": -284.48,
+     "y": -730.502,
+     "z": 620.924
+    },
+    {
+     "name": "HDMS Hadley",
+     "x": 626.167,
+     "y": -583.971,
+     "z": -518.485
+    },
+    {
+     "name": "HDMS Oparei",
+     "x": -556.126,
+     "y": -72.591,
+     "z": -828.071
+    },
+    {
+     "name": "HDMS Pinewood",
+     "x": 985.564,
+     "y": 90.029,
+     "z": 149.896
+    },
+    {
+     "name": "HDMS Stanhope",
+     "x": -648.608,
+     "y": 198.313,
+     "z": 735.121
+    },
+    {
+     "name": "HDMS Thedus",
+     "x": 443.322,
+     "y": 891.525,
+     "z": 101.509
+    },
+    {
+     "name": "HDES Calthrope (NA) [F]",
+     "x": -203.376,
+     "y": -806.58,
+     "z": 557.779
+    },
+    {
+     "name": "Security Depot Hurston-1 / HDSRO Bramen",
+     "x": 766.55,
+     "y": -74.234,
+     "z": -640.243
+    },
+    {
+     "name": "HDSF Adlai",
+     "x": -236.846,
+     "y": -810.89,
+     "z": 537.736
+    },
+    {
+     "name": "HDSF Barnabas",
+     "x": -895.863,
+     "y": 365.602,
+     "z": -252.538
+    },
+    {
+     "name": "HDSF Breckinridge",
+     "x": -557.599,
+     "y": 680.528,
+     "z": -477.825
+    },
+    {
+     "name": "HDSF Colfax",
+     "x": 902.272,
+     "y": 383.795,
+     "z": -203.763
+    },
+    {
+     "name": "HDSF Damaris",
+     "x": -898.695,
+     "y": 420.101,
+     "z": -141.747
+    },
+    {
+     "name": "HDSF Elbridge",
+     "x": 449.413,
+     "y": 838.666,
+     "z": 310.624
+    },
+    {
+     "name": "HDSF Hendricks",
+     "x": 63.555,
+     "y": -969.07,
+     "z": -242.52
+    },
+    {
+     "name": "HDSF Hiram",
+     "x": -942.48,
+     "y": -317.031,
+     "z": 122.747
+    },
+    {
+     "name": "HDSF Hobart",
+     "x": -492.22,
+     "y": 768.371,
+     "z": 410.823
+    },
+    {
+     "name": "HDSF Ishmael",
+     "x": -266.171,
+     "y": -159.479,
+     "z": 952.333
+    },
+    {
+     "name": "HDSF Millerand",
+     "x": -847.551,
+     "y": 517.597,
+     "z": 126.804
+    },
+    {
+     "name": "HDSF Rufus",
+     "x": -64.794,
+     "y": 11.531,
+     "z": -998.425
+    },
+    {
+     "name": "HDSF Sherman",
+     "x": 899.38,
+     "y": -406.057,
+     "z": 168.518
+    },
+    {
+     "name": "HDSF Tamar",
+     "x": 121.122,
+     "y": -810.963,
+     "z": -573.527
+    },
+    {
+     "name": "HDSF Tompkins",
+     "x": 374.762,
+     "y": 724.551,
+     "z": 579.815
+    },
+    {
+     "name": "HDSF Zacharias",
+     "x": 249.567,
+     "y": 398.572,
+     "z": -884.801
+    },
+    {
+     "name": "Reclamation & Disposal Orinth",
+     "x": 1.141,
+     "y": -794.276,
+     "z": 607.652
+    },
+    {
+     "name": "Hurston Cave N31 [F]",
+     "x": -303.624,
+     "y": -801.386,
+     "z": 518.049
+    },
+    {
+     "name": "Hurston Cave N34 [FV]",
+     "x": -357.903,
+     "y": -743.787,
+     "z": 565.637
+    },
+    {
+     "name": "Hurston Cave S11 [S]",
+     "x": -928.268,
+     "y": 318.895,
+     "z": -203.466
+    },
+    {
+     "name": "Hurston Cave N80 [FVS]",
+     "x": -160.053,
+     "y": -65.455,
+     "z": 985.626
+    },
+    {
+     "name": "Hurston Cave S21 [FVS]",
+     "x": -869.988,
+     "y": 336.529,
+     "z": -360.425
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": -653.836,
+     "y": -717.665,
+     "z": -245.716
+    },
+    {
+     "name": "Caterpillar B Wreck",
+     "x": -815.733,
+     "y": -287.104,
+     "z": -503.889
+    },
+    {
+     "name": "Caterpillar C Wreck",
+     "x": 646.062,
+     "y": 649.617,
+     "z": -404.154
+    },
+    {
+     "name": "Caterpillar D Wreck",
+     "x": -44.669,
+     "y": -971.574,
+     "z": 232.541
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": -699.893,
+     "y": 264.864,
+     "z": 663.971
+    },
+    {
+     "name": "Constellation D Wreck",
+     "x": 359.032,
+     "y": -881.816,
+     "z": -308.452
+    },
+    {
+     "name": "Constellation C Wreck",
+     "x": -63.743,
+     "y": 873.126,
+     "z": -486.42
+    },
+    {
+     "name": "Constellation B Wreck",
+     "x": -131.882,
+     "y": -882.095,
+     "z": -452.24
+    },
+    {
+     "name": "Cutlass A1 Wreck",
+     "x": 261.157,
+     "y": -269.43,
+     "z": -928.88
+    },
+    {
+     "name": "Cutlass A2 Wreck",
+     "x": -569.721,
+     "y": 306.215,
+     "z": -764.71
+    },
+    {
+     "name": "Cutlass A3 Wreck",
+     "x": -833.061,
+     "y": -68.424,
+     "z": -550.783
+    },
+    {
+     "name": "Cutlass A4 Wreck",
+     "x": -667.75,
+     "y": -271.843,
+     "z": 694.432
+    },
+    {
+     "name": "Freelancer D Wreck",
+     "x": 977.427,
+     "y": 90.2,
+     "z": 197.998
+    },
+    {
+     "name": "Freelancer A Wreck",
+     "x": -831.92,
+     "y": 292.444,
+     "z": -471.586
+    },
+    {
+     "name": "Freelancer C Wreck",
+     "x": -550.096,
+     "y": 706.821,
+     "z": -446.534
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": 674.898,
+     "y": -737.051,
+     "z": 45.596
+    },
+    {
+     "name": "Satellite Wreck 1",
+     "x": -846.765,
+     "y": 501.396,
+     "z": -178.92
+    },
+    {
+     "name": "Satellite Wreck 2",
+     "x": -237.427,
+     "y": -782.591,
+     "z": 577.772
+    },
+    {
+     "name": "Satellite Wreck 3",
+     "x": 457.265,
+     "y": 876.042,
+     "z": 158.397
+    },
+    {
+     "name": "Satellite Wreck 4",
+     "x": 26.263,
+     "y": -763.129,
+     "z": 646.048
+    },
+    {
+     "name": "Starfarer B Wreck",
+     "x": 979.864,
+     "y": -47.469,
+     "z": -193.947
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 774.788,
+     "y": 8.14,
+     "z": 633.956
+    },
+    {
+     "name": "Starfarer D Wreck",
+     "x": -950.244,
+     "y": 276.43,
+     "z": -152.587
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": -591.697,
+     "y": 779.843,
+     "z": 210.275
+    },
+    {
+     "name": "Hendricks Racetrack",
+     "x": -319.505,
+     "y": -928.411,
+     "z": -189.977
+    },
+    {
+     "name": "Oparei Racetrack",
+     "x": -550.283,
+     "y": -65.56,
+     "z": -832.412
+    },
+    {
+     "name": "Thedus Racetrack",
+     "x": 451.495,
+     "y": 887.98,
+     "z": 96.543
+    },
+    {
+     "name": "Hadley Racetrack",
+     "x": 619.836,
+     "y": -583.934,
+     "z": -527.064
+    },
+    {
+     "name": "Stanhope Racetrack",
+     "x": -641.356,
+     "y": 202.083,
+     "z": 740.274
+    },
+    {
+     "name": "Pinewood Racetrack",
+     "x": 985.379,
+     "y": 82.298,
+     "z": 157.981
+    }
+   ]
+  },
+  {
+   "name": "Ita",
+   "x": 12830194.716,
+   "y": 114913.609,
+   "z": 0.0,
+   "radius_km": 325.0,
+   "om_radius_km": 472.454,
+   "reach_km": 1950.0,
+   "rotation_hours": 4.8499999,
+   "rotation_adjust_deg": 243.1995839,
+   "pois": [
+    {
+     "name": "Comm Array ST1-02",
+     "x": 122.153,
+     "y": -475.821,
+     "z": 24.0
+    },
+    {
+     "name": "HDMS Ryder",
+     "x": -175.874,
+     "y": -263.381,
+     "z": 73.709
+    },
+    {
+     "name": "HDMS Woodruff",
+     "x": 114.792,
+     "y": 219.661,
+     "z": 210.467
+    },
+    {
+     "name": "Caterpillar D Wreck",
+     "x": -306.173,
+     "y": -9.831,
+     "z": 109.758
+    },
+    {
+     "name": "Constellation D Wreck",
+     "x": 216.188,
+     "y": -74.024,
+     "z": 230.962
+    },
+    {
+     "name": "Freelancer C Wreck",
+     "x": -311.307,
+     "y": 0.474,
+     "z": -94.345
+    },
+    {
+     "name": "Starfarer D Wreck",
+     "x": 270.672,
+     "y": -86.652,
+     "z": -158.135
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": 137.997,
+     "y": 211.437,
+     "z": 204.97
+    },
+    {
+     "name": "Ryder Racetrack",
+     "x": -182.796,
+     "y": -260.992,
+     "z": 64.867
+    },
+    {
+     "name": "Woodruff Racetrack",
+     "x": -72.134,
+     "y": 308.245,
+     "z": 74.18
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-1",
+     "x": 479.459,
+     "y": 179.262,
+     "z": 159.676
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-2",
+     "x": 371.301,
+     "y": 352.351,
+     "z": 76.315
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-3",
+     "x": 213.896,
+     "y": 465.043,
+     "z": 45.377
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-4",
+     "x": 26.789,
+     "y": 511.173,
+     "z": -191.906
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-1",
+     "x": -191.752,
+     "y": 474.602,
+     "z": 9.449
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-2",
+     "x": -300.873,
+     "y": 414.116,
+     "z": 97.428
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-3",
+     "x": -443.297,
+     "y": 255.938,
+     "z": -130.174
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-4",
+     "x": -510.92,
+     "y": 31.249,
+     "z": 17.37
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-1",
+     "x": -474.602,
+     "y": -191.752,
+     "z": 95.652
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-2",
+     "x": -374.971,
+     "y": -348.444,
+     "z": -116.742
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-3",
+     "x": -206.565,
+     "y": -468.345,
+     "z": -65.313
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-4",
+     "x": 0.0,
+     "y": -511.875,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-1",
+     "x": 175.072,
+     "y": -481.005,
+     "z": 24.835
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-2",
+     "x": 346.476,
+     "y": -376.79,
+     "z": -113.558
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-3",
+     "x": 463.916,
+     "y": -216.328,
+     "z": -24.636
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-4",
+     "x": 510.628,
+     "y": -35.707,
+     "z": 0.0
+    }
+   ]
+  },
+  {
+   "name": "Lyria",
+   "x": 18703607.172,
+   "y": -22121650.134,
+   "z": 0.0,
+   "radius_km": 223.0,
+   "om_radius_km": 328.204,
+   "reach_km": 1338.0,
+   "rotation_hours": 6.42999983,
+   "rotation_adjust_deg": 359.4217912,
+   "pois": [
+    {
+     "name": "Comm Array ST3-18",
+     "x": -382.727,
+     "y": 33.034,
+     "z": 24.0
+    },
+    {
+     "name": "Humboldt Mines",
+     "x": 5.311,
+     "y": -193.819,
+     "z": -112.545
+    },
+    {
+     "name": "Loveridge Mineral Reserve",
+     "x": 181.8,
+     "y": 128.166,
+     "z": 24.94
+    },
+    {
+     "name": "Shubin Mining Facility SAL-2",
+     "x": 150.636,
+     "y": -53.619,
+     "z": 156.668
+    },
+    {
+     "name": "Shubin Mining Facility SAL-5",
+     "x": 98.07,
+     "y": 78.361,
+     "z": 185.821
+    },
+    {
+     "name": "Security Depot Lyria-1",
+     "x": -147.527,
+     "y": -17.212,
+     "z": 167.674
+    },
+    {
+     "name": "The Orphanage",
+     "x": -91.99,
+     "y": 92.484,
+     "z": 182.182
+    },
+    {
+     "name": "Paradise Cove",
+     "x": -10.654,
+     "y": 147.439,
+     "z": -168.175
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-12",
+     "x": -173.535,
+     "y": 124.408,
+     "z": 67.444
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-3",
+     "x": -208.11,
+     "y": 11.143,
+     "z": -82.136
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-7",
+     "x": 38.016,
+     "y": -125.93,
+     "z": 181.508
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-9",
+     "x": 146.841,
+     "y": -168.909,
+     "z": 8.174
+    },
+    {
+     "name": "Elsewhere",
+     "x": 207.814,
+     "y": -67.758,
+     "z": -49.787
+    },
+    {
+     "name": "Teddy's Playhouse",
+     "x": 96.033,
+     "y": 159.442,
+     "z": -123.929
+    },
+    {
+     "name": "The Pit",
+     "x": 59.23,
+     "y": 68.198,
+     "z": 204.929
+    },
+    {
+     "name": "Wheeler's",
+     "x": -52.959,
+     "y": -209.881,
+     "z": -57.549
+    },
+    {
+     "name": "Buckets",
+     "x": -193.999,
+     "y": -67.967,
+     "z": -89.591
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-16",
+     "x": -39.936,
+     "y": -66.324,
+     "z": 209.905
+    },
+    {
+     "name": "Shubin Processing Facility SPAL-21",
+     "x": -18.296,
+     "y": 13.907,
+     "z": 222.81
+    },
+    {
+     "name": "Launch Pad",
+     "x": -213.816,
+     "y": -65.231,
+     "z": 16.647
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 17.44,
+     "y": -206.022,
+     "z": -86.259
+    },
+    {
+     "name": "Freelancer A Wreck",
+     "x": 169.675,
+     "y": -95.46,
+     "z": -110.856
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": -116.661,
+     "y": -189.259,
+     "z": 26.665
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 1",
+     "x": 90.196,
+     "y": 60.433,
+     "z": 196.272
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 2",
+     "x": 143.507,
+     "y": -71.508,
+     "z": 156.466
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": -304.98,
+     "y": -183.893,
+     "z": 68.439
+    }
+   ]
+  },
+  {
+   "name": "Magda",
+   "x": 12792686.359,
+   "y": -74464.581,
+   "z": 0.0,
+   "radius_km": 340.83,
+   "om_radius_km": 494.841,
+   "reach_km": 2045.0,
+   "rotation_hours": 1.94000006,
+   "rotation_adjust_deg": 242.7977464,
+   "pois": [
+    {
+     "name": "Comm Array ST1-48",
+     "x": 295.516,
+     "y": 413.046,
+     "z": 24.0
+    },
+    {
+     "name": "HDMS Hahn",
+     "x": -147.384,
+     "y": -292.217,
+     "z": 95.247
+    },
+    {
+     "name": "HDMS Perlman",
+     "x": -140.696,
+     "y": 287.922,
+     "z": -116.688
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": 320.169,
+     "y": 98.727,
+     "z": 64.42
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": 195.502,
+     "y": -14.652,
+     "z": -278.963
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": -300.821,
+     "y": -72.784,
+     "z": 143.452
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 1",
+     "x": -171.923,
+     "y": -278.139,
+     "z": 96.953
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 2",
+     "x": -84.944,
+     "y": -284.415,
+     "z": 168.126
+    },
+    {
+     "name": "Hahn Racetrack",
+     "x": -151.471,
+     "y": -289.241,
+     "z": 98.243
+    },
+    {
+     "name": "Perlman Racetrack",
+     "x": -142.988,
+     "y": 282.655,
+     "z": -126.56
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-1",
+     "x": 505.076,
+     "y": 181.839,
+     "z": 64.172
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-2",
+     "x": 433.186,
+     "y": 317.044,
+     "z": -5.116
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-3",
+     "x": 196.742,
+     "y": 499.459,
+     "z": 130.2
+    },
+    {
+     "name": "Orbital ShipGraveyard 1-4",
+     "x": 0.937,
+     "y": 536.811,
+     "z": 38.782
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-1",
+     "x": -205.429,
+     "y": 495.95,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-2",
+     "x": -379.583,
+     "y": 379.583,
+     "z": -154.009
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-3",
+     "x": -467.217,
+     "y": 264.339,
+     "z": -69.436
+    },
+    {
+     "name": "Orbital ShipGraveyard 2-4",
+     "x": -536.628,
+     "y": -14.052,
+     "z": 50.488
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-1",
+     "x": -503.47,
+     "y": -186.239,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-2",
+     "x": -389.39,
+     "y": -369.517,
+     "z": 74.997
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-3",
+     "x": -250.362,
+     "y": -474.854,
+     "z": 29.435
+    },
+    {
+     "name": "Orbital ShipGraveyard 3-4",
+     "x": -9.369,
+     "y": -536.73,
+     "z": -3.324
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-1",
+     "x": 201.093,
+     "y": -497.723,
+     "z": 22.61
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-2",
+     "x": 352.18,
+     "y": -405.137,
+     "z": 0.0
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-3",
+     "x": 486.517,
+     "y": -226.867,
+     "z": 21.812
+    },
+    {
+     "name": "Orbital ShipGraveyard 4-4",
+     "x": 536.076,
+     "y": -28.095,
+     "z": -27.667
+    },
+    {
+     "name": "Sketto Rock",
+     "x": -335.013,
+     "y": 45.699,
+     "z": 50.233
+    }
+   ]
+  },
+  {
+   "name": "MIC-L1",
+   "x": 20215824.238,
+   "y": 33467065.008,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 66379.8,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R MIC-L1 Shallow Frontier Station",
+     "x": -19816.939,
+     "y": 3896.088,
+     "z": 10707.48
+    },
+    {
+     "name": "Wrecked Relay 6",
+     "x": -40.521,
+     "y": 33.391,
+     "z": -9.238
+    },
+    {
+     "name": "Relay 2",
+     "x": 31.742,
+     "y": -0.183,
+     "z": -18.342
+    },
+    {
+     "name": "Relay 7",
+     "x": -39.919,
+     "y": 4.085,
+     "z": -0.107
+    },
+    {
+     "name": "Wrecked Relay 3",
+     "x": 31.189,
+     "y": 29.131,
+     "z": -27.51
+    },
+    {
+     "name": "Relay 1",
+     "x": 11.217,
+     "y": -19.713,
+     "z": -6.505
+    },
+    {
+     "name": "Wrecked Relay 5",
+     "x": -19.876,
+     "y": 52.729,
+     "z": -21.042
+    },
+    {
+     "name": "Wrecked Relay 8",
+     "x": -18.501,
+     "y": -17.828,
+     "z": 1.004
+    },
+    {
+     "name": "Wrecked Relay 4",
+     "x": 9.769,
+     "y": 51.075,
+     "z": -28.619
+    },
+    {
+     "name": "Fake Landing Pad",
+     "x": 3.003,
+     "y": 5.91,
+     "z": -1.85
+    },
+    {
+     "name": "Object Container 04",
+     "x": 28503.015,
+     "y": 1172.21,
+     "z": -16963.931
+    },
+    {
+     "name": "Object Container 05",
+     "x": 8784.108,
+     "y": -28.578,
+     "z": 3.522
+    },
+    {
+     "name": "Object Container 03",
+     "x": -8.244,
+     "y": 46.126,
+     "z": -26.535
+    },
+    {
+     "name": "ProCyon Wreck Site",
+     "x": 28502.598,
+     "y": 1172.006,
+     "z": -16964.057
+    },
+    {
+     "name": "INS-Jericho",
+     "x": 8108.803,
+     "y": 5221.406,
+     "z": -6377.92
+    },
+    {
+     "name": "Reclaimer Hijack Spawn Point",
+     "x": 8695.686,
+     "y": 5071.069,
+     "z": -6251.026
+    }
+   ]
+  },
+  {
+   "name": "MIC-L2",
+   "x": 24708827.153,
+   "y": 40905202.459,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 28097.2,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R MIC-L2 Long Forest Station",
+     "x": 4947.744,
+     "y": 7731.985,
+     "z": -10634.827
+    }
+   ]
+  },
+  {
+   "name": "MIC-L3",
+   "x": -22457170.266,
+   "y": -37187612.396,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 27986.1,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R MIC-L3 Endless Odyssey Station",
+     "x": 4952.014,
+     "y": 7689.373,
+     "z": -10590.411
+    }
+   ]
+  },
+  {
+   "name": "MIC-L4",
+   "x": -20971933.23,
+   "y": 38045504.032,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 32307.1,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R MIC-L4 Red Crossroads Station",
+     "x": 3212.567,
+     "y": 10554.325,
+     "z": -11799.275
+    }
+   ]
+  },
+  {
+   "name": "MIC-L5",
+   "x": 43435204.288,
+   "y": -851406.956,
+   "z": 0.0,
+   "radius_km": 0.0,
+   "om_radius_km": 0.0,
+   "reach_km": 33424.3,
+   "rotation_hours": 0.0,
+   "rotation_adjust_deg": 0.0,
+   "pois": [
+    {
+     "name": "R&R MIC-L5 Modern Icarus Station",
+     "x": 13355.569,
+     "y": -6301.076,
+     "z": -7824.374
+    }
+   ]
+  },
+  {
+   "name": "microTech",
+   "x": 22462085.252,
+   "y": 37185744.965,
+   "z": 0.0,
+   "radius_km": 1000.0,
+   "om_radius_km": 1439.593,
+   "reach_km": 6000.0,
+   "rotation_hours": 4.11999989,
+   "rotation_adjust_deg": 217.3176777,
+   "pois": [
+    {
+     "name": "New Babbage",
+     "x": 520.723,
+     "y": 419.364,
+     "z": 743.655
+    },
+    {
+     "name": "Port Tressler",
+     "x": 561.471,
+     "y": 545.853,
+     "z": 808.832
+    },
+    {
+     "name": "Comm Array ST4-22",
+     "x": -771.345,
+     "y": -919.253,
+     "z": 24.0
+    },
+    {
+     "name": "Rayari Deltana Research Outpost",
+     "x": -693.91,
+     "y": -648.299,
+     "z": 316.681
+    },
+    {
+     "name": "Shubin Mining Facility SM0-10",
+     "x": 85.476,
+     "y": -950.856,
+     "z": 298.799
+    },
+    {
+     "name": "Shubin Mining Facility SM0-13",
+     "x": -172.819,
+     "y": -981.308,
+     "z": 97.767
+    },
+    {
+     "name": "Shubin Mining Facility SM0-18",
+     "x": 920.21,
+     "y": -389.542,
+     "z": 43.837
+    },
+    {
+     "name": "Shubin Mining Facility SM0-22",
+     "x": 24.299,
+     "y": -822.591,
+     "z": 568.174
+    },
+    {
+     "name": "MT DataCenter 2UB-RB9-5",
+     "x": 907.102,
+     "y": 139.922,
+     "z": -397.434
+    },
+    {
+     "name": "MT DataCenter 4HJ-LVE-A",
+     "x": -100.656,
+     "y": 962.479,
+     "z": -255.491
+    },
+    {
+     "name": "MT DataCenter 5WQ-R2V-C",
+     "x": 959.827,
+     "y": 40.202,
+     "z": -279.233
+    },
+    {
+     "name": "MT DataCenter 8FK-Q2X-K",
+     "x": 22.273,
+     "y": 2.974,
+     "z": -1000.725
+    },
+    {
+     "name": "MT DataCenter D79-ECG-R",
+     "x": 201.182,
+     "y": 308.978,
+     "z": -929.668
+    },
+    {
+     "name": "MT DataCenter E2Q-NSG-Y",
+     "x": 916.82,
+     "y": 187.359,
+     "z": -354.077
+    },
+    {
+     "name": "MT DataCenter QVX-J88-J",
+     "x": -247.573,
+     "y": 892.65,
+     "z": -380.107
+    },
+    {
+     "name": "MT DataCenter TMG-XEV-2",
+     "x": -160.905,
+     "y": 62.279,
+     "z": 986.022
+    },
+    {
+     "name": "MT DataCenter L8P-JUC-8",
+     "x": -86.389,
+     "y": 218.654,
+     "z": -972.076
+    },
+    {
+     "name": "MT SecurityCenter DDV-6",
+     "x": 68.516,
+     "y": 64.213,
+     "z": -996.492
+    },
+    {
+     "name": "MT DataCenter KH3-AAE-L",
+     "x": -468.8,
+     "y": 801.495,
+     "z": -375.462
+    },
+    {
+     "name": "Calhoun Pass Emergency Shelter",
+     "x": 938.116,
+     "y": -347.818,
+     "z": 31.708
+    },
+    {
+     "name": "Clear View Emergency Shelter",
+     "x": -609.561,
+     "y": -688.363,
+     "z": 393.203
+    },
+    {
+     "name": "Nuiqsut Emergency Shelter",
+     "x": 750.613,
+     "y": -207.852,
+     "z": -627.225
+    },
+    {
+     "name": "Point Wain Emergency Shelter",
+     "x": -627.441,
+     "y": -485.258,
+     "z": 611.733
+    },
+    {
+     "name": "Necropolis (Stash House)",
+     "x": 63.643,
+     "y": -162.085,
+     "z": 985.651
+    },
+    {
+     "name": "Outpost 54 (Stash House)",
+     "x": 113.566,
+     "y": 14.479,
+     "z": -994.363
+    },
+    {
+     "name": "Lake Outpost",
+     "x": 808.992,
+     "y": 416.701,
+     "z": 415.719
+    },
+    {
+     "name": "West Babbage Outpost",
+     "x": 559.23,
+     "y": 386.6,
+     "z": 733.438
+    },
+    {
+     "name": "East Babbage Outpost",
+     "x": 488.767,
+     "y": 440.986,
+     "z": 754.061
+    },
+    {
+     "name": "KH3 Outpost",
+     "x": -458.538,
+     "y": 807.321,
+     "z": -372.023
+    },
+    {
+     "name": "SM0-13 Outpost",
+     "x": -154.476,
+     "y": -984.298,
+     "z": 94.002
+    },
+    {
+     "name": "microTech Cave N39 [F]",
+     "x": 679.115,
+     "y": 379.185,
+     "z": 630.074
+    },
+    {
+     "name": "microTech Cave N71 [F]",
+     "x": 209.189,
+     "y": -260.05,
+     "z": 944.768
+    },
+    {
+     "name": "microTech Cave S01 [S]",
+     "x": -428.145,
+     "y": 903.758,
+     "z": -31.124
+    },
+    {
+     "name": "microTech Cave N20 [FVS]",
+     "x": 940.94,
+     "y": -23.79,
+     "z": 343.679
+    },
+    {
+     "name": "microTech Cave N48 [FV]",
+     "x": 495.285,
+     "y": 446.713,
+     "z": 749.188
+    },
+    {
+     "name": "microTech Cave N02 [S]",
+     "x": 914.967,
+     "y": -405.203,
+     "z": 40.825
+    },
+    {
+     "name": "Caterpillar D Wreck",
+     "x": 422.031,
+     "y": 170.819,
+     "z": 890.497
+    },
+    {
+     "name": "Caterpillar C Wreck",
+     "x": -267.953,
+     "y": 310.782,
+     "z": 912.086
+    },
+    {
+     "name": "Caterpillar B Wreck",
+     "x": -223.634,
+     "y": 218.519,
+     "z": 949.902
+    },
+    {
+     "name": "Caterpillar A Wreck",
+     "x": -174.985,
+     "y": 978.259,
+     "z": -116.907
+    },
+    {
+     "name": "Constellation A Wreck",
+     "x": -167.21,
+     "y": 960.391,
+     "z": -228.48
+    },
+    {
+     "name": "Constellation B Wreck",
+     "x": 376.776,
+     "y": 920.916,
+     "z": -105.956
+    },
+    {
+     "name": "Constellation D Wreck",
+     "x": -676.718,
+     "y": -728.925,
+     "z": 112.13
+    },
+    {
+     "name": "Constellation C Wreck",
+     "x": 875.201,
+     "y": -465.38,
+     "z": -142.682
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": -933.3,
+     "y": -309.024,
+     "z": -189.532
+    },
+    {
+     "name": "Freelancer D Wreck",
+     "x": -683.477,
+     "y": -719.405,
+     "z": 134.431
+    },
+    {
+     "name": "Freelancer C Wreck",
+     "x": -973.704,
+     "y": -225.635,
+     "z": 40.8
+    },
+    {
+     "name": "Freelancer A Wreck",
+     "x": -686.688,
+     "y": -719.067,
+     "z": 111.168
+    },
+    {
+     "name": "Starfarer D Wreck",
+     "x": -588.09,
+     "y": 805.331,
+     "z": -78.362
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 9.472,
+     "y": 103.8,
+     "z": 995.341
+    },
+    {
+     "name": "Starfarer B Wreck",
+     "x": -637.938,
+     "y": 747.782,
+     "z": 185.558
+    },
+    {
+     "name": "Starfarer A Wreck",
+     "x": -226.008,
+     "y": 212.797,
+     "z": 950.747
+    },
+    {
+     "name": "Ghost Hollow",
+     "x": -127.194,
+     "y": 982.004,
+     "z": 149.145
+    },
+    {
+     "name": "Test Facility Octagon",
+     "x": 635.765,
+     "y": -155.464,
+     "z": 758.837
+    },
+    {
+     "name": "Chestnuts on an open fire",
+     "x": 520.693,
+     "y": 419.26,
+     "z": 743.714
+    },
+    {
+     "name": "Lakeside Chairs",
+     "x": 524.873,
+     "y": 425.683,
+     "z": 737.102
+    },
+    {
+     "name": "Mountainside Chairs",
+     "x": 506.682,
+     "y": 421.171,
+     "z": 754.683
+    },
+    {
+     "name": "Tears of Fire Painting",
+     "x": 518.388,
+     "y": 416.271,
+     "z": 747.876
+    },
+    {
+     "name": "microTech River (lake)",
+     "x": 809.509,
+     "y": 415.291,
+     "z": 415.788
+    },
+    {
+     "name": "microTech River (head)",
+     "x": 806.117,
+     "y": 424.57,
+     "z": 414.685
+    }
+   ]
+  },
+  {
+   "name": "Wala",
+   "x": 18379649.31,
+   "y": -22000466.768,
+   "z": 0.0,
+   "radius_km": 283.0,
+   "om_radius_km": 413.056,
+   "reach_km": 1698.0,
+   "rotation_hours": 6.32000017,
+   "rotation_adjust_deg": 135.56548,
+   "pois": [
+    {
+     "name": "Comm Array ST3-35",
+     "x": 365.821,
+     "y": -257.408,
+     "z": 24.0
+    },
+    {
+     "name": "ArcCorp Mining Area 045",
+     "x": -282.798,
+     "y": 14.108,
+     "z": 10.62
+    },
+    {
+     "name": "ArcCorp Mining Area 048",
+     "x": -178.193,
+     "y": 97.756,
+     "z": -196.34
+    },
+    {
+     "name": "ArcCorp Mining Area 056",
+     "x": 116.546,
+     "y": -50.147,
+     "z": 253.155
+    },
+    {
+     "name": "ArcCorp Mining Area 061",
+     "x": -21.04,
+     "y": -247.548,
+     "z": -132.57
+    },
+    {
+     "name": "Lost and Found",
+     "x": 62.307,
+     "y": 114.551,
+     "z": 251.523
+    },
+    {
+     "name": "ArcCorp Processing Center 123",
+     "x": 130.424,
+     "y": -247.614,
+     "z": 43.164
+    },
+    {
+     "name": "ArcCorp Processing Center 115",
+     "x": -277.349,
+     "y": 50.039,
+     "z": 28.036
+    },
+    {
+     "name": "Good Times Temple",
+     "x": -113.212,
+     "y": 179.686,
+     "z": 187.251
+    },
+    {
+     "name": "Samson & Son's Salvage Yard",
+     "x": -42.545,
+     "y": 279.059,
+     "z": 19.438
+    },
+    {
+     "name": "Shady Glen Farms",
+     "x": -20.622,
+     "y": 268.985,
+     "z": 87.534
+    },
+    {
+     "name": "Caterpillar B Wreck",
+     "x": 232.944,
+     "y": 30.599,
+     "z": -156.726
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": 158.741,
+     "y": -212.549,
+     "z": -99.089
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": -100.249,
+     "y": -244.995,
+     "z": -100.36
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 1",
+     "x": -281.801,
+     "y": 10.547,
+     "z": -22.472
+    },
+    {
+     "name": "Derelict Caterpillar Wreck 2",
+     "x": -164.031,
+     "y": 85.551,
+     "z": -213.83
+    },
+    {
+     "name": "Reclaimer Hijack Mission Spawn",
+     "x": -420.255,
+     "y": 89.003,
+     "z": -27.504
+    }
+   ]
+  },
+  {
+   "name": "Yela",
+   "x": -19022916.799,
+   "y": -2613996.152,
+   "z": 0.0,
+   "radius_km": 313.0,
+   "om_radius_km": 455.483,
+   "reach_km": 1878.0,
+   "rotation_hours": 1.8200005,
+   "rotation_adjust_deg": 219.0293123,
+   "pois": [
+    {
+     "name": "Comm Array ST2-76",
+     "x": 150.336,
+     "y": -454.428,
+     "z": 24.0
+    },
+    {
+     "name": "Grim HEX",
+     "x": -568.659,
+     "y": 383.565,
+     "z": -2.042
+    },
+    {
+     "name": "ArcCorp Mining Area 157",
+     "x": 6.023,
+     "y": 222.356,
+     "z": 220.313
+    },
+    {
+     "name": "Benson Mining Outpost",
+     "x": 48.998,
+     "y": -275.606,
+     "z": -140.136
+    },
+    {
+     "name": "Deakins Research Outpost",
+     "x": 231.587,
+     "y": -210.279,
+     "z": 13.278
+    },
+    {
+     "name": "Aston Ridge Aid Shelter",
+     "x": 207.944,
+     "y": 24.051,
+     "z": -232.785
+    },
+    {
+     "name": "Kosso Basin Aid Shelter",
+     "x": -31.289,
+     "y": -118.13,
+     "z": 288.314
+    },
+    {
+     "name": "Nakamura Valley Aid Shelter",
+     "x": -275.722,
+     "y": 124.074,
+     "z": 81.717
+    },
+    {
+     "name": "Talarine Divide Aid Shelter",
+     "x": -21.221,
+     "y": 310.79,
+     "z": 30.932
+    },
+    {
+     "name": "Yela Stash House (NT-999-XX)",
+     "x": -205.659,
+     "y": -73.988,
+     "z": 224.325
+    },
+    {
+     "name": "Abandoned Outpost",
+     "x": -45.303,
+     "y": 308.85,
+     "z": 28.948
+    },
+    {
+     "name": "BennyHenge",
+     "x": -626.649,
+     "y": 135.683,
+     "z": -1.819
+    },
+    {
+     "name": "Caterpillar E Wreck",
+     "x": 250.742,
+     "y": 43.617,
+     "z": -182.452
+    },
+    {
+     "name": "Constellation C Wreck",
+     "x": 101.554,
+     "y": -10.165,
+     "z": 295.936
+    },
+    {
+     "name": "Cutlass A Wreck",
+     "x": 211.453,
+     "y": -183.571,
+     "z": -141.022
+    },
+    {
+     "name": "Freelancer B Wreck",
+     "x": -31.161,
+     "y": -135.605,
+     "z": -280.447
+    },
+    {
+     "name": "Starfarer C Wreck",
+     "x": 161.234,
+     "y": 185.763,
+     "z": 193.758
+    },
+    {
+     "name": "Derelict Caterpillar Wreck",
+     "x": -29.543,
+     "y": 236.61,
+     "z": 203.199
+    },
+    {
+     "name": "Deakins Racetrack",
+     "x": 232.047,
+     "y": -209.568,
+     "z": 20.801
+    },
+    {
+     "name": "AC157 Racetrack",
+     "x": -5.361,
+     "y": 238.463,
+     "z": 203.044
+    },
+    {
+     "name": "Jumptown",
+     "x": 268.025,
+     "y": 143.784,
+     "z": 74.777
+    },
+    {
+     "name": "Utopia",
+     "x": 0.106,
+     "y": -0.425,
+     "z": -313.108
+    },
+    {
+     "name": "Security Post Wan",
+     "x": -208.492,
+     "y": 53.177,
+     "z": -227.351
+    },
+    {
+     "name": "Security Post Opal",
+     "x": 241.09,
+     "y": 96.618,
+     "z": -174.893
+    },
+    {
+     "name": "Connor's",
+     "x": -139.095,
+     "y": -254.344,
+     "z": 119.068
+    },
+    {
+     "name": "NT-999-XXII",
+     "x": 54.792,
+     "y": 55.827,
+     "z": -303.328
+    },
+    {
+     "name": "Afterlife",
+     "x": -254.067,
+     "y": -153.318,
+     "z": 99.652
+    },
+    {
+     "name": "Reclaimer Hijack Mission Spawn",
+     "x": 727.18,
+     "y": -162.5,
+     "z": 1.402
+    },
+    {
+     "name": "Starting Line (ArcCorp 157)",
+     "x": 6.023,
+     "y": 222.356,
+     "z": 220.313
+    },
+    {
+     "name": "Checkpoint 1",
+     "x": 6.478,
+     "y": 237.141,
+     "z": 204.49
+    },
+    {
+     "name": "Checkpoint 2",
+     "x": 37.672,
+     "y": 225.806,
+     "z": 213.592
+    },
+    {
+     "name": "Finish Line (ArcCorp 157)",
+     "x": 6.023,
+     "y": 222.356,
+     "z": 220.313
+    },
+    {
+     "name": "ObjectContainer-32",
+     "x": -132.066,
+     "y": 534.89,
+     "z": 0.0
+    },
+    {
+     "name": "Asteroid Arena Scramble Race 1",
+     "x": -520.796,
+     "y": 433.533,
+     "z": 0.067
+    },
+    {
+     "name": "Asteroid Arena Scramble Race 2",
+     "x": -492.184,
+     "y": 340.393,
+     "z": -0.963
+    },
+    {
+     "name": "Asteroid Arena Scramble Race 3",
+     "x": -414.521,
+     "y": 474.924,
+     "z": 0.356
+    },
+    {
+     "name": "Asteroid Arena Scramble Race 4",
+     "x": -488.593,
+     "y": 516.63,
+     "z": 0.051
+    },
+    {
+     "name": "Asteroid Arena General 1",
+     "x": -596.837,
+     "y": 45.458,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 2",
+     "x": -665.347,
+     "y": -216.351,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 3",
+     "x": -452.306,
+     "y": -412.26,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 4",
+     "x": -293.229,
+     "y": -587.884,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 5",
+     "x": -45.458,
+     "y": -715.787,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 6",
+     "x": 216.352,
+     "y": -584.946,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 7",
+     "x": 533.611,
+     "y": -472.744,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 8",
+     "x": 518.019,
+     "y": -223.204,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 9",
+     "x": 620.467,
+     "y": -45.458,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 10",
+     "x": 670.113,
+     "y": 169.574,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 11",
+     "x": 449.989,
+     "y": 407.127,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 12",
+     "x": 273.534,
+     "y": 589.776,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 13",
+     "x": 45.458,
+     "y": 690.352,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 14",
+     "x": -200.038,
+     "y": 625.223,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 15",
+     "x": -482.122,
+     "y": 536.904,
+     "z": -10.0
+    },
+    {
+     "name": "Asteroid Arena General 16",
+     "x": -606.314,
+     "y": 300.347,
+     "z": -10.0
+    },
+    {
+     "name": "Escort Mission Markup 1",
+     "x": 108.446,
+     "y": 542.59,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 2",
+     "x": 331.382,
+     "y": 457.211,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 3",
+     "x": 498.361,
+     "y": 288.633,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 4",
+     "x": 583.75,
+     "y": 58.652,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 5",
+     "x": 215.892,
+     "y": -540.623,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 6",
+     "x": 413.233,
+     "y": -408.879,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 7",
+     "x": 539.582,
+     "y": -206.33,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 8",
+     "x": -65.611,
+     "y": -577.127,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 9",
+     "x": -288.546,
+     "y": -491.748,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 10",
+     "x": -455.525,
+     "y": -323.17,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 11",
+     "x": -540.854,
+     "y": -41.716,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 12",
+     "x": -503.692,
+     "y": 194.099,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Mission Markup 13",
+     "x": -373.515,
+     "y": 392.478,
+     "z": 0.0
+    },
+    {
+     "name": "Escort Asteroid 1",
+     "x": -466.481,
+     "y": 487.935,
+     "z": -0.061
+    },
+    {
+     "name": "Escort Asteroid 2",
+     "x": -450.324,
+     "y": 461.488,
+     "z": 1.217
+    },
+    {
+     "name": "Escort Asteroid 3",
+     "x": -475.447,
+     "y": 417.835,
+     "z": 2.389
+    },
+    {
+     "name": "Escort Asteroid 4",
+     "x": -511.733,
+     "y": 451.031,
+     "z": 0.866
+    },
+    {
+     "name": "Escort Asteroid 5",
+     "x": -506.748,
+     "y": 488.206,
+     "z": 0.653
+    },
+    {
+     "name": "Escort Asteroid 6",
+     "x": -443.917,
+     "y": 426.399,
+     "z": 2.507
+    }
+   ]
+  }
+ ]
+}

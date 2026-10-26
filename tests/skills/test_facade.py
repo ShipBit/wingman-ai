@@ -5,6 +5,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 import yaml
 
 from api.enums import TtsProvider, WingmanProTtsProvider
@@ -276,3 +277,30 @@ def test_a_spelling_a_skill_adds_is_shown_to_the_user(monkeypatch):
     assert len(shown) == 1
     text, source = shown[0]
     assert "Houston" in text and "Hurston" in text and source == "Bob"
+
+
+def test_the_clipboard_facade_goes_through_the_service(monkeypatch):
+    from services import clipboard as service
+
+    held = {"text": "hello"}
+    monkeypatch.setattr(service, "read_text", lambda: held["text"])
+    monkeypatch.setattr(service, "write_text", lambda text: held.__setitem__("text", text))
+    board = facade.SkillClipboard()
+
+    assert _run(board.read()) == "hello"
+    _run(board.write("Coordinates: x:1 y:2 z:3"))
+    assert held["text"] == "Coordinates: x:1 y:2 z:3"
+
+
+def test_the_linux_clipboard_prefers_wayland_tools(monkeypatch):
+    from services import clipboard as service
+
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(service.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert service._linux_tool(read=True) == ["wl-paste", "--no-newline"]
+    assert service._linux_tool(read=False) == ["wl-copy"]
+
+    monkeypatch.delenv("WAYLAND_DISPLAY")
+    monkeypatch.setattr(service.shutil, "which", lambda name: None)
+    with pytest.raises(service.ClipboardError):
+        service._linux_tool(read=True)

@@ -1,0 +1,59 @@
+module: skills.sc_position.main
+name: ScPosition
+api_version: 3
+display_name: Star Citizen Position
+author: ShipBit
+auto_activate: true
+tags:
+  - Star Citizen
+  - Game Integration
+description:
+  en: Reads your position in Star Citizen through the game's /showlocation chat command and tells you the body, your height above it, the nearest known place, and distance and bearing to waypoints you saved. Stanton only, so far. Put "Read position" on a key in Commands to read it without talking.
+  de: Liest deine Position in Star Citizen über den Chat-Befehl /showlocation des Spiels und sagt dir Himmelskörper, Höhe, den nächsten bekannten Ort und Entfernung und Richtung zu gespeicherten Wegpunkten. Bisher nur Stanton. Lege "Read position" in den Commands auf eine Taste, um die Position ohne Sprechen zu lesen.
+discovery_keywords:
+  - where am i
+  - my position
+  - coordinates
+  - location
+  - waypoint
+  - how far
+  - am i there yet
+  - save this place
+  - mark this spot
+custom_properties:
+  - id: chat_toggle_key
+    name: Chat toggle key
+    hint: The game's key that shows and hides the chat window. Only used when the chat is hidden; it is hidden again afterwards.
+    value: f12
+    required: false
+    property_type: string
+  - id: chat_input_key
+    name: Chat input key
+    hint: The key that puts the cursor into the chat and sends a line.
+    value: enter
+    required: false
+    property_type: string
+  - id: paste_key
+    name: Paste key
+    hint: Pastes the command into the chat. The command is pasted, not typed, so no stray letters reach the game when the chat has no focus.
+    value: ctrl+v
+    required: false
+    property_type: string
+  - id: key_delay_ms
+    name: Delay between keys (ms)
+    hint: Raise it when the game misses keys. 50 to 1000.
+    value: 150
+    required: false
+    property_type: number
+  - id: tolerance_m
+    name: Waypoint tolerance (m)
+    hint: This close to a waypoint counts as arrived, unless the waypoint has its own. Planets turn, so a second of clock error moves a surface point by a few hundred metres; stay at 500 or more.
+    value: 1000
+    required: false
+    property_type: number
+  - id: show_in_hud
+    name: Show in HUD
+    hint: Show each reading as a HUD message when the HUD is on.
+    value: true
+    required: false
+    property_type: boolean
