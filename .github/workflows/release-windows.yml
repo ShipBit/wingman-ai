@@ -50,9 +50,9 @@ jobs:
           pip install -r requirements.txt
           # PowerShell only fails the step on the last command's exit code.
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          # faster-whisper pulls in the CPU onnxruntime, which shares its package
-          # directory with onnxruntime-gpu. See the script for why that breaks CUDA.
-          python scripts/ensure_onnxruntime_gpu.py
+          # Fails when onnxruntime-gpu and the bundled CUDA runtime don't match,
+          # which would put Parakeet on the CPU without a word in the log.
+          python scripts/check_onnxruntime_gpu.py
 
       - name: Build with PyInstaller
         run: |
