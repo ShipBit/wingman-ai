@@ -206,8 +206,11 @@ def locate(
 
 def nearest_pois(body: Body, local: tuple, count: int) -> list:
     """The `count` named places closest to a body-fixed point, with their distance in km."""
-    ranked = sorted((math.dist(local, (poi.x, poi.y, poi.z)), poi) for poi in body.pois)
-    return [(poi, distance) for distance, poi in ranked[:count]]
+    ranked = sorted(
+        ((poi, math.dist(local, (poi.x, poi.y, poi.z))) for poi in body.pois),
+        key=lambda item: (item[1], item[0].name),
+    )
+    return ranked[:count]
 
 
 def find_poi(body: Body, name: str) -> Optional[Poi]:

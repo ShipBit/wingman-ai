@@ -323,6 +323,18 @@ def test_a_broken_file_loads_as_empty(tmp_path):
     assert store.active() is None
 
 
+def test_places_sharing_coordinates_rank_without_comparing_places(bodies):
+    # Aberdeen lists Klescher Rehabilitation Facility and South Borehole at one spot;
+    # ranking by distance alone fell through to comparing the places themselves.
+    aberdeen = next(b for b in bodies if b.name == "Aberdeen")
+    klescher = geo.find_poi(aberdeen, "Klescher Rehabilitation Facility")
+
+    ranked = geo.nearest_pois(aberdeen, (klescher.x, klescher.y, klescher.z), 3)
+
+    assert [poi.name for poi, _ in ranked[:2]] == ["Klescher Rehabilitation Facility", "South Borehole"]
+    assert ranked[0][1] == 0 and ranked[1][1] == 0 and ranked[2][1] > 0
+
+
 # --- wording ---------------------------------------------------------------------
 
 from skills.sc_position.wording import describe  # noqa: E402
