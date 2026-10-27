@@ -62,9 +62,9 @@ def test_uex_still_finds_an_exact_name_with_system_one_off():
 def test_uex_refuses_to_ask_about_an_unbounded_shortlist():
     """The substring pass after difflib has no limit; a choice takes 255, and
     a list that long is not a disambiguation anyway."""
+    llm = _uex_llm(True)  # Puts skills/uexcorp on the path first.
     from uexcorp.api.llm import Llm
 
-    llm = _uex_llm(True)
     huge = [f"Ship {i}" for i in range(Llm.SYSTEM_ONE_MAX_OPTIONS + 5)]
     # (None, None): System One was not asked, the main model decides as before
     assert asyncio.run(llm._Llm__system_one_match("Ship", huge)) == (None, None)

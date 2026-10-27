@@ -171,6 +171,19 @@ def test_capture_for_the_mic_test_keeps_the_clip():
     assert controller.state == ListenState.ARMED
 
 
+def test_mic_test_numbers_survive_voice_activation_arming_again():
+    """Stopping the test arms voice activation, which starts fresh numbers.
+    The test must still report the level and score of the clip it recorded."""
+    controller, _, gate = make()
+    controller.set_voice_activation(True)
+    controller.capture_start("__test__")
+    speak(controller, silence_frames=0)
+    controller.capture_stop("__test__")
+    controller.feed(SILENCE)
+    assert gate.clip_peak == np.float32(0.3)
+    assert gate.clip_best_score == 1.0
+
+
 def test_a_long_capture_keeps_every_piece():
     """The gate cuts at max_utterance_s. A mic test held longer than that must
     still come back whole, not just its tail."""
