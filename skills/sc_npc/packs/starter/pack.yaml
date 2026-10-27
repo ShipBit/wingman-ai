@@ -6,16 +6,22 @@
 # HDMS-Anderson, Port Tressler, New Babbage, ...). Voices are per TTS provider
 # id (edge_tts, openai, elevenlabs, wingman_pro, ...); a provider without an
 # entry uses the skill's "NPC voice" setting.
+#
+# The pilot addresses an NPC by name ("Lena, got any work?"), so pick names the
+# speech recognition writes reliably in the pilot's language: short, common,
+# spelled the way they sound.
 
 pack: starter
 version: 1
 author: ShipBit
 
 npcs:
-  - id: tecia-varga
-    name: Tecia Varga
+  - id: lena-varga
+    name: Lena Varga
     place: Lorville
     shop: Tammany and Sons
+    # Other names the pilot may use for her.
+    aliases: [Miss Varga]
     voices:
       edge_tts: en-GB-SoniaNeural
       openai: nova
@@ -26,53 +32,53 @@ npcs:
     knows:
       - Lorville, its districts and who runs what there
       - Hurston Dynamics and what it does to its workers
-      - the mining outposts on Aberdeen, where her brother Marek works
+      - the mining outposts on Aberdeen, where her brother Jonas works
     wants: >
-      Someone she can trust to carry a letter to her brother Marek at
+      Someone she can trust to carry a letter to her brother Jonas at
       HDMS-Anderson on Aberdeen. The company reads her messages.
     greeting: >
       You're not from Hurston Dynamics, are you? Good. Then we can talk.
 
-  - id: marek-varga
-    name: Marek Varga
+  - id: jonas-varga
+    name: Jonas Varga
     place: HDMS-Anderson
     voices:
       edge_tts: en-GB-RyanNeural
       openai: onyx
     persona: >
-      Tecia's younger brother, mining foreman at HDMS-Anderson on Aberdeen.
+      Lena's younger brother, mining foreman at HDMS-Anderson on Aberdeen.
       Tired, friendly, talks too much when someone new shows up. Worries about
       his sister in Lorville.
     knows:
       - the mines on Aberdeen and the heat out there
       - where he hid a crate of his sister's things, a short drive east of the outpost
     wants: >
-      News from Tecia, and someone to fetch the crate he buried east of the
+      News from Lena, and someone to fetch the crate he buried east of the
       outpost before the company finds it.
 
 quests:
   - id: letter-for-aberdeen
     title: A letter for Aberdeen
-    giver: tecia-varga
+    giver: lena-varga
     offer: >
-      She has a letter for her brother Marek at HDMS-Anderson on Aberdeen and
+      She has a letter for her brother Jonas at HDMS-Anderson on Aberdeen and
       wants it carried by hand, not sent through the company.
     steps:
       - type: visit
         place: HDMS-Anderson
-        hint: Fly to HDMS-Anderson on Aberdeen and find Marek.
+        hint: Fly to HDMS-Anderson on Aberdeen and find Jonas.
         done: You have reached HDMS-Anderson.
       - type: talk
-        npc: marek-varga
-        hint: Talk to Marek and give him the letter.
-        done: Marek has the letter.
+        npc: jonas-varga
+        hint: Talk to Jonas and give him the letter.
+        done: Jonas has the letter.
       - type: reach
         # body, latitude, longitude, height in metres, tolerance in metres
         target: "Aberdeen 48.6255 8.9795 1690 800"
-        hint: Marek's crate is buried about one and a half kilometres east of the outpost. Drive out there and ask your Wingman whether you are at the spot.
-        done: You are at the spot where Marek buried the crate.
+        hint: Jonas's crate is buried about one and a half kilometres east of the outpost. Drive out there and ask your Wingman whether you are at the spot.
+        done: You are at the spot where Jonas buried the crate.
       - type: confirm
         hint: Look around for the crate and tell your Wingman when you have it.
         done: The crate is yours.
     reward: >
-      Tecia will remember this. Word of a courier who keeps quiet travels in Lorville.
+      Lena will remember this. Word of a courier who keeps quiet travels in Lorville.

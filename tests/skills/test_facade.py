@@ -322,14 +322,14 @@ def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypa
     wingman = SimpleNamespace(name="Computer", conversation=SimpleNamespace(messages=[]), _takeover=None)
     conversation = facade.SkillConversation(wingman)
 
-    _run(conversation.said_by("Tecia Varga", "Then we can talk.", skill_name="Star Citizen NPCs"))
+    _run(conversation.said_by("Lena Varga", "Then we can talk.", skill_name="Star Citizen NPCs"))
 
     text, kwargs = printed[0]
     assert text == "Then we can talk."
     assert kwargs["color"] == LogType.CHARACTER and kwargs["source"] == LogSource.WINGMAN
-    assert kwargs["source_name"] == "Tecia Varga" and kwargs["wingman_name"] == "Computer"
+    assert kwargs["source_name"] == "Lena Varga" and kwargs["wingman_name"] == "Computer"
     assert wingman.conversation.messages == [
-        {"role": "user", "content": f'{NOTE_PREFIX}Tecia Varga said: "Then we can talk."]'}
+        {"role": "user", "content": f'{NOTE_PREFIX}Lena Varga said: "Then we can talk."]'}
     ]
 
 
@@ -344,8 +344,8 @@ def test_a_registered_speaker_is_gone_after_unsubscribing():
     async def opener(name, text):
         return True
 
-    subscription = conversation.register_speaker("Tecia", opener)
-    assert wingman._speakers == {"Tecia": opener} and conversation.takeover is None
+    subscription = conversation.register_speaker("Lena", opener)
+    assert wingman._speakers == {"Lena": opener} and conversation.takeover is None
 
     subscription.unsubscribe()
     assert wingman._speakers == {}

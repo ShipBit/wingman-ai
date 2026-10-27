@@ -29,21 +29,22 @@ def _run(coro):
 
 def test_the_starter_pack_loads(packs):
     assert packs.loaded == ["starter"] and packs.problems == []
-    tecia = packs.npcs["tecia-varga"]
-    assert tecia.at("lorville") and tecia.shop == "Tammany and Sons"
-    assert tecia.voices["edge_tts"].startswith("en-GB")
+    lena = packs.npcs["lena-varga"]
+    assert lena.at("lorville") and lena.shop == "Tammany and Sons"
+    assert lena.voices["edge_tts"].startswith("en-GB")
+    assert lena.aliases == ("Miss Varga",)
     quest = packs.quests["letter-for-aberdeen"]
-    assert quest.giver == "tecia-varga"
+    assert quest.giver == "lena-varga"
     assert [s.type for s in quest.steps] == ["visit", "talk", "reach", "confirm"]
     assert quest.steps[2].target.startswith("Aberdeen ")
 
 
 def test_npcs_and_quests_are_found_loosely(packs):
-    assert packs.find_npc("tecia").id == "tecia-varga"
-    assert packs.find_npc("Marek Varga").id == "marek-varga"
+    assert packs.find_npc("lena").id == "lena-varga"
+    assert packs.find_npc("Jonas Varga").id == "jonas-varga"
     assert packs.find_npc("nobody") is None
     assert packs.find_quest("letter").id == "letter-for-aberdeen"
-    assert [n.id for n in packs.npcs_at("HDMS-Anderson")] == ["marek-varga"]
+    assert [n.id for n in packs.npcs_at("HDMS-Anderson")] == ["jonas-varga"]
     assert packs.npcs_at("Port Tressler") == []
 
 
@@ -95,19 +96,19 @@ def test_a_quest_runs_through_its_steps(packs, tmp_path):
     log = _log(packs, tmp_path)
     quest = packs.quests["letter-for-aberdeen"]
 
-    assert [q.id for q in log.offerable("tecia-varga")] == [quest.id]
+    assert [q.id for q in log.offerable("lena-varga")] == [quest.id]
     log.offer(quest)
     assert log.state(quest.id).status == OFFERED
     log.accept(quest, now=100.0)
     assert log.state(quest.id).status == ACTIVE
-    assert log.offerable("tecia-varga") == []
+    assert log.offerable("lena-varga") == []
 
     assert log.on_place("Port Tressler") == []
     (advance,) = log.on_place("hdms-anderson", now=110.0)
     assert advance.step.type == "visit" and not advance.finished and advance.next_step.type == "talk"
 
-    assert log.on_talk("tecia-varga") == []
-    (advance,) = log.on_talk("marek-varga", now=120.0)
+    assert log.on_talk("lena-varga") == []
+    (advance,) = log.on_talk("jonas-varga", now=120.0)
     assert advance.step.type == "talk" and advance.next_step.type == "reach"
 
     assert log.on_confirm(quest) is None  # the current step is reach, not confirm
@@ -117,7 +118,7 @@ def test_a_quest_runs_through_its_steps(packs, tmp_path):
     advance = log.on_confirm(quest, now=140.0)
     assert advance.finished and advance.next_step is None
     assert log.state(quest.id).status == DONE and log.state(quest.id).finished_at == 140.0
-    assert log.active() == [] and log.offerable("tecia-varga") == []
+    assert log.active() == [] and log.offerable("lena-varga") == []
 
 
 def test_the_quest_log_survives_a_restart(packs, tmp_path):
@@ -129,7 +130,7 @@ def test_the_quest_log_survives_a_restart(packs, tmp_path):
     again = _log(packs, tmp_path)
 
     assert again.state(quest.id).step == 1
-    assert "A letter for Aberdeen (step 2 of 4: talk to marek-varga)" in again.summary()
+    assert "A letter for Aberdeen (step 2 of 4: talk to jonas-varga)" in again.summary()
 
 
 def test_an_abandoned_quest_can_be_offered_again(packs, tmp_path):
@@ -138,25 +139,25 @@ def test_an_abandoned_quest_can_be_offered_again(packs, tmp_path):
     log.accept(quest)
 
     assert log.abandon(quest) and not log.abandon(quest)
-    assert [q.id for q in log.offerable("tecia-varga")] == [quest.id]
+    assert [q.id for q in log.offerable("lena-varga")] == [quest.id]
 
 
 # --- the NPC prompt ----------------------------------------------------------------
 
 def test_the_npc_prompt_holds_persona_rules_and_offers(packs):
-    tecia = packs.npcs["tecia-varga"]
+    lena = packs.npcs["lena-varga"]
     quest = packs.quests["letter-for-aberdeen"]
 
     system = dialogue.npc_system_prompt(
-        tecia, language="German", place="Lorville", world="The pilot flies a Cutlass.",
-        memory="Talked with Tecia before.", offers=[quest], active_titles=[],
+        lena, language="German", place="Lorville", world="The pilot flies a Cutlass.",
+        memory="Talked with Lena before.", offers=[quest], active_titles=[],
     )
 
-    assert system.startswith("You are Tecia Varga")
+    assert system.startswith("You are Lena Varga")
     assert "Tammany and Sons" in system and "mine worker" in system
     assert "Answer in German" in system and "IN CHARACTER" in system
     assert "'A letter for Aberdeen'" in system
-    assert "Talked with Tecia before." in system and "Cutlass" in system
+    assert "Talked with Lena before." in system and "Cutlass" in system
 
 
 def test_only_the_last_turns_reach_the_model():
@@ -187,36 +188,36 @@ def _skill(packs, here: str = "", provider: str = "edge_tts", voice_setting=None
 def test_the_npc_at_the_place_is_picked_when_none_is_named(packs):
     skill = _skill(packs, here="Lorville")
     npc, note = skill._resolve_npc("")
-    assert npc.id == "tecia-varga" and note == ""
+    assert npc.id == "lena-varga" and note == ""
 
     skill = _skill(packs, here="Port Tressler")
     npc, note = skill._resolve_npc("")
     assert npc is None and "no one to talk to at Port Tressler" in note
 
-    npc, note = skill._resolve_npc("marek")
-    assert npc.id == "marek-varga"
+    npc, note = skill._resolve_npc("jonas")
+    assert npc.id == "jonas-varga"
     npc, note = skill._resolve_npc("ghost")
-    assert npc is None and "No NPC called 'ghost'" in note and "Tecia Varga" in note
+    assert npc is None and "No NPC called 'ghost'" in note and "Lena Varga" in note
 
 
 def test_the_world_says_when_the_pilot_is_elsewhere(packs):
     skill = _skill(packs, here="Port Tressler")
-    assert "over comms from Port Tressler" in skill._world(packs.npcs["tecia-varga"])
+    assert "over comms from Port Tressler" in skill._world(packs.npcs["lena-varga"])
     skill = _skill(packs, here="Lorville")
-    assert skill._world(packs.npcs["tecia-varga"]) == ""
+    assert skill._world(packs.npcs["lena-varga"]) == ""
 
 
 def test_the_voice_comes_from_the_pack_then_the_setting(packs):
-    tecia = packs.npcs["tecia-varga"]
+    lena = packs.npcs["lena-varga"]
     skill = _skill(packs, provider="edge_tts")
-    assert skill._voice_for(tecia) == "en-GB-SoniaNeural"
+    assert skill._voice_for(lena) == "en-GB-SoniaNeural"
 
     skill = _skill(packs, provider="elevenlabs")
-    assert skill._voice_for(tecia) is None
+    assert skill._voice_for(lena) is None
 
     skill = _skill(packs, provider="elevenlabs")
     skill.retrieve_custom_property_value = lambda name, errors: SimpleNamespace(provider=skill._provider_enum, voice="Rachel")
-    assert skill._voice_for(tecia) == "Rachel"
+    assert skill._voice_for(lena) == "Rachel"
 
 
 # --- talking directly: the skill takes the conversation ----------------------------
@@ -321,17 +322,18 @@ def _talking_skill(packs, tmp_path, *, here="Lorville", replies=("Then we can ta
     return skill
 
 
-def test_addressing_tecia_by_name_hands_the_conversation_to_her(packs, tmp_path):
+def test_addressing_lena_by_name_hands_the_conversation_to_her(packs, tmp_path):
     skill = _talking_skill(packs, tmp_path, replies=("Depends. Who's asking?",))
     skill._register_names()
-    assert {"Tecia", "Tecia Varga", "Marek", "Marek Varga"} <= set(skill._names)
+    assert {"Lena", "Lena Varga", "Miss Varga", "Jonas", "Jonas Varga"} <= set(skill._names)
+    assert skill._names["Miss Varga"] == "lena-varga"
     assert set(skill.wingman.conversation.registered) == set(skill._names)
 
-    keep = _run(skill._addressed("Tecia", "Tecia, got any work?"))
+    keep = _run(skill._addressed("Lena", "Lena, got any work?"))
 
     conversation, tts = skill.wingman.conversation, skill.wingman.tts
-    assert keep and conversation.takeover.speaker == "Tecia Varga" and conversation.handler == skill._turn
-    assert [who for who, _ in conversation.said] == ["Tecia Varga", "Tecia Varga"]
+    assert keep and conversation.takeover.speaker == "Lena Varga" and conversation.handler == skill._turn
+    assert [who for who, _ in conversation.said] == ["Lena Varga", "Lena Varga"]
     assert "Hurston Dynamics" in conversation.said[0][1]  # her greeting, once per session
     assert conversation.said[1][1] == "Depends. Who's asking?"
     assert [voice for voice, _ in tts.spoken] == ["en-GB-SoniaNeural", "en-GB-SoniaNeural"]
@@ -341,20 +343,20 @@ def test_addressing_tecia_by_name_hands_the_conversation_to_her(packs, tmp_path)
 
 
 def test_a_goodbye_ends_the_conversation_when_system_one_hears_it(packs, tmp_path):
-    tecia = packs.npcs["tecia-varga"]
+    lena = packs.npcs["lena-varga"]
     skill = _talking_skill(packs, tmp_path, replies=("Safe travels.",), over=True)
-    assert _run(skill._start_talk(tecia, "Thanks, bye.")) is False
+    assert _run(skill._start_talk(lena, "Thanks, bye.")) is False
     assert skill._talking is None
 
     skill = _talking_skill(packs, tmp_path, replies=("Safe travels.",), over=True, available=False)
-    assert _run(skill._start_talk(tecia, "Thanks, bye.")) is True  # ends by name, leaving or silence
+    assert _run(skill._start_talk(lena, "Thanks, bye.")) is True  # ends by name, leaving or silence
 
 
 def test_agreeing_to_the_work_accepts_the_quest_and_the_wingman_says_so(packs, tmp_path):
-    tecia, quest = packs.npcs["tecia-varga"], packs.quests["letter-for-aberdeen"]
+    lena, quest = packs.npcs["lena-varga"], packs.quests["letter-for-aberdeen"]
     skill = _talking_skill(packs, tmp_path, replies=("Good. Don't read it.",), accept=True)
     skill._log.offer(quest)
-    skill._talking = tecia
+    skill._talking = lena
 
     assert _run(skill._turn("Sure, I'll carry it."))
 
@@ -365,31 +367,31 @@ def test_agreeing_to_the_work_accepts_the_quest_and_the_wingman_says_so(packs, t
     assert state["offered_work"] == ["A letter for Aberdeen"] and "accept" in questions
 
 
-def test_talking_to_marek_closes_the_talk_step(packs, tmp_path):
-    marek, quest = packs.npcs["marek-varga"], packs.quests["letter-for-aberdeen"]
-    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson", replies=("A letter? From Tecia?",))
+def test_talking_to_jonas_closes_the_talk_step(packs, tmp_path):
+    jonas, quest = packs.npcs["jonas-varga"], packs.quests["letter-for-aberdeen"]
+    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson", replies=("A letter? From Lena?",))
     skill._log.accept(quest)
     skill._log.on_place("HDMS-Anderson")
-    skill._talking = marek
+    skill._talking = jonas
 
-    assert _run(skill._turn("Hi Marek, I have a letter from your sister."))
+    assert _run(skill._turn("Hi Jonas, I have a letter from your sister."))
 
-    assert skill.wingman.conversation.shown[0].startswith("Marek has the letter.")
+    assert skill.wingman.conversation.shown[0].startswith("Jonas has the letter.")
     assert skill._log.state(quest.id).step == 2
 
 
 def test_the_tool_hands_over_and_keeps_the_wingman_silent(packs, tmp_path):
     skill = _talking_skill(packs, tmp_path)
 
-    result, instant = _run(skill.talk_to_npc("Hello", "Tecia"))
+    result, instant = _run(skill.talk_to_npc("Hello", "Lena"))
 
-    assert instant == "." and result.startswith("Tecia Varga is talking to the user now")
-    assert skill.wingman.conversation.takeover.speaker == "Tecia Varga"
+    assert instant == "." and result.startswith("Lena Varga is talking to the user now")
+    assert skill.wingman.conversation.takeover.speaker == "Lena Varga"
 
 
 def test_leaving_the_place_ends_the_conversation(packs, tmp_path):
     skill = _talking_skill(packs, tmp_path)
-    _run(skill._start_talk(packs.npcs["tecia-varga"], "Hello"))
+    _run(skill._start_talk(packs.npcs["lena-varga"], "Hello"))
 
     skill._end_talk()
 

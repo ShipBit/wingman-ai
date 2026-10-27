@@ -25,7 +25,7 @@ def _notes(wingman):
     return [m["content"][len(NOTE_PREFIX):-1] for m in wingman.conversation.messages]
 
 
-class Tecia:
+class Lena:
     """A handler that keeps the conversation until the pilot says bye."""
 
     def __init__(self):
@@ -38,19 +38,19 @@ class Tecia:
 
 def test_while_taken_over_the_handler_hears_the_user_and_the_model_does_not():
     wingman = _wingman()
-    tecia = Tecia()
-    takeover = wingman.take_over("Tecia Varga", tecia)
+    lena = Lena()
+    takeover = wingman.take_over("Lena Varga", lena)
 
     handled = asyncio.run(wingman._takeover_turn("Do you have work for me?"))
 
-    assert handled and tecia.heard == ["Do you have work for me?"]
+    assert handled and lena.heard == ["Do you have work for me?"]
     assert takeover.active and wingman._takeover is takeover
-    assert _notes(wingman) == ['The user said to Tecia Varga: "Do you have work for me?"']
+    assert _notes(wingman) == ['The user said to Lena Varga: "Do you have work for me?"']
 
 
 def test_the_handler_ends_the_conversation():
     wingman = _wingman()
-    takeover = wingman.take_over("Tecia Varga", Tecia())
+    takeover = wingman.take_over("Lena Varga", Lena())
 
     assert asyncio.run(wingman._takeover_turn("Thanks, bye."))
     assert not takeover.active and wingman._takeover is None
@@ -58,23 +58,23 @@ def test_the_handler_ends_the_conversation():
 
 def test_the_wingmans_name_takes_the_conversation_back():
     wingman = _wingman("Computer")
-    tecia = Tecia()
-    takeover = wingman.take_over("Tecia Varga", tecia)
+    lena = Lena()
+    takeover = wingman.take_over("Lena Varga", lena)
 
     handled = asyncio.run(wingman._takeover_turn("Computa, what time is it?"))
 
-    assert not handled and not takeover.active and tecia.heard == []
+    assert not handled and not takeover.active and lena.heard == []
     assert wingman.conversation.messages == []  # the model gets the sentence as usual
 
 
 def test_silence_ends_the_conversation():
     wingman = _wingman()
-    tecia = Tecia()
-    takeover = wingman.take_over("Tecia Varga", tecia, idle_s=60)
+    lena = Lena()
+    takeover = wingman.take_over("Lena Varga", lena, idle_s=60)
     takeover.last_at -= 61
 
     assert not asyncio.run(wingman._takeover_turn("Still there?"))
-    assert not takeover.active and tecia.heard == []
+    assert not takeover.active and lena.heard == []
 
 
 def test_a_failing_handler_releases_and_the_turn_counts_as_handled():
@@ -87,7 +87,7 @@ def test_a_failing_handler_releases_and_the_turn_counts_as_handled():
         pass
 
     wingman._takeover_failed = quiet
-    takeover = wingman.take_over("Tecia Varga", broken)
+    takeover = wingman.take_over("Lena Varga", broken)
 
     assert asyncio.run(wingman._takeover_turn("Hello?"))
     assert not takeover.active
@@ -99,15 +99,15 @@ def test_a_registered_speaker_is_addressed_by_name_like_a_wingman():
 
     async def opener(name, text):
         opened.append((name, text))
-        wingman.take_over(name, Tecia())
+        wingman.take_over(name, Lena())
         return True
 
-    wingman.register_speaker("Tecia", opener)
+    wingman.register_speaker("Lena", opener)
 
-    assert asyncio.run(wingman._takeover_turn("Tesia, do you have work?"))
-    assert opened == [("Tecia", "Tesia, do you have work?")]
-    assert wingman._takeover is not None and wingman._takeover.speaker == "Tecia"
-    assert _notes(wingman) == ['The user said to Tecia: "Tesia, do you have work?"']
+    assert asyncio.run(wingman._takeover_turn("Lehna, do you have work?"))
+    assert opened == [("Lena", "Lehna, do you have work?")]
+    assert wingman._takeover is not None and wingman._takeover.speaker == "Lena"
+    assert _notes(wingman) == ['The user said to Lena: "Lehna, do you have work?"']
 
 
 def test_an_opener_that_declines_leaves_no_trace():
@@ -116,33 +116,33 @@ def test_an_opener_that_declines_leaves_no_trace():
     async def opener(name, text):
         return False
 
-    wingman.register_speaker("Tecia", opener)
+    wingman.register_speaker("Lena", opener)
 
-    assert not asyncio.run(wingman._takeover_turn("Tecia is a nice name."))
+    assert not asyncio.run(wingman._takeover_turn("Lena is a nice name."))
     assert wingman.conversation.messages == []
 
 
 def test_the_wingman_wins_over_a_speaker_when_both_fit():
-    wingman = _wingman("Marek")
+    wingman = _wingman("Jonas")
     opened = []
 
     async def opener(name, text):
         opened.append(name)
         return True
 
-    wingman.register_speaker("Marek Varga", opener)
+    wingman.register_speaker("Jonas Varga", opener)
 
-    assert not asyncio.run(wingman._takeover_turn("Marek, gear up."))
+    assert not asyncio.run(wingman._takeover_turn("Jonas, gear up."))
     assert opened == []
 
 
 def test_unregistering_a_speaker_and_a_new_takeover_replacing_the_old():
     wingman = _wingman()
-    first = wingman.take_over("Tecia Varga", Tecia())
-    second = wingman.take_over("Marek Varga", Tecia())
+    first = wingman.take_over("Lena Varga", Lena())
+    second = wingman.take_over("Jonas Varga", Lena())
 
     assert not first.active and second.active and wingman._takeover is second
 
-    wingman.register_speaker("Tecia", None)
-    wingman.unregister_speaker("Tecia")
+    wingman.register_speaker("Lena", None)
+    wingman.unregister_speaker("Lena")
     assert wingman._speakers == {}

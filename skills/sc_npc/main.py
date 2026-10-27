@@ -128,7 +128,7 @@ class ScNpc(Skill):
                 people = ", ".join(n.name + (f" at {n.shop}" if n.shop else "") for n in npcs)
                 parts.append(
                     f"People at {self._here} the user can talk to: {people}. The user addresses them "
-                    "by name ('Tecia, ...') or you hand over with talk_to_npc; from then on they talk "
+                    "by name ('Lena, ...') or you hand over with talk_to_npc; from then on they talk "
                     "directly and you stay silent until the user says your name."
                 )
         summary = self._log.summary() if self._log else ""
@@ -353,13 +353,13 @@ class ScNpc(Skill):
     # --- the conversation with an NPC ------------------------------------------------
 
     def _register_names(self) -> None:
-        """Every NPC's full and first name become addressable like a Wingman's."""
+        """Every NPC's full name, first name and aliases become addressable like a Wingman's."""
         for speaker in self._speakers:
             speaker.unsubscribe()
         self._speakers.clear()
         self._names.clear()
         for npc in self._packs.npcs.values():
-            for name in dict.fromkeys([npc.name, npc.name.split()[0]]):
+            for name in dict.fromkeys([npc.name, npc.name.split()[0], *npc.aliases]):
                 self._names[name] = npc.id
                 self._speakers.append(self.wingman.conversation.register_speaker(name, self._addressed))
 

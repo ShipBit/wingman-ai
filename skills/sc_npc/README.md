@@ -2,7 +2,7 @@
 
 NPCs from content packs stand at places the game log names, talk in their own
 voice, remember the player and hand out quests. The user talks to them
-directly: a sentence that starts with an NPC's name ("Tecia, got any work?")
+directly: a sentence that starts with an NPC's name ("Lena, got any work?")
 goes to that NPC, not to the Wingman, and from then on the NPC has the
 conversation (`conversation.take_over`). The Wingman stays silent until the
 user says its name again ("Computer, ..."), the NPC hears a goodbye, the
@@ -30,7 +30,8 @@ problem is logged; `quests` with action `list` names it too.
 | Field | Required | What |
 |---|---|---|
 | `id` | yes | Short, unique, no spaces. Quests refer to it. |
-| `name` | yes | As the player hears it. |
+| `name` | yes | As the player hears it, and says it: the player addresses them by first or full name, so pick one the speech recognition writes reliably in the player's language (short, common, spelled as it sounds). |
+| `aliases` | no | Other names the player may use: a nickname, a title, a spelling the speech recognition tends to produce. |
 | `place` | yes | The place as the game log names it: `Lorville`, `Port Tressler`, `HDMS-Anderson`, `New Babbage`, `Area 18`, `GrimHEX`... |
 | `persona` | yes | Who they are and how they talk, three to five sentences. This is what the model plays. |
 | `shop` | no | The shop or spot at that place, shown on the HUD card. |
@@ -58,7 +59,7 @@ Step types:
 
 ## What the player can say
 
-- "Tecia, ..." → straight to Tecia, no Wingman in between
+- "Lena, ..." → straight to Lena, no Wingman in between
 - "Who is here?" and "I'm at Tammany and Sons" → `talk_to_npc` hands over
 - "Computer, ..." → the Wingman is back
 - "I'll take the job" (to the NPC), or "Computer, accept the quest" → the quest starts

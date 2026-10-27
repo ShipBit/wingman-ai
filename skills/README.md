@@ -1728,20 +1728,20 @@ conversation over so the user talks to them directly, without the Wingman in bet
 
 ```python
 async def prepare(self):
-    self._tecia = self.wingman.conversation.register_speaker("Tecia", self._addressed)
+    self._lena = self.wingman.conversation.register_speaker("Lena", self._addressed)
 
 async def _addressed(self, name: str, text: str) -> bool:
-    self.wingman.conversation.take_over("Tecia Varga", self._turn, idle_s=300)
+    self.wingman.conversation.take_over("Lena Varga", self._turn, idle_s=300)
     return await self._turn(text)
 
 async def _turn(self, text: str) -> bool:
-    line = await self.wingman.ai.generate(messages=self._as_tecia(text))
-    await self.wingman.conversation.said_by("Tecia Varga", line, skill_name=self.config.display_name)
+    line = await self.wingman.ai.generate(messages=self._as_lena(text))
+    await self.wingman.conversation.said_by("Lena Varga", line, skill_name=self.config.display_name)
     await self.wingman.tts.speak(line)          # in her voice: tts.set_voice around it
     return "[END]" not in line                  # False ends the conversation
 
 async def unload(self):
-    self._tecia.unsubscribe()
+    self._lena.unsubscribe()
     if self.wingman.conversation.takeover:
         self.wingman.conversation.takeover.release()
 ```

@@ -38,6 +38,9 @@ class Npc:
     """Said when the player first talks to them; empty = improvised."""
     voices: dict = field(default_factory=dict)
     """TTS provider id to voice, e.g. {"edge_tts": "en-GB-SoniaNeural"}."""
+    aliases: tuple = ()
+    """Other names the user may address them by: a nickname, a spelling the
+    speech recognition tends to produce."""
     pack: str = ""
 
     def at(self, place_name: str) -> bool:
@@ -145,6 +148,9 @@ def parse_pack(data, pack_name: str) -> tuple[list, list, list]:
         knows = item.get("knows") or []
         if isinstance(knows, str):
             knows = [knows]
+        aliases = item.get("aliases") or []
+        if isinstance(aliases, str):
+            aliases = [aliases]
         npcs.append(
             Npc(
                 id=npc_id,
@@ -156,6 +162,7 @@ def parse_pack(data, pack_name: str) -> tuple[list, list, list]:
                 wants=_text(item.get("wants"), f"{what}.wants", False, problems),
                 greeting=_text(item.get("greeting"), f"{what}.greeting", False, problems),
                 voices={str(k): v for k, v in voices.items()},
+                aliases=tuple(_text(a, f"{what}.aliases", False, problems) for a in aliases),
                 pack=pack_name,
             )
         )
