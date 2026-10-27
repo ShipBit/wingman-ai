@@ -138,3 +138,12 @@ def inworld_language(
     if language == SpokenLanguage.OTHER:
         return other.code if other else None
     return language.value
+
+
+def elevenlabs_language(
+    language: SpokenLanguage, other: Optional[OtherLanguageSetting] = None
+) -> Optional[str]:
+    """ElevenLabs takes the ISO 639-1 code, the same one Inworld gets. It
+    answers 400 for a code the model doesn't speak, so the provider only sends
+    it when the model lists the language."""
+    return inworld_language(language, other)

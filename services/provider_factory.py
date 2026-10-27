@@ -119,7 +119,9 @@ class ProviderFactory:
             from providers.elevenlabs import ElevenLabs, ElevenLabsTts
 
             elevenlabs = ElevenLabs(api_key=api_key, wingman_name=self._wingman_name)
-            return ElevenLabsTts(elevenlabs_instance=elevenlabs, config=self._config)
+            return ElevenLabsTts(
+                elevenlabs_instance=elevenlabs, config=self._config, settings=self._settings
+            )
         elif tts_enum == TtsProvider.HUME:
             api_key = await self._retrieve_secret("hume", errors)
             if not api_key:

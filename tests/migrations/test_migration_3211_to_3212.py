@@ -115,3 +115,15 @@ def test_a_chosen_global_key_stays():
     chosen = [{"device": "mouse", "keys": [], "mouse_button": "x2"}]
     out = _migration().migrate_settings({"global_ptt_bindings": list(chosen)})
     assert out["global_ptt_bindings"] == chosen
+
+
+def test_defaults_get_the_elevenlabs_speed_and_keep_a_set_one():
+    out = _migration().migrate_defaults(
+        {"elevenlabs": {"voice_settings": {"stability": 0.71}}}
+    )
+    assert out["elevenlabs"]["voice_settings"] == {"stability": 0.71, "speed": 1.0}
+
+    out = _migration().migrate_defaults(
+        {"elevenlabs": {"voice_settings": {"speed": 1.1}}}
+    )
+    assert out["elevenlabs"]["voice_settings"]["speed"] == 1.1

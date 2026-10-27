@@ -16,6 +16,10 @@ from the key name the recording saved ("right ctrl", "end"); elsewhere it is
 always False. Keys saved without codes are kept by name.
 
 Command actions are not touched: they keep playing exactly as before.
+
+ElevenLabs gets a speaking rate: `elevenlabs.voice_settings.speed` in the
+defaults, 1.0. Wingman configs only hold what differs, so they get it from
+there.
 """
 
 import platform
@@ -78,6 +82,13 @@ class Migration3211To3212(BaseMigration):
             va.pop("mute_toggle_key_codes", None)
 
         self.log("Converted the shut up and mute keys to bindings.")
+        return old
+
+    def migrate_defaults(self, old: dict) -> dict:
+        voice_settings = (old.get("elevenlabs") or {}).get("voice_settings")
+        if isinstance(voice_settings, dict) and "speed" not in voice_settings:
+            voice_settings["speed"] = 1.0
+            self.log("- ElevenLabs speaks at normal speed (new setting)")
         return old
 
     def migrate_wingman(self, old: dict) -> dict:

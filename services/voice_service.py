@@ -26,7 +26,7 @@ from services.audio_player import AudioPlayer
 from services import speech_text
 from services.config_manager import ConfigManager
 from services.printr import Printr
-from services.spoken_language import inworld_language
+from services.spoken_language import elevenlabs_language, inworld_language
 
 
 class VoiceService:
@@ -345,6 +345,10 @@ class VoiceService:
                 audio_player=self.audio_player,
                 wingman_name="system",
                 stream=False,
+                language=elevenlabs_language(
+                    self.config_manager.settings_config.spoken_language,
+                    self.config_manager.settings_config.other_language,
+                ),
             )
         )
 

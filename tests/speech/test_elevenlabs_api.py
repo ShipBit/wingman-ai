@@ -1,5 +1,5 @@
-"""ElevenLabs talks to the HTTP API directly: tier fallback for PCM streaming
-and voice lookup by name."""
+"""ElevenLabs talks to the HTTP API directly: tier fallback for PCM streaming,
+voice lookup by name, speed and the language hint."""
 
 import pytest
 
@@ -22,15 +22,16 @@ class FakeResponse:
         self.closed = True
 
 
-def make_config(**voice) -> ElevenlabsConfig:
+def make_config(model: str = "eleven_v4", **voice) -> ElevenlabsConfig:
     return ElevenlabsConfig(
-        model="eleven_v4",
+        model=model,
         voice=voice,
         voice_settings={
             "stability": 0.71,
             "similarity_boost": 0.8,
             "style": 0.1,
             "use_speaker_boost": True,
+            "speed": 1.1,
         },
         output_streaming=True,
         use_tts_prompt=False,
@@ -99,3 +100,22 @@ def test_voice_found_by_name_across_pages(monkeypatch):
     assert provider._get_voice_id(make_config(name="bob")) == "b"
     with pytest.raises(ValueError, match="not found"):
         provider._get_voice_id(make_config(name="Carol"))
+
+
+def test_language_code_only_goes_to_a_model_that_lists_it(monkeypatch):
+    models = [
+        {"model_id": "eleven_v4", "languages": [{"language_id": "de", "name": "German"}]},
+        {"model_id": "eleven_turbo_v2", "languages": [{"language_id": "en", "name": "English"}]},
+    ]
+    monkeypatch.setattr(
+        elevenlabs.requests, "request", lambda *a, **k: FakeResponse(200, models)
+    )
+    provider = elevenlabs.ElevenLabs("key", "Bob")
+
+    payload = provider._tts_payload("Hallo.", make_config(id="v1"), "de")
+    assert payload["language_code"] == "de"
+    assert payload["voice_settings"]["speed"] == 1.1
+
+    payload = provider._tts_payload("Hallo.", make_config("eleven_turbo_v2", id="v1"), "de")
+    assert "language_code" not in payload
+    assert "style" not in payload["voice_settings"]

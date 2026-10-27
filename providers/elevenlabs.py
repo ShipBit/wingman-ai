@@ -15,11 +15,12 @@ from api.interface import (
 from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from services.spoken_language import elevenlabs_language
 from services.sound_effects import get_sound_effects
 from services.websocket_user import WebSocketUser
 
 if TYPE_CHECKING:
-    from api.interface import WingmanConfig
+    from api.interface import SettingsConfig, WingmanConfig
 
 
 API_URL = "https://api.elevenlabs.io"
@@ -30,6 +31,8 @@ API_URL = "https://api.elevenlabs.io"
 _LOOKUP_LOCK = threading.RLock()
 _LOOKUP_GAP_SECONDS = 0.3
 _LOOKUP_CACHE_SECONDS = 60.0
+# Every answer asks which languages its model speaks: the list barely changes.
+_MODELS_CACHE_SECONDS = 3600.0
 _lookup_cache: dict[tuple[str, str], tuple[float, Any]] = {}
 _last_lookup_at = 0.0
 
@@ -42,14 +45,19 @@ _pcm_format_by_key: dict[str, str] = {}
 _MP3_FORMAT = "mp3_44100_128"
 
 
-def _throttled_lookup(api_key: str, name: str, fetch: Callable[[], Any]) -> Any:
+def _throttled_lookup(
+    api_key: str,
+    name: str,
+    fetch: Callable[[], Any],
+    max_age: float = _LOOKUP_CACHE_SECONDS,
+) -> Any:
     global _last_lookup_at
     key = (api_key, name)
     # Holding the lock during the fetch makes concurrent callers wait for the
     # first one and then take its cached answer instead of asking again.
     with _LOOKUP_LOCK:
         cached = _lookup_cache.get(key)
-        if cached and time.monotonic() - cached[0] < _LOOKUP_CACHE_SECONDS:
+        if cached and time.monotonic() - cached[0] < max_age:
             return cached[1]
 
         wait = _last_lookup_at + _LOOKUP_GAP_SECONDS - time.monotonic()
@@ -142,7 +150,10 @@ class ElevenLabs:
 
     def get_available_models(self) -> list[dict]:
         return _throttled_lookup(
-            self.api_key, "models", lambda: self._get_json("/v1/models")
+            self.api_key,
+            "models",
+            lambda: self._get_json("/v1/models"),
+            max_age=_MODELS_CACHE_SECONDS,
         )
 
     def get_models(self) -> list[ElevenlabsModel]:
@@ -186,35 +197,65 @@ class ElevenLabs:
                 return voice["voice_id"]
         raise ValueError(f"ElevenLabs voice '{config.voice.name}' not found.")
 
-    def _tts_payload(self, text: str, config: ElevenlabsConfig) -> dict:
+    def _speaks(self, model_id: str, language: str) -> bool:
+        """Whether the model lists the language. ElevenLabs answers 400 when a
+        request names one it doesn't."""
+        for model in self.get_available_models():
+            if model.get("model_id") == model_id:
+                return any(
+                    l.get("language_id") == language for l in model.get("languages", [])
+                )
+        return False
+
+    def _tts_payload(
+        self, text: str, config: ElevenlabsConfig, language: Optional[str] = None
+    ) -> dict:
         settings = config.voice_settings
         voice_settings = {
             "stability": settings.stability,
             "similarity_boost": settings.similarity_boost,
             "use_speaker_boost": settings.use_speaker_boost,
+            "speed": settings.speed,
         }
         if config.model != "eleven_turbo_v2":
             voice_settings["style"] = settings.style
-        return {"text": text, "model_id": config.model, "voice_settings": voice_settings}
+        payload = {"text": text, "model_id": config.model, "voice_settings": voice_settings}
+        if language:
+            try:
+                if self._speaks(config.model, language):
+                    payload["language_code"] = language
+            except (ValueError, requests.RequestException):
+                pass  # without the hint the model detects the language itself
+        return payload
 
-    def _generate_audio(self, text: str, config: ElevenlabsConfig, voice_id: str) -> bytes:
+    def _generate_audio(
+        self,
+        text: str,
+        config: ElevenlabsConfig,
+        voice_id: str,
+        language: Optional[str] = None,
+    ) -> bytes:
         response = self._request(
             "POST",
             f"/v1/text-to-speech/{voice_id}",
             params={"output_format": _MP3_FORMAT},
-            json=self._tts_payload(text, config),
+            json=self._tts_payload(text, config, language),
             headers={"accept": "audio/mpeg"},
         )
         return response.content
 
     def _open_pcm_stream(
-        self, text: str, config: ElevenlabsConfig, voice_id: str
+        self,
+        text: str,
+        config: ElevenlabsConfig,
+        voice_id: str,
+        language: Optional[str] = None,
     ) -> tuple[requests.Response, int]:
         """Starts a PCM stream and returns it with its sample rate. Falls back
         to 24 kHz when the account's tier doesn't get 44.1 kHz."""
         preferred = _pcm_format_by_key.get(self.api_key, _PCM_FORMATS[0])
         formats = _PCM_FORMATS[_PCM_FORMATS.index(preferred) :]
-        payload = self._tts_payload(text, config)
+        payload = self._tts_payload(text, config, language)
         for output_format in formats:
             response = requests.post(
                 f"{API_URL}/v1/text-to-speech/{voice_id}/stream",
@@ -250,9 +291,10 @@ class ElevenLabs:
         sound_config: SoundConfig,
         on_playback_started: Callable[[], None],
         on_playback_finished: Callable[[], None],
+        language: Optional[str] = None,
     ):
         response, sample_rate = await asyncio.to_thread(
-            self._open_pcm_stream, text, config, voice_id
+            self._open_pcm_stream, text, config, voice_id, language
         )
 
         if audio_player.is_playing:
@@ -352,16 +394,25 @@ class ElevenLabs:
         audio_player: AudioPlayer,
         wingman_name: str,
         stream: bool,
+        language: Optional[str] = None,
     ):
+        """language: ISO 639-1 code of the spoken language, sent when the
+        model speaks it (services/spoken_language.elevenlabs_language)."""
         try:
             voice_id = await asyncio.to_thread(self._get_voice_id, config)
             if stream:
                 await self._play_streamed(
-                    text, config, voice_id, sound_config, audio_player, wingman_name
+                    text,
+                    config,
+                    voice_id,
+                    sound_config,
+                    audio_player,
+                    wingman_name,
+                    language,
                 )
             else:
                 audio_bytes = await asyncio.to_thread(
-                    self._generate_audio, text, config, voice_id
+                    self._generate_audio, text, config, voice_id, language
                 )
                 if audio_bytes:
                     await audio_player.play_with_effects(
@@ -380,6 +431,7 @@ class ElevenLabs:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        language: Optional[str],
     ):
         def notify_playback_started():
             if sound_config.play_beep:
@@ -423,6 +475,7 @@ class ElevenLabs:
             sound_config=sound_config,
             on_playback_started=notify_playback_started,
             on_playback_finished=handle_playback_finished,
+            language=language,
         )
 
     # ─── Sound effects ───────────────────────────────────────────────────
@@ -454,9 +507,15 @@ class ElevenLabs:
 
 @tts_provider(TtsProvider.ELEVENLABS)
 class ElevenLabsTts(TtsInterface):
-    def __init__(self, elevenlabs_instance: "ElevenLabs", config: "WingmanConfig"):
+    def __init__(
+        self,
+        elevenlabs_instance: "ElevenLabs",
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+    ):
         self._elevenlabs = elevenlabs_instance
         self._config = config
+        self._settings = settings
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         await self._elevenlabs.play_audio(
@@ -466,4 +525,7 @@ class ElevenLabsTts(TtsInterface):
             audio_player=audio_player,
             wingman_name=wingman_name,
             stream=self._config.elevenlabs.output_streaming,
+            language=elevenlabs_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
         )
