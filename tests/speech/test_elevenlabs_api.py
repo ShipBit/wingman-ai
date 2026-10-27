@@ -119,3 +119,21 @@ def test_language_code_only_goes_to_a_model_that_lists_it(monkeypatch):
     payload = provider._tts_payload("Hallo.", make_config("eleven_turbo_v2", id="v1"), "de")
     assert "language_code" not in payload
     assert "style" not in payload["voice_settings"]
+
+
+def test_short_name_finds_the_elevenlabs_voice_before_an_own_one(monkeypatch):
+    page = {
+        "voices": [
+            {"voice_id": "own", "name": "Bob - deep voice", "category": "generated"},
+            {"voice_id": "stock", "name": "Bob - Dominant, Firm", "category": "premade"},
+            {"voice_id": "exact", "name": "Bobby", "category": "cloned"},
+        ],
+        "has_more": False,
+    }
+    monkeypatch.setattr(
+        elevenlabs.requests, "request", lambda *a, **k: FakeResponse(200, page)
+    )
+    provider = elevenlabs.ElevenLabs("key", "Bob")
+
+    assert provider._get_voice_id(make_config(name="Bob")) == "stock"
+    assert provider._get_voice_id(make_config(name="bobby")) == "exact"

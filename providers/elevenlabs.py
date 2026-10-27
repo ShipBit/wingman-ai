@@ -189,12 +189,25 @@ class ElevenLabs:
     # ─── Text to speech ──────────────────────────────────────────────────
 
     def _get_voice_id(self, config: ElevenlabsConfig) -> str:
+        """The configured ID, or the voice with that name. ElevenLabs names
+        voices "Adam - Dominant, Firm", while configs say "Adam": the part
+        before " - " counts too, an ElevenLabs voice before one of the
+        user's own."""
         if config.voice.id:
             return config.voice.id
         name = (config.voice.name or "").strip().lower()
-        for voice in self.get_available_voices():
+        voices = self.get_available_voices()
+        for voice in voices:
             if voice.get("name", "").strip().lower() == name:
                 return voice["voice_id"]
+        matches = [
+            voice
+            for voice in voices
+            if voice.get("name", "").split(" - ")[0].strip().lower() == name
+        ]
+        matches.sort(key=lambda voice: voice.get("category") != "premade")
+        if matches:
+            return matches[0]["voice_id"]
         raise ValueError(f"ElevenLabs voice '{config.voice.name}' not found.")
 
     def _speaks(self, model_id: str, language: str) -> bool:

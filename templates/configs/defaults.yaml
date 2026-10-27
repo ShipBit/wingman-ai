@@ -134,13 +134,13 @@ local_llm:
 edge_tts:
   voice: en-US-GuyNeural
 elevenlabs:
-  model: eleven_multilingual_v2
+  model: eleven_v4_turbo
   output_streaming: true
   voice:
     name: Adam
   voice_settings:
-    stability: 0.71
-    similarity_boost: 0.5
+    stability: 0.5
+    similarity_boost: 0.75
     style: 0.0
     use_speaker_boost: true
     speed: 1.0
