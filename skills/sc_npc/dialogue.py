@@ -79,7 +79,11 @@ def tool_result(npc: Npc, line: str, *, offered: Optional[list] = None, note: st
     """What the Wingman's model gets back after the NPC spoke."""
     text = f"{npc.name} answered (already spoken aloud to the user in {npc.name}'s voice): \"{line}\""
     if offered:
-        text += " They offered: " + ", ".join(f"'{q.title}'" for q in offered) + " (the user can accept it)."
+        titles = ", ".join(f"'{q.title}'" for q in offered)
+        text += (
+            f" With that, {npc.name} has offered the quest {titles} in their own words; "
+            "if the user wants it, call quests with accept."
+        )
     if note:
         text += " " + note
     text += " Do not repeat their words. Reply with at most one short sentence, or stay silent, unless the user asks you something."

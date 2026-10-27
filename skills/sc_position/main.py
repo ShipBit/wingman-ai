@@ -22,6 +22,7 @@ user has to say whether their chat is hidden.
 
 import asyncio
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -140,6 +141,20 @@ class ScPosition(Skill):
             self._get_bodies(), x, y, z, reading.measured_at, self._calibration().deltas()
         )
 
+    async def _fix(self) -> tuple:
+        """(Fix, "") or (None, what to tell the model). A failure says whether a
+        second try can help, so the model does not loop over the tool."""
+        try:
+            return await self._measure(), ""
+        except ReadError as error:
+            return None, f"Could not read the position: {error}"
+        except Exception as error:  # a bug in the skill or its data, not the game
+            self.log.error(f"Position failed: {error!r}\n{traceback.format_exc()}", server_only=True)
+            return None, (
+                f"The position could not be computed: an error in the skill ({type(error).__name__}: {error}). "
+                "Retrying will not help. Tell the user it is a bug in the Star Citizen Position skill."
+            )
+
     # --- wording --------------------------------------------------------------------
 
     def _describe(self, fix: geo.Fix, waypoint: "Waypoint | None") -> tuple[str, str]:
@@ -179,10 +194,9 @@ class ScPosition(Skill):
         name = (name or "").strip()
         if not name:
             return "A waypoint needs a name."
-        try:
-            fix = await self._measure()
-        except (RuntimeError, ValueError) as error:
-            return f"Could not read the position: {error}"
+        fix, error = await self._fix()
+        if fix is None:
+            return error
         tolerance = float(tolerance_m) if tolerance_m and tolerance_m > 0 else self._default_tolerance()
         waypoint = Waypoint(
             name=name, body=fix.body.name, lat=fix.lat, lon=fix.lon, alt_m=fix.alt_km * 1000,
@@ -216,10 +230,9 @@ class ScPosition(Skill):
                 store.activate(target.name)
         else:
             target = store.active()
-        try:
-            fix = await self._measure()
-        except (RuntimeError, ValueError) as error:
-            return f"Could not read the position: {error}"
+        fix, error = await self._fix()
+        if fix is None:
+            return error
         text, hud = self._describe(fix, target)
         await self._show(hud)
         return text if target else text + self._listed(store)
@@ -239,10 +252,9 @@ class ScPosition(Skill):
         place = (place or "").strip()
         if not place:
             return "Which place is the user at?"
-        try:
-            fix = await self._measure()
-        except (RuntimeError, ValueError) as error:
-            return f"Could not read the position: {error}"
+        fix, error = await self._fix()
+        if fix is None:
+            return error
         if not fix.body.rotates:
             return f"{fix.body.name} does not rotate; there is nothing to calibrate here."
         poi = geo.find_poi(fix.body, place)
@@ -283,10 +295,9 @@ class ScPosition(Skill):
     )
     async def read_position(self) -> str:
         store = self._waypoints()
-        try:
-            fix = await self._measure()
-        except (RuntimeError, ValueError) as error:
-            return f"Could not read the position: {error}"
+        fix, error = await self._fix()
+        if fix is None:
+            return error
         text, hud = self._describe(fix, store.active())
         await self._show(hud)
         return text

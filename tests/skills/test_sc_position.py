@@ -335,6 +335,50 @@ def test_places_sharing_coordinates_rank_without_comparing_places(bodies):
     assert ranked[0][1] == 0 and ranked[1][1] == 0 and ranked[2][1] > 0
 
 
+# --- the skill: what a failed measurement tells the model ---------------------------
+
+from skills.sc_position.main import ScPosition  # noqa: E402
+
+
+class _Log:
+    def __init__(self):
+        self.errors = []
+
+    def error(self, message, server_only=False):
+        self.errors.append((message, server_only))
+
+
+def _skill_whose_measurement(raises) -> ScPosition:
+    skill = object.__new__(ScPosition)
+    skill.log = _Log()
+
+    async def measure():
+        raise raises
+
+    skill._measure = measure
+    return skill
+
+
+def test_a_bug_in_the_skill_is_named_and_not_retried():
+    skill = _skill_whose_measurement(TypeError("'<' not supported between instances of 'Poi' and 'Poi'"))
+
+    fix, text = _run(skill._fix())
+
+    assert fix is None
+    assert "TypeError" in text and "Retrying will not help" in text
+    assert skill.log.errors and skill.log.errors[0][1] is True  # traceback stays in the server log
+
+
+def test_a_silent_game_is_reported_as_such():
+    skill = _skill_whose_measurement(ReadError("Star Citizen did not answer /showlocation."))
+
+    fix, text = _run(skill._fix())
+
+    assert fix is None
+    assert text.startswith("Could not read the position: Star Citizen did not answer")
+    assert not skill.log.errors
+
+
 # --- wording ---------------------------------------------------------------------
 
 from skills.sc_position.wording import describe  # noqa: E402

@@ -163,6 +163,7 @@ def test_the_tool_result_tells_the_wingman_not_to_repeat(packs):
 
     assert "already spoken aloud" in text and "Do not repeat" in text
     assert "'A letter for Aberdeen'" in text and "Others here: Bob." in text
+    assert "in their own words" in text and "quests with accept" in text
 
 
 def test_only_the_last_turns_reach_the_model():

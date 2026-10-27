@@ -113,7 +113,11 @@ class ScNpc(Skill):
                 parts.append(f"People at {self._here} the user can talk to (use talk_to_npc): {people}.")
         summary = self._log.summary() if self._log else ""
         if summary:
-            parts.append("The user's NPC quests:\n" + summary)
+            parts.append(
+                "The user's NPC quests:\n" + summary
+                + "\nWhether the user has reached a quest spot is answered by quests(check), "
+                "which measures the position itself; do not guess coordinates for check_position."
+            )
         text = "\n".join(p for p in parts if p)
         return text or None
 
@@ -287,6 +291,7 @@ class ScNpc(Skill):
             if result.startswith("Voice change failed"):
                 self.log.warning(f"{npc.name}: {result}", server_only=True)
                 voice = None
+        self.log.info(f"{npc.name}: {line}")
         try:
             await self.wingman.tts.speak(line)
         finally:
@@ -313,7 +318,7 @@ class ScNpc(Skill):
     )
     async def talk_to_npc(self, text: str, npc: str = "") -> str:
         """Args:
-        text: What the user says to the NPC, in the user's own words.
+        text: What the user says to the NPC, in the user's own words. Nothing said to them yet: a plain greeting.
         npc: Who, by name. Empty = the NPC at the current place.
         """
         target, note = self._resolve_npc(npc)

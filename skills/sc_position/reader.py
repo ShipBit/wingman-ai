@@ -92,7 +92,10 @@ class PositionReader:
                     "switch on 'Chat is hidden' in the skill's settings."
                 )
             raise ReadError(
-                "Star Citizen did not answer /showlocation. The game window needs the focus. " + hint
+                "Star Citizen did not answer /showlocation. Either the game window did not have the focus, "
+                "or the chat's state in the game differed from the 'Chat is hidden' setting (for example the "
+                "chat was left open). " + hint + " Do not retry on your own: ask the user to check, "
+                "then measure again when they say so."
             )
         text, measured_at = answer
         return Reading(text=text, measured_at=measured_at, toggled_chat=self.chat_hidden)
