@@ -1,5 +1,5 @@
-# Starter pack: one trader in Lorville, her brother at an outpost on Aberdeen,
-# and one errand between them. A template for your own packs: copy this folder
+# Starter pack: a trader and a gun dealer in Lorville, the trader's brother at
+# an outpost on Aberdeen, and one errand between the siblings. A template for your own packs: copy this folder
 # into the skill's files folder under packs/<your-pack>/ and edit.
 #
 # Places are named as the Star Citizen game log names them (Lorville,
@@ -25,6 +25,7 @@ npcs:
     voices:
       edge_tts: en-GB-SoniaNeural
       openai: nova
+      pocket_tts: en-dana
     persona: >
       Former Hurston Dynamics mine worker, now runs the counter at Tammany and
       Sons. Dry, direct, distrusts corporations, warms to people who pay on
@@ -45,6 +46,7 @@ npcs:
     voices:
       edge_tts: en-GB-RyanNeural
       openai: onyx
+      pocket_tts: en-john
     persona: >
       Lena's younger brother, mining foreman at HDMS-Anderson on Aberdeen.
       Tired, friendly, talks too much when someone new shows up. Worries about
@@ -55,6 +57,28 @@ npcs:
     wants: >
       News from Lena, and someone to fetch the crate he buried east of the
       outpost before the company finds it.
+
+  - id: nico-brandt
+    name: Nico Brandt
+    place: Lorville
+    shop: Centermass
+    voices:
+      edge_tts: en-GB-ThomasNeural
+      openai: echo
+      pocket_tts: en-tom
+    persona: >
+      Runs the counter at Centermass, the weapons shop in L19. Ex-Hurston
+      Security, left after one order too many. Gruff, short sentences, sizes
+      people up by their holster. Likes a customer who knows what they want.
+    knows:
+      - personal weapons, armor and what works outside the city
+      - the L19 district, who is trouble and who only looks like it
+      - Lena at Tammany and Sons; he buys his coffee there and owes her a favour
+    wants: >
+      Quiet business. He hears everything in L19 and tells some of it to people
+      he trusts.
+    greeting: >
+      Centermass. You buying, or just looking at the wall?
 
 quests:
   - id: letter-for-aberdeen

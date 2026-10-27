@@ -29,6 +29,8 @@ def _run(coro):
 
 def test_the_starter_pack_loads(packs):
     assert packs.loaded == ["starter"] and packs.problems == []
+    assert [n.id for n in packs.npcs_at("Lorville")] == ["lena-varga", "nico-brandt"]
+    assert {n.voices["pocket_tts"] for n in packs.npcs.values()} == {"en-dana", "en-john", "en-tom"}
     lena = packs.npcs["lena-varga"]
     assert lena.at("lorville") and lena.shop == "Tammany and Sons"
     assert lena.voices["edge_tts"].startswith("en-GB")
@@ -188,7 +190,7 @@ def _skill(packs, here: str = "", provider: str = "edge_tts", voice_setting=None
 def test_the_npc_at_the_place_is_picked_when_none_is_named(packs):
     skill = _skill(packs, here="Lorville")
     npc, note = skill._resolve_npc("")
-    assert npc.id == "lena-varga" and note == ""
+    assert npc.id == "lena-varga" and note == "Others here: Nico Brandt."
 
     skill = _skill(packs, here="Port Tressler")
     npc, note = skill._resolve_npc("")
@@ -325,7 +327,7 @@ def _talking_skill(packs, tmp_path, *, here="Lorville", replies=("Then we can ta
 def test_addressing_lena_by_name_hands_the_conversation_to_her(packs, tmp_path):
     skill = _talking_skill(packs, tmp_path, replies=("Depends. Who's asking?",))
     skill._register_here()
-    assert set(skill._names) == {"Lena", "Lena Varga", "Miss Varga"}  # Jonas is on Aberdeen
+    assert set(skill._names) == {"Lena", "Lena Varga", "Miss Varga", "Nico", "Nico Brandt"}  # Jonas is on Aberdeen
     assert skill._names["Miss Varga"] == "lena-varga"
     assert set(skill.wingman.conversation.registered) == set(skill._names)
 
@@ -407,7 +409,9 @@ def test_leaving_a_place_drops_its_people_and_the_names_are_hotwords(packs, tmp_
     skill._register_here()
     assert skill._names == {} and skill._speakers == []
 
-    assert set(skill._hotwords()) == {"Lena Varga", "Lena", "Miss Varga", "Jonas Varga", "Jonas"}
+    assert set(skill._hotwords()) == {
+        "Lena Varga", "Lena", "Miss Varga", "Jonas Varga", "Jonas", "Nico Brandt", "Nico"
+    }
 
 
 class FakeScreen:
@@ -459,3 +463,12 @@ def test_the_vision_answer_is_matched_by_name_or_shop(packs):
     assert dialogue.npc_in_answer("Jonas Varga", npcs).id == "jonas-varga"
     assert dialogue.npc_in_answer("None of them.", npcs) is None
     assert dialogue.npc_in_answer("", npcs) is None
+
+
+def test_without_a_name_the_screen_picks_among_the_people_here(packs, tmp_path):
+    skill, seen = _looking_skill(packs, tmp_path, "The sign reads Centermass.")
+
+    result, instant = _run(skill.talk_to_npc("Hi there", ""))
+
+    assert instant == "." and result.startswith("Nico Brandt is talking to the user now")
+    assert skill.wingman.conversation.takeover.speaker == "Nico Brandt" and len(seen) == 1
