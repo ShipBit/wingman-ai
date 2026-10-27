@@ -6,7 +6,7 @@
 Run after `pip install -r requirements.txt` on Windows and Linux; the release
 workflows do. On macOS it does nothing.
 
-elevenlabslib depends on the CPU package `onnxruntime`. It and `onnxruntime-gpu`
+faster-whisper depends on the CPU package `onnxruntime`. It and `onnxruntime-gpu`
 install into the same `onnxruntime/` directory, so the one pip installs last
 owns the files, and with different versions the directory ends up mixed. A CPU
 `onnxruntime_pybind11_state` next to the GPU build's CUDA provider means Parakeet
