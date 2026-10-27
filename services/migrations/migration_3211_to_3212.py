@@ -19,8 +19,10 @@ Command actions are not touched: they keep playing exactly as before.
 
 ElevenLabs moves to Eleven v4 Turbo with the voice settings ElevenLabs
 itself defaults to (GET /v1/voices/settings/default), plus the new speaking
-rate. Only values still at the old default change, so a default the user set
-stays. Wingman configs only hold what differs, so they follow the defaults.
+rate. Every config is reset to them, also values the user set: the settings
+of the old models don't carry over to v4. Only the chosen voice stays.
+Wingman configs lose their own model and voice settings and follow the
+defaults.
 """
 
 import platform
@@ -38,14 +40,16 @@ DEFAULT_GLOBAL_PTT = {
 services/input_bindings._PHYSICAL_KEYS), so it works on every layout."""
 
 
-ELEVENLABS_MODEL = ("eleven_multilingual_v2", "eleven_v4_turbo")
-"""Old default model and the new one."""
+ELEVENLABS_MODEL = "eleven_v4_turbo"
 
 ELEVENLABS_VOICE_SETTINGS = {
-    "stability": (0.71, 0.5),
-    "similarity_boost": (0.5, 0.75),
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.0,
+    "use_speaker_boost": True,
+    "speed": 1.0,
 }
-"""Old default and the new one, ElevenLabs' own default."""
+"""ElevenLabs' own defaults, plus normal speed."""
 
 
 def _bindings(*candidates) -> list[dict]:
@@ -100,23 +104,20 @@ class Migration3211To3212(BaseMigration):
         if not isinstance(elevenlabs, dict):
             return old
 
-        before, after = ELEVENLABS_MODEL
-        if elevenlabs.get("model") == before:
-            elevenlabs["model"] = after
-            self.log(f"- ElevenLabs model: {before} -> {after}")
-
-        voice_settings = elevenlabs.get("voice_settings")
-        if isinstance(voice_settings, dict):
-            for field, (before, after) in ELEVENLABS_VOICE_SETTINGS.items():
-                if voice_settings.get(field) == before:
-                    voice_settings[field] = after
-                    self.log(f"- ElevenLabs {field}: {before} -> {after}")
-            if "speed" not in voice_settings:
-                voice_settings["speed"] = 1.0
-                self.log("- ElevenLabs speaks at normal speed (new setting)")
+        elevenlabs["model"] = ELEVENLABS_MODEL
+        elevenlabs["voice_settings"] = dict(ELEVENLABS_VOICE_SETTINGS)
+        self.log(f"- ElevenLabs: {ELEVENLABS_MODEL} with its default voice settings")
         return old
 
     def migrate_wingman(self, old: dict) -> dict:
+        elevenlabs = old.get("elevenlabs")
+        if isinstance(elevenlabs, dict):
+            changed = [f for f in ("model", "voice_settings") if elevenlabs.pop(f, None) is not None]
+            if changed:
+                self.log(f"- ElevenLabs {' and '.join(changed)} back to the defaults, voice kept")
+            if not elevenlabs:
+                old.pop("elevenlabs")
+
         if "record_bindings" not in old:
             old["record_bindings"] = _bindings(
                 legacy_keyboard(

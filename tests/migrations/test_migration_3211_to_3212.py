@@ -117,48 +117,33 @@ def test_a_chosen_global_key_stays():
     assert out["global_ptt_bindings"] == chosen
 
 
-def test_elevenlabs_defaults_move_to_v4_turbo_unless_the_user_changed_them():
-    old = {
-        "elevenlabs": {
-            "model": "eleven_multilingual_v2",
-            "voice_settings": {
-                "stability": 0.71,
-                "similarity_boost": 0.5,
-                "style": 0.0,
-                "use_speaker_boost": True,
-            },
-        }
-    }
-    out = _migration().migrate_defaults(old)
-    assert out["elevenlabs"]["model"] == "eleven_v4_turbo"
-    assert out["elevenlabs"]["voice_settings"] == {
-        "stability": 0.5,
-        "similarity_boost": 0.75,
-        "style": 0.0,
-        "use_speaker_boost": True,
-        "speed": 1.0,
-    }
-
+def test_elevenlabs_defaults_are_reset_to_v4_turbo_and_the_voice_stays():
     old = {
         "elevenlabs": {
             "model": "eleven_v3",
-            "voice_settings": {"stability": 0.3, "similarity_boost": 0.9, "speed": 1.1},
+            "voice": {"name": "Bob"},
+            "output_streaming": False,
+            "voice_settings": {"stability": 0.3, "similarity_boost": 0.9, "style": 0.4},
         }
     }
-    out = _migration().migrate_defaults(old)
-    assert out["elevenlabs"]["model"] == "eleven_v3"
-    assert out["elevenlabs"]["voice_settings"] == {
-        "stability": 0.3,
-        "similarity_boost": 0.9,
-        "speed": 1.1,
+    out = _migration().migrate_defaults(old)["elevenlabs"]
+    template_elevenlabs = template("defaults.yaml")["elevenlabs"]
+    assert out["model"] == template_elevenlabs["model"]
+    assert out["voice_settings"] == template_elevenlabs["voice_settings"]
+    assert out["voice"] == {"name": "Bob"}
+    assert out["output_streaming"] is False
+
+
+def test_a_wingman_drops_its_elevenlabs_model_and_settings_but_keeps_its_voice():
+    old = {
+        "name": "Computer",
+        "elevenlabs": {
+            "model": "eleven_multilingual_v2",
+            "voice": {"id": "abc"},
+            "voice_settings": {"stability": 0.2},
+        },
     }
+    assert _migration().migrate_wingman(old)["elevenlabs"] == {"voice": {"id": "abc"}}
 
-
-def test_the_new_defaults_are_the_template():
-    elevenlabs = template("defaults.yaml")["elevenlabs"]
-    out = _migration().migrate_defaults(
-        {"elevenlabs": {"model": "eleven_multilingual_v2", "voice_settings": {"stability": 0.71, "similarity_boost": 0.5}}}
-    )
-    assert out["elevenlabs"]["model"] == elevenlabs["model"]
-    for field, value in out["elevenlabs"]["voice_settings"].items():
-        assert elevenlabs["voice_settings"][field] == value
+    old = {"name": "Computer", "elevenlabs": {"model": "eleven_v3"}}
+    assert "elevenlabs" not in _migration().migrate_wingman(old)
