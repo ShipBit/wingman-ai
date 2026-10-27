@@ -313,10 +313,12 @@ def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypa
 
     printed = []
 
-    async def print_async(self, text, **kwargs):
+    async def print_async(text, **kwargs):
         printed.append((text, kwargs))
 
-    monkeypatch.setattr(Printr, "print_async", print_async)
+    # The singleton instance, not the class: an earlier test may have put a
+    # print_async on the instance, which would shadow a class patch.
+    monkeypatch.setattr(Printr(), "print_async", print_async)
     wingman = SimpleNamespace(name="Computer", conversation=SimpleNamespace(messages=[]), _takeover=None)
     conversation = facade.SkillConversation(wingman)
 
