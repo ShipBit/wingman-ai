@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from api.enums import SpeechPriority
 from api.interface import SettingsConfig, SkillConfig
+from services.image_generation import vision_base64
 from services.skill_local_ai import SamplingPreset
 from skills.sc_npc import dialogue
 from skills.sc_npc.packs import Npc, Packs, Quest, load_packs
@@ -81,6 +82,16 @@ class ScNpc(Skill):
     def _npc_voice_setting(self):
         return self.retrieve_custom_property_value("npc_voice", [])
 
+    def _look_at_screen(self) -> bool:
+        value = self.retrieve_custom_property_value("look_at_screen", [])
+        return True if value is None else bool(value)
+
+    def _display(self) -> int:
+        try:
+            return max(1, int(self.retrieve_custom_property_value("display", []) or 1))
+        except (TypeError, ValueError):
+            return 1
+
     # --- lifecycle --------------------------------------------------------------
 
     def _files(self) -> Path:
@@ -101,10 +112,11 @@ class ScNpc(Skill):
         await super().prepare()
         self._reload_packs()
         self._subscription = self.wingman.sc_gamelog.on("*", self._on_event)
-        self._register_names()
+        self._teach_names()
         state = self.wingman.sc_gamelog.state() if self.wingman.sc_gamelog.available else None
         if state and state.get("location_status") == "at":
             self._here = str(state.get("location_name") or "")
+        self._register_here()
 
     async def unload(self) -> None:
         if self._subscription:
@@ -114,6 +126,10 @@ class ScNpc(Skill):
         for speaker in self._speakers:
             speaker.unsubscribe()
         self._speakers.clear()
+        try:
+            self.wingman.stt.remove_hotwords(self._hotwords())
+        except Exception:
+            pass
         for task in list(self._tasks):
             if not task.done():
                 task.cancel()
@@ -147,10 +163,12 @@ class ScNpc(Skill):
         if event.type == "location_arrived":
             place = str(event.data.get("location_name") or "")
             self._here = place
+            self._register_here()
             if not event.catching_up and place:
                 self._schedule(self._arrived(place))
         elif event.type == "location_departed":
             self._here = ""
+            self._register_here()
             if not event.catching_up:
                 self._schedule(self._departed())
 
@@ -344,6 +362,12 @@ class ScNpc(Skill):
         target, note = self._resolve_npc(npc)
         if target is None:
             return note
+        if not (npc or "").strip():
+            here = self._packs.npcs_at(self._here) if self._here else []
+            if len(here) > 1:
+                seen = await self._look_for(here)
+                if seen is not None:
+                    target, note = seen, ""
         await self._start_talk(target, (text or "").strip() or "Hello.")
         return (
             f"{target.name} is talking to the user now, in their own voice. You are out of the "
@@ -352,13 +376,31 @@ class ScNpc(Skill):
 
     # --- the conversation with an NPC ------------------------------------------------
 
-    def _register_names(self) -> None:
-        """Every NPC's full name, first name and aliases become addressable like a Wingman's."""
+    def _hotwords(self) -> list:
+        """The names of every NPC in the loaded packs, for the transcription."""
+        words = []
+        for npc in self._packs.npcs.values():
+            words += [npc.name, npc.name.split()[0], *npc.aliases]
+        return list(dict.fromkeys(words))
+
+    def _teach_names(self) -> None:
+        """The transcription corrects what it heard against these names, so
+        "Lena" does not come out as "Lehna" and never match."""
+        try:
+            self.wingman.stt.add_hotwords(self._hotwords())
+        except Exception as error:
+            self.log.warning(f"Hotwords: {error}", server_only=True)
+
+    def _register_here(self) -> None:
+        """The people at the current place become addressable like a Wingman,
+        by full name, first name and alias. Nobody elsewhere: a name only
+        reaches someone who is here, and whoever routes the sentence sees a
+        short list."""
         for speaker in self._speakers:
             speaker.unsubscribe()
         self._speakers.clear()
         self._names.clear()
-        for npc in self._packs.npcs.values():
+        for npc in (self._packs.npcs_at(self._here) if self._here else []):
             for name in dict.fromkeys([npc.name, npc.name.split()[0], *npc.aliases]):
                 self._names[name] = npc.id
                 self._speakers.append(self.wingman.conversation.register_speaker(name, self._addressed))
@@ -458,6 +500,28 @@ class ScNpc(Skill):
         over = bool(answers.yes_no("over", 0.7))
         accepted = offered[0] if offered and answers.choice("accept", min_confidence=0.7) == "yes" else None
         return over, accepted
+
+    async def _look_for(self, npcs: list) -> Optional[Npc]:
+        """Which of `npcs` is in front of the user, told from a screenshot: a
+        shop sign, a counter, a name on screen. None when the screen does not
+        say, the model cannot see, or the setting is off."""
+        if not self._look_at_screen() or not npcs:
+            return None
+        try:
+            image = await self.wingman.screen.capture(self._display())
+            jpeg = await asyncio.to_thread(vision_base64, image)
+            answer = await self.wingman.ai.generate(
+                dialogue.look_prompt(npcs), image=f"data:image/jpeg;base64,{jpeg}"
+            )
+        except Exception as error:
+            self.log.warning(f"Could not look at the screen: {error}", server_only=True)
+            return None
+        seen = dialogue.npc_in_answer(answer, npcs)
+        self.log.info(
+            f"On screen: {seen.name if seen else 'none of ' + ', '.join(n.name for n in npcs)}",
+            server_only=True,
+        )
+        return seen
 
     async def _say(self, npc: Npc, line: str) -> None:
         await self.wingman.conversation.said_by(npc.name, line, skill_name=self.config.display_name)

@@ -324,8 +324,8 @@ def _talking_skill(packs, tmp_path, *, here="Lorville", replies=("Then we can ta
 
 def test_addressing_lena_by_name_hands_the_conversation_to_her(packs, tmp_path):
     skill = _talking_skill(packs, tmp_path, replies=("Depends. Who's asking?",))
-    skill._register_names()
-    assert {"Lena", "Lena Varga", "Miss Varga", "Jonas", "Jonas Varga"} <= set(skill._names)
+    skill._register_here()
+    assert set(skill._names) == {"Lena", "Lena Varga", "Miss Varga"}  # Jonas is on Aberdeen
     assert skill._names["Miss Varga"] == "lena-varga"
     assert set(skill.wingman.conversation.registered) == set(skill._names)
 
@@ -396,3 +396,66 @@ def test_leaving_the_place_ends_the_conversation(packs, tmp_path):
     skill._end_talk()
 
     assert skill._talking is None and skill.wingman.conversation.takeover.active is False
+
+
+def test_leaving_a_place_drops_its_people_and_the_names_are_hotwords(packs, tmp_path):
+    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson")
+    skill._register_here()
+    assert set(skill._names) == {"Jonas", "Jonas Varga"}
+
+    skill._here = ""
+    skill._register_here()
+    assert skill._names == {} and skill._speakers == []
+
+    assert set(skill._hotwords()) == {"Lena Varga", "Lena", "Miss Varga", "Jonas Varga", "Jonas"}
+
+
+class FakeScreen:
+    async def capture(self, display=1):
+        from PIL import Image
+
+        return Image.new("RGB", (8, 8), "white")
+
+
+def _looking_skill(packs, tmp_path, answer):
+    skill = _talking_skill(packs, tmp_path, replies=("Hm.",))
+    skill.wingman.screen = FakeScreen()
+    seen = []
+
+    async def generate(prompt="", *, image=None, messages=None):
+        if messages is not None:
+            return "Hm."
+        seen.append((prompt, image))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    skill.wingman.ai = SimpleNamespace(generate=generate)
+    return skill, seen
+
+
+def test_the_screen_tells_who_is_in_front_of_the_user(packs, tmp_path):
+    npcs = [packs.npcs["lena-varga"], packs.npcs["jonas-varga"]]
+
+    skill, seen = _looking_skill(packs, tmp_path, "Tammany and Sons")
+    assert _run(skill._look_for(npcs)).id == "lena-varga"
+    prompt, image = seen[0]
+    assert "Lena Varga (at Tammany and Sons)" in prompt and image.startswith("data:image/jpeg;base64,")
+
+    skill, _ = _looking_skill(packs, tmp_path, "none")
+    assert _run(skill._look_for(npcs)) is None
+
+    skill, _ = _looking_skill(packs, tmp_path, RuntimeError("the model cannot see"))
+    assert _run(skill._look_for(npcs)) is None
+
+    skill, seen = _looking_skill(packs, tmp_path, "Jonas")
+    skill.retrieve_custom_property_value = lambda name, errors: False if name == "look_at_screen" else None
+    assert _run(skill._look_for(npcs)) is None and seen == []
+
+
+def test_the_vision_answer_is_matched_by_name_or_shop(packs):
+    npcs = [packs.npcs["lena-varga"], packs.npcs["jonas-varga"]]
+    assert dialogue.npc_in_answer("The sign says Tammany and Sons.", npcs).id == "lena-varga"
+    assert dialogue.npc_in_answer("Jonas Varga", npcs).id == "jonas-varga"
+    assert dialogue.npc_in_answer("None of them.", npcs) is None
+    assert dialogue.npc_in_answer("", npcs) is None

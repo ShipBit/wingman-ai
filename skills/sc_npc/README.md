@@ -9,6 +9,13 @@ user says its name again ("Computer, ..."), the NPC hears a goodbye, the
 user leaves the place, or five minutes pass without a word. The Wingman can
 also hand over with `talk_to_npc` ("I'm at Tammany and Sons").
 
+Only the people at the current place are addressable, registered when the
+game log reports the arrival and dropped on departure. Their names go to the
+transcription as hotwords, so it writes them the way the pack spells them.
+When the user talks to someone without naming them and several people stand
+at the place, a screenshot tells the main model from the shop sign who is in
+front of the user ("Look at the screen" setting; needs a model that can see).
+
 NPC lines show up in the chat under the NPC's name. Whether the user is saying
 goodbye or agreeing to an offered job is judged by System One; without it, a
 conversation ends by name, by leaving, or by silence, and a job is accepted

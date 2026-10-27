@@ -47,3 +47,15 @@ custom_properties:
     value: true
     required: false
     property_type: boolean
+  - id: look_at_screen
+    name: Look at the screen
+    hint: When you talk to someone without naming them and several people stand at this place, a screenshot tells the model from the shop sign who is in front of you. Needs a main model that can see images.
+    value: true
+    required: false
+    property_type: boolean
+  - id: display
+    name: Display to capture
+    hint: The monitor Star Citizen runs on. 1 is the first.
+    value: 1
+    required: false
+    property_type: number

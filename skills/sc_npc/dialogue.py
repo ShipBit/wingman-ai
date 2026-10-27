@@ -74,3 +74,34 @@ def arrival_hint_prompt(wingman: str, language: str, npc: Npc, place: str) -> st
 def history_messages(history: list) -> list:
     """The last turns as chat messages: [(role, text), ...] -> OpenAI style."""
     return [{"role": role, "content": text} for role, text in history[-MAX_HISTORY:]]
+
+
+def look_prompt(npcs: list) -> str:
+    """Ask a vision model which of these people or shops the screenshot shows."""
+    options = "\n".join(
+        f"- {n.name}" + (f" (at {n.shop})" if n.shop else "") for n in npcs
+    )
+    return (
+        "This is a screenshot from the game Star Citizen. The pilot stands at a place where "
+        "these people work:\n"
+        f"{options}\n"
+        "Rules:\n"
+        "- Look for a shop sign, a counter, a storefront or a name on screen.\n"
+        "- Answer with the EXACT name of the one person from the list who is in view.\n"
+        "- If none of them is clearly in view, answer exactly: none\n"
+        "- Do NOT explain."
+    )
+
+
+def npc_in_answer(answer: str, npcs: list):
+    """The NPC a vision answer names, by their name or their shop; None otherwise."""
+    text = (answer or "").strip().lower()
+    if not text or text.startswith("none"):
+        return None
+    for npc in npcs:
+        if npc.name.lower() in text or (npc.shop and npc.shop.lower() in text):
+            return npc
+    for npc in npcs:
+        if npc.name.split()[0].lower() in text:
+            return npc
+    return None
