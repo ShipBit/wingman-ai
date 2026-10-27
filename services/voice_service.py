@@ -177,7 +177,7 @@ class VoiceService:
                     pool, elevenlabs.get_available_voices
                 )
 
-            convert = lambda voice: VoiceInfo(id=voice.voiceID, name=voice.name)
+            convert = lambda voice: VoiceInfo(id=voice["voice_id"], name=voice["name"])
             result = [convert(voice) for voice in voices]
             return result
         except ValueError as e:

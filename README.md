@@ -381,7 +381,6 @@ Wingman makes use of other Open Source projects internally. We would like to tha
 We use them without changes, except for [keyboard](https://github.com/boppreh/keyboard) and [mouse](https://github.com/boppreh/mouse), which ship as copies in this repository with our own fixes for macOS and Linux.
 
 - [edge-tts](https://github.com/rany2/edge-tts) - LGPL-3.0
-- [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2023 lugia19
 - [FastAPI](https://github.com/fastapi/fastapi) - MIT, © 2018 Sebastián Ramírez
 - [google-genai](https://github.com/googleapis/python-genai) - Apache-2.0
 - [httpx](https://github.com/encode/httpx) - BSD 3, © 2019 Encode OSS Ltd.

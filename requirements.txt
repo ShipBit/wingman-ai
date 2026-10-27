@@ -1,7 +1,6 @@
 aiofiles==24.1.0
 backports-tarfile>=1.0.0
 edge-tts==7.3.1
-elevenlabslib==0.32.1
 fastapi==0.128.6
 google-genai==2.31.0
 httptools==0.7.1
