@@ -2,7 +2,9 @@
 
 import pytest
 
+from services.sc_gamelog import reader as reader_module
 from services.sc_gamelog import service as service_module
+from services.sc_gamelog import tailer as tailer_module
 from services.sc_gamelog.item_names import ItemNamesSource
 from services.sc_gamelog.rules import RulesSource
 
@@ -13,6 +15,11 @@ def reader(tmp_path, monkeypatch):
     reaches GitHub for its rules or item names."""
     monkeypatch.setattr(service_module, "get_generated_files_dir", lambda _: str(tmp_path / "data"))
     monkeypatch.setattr(service_module, "POLL_SECONDS", 0.02)
+    # The parse budget is wall time. On a busy CI runner the reader thread can
+    # wait longer than that for the CPU, and the line is dropped as too slow.
+    monkeypatch.setattr(reader_module, "PARSE_TIMEOUT_SECONDS", 5.0)
+    monkeypatch.setattr(reader_module, "REGEX_TIMEOUT_SECONDS", 5.0)
+    monkeypatch.setattr(tailer_module, "REGEX_TIMEOUT_SECONDS", 5.0)
 
     async def offline(self):
         raise OSError("offline in tests")
