@@ -30,7 +30,7 @@ from api.interface import SettingsConfig, SkillConfig
 from skills.sc_position import geo
 from skills.sc_position.calibration import Calibration, CalibrationStore
 from skills.sc_position.reader import PositionReader, ReadError
-from skills.sc_position.waypoints import Waypoint, WaypointStore
+from skills.sc_position.waypoints import Waypoint, WaypointStore, parse_target
 from skills.sc_position.wording import describe
 from skills.skill_base import Skill, command_action, tool
 
@@ -204,15 +204,16 @@ class ScPosition(Skill):
     )
     async def check_position(self, waypoint: str = "") -> str:
         """Args:
-        waypoint: A saved waypoint to measure against. Empty uses the active one, if any.
+        waypoint: A saved waypoint to measure against, or an inline target "<body> <lat> <lon> <height m> [<tolerance m>]". Empty uses the active one, if any.
         """
         store = self._waypoints()
         if waypoint and waypoint.strip():
-            target = store.find(waypoint)
+            target = parse_target(waypoint) or store.find(waypoint)
             if target is None:
                 listed = self._listed(store)
                 return f"No waypoint named '{waypoint.strip()}'." + (listed or " No waypoints saved yet.")
-            store.activate(target.name)
+            if target.measured_at:  # a saved one, not an inline target
+                store.activate(target.name)
         else:
             target = store.active()
         try:

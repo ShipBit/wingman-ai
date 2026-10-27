@@ -11,7 +11,7 @@ import pytest
 from skills.sc_position import geo
 from skills.sc_position.calibration import Calibration, CalibrationStore
 from skills.sc_position.reader import ANSWER_PREFIX, COMMAND, PositionReader, ReadError
-from skills.sc_position.waypoints import Waypoint, WaypointStore
+from skills.sc_position.waypoints import Waypoint, WaypointStore, parse_target
 from tests.support import REPO_ROOT
 
 BODIES = Path(REPO_ROOT) / "skills" / "sc_position" / "data" / "bodies.json"
@@ -392,3 +392,13 @@ def test_a_waypoint_reports_arrival_or_the_way(bodies):
 
     text, hud = describe(fix, elsewhere, calibrated=True, place_km=5)
     assert "Waypoint 'Cave' is on Daymar, not here" in text
+
+
+def test_an_inline_target_is_a_waypoint_without_a_file():
+    target = parse_target("Aberdeen 12.4 -88.1 120 800")
+    assert (target.body, target.lat, target.lon, target.alt_m, target.tolerance_m) == ("Aberdeen", 12.4, -88.1, 120.0, 800.0)
+    assert parse_target("Pyro IV 1.5, 2.5, 30").body == "Pyro IV"
+    assert parse_target("Pyro IV 1.5 2.5 30").tolerance_m == 1000.0
+    assert parse_target("Treasure cave") is None
+    assert parse_target("") is None
+    assert parse_target("12 13 14 15") is None

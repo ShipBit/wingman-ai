@@ -23,6 +23,29 @@ class Waypoint:
     """The raw measurement, for the record."""
 
 
+def parse_target(text: str) -> Optional[Waypoint]:
+    """An inline target instead of a saved waypoint: `<body> <lat> <lon> <height_m> [<tolerance_m>]`,
+    e.g. "Aberdeen 12.4 -88.1 120 800". None when `text` is not of that shape."""
+    parts = (text or "").replace(",", " ").split()
+    if len(parts) < 4:
+        return None
+    numbers = []
+    for part in parts[-5:]:
+        try:
+            numbers.append(float(part))
+        except ValueError:
+            numbers = []
+    if len(numbers) < 3:
+        return None
+    body = " ".join(parts[: len(parts) - len(numbers)]).strip()
+    if not body:
+        return None
+    lat, lon, alt = numbers[0], numbers[1], numbers[2]
+    tolerance = numbers[3] if len(numbers) > 3 else 1000.0
+    return Waypoint(name=f"target on {body}", body=body, lat=lat, lon=lon, alt_m=alt,
+                    tolerance_m=max(10.0, tolerance), measured_at="", global_m=[])
+
+
 class WaypointStore:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
