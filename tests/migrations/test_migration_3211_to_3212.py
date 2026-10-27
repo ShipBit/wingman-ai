@@ -115,3 +115,35 @@ def test_a_chosen_global_key_stays():
     chosen = [{"device": "mouse", "keys": [], "mouse_button": "x2"}]
     out = _migration().migrate_settings({"global_ptt_bindings": list(chosen)})
     assert out["global_ptt_bindings"] == chosen
+
+
+def test_elevenlabs_defaults_are_reset_to_v4_turbo_and_the_voice_stays():
+    old = {
+        "elevenlabs": {
+            "model": "eleven_v3",
+            "voice": {"name": "Bob"},
+            "output_streaming": False,
+            "voice_settings": {"stability": 0.3, "similarity_boost": 0.9, "style": 0.4},
+        }
+    }
+    out = _migration().migrate_defaults(old)["elevenlabs"]
+    template_elevenlabs = template("defaults.yaml")["elevenlabs"]
+    assert out["model"] == template_elevenlabs["model"]
+    assert out["voice_settings"] == template_elevenlabs["voice_settings"]
+    assert out["voice"] == {"name": "Bob"}
+    assert out["output_streaming"] is False
+
+
+def test_a_wingman_drops_its_elevenlabs_model_and_settings_but_keeps_its_voice():
+    old = {
+        "name": "Computer",
+        "elevenlabs": {
+            "model": "eleven_multilingual_v2",
+            "voice": {"id": "abc"},
+            "voice_settings": {"stability": 0.2},
+        },
+    }
+    assert _migration().migrate_wingman(old)["elevenlabs"] == {"voice": {"id": "abc"}}
+
+    old = {"name": "Computer", "elevenlabs": {"model": "eleven_v3"}}
+    assert "elevenlabs" not in _migration().migrate_wingman(old)

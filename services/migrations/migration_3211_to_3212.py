@@ -16,6 +16,13 @@ from the key name the recording saved ("right ctrl", "end"); elsewhere it is
 always False. Keys saved without codes are kept by name.
 
 Command actions are not touched: they keep playing exactly as before.
+
+ElevenLabs moves to Eleven v4 Turbo with the voice settings ElevenLabs
+itself defaults to (GET /v1/voices/settings/default), plus the new speaking
+rate. Every config is reset to them, also values the user set: the settings
+of the old models don't carry over to v4. Only the chosen voice stays.
+Wingman configs lose their own model and voice settings and follow the
+defaults.
 """
 
 import platform
@@ -31,6 +38,18 @@ DEFAULT_GLOBAL_PTT = {
 }
 """The period key, matched by its place on the keyboard (see
 services/input_bindings._PHYSICAL_KEYS), so it works on every layout."""
+
+
+ELEVENLABS_MODEL = "eleven_v4_turbo"
+
+ELEVENLABS_VOICE_SETTINGS = {
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.0,
+    "use_speaker_boost": True,
+    "speed": 1.0,
+}
+"""ElevenLabs' own defaults, plus normal speed."""
 
 
 def _bindings(*candidates) -> list[dict]:
@@ -80,7 +99,25 @@ class Migration3211To3212(BaseMigration):
         self.log("Converted the shut up and mute keys to bindings.")
         return old
 
+    def migrate_defaults(self, old: dict) -> dict:
+        elevenlabs = old.get("elevenlabs")
+        if not isinstance(elevenlabs, dict):
+            return old
+
+        elevenlabs["model"] = ELEVENLABS_MODEL
+        elevenlabs["voice_settings"] = dict(ELEVENLABS_VOICE_SETTINGS)
+        self.log(f"- ElevenLabs: {ELEVENLABS_MODEL} with its default voice settings")
+        return old
+
     def migrate_wingman(self, old: dict) -> dict:
+        elevenlabs = old.get("elevenlabs")
+        if isinstance(elevenlabs, dict):
+            changed = [f for f in ("model", "voice_settings") if elevenlabs.pop(f, None) is not None]
+            if changed:
+                self.log(f"- ElevenLabs {' and '.join(changed)} back to the defaults, voice kept")
+            if not elevenlabs:
+                old.pop("elevenlabs")
+
         if "record_bindings" not in old:
             old["record_bindings"] = _bindings(
                 legacy_keyboard(

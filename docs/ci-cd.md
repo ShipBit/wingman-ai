@@ -23,7 +23,7 @@ Wingman AI uses a two-stage build pipeline: **Core** is built first (Python via 
 ### System Dependencies
 
 - **macOS**: `portaudio`, `sdl2` (brew); `pyobjc-framework-Quartz` (pip)
-- **Linux**: `portaudio19-dev`, `libsdl2-dev` (apt). Linux installs the CPU build of torch before `requirements.txt` and runs `scripts/ensure_onnxruntime_gpu.py` after.
+- **Linux**: `portaudio19-dev`, `libsdl2-dev` (apt). Linux installs the CPU build of torch before `requirements.txt` and runs `scripts/check_onnxruntime_gpu.py` after.
 
 ## Staging Artifacts
 

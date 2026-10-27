@@ -285,6 +285,9 @@ class ElevenlabsVoiceSettingsConfig(BaseModel):
     use_speaker_boost: bool
     """Adds a delay to the playback"""
 
+    speed: Annotated[float, Field(strict=True, ge=0.7, le=1.2)]
+    """Speaking rate, 1.0 is normal. 0.7 - 1.2, the range every model takes."""
+
 
 class ElevenlabsConfig(BaseModel):
     model: str
