@@ -1931,7 +1931,7 @@ class WingmanCore(WebSocketUser):
             return
         self.printr.print(
             f"Skipped recording ({name}) - no speech detected "
-            f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
+            f"(level {gate.clip_peak:.3f}, best speech score {gate.clip_best_score:.2f}, "
             f"threshold {gate.params.threshold:.2f})",
             color=LogType.WARNING,
             source_name=name,
@@ -2451,8 +2451,8 @@ class WingmanCore(WebSocketUser):
             return SttTestResult(
                 text="",
                 duration_s=0.0,
-                level=gate.last_peak,
-                best_score=gate.last_best_score,
+                level=gate.clip_peak,
+                best_score=gate.clip_best_score,
                 threshold=gate.params.threshold,
             )
         wav_path = self.transcription_worker.write(utterance)
@@ -2462,8 +2462,8 @@ class WingmanCore(WebSocketUser):
             text=text or "",
             duration_s=utterance.duration_s,
             transcribe_ms=int((time.perf_counter() - started) * 1000),
-            level=gate.last_peak,
-            best_score=gate.last_best_score,
+            level=gate.clip_peak,
+            best_score=gate.clip_best_score,
             threshold=gate.params.threshold,
         )
 
