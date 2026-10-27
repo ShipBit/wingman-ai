@@ -43,6 +43,8 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from providers.interfaces import LlmInterface, TtsInterface
+from services.conversation_takeover import TAKEOVER_IDLE_S, Opener, Takeover
+from services.name_match import find_name, words_of
 from services.audio.vocabulary_tools import VOCABULARY_TOOLS
 from services.hud_service import HudService
 from services.hud_tools import HUD_TOOLS, run_hud_tool
@@ -68,7 +70,7 @@ from services.token_utils import count_tokens
 from services.conversation_condenser import ConversationCondenser
 from services.context_builder import ContextBuilder
 from services.command_executor import CommandExecutor
-from services.tool_executor import ToolExecutor
+from services.tool_executor import SILENT, ToolExecutor
 from services.provider_factory import ProviderFactory
 from services.skill_registry import SkillRegistry
 from services.threading_utils import threaded_execution
@@ -249,6 +251,11 @@ class Wingman:
         # off neither speaks nor writes to memory.
         self._unloaded = False
 
+        # --- A skill talking in someone else's name (services/conversation_takeover.py) ---
+        self._takeover: Takeover | None = None
+        self._speakers: dict[str, Opener] = {}
+        """Names a skill made addressable like a Wingman, with what opens them."""
+
         # --- Image generation (lazy) ---
         self._image_subscription = None
         self._learned_window: int | None = None
@@ -386,6 +393,10 @@ class Wingman:
 
     async def unload(self):
         self._unloaded = True
+        # Someone else had the conversation: it is over with the Wingman.
+        if getattr(self, "_takeover", None) is not None:
+            self._takeover.release()
+        getattr(self, "_speakers", {}).clear()
         # A filler line not out yet stays unsaid.
         if getattr(self, "_turn_filler", None) is not None:
             self._stop_turn_filler(learn=False)
@@ -617,6 +628,9 @@ class Wingman:
                     additional_data=additional_data,
                 )
 
+                if await self._takeover_turn(transcript):
+                    return
+
                 benchmark_llm = Benchmark(label="Command/AI Processing")
                 answered = False
                 try:
@@ -672,6 +686,80 @@ class Wingman:
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
+    # ───────────────── Someone else has the conversation ───────────────── #
+
+    def take_over(self, speaker: str, handler, *, idle_s: float = TAKEOVER_IDLE_S) -> Takeover:
+        """Hand the conversation to a skill's handler: see
+        services/conversation_takeover.py. A takeover already running ends."""
+        if self._takeover is not None:
+            self._takeover.release()
+        self._takeover = Takeover(speaker, handler, idle_s, self._takeover_released)
+        return self._takeover
+
+    def _takeover_released(self, takeover: Takeover) -> None:
+        if self._takeover is takeover:
+            self._takeover = None
+
+    def register_speaker(self, name: str, opener: Opener) -> None:
+        """A sentence that starts with `name` goes to `opener` instead of the model."""
+        self._speakers[name] = opener
+
+    def unregister_speaker(self, name: str) -> None:
+        self._speakers.pop(name, None)
+
+    async def _takeover_turn(self, transcript: str) -> bool:
+        """The turn when someone else has the conversation, or is addressed by
+        name: True when it was handled here and the model is not asked.
+
+        The Wingman's own name at the start of a sentence always takes the
+        conversation back, like it picks the Wingman in voice activation."""
+        if self._takeover is None and not self._speakers:
+            return False
+        words = words_of(transcript)
+        mine = find_name(words, self.config.name)
+        takeover = self._takeover
+        if takeover is not None:
+            if mine is not None or takeover.idle():
+                takeover.release()
+                return False
+            note = self._note_said_to(takeover.speaker, transcript)
+            try:
+                await takeover.handle(transcript)
+            except Exception as error:
+                await self._takeover_failed(takeover.speaker, error)
+                takeover.release()
+            return True
+        best = None
+        for name, opener in self._speakers.items():
+            found = find_name(words, name)
+            if found is not None and (best is None or found[2] < best[0]):
+                best = (found[2], name, opener)
+        if best is None or (mine is not None and mine[2] <= best[0]):
+            return False
+        _, name, opener = best
+        note = self._note_said_to(name, transcript)
+        try:
+            handled = bool(await opener(name, transcript))
+        except Exception as error:
+            await self._takeover_failed(name, error)
+            handled = False
+        if not handled and note in self.conversation.messages:
+            self.conversation.messages.remove(note)
+        return handled
+
+    def _note_said_to(self, speaker: str, transcript: str) -> dict:
+        from services.conversation_manager import NOTE_PREFIX
+
+        note = {"role": "user", "content": f'{NOTE_PREFIX}The user said to {speaker}: "{transcript}"]'}
+        self.conversation.messages.append(note)
+        return note
+
+    async def _takeover_failed(self, speaker: str, error: Exception) -> None:
+        await printr.print_async(
+            f"The skill speaking as {speaker} failed: {error}", color=LogType.ERROR
+        )
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
     # ───────────────── Response orchestration ───────────────── #
 
     async def _get_response_for_transcript(
@@ -689,7 +777,7 @@ class Wingman:
         if instant_response:
             await self.conversation.add_assistant_message(instant_response)
             benchmark.finish_snapshot()
-            if instant_response == ".":
+            if instant_response == SILENT:
                 instant_response = None
             return instant_response, instant_response, None, True
         benchmark.finish_snapshot()
@@ -778,6 +866,8 @@ class Wingman:
                 await self.metrics.broadcast_token_usage(
                     turn_prompt_tokens, turn_completion_tokens
                 )
+                if instant_response == SILENT:
+                    return None, None, None, interrupt
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:

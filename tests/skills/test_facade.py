@@ -304,3 +304,46 @@ def test_the_linux_clipboard_prefers_wayland_tools(monkeypatch):
     monkeypatch.setattr(service.shutil, "which", lambda name: None)
     with pytest.raises(service.ClipboardError):
         service._linux_tool(read=True)
+
+
+def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypatch):
+    from api.enums import LogSource, LogType
+    from services.conversation_manager import NOTE_PREFIX
+    from services.printr import Printr
+
+    printed = []
+
+    async def print_async(self, text, **kwargs):
+        printed.append((text, kwargs))
+
+    monkeypatch.setattr(Printr, "print_async", print_async)
+    wingman = SimpleNamespace(name="Computer", conversation=SimpleNamespace(messages=[]), _takeover=None)
+    conversation = facade.SkillConversation(wingman)
+
+    _run(conversation.said_by("Tecia Varga", "Then we can talk.", skill_name="Star Citizen NPCs"))
+
+    text, kwargs = printed[0]
+    assert text == "Then we can talk."
+    assert kwargs["color"] == LogType.CHARACTER and kwargs["source"] == LogSource.WINGMAN
+    assert kwargs["source_name"] == "Tecia Varga" and kwargs["wingman_name"] == "Computer"
+    assert wingman.conversation.messages == [
+        {"role": "user", "content": f'{NOTE_PREFIX}Tecia Varga said: "Then we can talk."]'}
+    ]
+
+
+def test_a_registered_speaker_is_gone_after_unsubscribing():
+    from wingmen.wingman import Wingman
+
+    wingman = SimpleNamespace(_speakers={}, _takeover=None)
+    wingman.register_speaker = Wingman.register_speaker.__get__(wingman)
+    wingman.unregister_speaker = Wingman.unregister_speaker.__get__(wingman)
+    conversation = facade.SkillConversation(wingman)
+
+    async def opener(name, text):
+        return True
+
+    subscription = conversation.register_speaker("Tecia", opener)
+    assert wingman._speakers == {"Tecia": opener} and conversation.takeover is None
+
+    subscription.unsubscribe()
+    assert wingman._speakers == {}

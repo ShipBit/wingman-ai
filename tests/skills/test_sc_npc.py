@@ -21,6 +21,10 @@ def packs():
     return load_packs([BUNDLED])
 
 
+def _run(coro):
+    return asyncio.run(coro)
+
+
 # --- packs -----------------------------------------------------------------------
 
 def test_the_starter_pack_loads(packs):
@@ -155,17 +159,6 @@ def test_the_npc_prompt_holds_persona_rules_and_offers(packs):
     assert "Talked with Tecia before." in system and "Cutlass" in system
 
 
-def test_the_tool_result_tells_the_wingman_not_to_repeat(packs):
-    tecia = packs.npcs["tecia-varga"]
-    quest = packs.quests["letter-for-aberdeen"]
-
-    text = dialogue.tool_result(tecia, "Not from the company? Good.", offered=[quest], note="Others here: Bob.")
-
-    assert "already spoken aloud" in text and "Do not repeat" in text
-    assert "'A letter for Aberdeen'" in text and "Others here: Bob." in text
-    assert "in their own words" in text and "quests with accept" in text
-
-
 def test_only_the_last_turns_reach_the_model():
     history = [("user", str(i)) for i in range(20)]
     assert len(dialogue.history_messages(history)) == dialogue.MAX_HISTORY
@@ -224,3 +217,180 @@ def test_the_voice_comes_from_the_pack_then_the_setting(packs):
     skill = _skill(packs, provider="elevenlabs")
     skill.retrieve_custom_property_value = lambda name, errors: SimpleNamespace(provider=skill._provider_enum, voice="Rachel")
     assert skill._voice_for(tecia) == "Rachel"
+
+
+# --- talking directly: the skill takes the conversation ----------------------------
+
+class FakeTakeover:
+    def __init__(self, speaker):
+        self.speaker = speaker
+        self.active = True
+
+    def release(self):
+        self.active = False
+
+
+class FakeConversation:
+    def __init__(self):
+        self.takeover = None
+        self.handler = None
+        self.said = []
+        self.shown = []
+        self.registered = []
+
+    def take_over(self, speaker, handler, *, idle_s=300):
+        self.takeover = FakeTakeover(speaker)
+        self.handler = handler
+        return self.takeover
+
+    def register_speaker(self, name, opener):
+        self.registered.append(name)
+        return SimpleNamespace(unsubscribe=lambda: None)
+
+    async def said_by(self, speaker, text, *, skill_name=""):
+        self.said.append((speaker, text))
+
+    async def show(self, text, *, skill_name=""):
+        self.shown.append(text)
+
+
+class FakeTts:
+    def __init__(self):
+        self.voice = "wingman-voice"
+        self.spoken = []
+
+    async def set_voice(self, voice):
+        self.voice = voice
+        return "ok"
+
+    async def speak(self, text, **kwargs):
+        self.spoken.append((self.voice, text))
+        return True
+
+
+class FakeAnswers:
+    def __init__(self, over, accept):
+        self._over, self._accept = over, accept
+
+    def yes_no(self, key, threshold=0.5):
+        return self._over if key == "over" else None
+
+    def choice(self, key, min_confidence=0.0):
+        return ("yes" if self._accept else "no") if key == "accept" else None
+
+
+class FakeSystemOne:
+    def __init__(self, over=False, accept=False, available=True):
+        self.available = available
+        self.answers = FakeAnswers(over, accept)
+        self.asked = []
+
+    def noul(self, question):
+        return ("noul", question)
+
+    def choice(self, question, options):
+        return ("choice", question, options)
+
+    async def decide(self, state, questions):
+        self.asked.append((state, questions))
+        return self.answers
+
+
+def _talking_skill(packs, tmp_path, *, here="Lorville", replies=("Then we can talk.",), **system_one):
+    skill = _skill(packs, here=here)
+    skill._log = QuestLog(tmp_path / "quests.json", packs)
+    skill._talking = None
+    skill._speakers, skill._names, skill._tasks, skill._hinted = [], {}, set(), {}
+    skill.config = SimpleNamespace(display_name="Star Citizen NPCs")
+    quiet = lambda *args, **kwargs: None
+    skill.log = SimpleNamespace(warning=quiet, info=quiet, error=quiet)
+    pending = list(replies)
+
+    async def generate(prompt=None, *, messages=None):
+        return pending.pop(0) if len(pending) > 1 else pending[0]
+
+    skill.wingman.name = "Computer"
+    skill.wingman.language = SimpleNamespace(name="English")
+    skill.wingman.conversation = FakeConversation()
+    skill.wingman.tts = FakeTts()
+    skill.wingman.ai = SimpleNamespace(generate=generate)
+    skill.wingman.local_ai = SimpleNamespace(available=False)
+    skill.wingman.memory = SimpleNamespace(available=False)
+    skill.wingman.hud = SimpleNamespace(available=False)
+    skill.wingman.system_one = FakeSystemOne(**system_one)
+    return skill
+
+
+def test_addressing_tecia_by_name_hands_the_conversation_to_her(packs, tmp_path):
+    skill = _talking_skill(packs, tmp_path, replies=("Depends. Who's asking?",))
+    skill._register_names()
+    assert {"Tecia", "Tecia Varga", "Marek", "Marek Varga"} <= set(skill._names)
+    assert set(skill.wingman.conversation.registered) == set(skill._names)
+
+    keep = _run(skill._addressed("Tecia", "Tecia, got any work?"))
+
+    conversation, tts = skill.wingman.conversation, skill.wingman.tts
+    assert keep and conversation.takeover.speaker == "Tecia Varga" and conversation.handler == skill._turn
+    assert [who for who, _ in conversation.said] == ["Tecia Varga", "Tecia Varga"]
+    assert "Hurston Dynamics" in conversation.said[0][1]  # her greeting, once per session
+    assert conversation.said[1][1] == "Depends. Who's asking?"
+    assert [voice for voice, _ in tts.spoken] == ["en-GB-SoniaNeural", "en-GB-SoniaNeural"]
+    assert tts.voice == "wingman-voice"  # the Wingman got its voice back
+    assert skill._log.state("letter-for-aberdeen").status == OFFERED
+    assert skill.wingman.conversation.shown == []  # the Wingman said nothing
+
+
+def test_a_goodbye_ends_the_conversation_when_system_one_hears_it(packs, tmp_path):
+    tecia = packs.npcs["tecia-varga"]
+    skill = _talking_skill(packs, tmp_path, replies=("Safe travels.",), over=True)
+    assert _run(skill._start_talk(tecia, "Thanks, bye.")) is False
+    assert skill._talking is None
+
+    skill = _talking_skill(packs, tmp_path, replies=("Safe travels.",), over=True, available=False)
+    assert _run(skill._start_talk(tecia, "Thanks, bye.")) is True  # ends by name, leaving or silence
+
+
+def test_agreeing_to_the_work_accepts_the_quest_and_the_wingman_says_so(packs, tmp_path):
+    tecia, quest = packs.npcs["tecia-varga"], packs.quests["letter-for-aberdeen"]
+    skill = _talking_skill(packs, tmp_path, replies=("Good. Don't read it.",), accept=True)
+    skill._log.offer(quest)
+    skill._talking = tecia
+
+    assert _run(skill._turn("Sure, I'll carry it."))
+
+    assert skill._log.state(quest.id).status == ACTIVE
+    assert skill.wingman.conversation.shown[0].startswith("Accepted 'A letter for Aberdeen'")
+    assert [voice for voice, _ in skill.wingman.tts.spoken] == ["en-GB-SoniaNeural", "wingman-voice"]
+    state, questions = skill.wingman.system_one.asked[0]
+    assert state["offered_work"] == ["A letter for Aberdeen"] and "accept" in questions
+
+
+def test_talking_to_marek_closes_the_talk_step(packs, tmp_path):
+    marek, quest = packs.npcs["marek-varga"], packs.quests["letter-for-aberdeen"]
+    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson", replies=("A letter? From Tecia?",))
+    skill._log.accept(quest)
+    skill._log.on_place("HDMS-Anderson")
+    skill._talking = marek
+
+    assert _run(skill._turn("Hi Marek, I have a letter from your sister."))
+
+    assert skill.wingman.conversation.shown[0].startswith("Marek has the letter.")
+    assert skill._log.state(quest.id).step == 2
+
+
+def test_the_tool_hands_over_and_keeps_the_wingman_silent(packs, tmp_path):
+    skill = _talking_skill(packs, tmp_path)
+
+    result, instant = _run(skill.talk_to_npc("Hello", "Tecia"))
+
+    assert instant == "." and result.startswith("Tecia Varga is talking to the user now")
+    assert skill.wingman.conversation.takeover.speaker == "Tecia Varga"
+
+
+def test_leaving_the_place_ends_the_conversation(packs, tmp_path):
+    skill = _talking_skill(packs, tmp_path)
+    _run(skill._start_talk(packs.npcs["tecia-varga"], "Hello"))
+
+    skill._end_talk()
+
+    assert skill._talking is None and skill.wingman.conversation.takeover.active is False

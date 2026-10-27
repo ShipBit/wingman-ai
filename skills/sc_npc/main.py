@@ -27,11 +27,16 @@ from skills.sc_npc.packs import Npc, Packs, Quest, load_packs
 from skills.sc_npc.quests import Advance, QuestLog, describe_step
 from skills.skill_base import Skill, tool
 
+SILENT = "."
+"""A tool's instant response that ends the turn without a word (skills/README.md)."""
+
 if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
 BUNDLED_PACKS = Path(__file__).parent / "packs"
 HINT_COOLDOWN_SECONDS = 20 * 60
+TALK_IDLE_SECONDS = 5 * 60
+"""Without a word for this long, a conversation with an NPC is over."""
 """The same NPC is not hinted at again within this time."""
 LINE_CHARS = 400
 HUD_GROUP = "npc"
@@ -56,6 +61,12 @@ class ScNpc(Skill):
         self._met: set = set()
         """NPC ids greeted this session."""
         self._tasks: set = set()
+        self._speakers: list = []
+        """Subscriptions for the NPC names the user can address directly."""
+        self._names: dict = {}
+        """Addressable name to NPC id."""
+        self._talking: Optional[Npc] = None
+        """The NPC the user is talking to right now (the skill has the conversation)."""
 
     # --- settings, read fresh -------------------------------------------------
 
@@ -90,6 +101,7 @@ class ScNpc(Skill):
         await super().prepare()
         self._reload_packs()
         self._subscription = self.wingman.sc_gamelog.on("*", self._on_event)
+        self._register_names()
         state = self.wingman.sc_gamelog.state() if self.wingman.sc_gamelog.available else None
         if state and state.get("location_status") == "at":
             self._here = str(state.get("location_name") or "")
@@ -98,6 +110,10 @@ class ScNpc(Skill):
         if self._subscription:
             self._subscription.unsubscribe()
             self._subscription = None
+        self._end_talk()
+        for speaker in self._speakers:
+            speaker.unsubscribe()
+        self._speakers.clear()
         for task in list(self._tasks):
             if not task.done():
                 task.cancel()
@@ -110,7 +126,11 @@ class ScNpc(Skill):
             npcs = self._packs.npcs_at(self._here)
             if npcs:
                 people = ", ".join(n.name + (f" at {n.shop}" if n.shop else "") for n in npcs)
-                parts.append(f"People at {self._here} the user can talk to (use talk_to_npc): {people}.")
+                parts.append(
+                    f"People at {self._here} the user can talk to: {people}. The user addresses them "
+                    "by name ('Tecia, ...') or you hand over with talk_to_npc; from then on they talk "
+                    "directly and you stay silent until the user says your name."
+                )
         summary = self._log.summary() if self._log else ""
         if summary:
             parts.append(
@@ -169,6 +189,7 @@ class ScNpc(Skill):
             self.log.warning(f"Arrival at {place}: {error}", server_only=True)
 
     async def _departed(self) -> None:
+        self._end_talk()
         try:
             if self._show_in_hud() and self.wingman.hud.available:
                 await self._group().clear()
@@ -291,7 +312,6 @@ class ScNpc(Skill):
             if result.startswith("Voice change failed"):
                 self.log.warning(f"{npc.name}: {result}", server_only=True)
                 voice = None
-        self.log.info(f"{npc.name}: {line}")
         try:
             await self.wingman.tts.speak(line)
         finally:
@@ -311,12 +331,12 @@ class ScNpc(Skill):
 
     @tool(
         description=(
-            "Let the user talk to an NPC from the content packs: the one at the current place, "
-            "or the one named. Pass what the user says to them. The NPC's answer is spoken aloud "
-            "in their own voice by this skill."
+            "Hand the user over to an NPC from the content packs to talk directly: the one at the "
+            "current place, or the one named. The NPC then answers in their own voice and you stay "
+            "silent until the user addresses you by name."
         )
     )
-    async def talk_to_npc(self, text: str, npc: str = "") -> str:
+    async def talk_to_npc(self, text: str, npc: str = ""):
         """Args:
         text: What the user says to the NPC, in the user's own words. Nothing said to them yet: a plain greeting.
         npc: Who, by name. Empty = the NPC at the current place.
@@ -324,26 +344,136 @@ class ScNpc(Skill):
         target, note = self._resolve_npc(npc)
         if target is None:
             return note
-        text = (text or "").strip() or "Hello."
-        history = self._history.setdefault(target.id, [])
-        if target.id not in self._met and target.greeting and not history:
-            self._met.add(target.id)
-            await self._speak_as(target, target.greeting)
-            history.append(("assistant", target.greeting))
-        self._met.add(target.id)
-        line = await self._npc_answer(target, text)
-        if not line:
-            return f"{target.name} did not answer; the model gave nothing. Try again."
-        await self._speak_as(target, line)
-        history.extend([("user", text), ("assistant", line)])
-        offered = self._log.offerable(target.id) if self._log else []
-        for quest in offered:
-            self._log.offer(quest)
-        advances = self._log.on_talk(target.id) if self._log else []
-        notes = [note] + [await self._after_advance(a) for a in advances]
-        await self._remember(target, text, line)
+        await self._start_talk(target, (text or "").strip() or "Hello.")
+        return (
+            f"{target.name} is talking to the user now, in their own voice. You are out of the "
+            f"conversation until the user says your name. {note}"
+        ).strip(), SILENT
+
+    # --- the conversation with an NPC ------------------------------------------------
+
+    def _register_names(self) -> None:
+        """Every NPC's full and first name become addressable like a Wingman's."""
+        for speaker in self._speakers:
+            speaker.unsubscribe()
+        self._speakers.clear()
+        self._names.clear()
+        for npc in self._packs.npcs.values():
+            for name in dict.fromkeys([npc.name, npc.name.split()[0]]):
+                self._names[name] = npc.id
+                self._speakers.append(self.wingman.conversation.register_speaker(name, self._addressed))
+
+    async def _addressed(self, name: str, text: str) -> bool:
+        npc = self._packs.npcs.get(self._names.get(name, ""))
+        if npc is None:
+            return False
+        await self._start_talk(npc, text)
+        return True
+
+    async def _start_talk(self, npc: Npc, text: str) -> bool:
+        """The user starts talking to `npc`: the skill takes the conversation,
+        the NPC greets once per session, then answers what was said."""
+        self._talking = npc
+        self.wingman.conversation.take_over(npc.name, self._turn, idle_s=TALK_IDLE_SECONDS)
+        if npc.id not in self._met and npc.greeting:
+            self._met.add(npc.id)
+            self._history.setdefault(npc.id, []).append(("assistant", npc.greeting))
+            await self._say(npc, npc.greeting)
+        self._met.add(npc.id)
+        return await self._turn(text)
+
+    def _end_talk(self) -> None:
+        self._talking = None
+        takeover = self.wingman.conversation.takeover
+        if takeover is not None and takeover.speaker in {n.name for n in self._packs.npcs.values()}:
+            takeover.release()
+
+    async def _turn(self, text: str) -> bool:
+        """What the user said to the NPC they are talking to. False ends it."""
+        npc = self._talking
+        if npc is None:
+            return False
+        over, accepted = await self._judge(npc, text)
+        said_by_wingman = []
+        if accepted is not None:
+            said_by_wingman.append(await self._accept(accepted))
+        line = await self._npc_answer(npc, text)
+        if line:
+            self._history.setdefault(npc.id, []).extend([("user", text), ("assistant", line)])
+            await self._say(npc, line)
+        else:
+            self.log.warning(f"{npc.name} gave no answer.", server_only=True)
+        if self._log:
+            for quest in self._log.offerable(npc.id):
+                self._log.offer(quest)
+            for advance in self._log.on_talk(npc.id):
+                said_by_wingman.append(await self._after_advance(advance))
+        for note in said_by_wingman:
+            await self.wingman.conversation.show(note, skill_name=self.config.display_name)
+            await self.wingman.tts.speak(note)
+        if line:
+            await self._remember(npc, text, line)
         await self._questlog()
-        return dialogue.tool_result(target, line, offered=offered, note=" ".join(n for n in notes if n))
+        if over:
+            self._talking = None
+        return not over
+
+    async def _judge(self, npc: Npc, text: str) -> tuple:
+        """(the pilot is ending the conversation, the offered quest they just
+        agreed to or None), judged by System One. Without it: (False, None);
+        the conversation then ends by name, by leaving, or by silence."""
+        so = self.wingman.system_one
+        if not so.available:
+            return False, None
+        offered = [
+            q for q in (self._log.offerable(npc.id) if self._log else [])
+            if self._log.state(q.id) is not None and self._log.state(q.id).status == "offered"
+        ]
+        questions = {
+            "over": so.noul("Is the pilot ending the conversation: saying goodbye, leaving, or done talking?")
+        }
+        if offered:
+            questions["accept"] = so.choice(
+                "Does the pilot agree to take on the work this person offered?",
+                {
+                    "yes": "agrees, accepts, says they will do it",
+                    "no": "declines, asks more, or talks about something else",
+                },
+            )
+        history = self._history.get(npc.id, [])
+        last = next((t for role, t in reversed(history) if role == "assistant"), "")
+        try:
+            answers = await so.decide(
+                state={
+                    "person": npc.name,
+                    "person_last_said": last,
+                    "pilot_said": text,
+                    "offered_work": [q.title for q in offered],
+                },
+                questions=questions,
+            )
+        except Exception as error:
+            self.log.warning(f"System One: {error}", server_only=True)
+            return False, None
+        over = bool(answers.yes_no("over", 0.7))
+        accepted = offered[0] if offered and answers.choice("accept", min_confidence=0.7) == "yes" else None
+        return over, accepted
+
+    async def _say(self, npc: Npc, line: str) -> None:
+        await self.wingman.conversation.said_by(npc.name, line, skill_name=self.config.display_name)
+        await self._speak_as(npc, line)
+
+    async def _accept(self, quest: Quest) -> str:
+        self._log.accept(quest)
+        if self.wingman.memory.available:
+            try:
+                await self.wingman.memory.track(
+                    f"Quest '{quest.title}' for {quest.giver}: {describe_step(quest.steps[0])}"
+                )
+            except Exception:
+                pass
+        await self._questlog()
+        return f"Accepted '{quest.title}'. First step: {quest.steps[0].hint or describe_step(quest.steps[0])}"
 
     # --- quests ---------------------------------------------------------------------------
 
@@ -414,14 +544,7 @@ class ScNpc(Skill):
             picked, note = self._pick_quest(quest, ("offered",))
             if picked is None:
                 return note
-            self._log.accept(picked)
-            if self.wingman.memory.available:
-                try:
-                    await self.wingman.memory.track(f"Quest '{picked.title}' for {picked.giver}: {describe_step(picked.steps[0])}")
-                except Exception:
-                    pass
-            await self._questlog()
-            return f"Accepted '{picked.title}'. First step: {picked.steps[0].hint or describe_step(picked.steps[0])}"
+            return await self._accept(picked)
         if action == "abandon":
             picked, note = self._pick_quest(quest, ("active",))
             if picked is None:

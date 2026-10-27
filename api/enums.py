@@ -19,6 +19,7 @@ class LogType(Enum):
     LOCALMODEL = "localmodel"  # Messages from the local support/embedding model — not part of conversation history
     MEMORY = "memory"  # Persistent memory operations (recall, store, forget)
     FILLER = "filler"  # Short line spoken while a slow tool runs — not part of conversation history
+    CHARACTER = "character"  # A line said by someone a skill voices (an NPC, a caller), shown under their name
 
     # Conversation messages
     USER = "user"  # Pink/Purple - user speech/input

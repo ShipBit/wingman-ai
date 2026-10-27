@@ -1,9 +1,18 @@
 # Star Citizen NPCs
 
 NPCs from content packs stand at places the game log names, talk in their own
-voice, remember the player and hand out quests. The Wingman stays the
-go-between: the user talks to the Wingman, the Wingman calls `talk_to_npc`,
-the NPC answers aloud.
+voice, remember the player and hand out quests. The user talks to them
+directly: a sentence that starts with an NPC's name ("Tecia, got any work?")
+goes to that NPC, not to the Wingman, and from then on the NPC has the
+conversation (`conversation.take_over`). The Wingman stays silent until the
+user says its name again ("Computer, ..."), the NPC hears a goodbye, the
+user leaves the place, or five minutes pass without a word. The Wingman can
+also hand over with `talk_to_npc` ("I'm at Tammany and Sons").
+
+NPC lines show up in the chat under the NPC's name. Whether the user is saying
+goodbye or agreeing to an offered job is judged by System One; without it, a
+conversation ends by name, by leaving, or by silence, and a job is accepted
+with "Computer, accept the quest".
 
 ## Writing a pack
 
@@ -49,7 +58,9 @@ Step types:
 
 ## What the player can say
 
-- "Who is here?" and "I talk to Tecia" / "Tell her ..." → `talk_to_npc`
-- "I'll take the job" → `quests accept`
+- "Tecia, ..." → straight to Tecia, no Wingman in between
+- "Who is here?" and "I'm at Tammany and Sons" → `talk_to_npc` hands over
+- "Computer, ..." → the Wingman is back
+- "I'll take the job" (to the NPC), or "Computer, accept the quest" → the quest starts
 - "Am I at the spot?" / "I found it" → `quests check`
 - "What am I working on?" → `quests list`

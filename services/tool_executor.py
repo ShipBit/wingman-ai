@@ -12,6 +12,11 @@ from services.printr import Printr
 from services.tool_response_limiter import ToolResponseLimiter
 from services.context_budget import DEFAULT_WINDOW, ContextBudget
 
+SILENT = "."
+"""An instant response that ends the turn without a word: a command whose
+response is "." says nothing, and a tool returning (result, ".") hands the
+floor to whoever is speaking instead of the Wingman."""
+
 if TYPE_CHECKING:
     from api.interface import CommandConfig, WingmanConfig, SettingsConfig
     from services.capability_registry import CapabilityRegistry
@@ -591,7 +596,7 @@ class ToolExecutor:
                     benchmark=benchmark,
                 )
                 used_skill = skill
-                if instant_response:
+                if instant_response and instant_response != SILENT:
                     await play_to_user_fn(instant_response)
             except Exception as e:
                 await printr.print_async(

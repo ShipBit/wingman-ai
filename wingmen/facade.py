@@ -1249,6 +1249,54 @@ class SkillConversation:
 
         return user_activity.busy
 
+    @property
+    def takeover(self):
+        """Who has the conversation right now, a ``Takeover`` with ``.speaker``,
+        ``.active`` and ``.release()`` (services/conversation_takeover), or None."""
+        return self._wingman._takeover
+
+    def take_over(self, speaker: str, handler, *, idle_s: float = 300.0):
+        """Hand the conversation to ``handler``: from now on what the user says
+        goes to it, not to the model, and the Wingman says nothing.
+        ``await handler(text)`` answers in ``speaker``'s name (tts.speak in
+        their voice, said_by for the chat) and returns False when the
+        conversation is over. It also ends when the user addresses the Wingman
+        by name, after ``idle_s`` without a word, on ``release()`` and when the
+        Wingman unloads. Both sides land in the history as notes, so the
+        Wingman knows afterwards what was said. Returns the ``Takeover``."""
+        return self._wingman.take_over(speaker, handler, idle_s=idle_s)
+
+    def register_speaker(self, name: str, opener) -> Subscription:
+        """Make ``name`` addressable like a Wingman: a sentence that starts
+        with it ("Tecia, do you have work for me?") goes to
+        ``await opener(name, text)`` instead of the model, matched by sound
+        like Wingman names are. The opener usually takes over the conversation
+        and answers; it returns False to leave the sentence to the model after
+        all. The Wingman's own name wins when both fit. Unsubscribe in
+        ``unload()``."""
+        self._wingman.register_speaker(name, opener)
+        return Subscription(lambda: self._wingman.unregister_speaker(name))
+
+    async def said_by(self, speaker: str, text: str, *, skill_name: str = "") -> None:
+        """Show a line said by someone the skill voices, under their name and
+        in the chat's character style, and record it in the history as a
+        note. Speak it yourself with tts.speak."""
+        from api.enums import LogSource, LogType
+        from services.conversation_manager import NOTE_PREFIX
+        from services.printr import Printr
+
+        await Printr().print_async(
+            text,
+            color=LogType.CHARACTER,
+            source=LogSource.WINGMAN,
+            source_name=speaker,
+            wingman_name=self._wingman.name,
+            skill_name=skill_name,
+        )
+        self._wingman.conversation.messages.append(
+            {"role": "user", "content": f'{NOTE_PREFIX}{speaker} said: "{text}"]'}
+        )
+
     async def show(self, text: str, *, skill_name: str = "") -> None:
         """Show a line in the chat as said by this Wingman, like one of its
         answers. Only the display: pair it with tts.speak to say it and with

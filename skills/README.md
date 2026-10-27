@@ -616,6 +616,7 @@ class ImageGeneration(Skill):
 - Uses docstring for tool and parameter descriptions
 - `wait_response=True`: Shows "please wait" message for long operations
 - `summarize=False`: Skip AI summarization after tool execution
+- A tool may return `(result, instant_response)`: `result` goes to the model, `instant_response` is spoken right away and ends the turn. `(result, ".")` ends the turn without a word, for a tool that handed the conversation to someone else (see `conversation.take_over`).
 
 **Example:** [ImageGeneration](image_generation/main.py)
 
@@ -1715,6 +1716,38 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.user_busy` | `True` while the user holds a push-to-talk key, was just heard, or any wingman is answering. Check it before your skill speaks up on its own. |
 | `await .summarize()` | Summarize the live conversation via the **free local** model (`""` if unavailable). |
 | `await .reset()` | Reset the conversation history. |
+| `.takeover` | Who has the conversation right now (`Takeover` with `.speaker`, `.active`, `.release()`), or `None`. |
+| `.take_over(speaker, handler, *, idle_s=300)` → `Takeover` | Hand the conversation to `handler`: what the user says goes to `await handler(text)` instead of the model, and the Wingman says nothing. The handler answers in `speaker`'s name and returns `False` when the conversation is over. It also ends when the user addresses the Wingman by name, after `idle_s` without a word, on `release()` and on unload. Both sides land in the history as notes. |
+| `.register_speaker(name, opener)` → `Subscription` | Make `name` addressable like a Wingman: a sentence starting with it goes to `await opener(name, text)`, matched by sound. The opener usually takes over and answers; `False` leaves the sentence to the model. Unsubscribe in `unload()`. |
+| `await .said_by(speaker, text, *, skill_name="")` | Show a line said by someone the skill voices, under their name and in the chat's character style, and record it in the history. Speak it yourself with `tts.speak`. |
+
+#### Voicing someone else
+
+A skill that plays a character, an NPC at a counter or a caller on the radio, takes the
+conversation over so the user talks to them directly, without the Wingman in between:
+
+```python
+async def prepare(self):
+    self._tecia = self.wingman.conversation.register_speaker("Tecia", self._addressed)
+
+async def _addressed(self, name: str, text: str) -> bool:
+    self.wingman.conversation.take_over("Tecia Varga", self._turn, idle_s=300)
+    return await self._turn(text)
+
+async def _turn(self, text: str) -> bool:
+    line = await self.wingman.ai.generate(messages=self._as_tecia(text))
+    await self.wingman.conversation.said_by("Tecia Varga", line, skill_name=self.config.display_name)
+    await self.wingman.tts.speak(line)          # in her voice: tts.set_voice around it
+    return "[END]" not in line                  # False ends the conversation
+
+async def unload(self):
+    self._tecia.unsubscribe()
+    if self.wingman.conversation.takeover:
+        self.wingman.conversation.takeover.release()
+```
+
+A tool can start it too, returning `(result, ".")` so the Wingman stays silent. "Computer, ..."
+always takes the conversation back, the same way the name picks a Wingman in voice activation.
 
 ### `self.wingman.memory` — local persistent memory
 
