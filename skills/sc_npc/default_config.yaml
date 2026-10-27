@@ -1,0 +1,49 @@
+module: skills.sc_npc.main
+name: ScNpc
+api_version: 3
+display_name: Star Citizen NPCs
+author: ShipBit
+auto_activate: true
+requires:
+  - sc_gamelog
+tags:
+  - Star Citizen
+  - Game Integration
+description:
+  en: Gives the people of Star Citizen a voice. NPCs from content packs stand at real places, remember you, talk in their own voice and hand out quests that run over the game log and your position. Your Wingman tells you when someone wants to talk. Needs the Star Citizen log in the settings; quest spots need the Star Citizen Position skill.
+  de: Gibt den Leuten in Star Citizen eine Stimme. NPCs aus Content-Paketen stehen an echten Orten, erinnern sich an dich, sprechen mit eigener Stimme und vergeben Quests, die über das Spiel-Log und deine Position laufen. Dein Wingman sagt dir, wenn jemand reden will. Braucht das Star Citizen Log in den Einstellungen; Questpunkte brauchen den Skill Star Citizen Position.
+discovery_keywords:
+  - npc
+  - talk to
+  - speak with
+  - quest
+  - mission from
+  - who is here
+  - accept the job
+  - character
+prompt: |
+  NPC answers are spoken aloud by the skill in the NPC's own voice; do not repeat them.
+  When the user addresses someone at the place by name or says they talk to them, call talk_to_npc with the user's words.
+  When the user accepts a job an NPC offered, call quests with action accept and the quest's title.
+custom_properties:
+  - id: npc_voice
+    name: NPC voice
+    hint: The voice NPCs speak with when their pack names none for your TTS provider. Pick one that sounds clearly different from your Wingman. Leave empty to use the Wingman's voice.
+    value: null
+    required: false
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: false
+  - id: hint_on_arrival
+    name: Hint on arrival
+    hint: When the game log reports you at a place where an NPC stands, your Wingman mentions them once. Off means NPCs only speak when you address them.
+    value: true
+    required: false
+    property_type: boolean
+  - id: show_in_hud
+    name: Show in HUD
+    hint: NPC cards on arrival and the quest log on the info panel, when the HUD is on.
+    value: true
+    required: false
+    property_type: boolean
