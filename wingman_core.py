@@ -2072,8 +2072,9 @@ class WingmanCore(WebSocketUser):
         tower = self.tower
         if not tower:
             return
+        speaker = None
         if wingman is ANY_WINGMAN:
-            target = self._wingman_for_global_ptt(text, tower)
+            target, speaker = self._wingman_for_global_ptt(text, tower)
         else:
             target = wingman or tower.get_wingman_from_text(text)
         if not target:
@@ -2096,33 +2097,48 @@ class WingmanCore(WebSocketUser):
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(
-                    target.process(transcript=text, transcription_benchmark=benchmark)
+                    target.process(
+                        transcript=text, transcription_benchmark=benchmark, speaker=speaker
+                    )
                 )
             finally:
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
 
-    def _wingman_for_global_ptt(self, text: str, tower) -> Wingman | None:
-        """Who answers the global push-to-talk key: the wingman named in the
-        first words, else the one with the star, else the one Jev thinks most
-        likely when System One is on. If that call fails, the wingman who
-        answered last. Otherwise nobody: there is no one to guess from."""
-        target = tower.get_addressed_wingman(text) or tower.get_default_wingman()
+    def _wingman_for_global_ptt(self, text: str, tower) -> tuple[Wingman | None, str | None]:
+        """Who answers the global push-to-talk key, and the speaker it is for
+        when it is for someone a skill voices (an NPC at the user's place).
+
+        The wingman or speaker named in the first words, else the wingman
+        whose conversation a speaker has right now, else the one with the
+        star, else the one Jev thinks most likely when System One is on, with
+        the speakers at the user's place among its options. If that call
+        fails, the wingman who answered last. Otherwise nobody: there is no
+        one to guess from."""
+        target, speaker = tower.get_addressed(text)
         if target:
-            return target
+            return target, speaker
+        target = tower.get_taken_over_wingman() or tower.get_default_wingman()
+        if target:
+            return target, None
         if len(tower.wingmen) == 1:
-            return tower.wingmen[0]
+            return tower.wingmen[0], None
+        speakers = tower.speakers()
         self.routing_jev.update_settings(self.settings_service.settings)
         name = self.routing_jev.pick_wingman(
             text,
             [w.config for w in tower.wingmen],
             recent={w.name: w.conversation.last_exchange() for w in tower.wingmen},
             last_answer_from=self._last_answer_from,
+            speakers=speakers,
         )
+        if name in speakers:
+            speaker, name = name, speakers[name][1]
         target = next((w for w in tower.wingmen if w.name == name), None)
         if target:
-            self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
+            who = f"{speaker} ({target.name})" if speaker else target.name
+            self.printr.print(f"Jev picked {who} for '{text}'.", server_only=True)
         elif self.routing_jev.active:
             # Jev is on but the call failed: whoever spoke last is the best guess.
             target = next((w for w in tower.wingmen if w.name == self._last_answer_from), None)
@@ -2137,7 +2153,7 @@ class WingmanCore(WebSocketUser):
                 "or switch on Fast decisions.",
                 color=LogType.WARNING,
             )
-        return target
+        return target, speaker
 
     def _is_stop(self, words: list[str]) -> bool:
         """Whether the whole utterance is a stop command. The phrases are read

@@ -401,9 +401,14 @@ class ScNpc(Skill):
         self._speakers.clear()
         self._names.clear()
         for npc in (self._packs.npcs_at(self._here) if self._here else []):
+            description = dialogue.speaker_description(npc)
             for name in dict.fromkeys([npc.name, npc.name.split()[0], *npc.aliases]):
                 self._names[name] = npc.id
-                self._speakers.append(self.wingman.conversation.register_speaker(name, self._addressed))
+                self._speakers.append(
+                    self.wingman.conversation.register_speaker(
+                        name, self._addressed, description=description
+                    )
+                )
 
     async def _addressed(self, name: str, text: str) -> bool:
         npc = self._packs.npcs.get(self._names.get(name, ""))
@@ -508,6 +513,9 @@ class ScNpc(Skill):
         if not self._look_at_screen() or not npcs:
             return None
         try:
+            if not await self.wingman.ai.sees_images():
+                self.log.info("The main model does not take images; no look at the screen.", server_only=True)
+                return None
             image = await self.wingman.screen.capture(self._display())
             jpeg = await asyncio.to_thread(vision_base64, image)
             answer = await self.wingman.ai.generate(

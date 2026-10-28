@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from api.interface import CommandConfig, WingmanConfig
 from services.jev_decisions import (
+    SPEAKER_INSTRUCTIONS,
+    WINGMAN_INSTRUCTIONS,
     read_wingman,
     wingman_description,
     wingman_questions,
@@ -47,9 +49,10 @@ class FakeJev:
     def update_settings(self, _settings):
         pass
 
-    def pick_wingman(self, text, configs, recent=None, last_answer_from=None):
+    def pick_wingman(self, text, configs, recent=None, last_answer_from=None, speakers=None):
         self.asked.append((text, [c.name for c in configs]))
         self.context = (recent, last_answer_from)
+        self.speakers = speakers
         return self.pick
 
 
@@ -65,7 +68,7 @@ def core(jev):
 def test_a_name_in_the_first_words_wins():
     jev = FakeJev("ATC")
     t = tower(config("Computer", default=True), config("ATC"))
-    target = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
+    target, _ = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
     assert target.name == "ATC"
     assert jev.asked == []
 
@@ -73,7 +76,7 @@ def test_a_name_in_the_first_words_wins():
 def test_without_a_name_the_star_answers():
     jev = FakeJev("ATC")
     t = tower(config("Computer", default=True), config("ATC"))
-    target = core(jev)._wingman_for_global_ptt("Requesting permission to land.", t)
+    target, _ = core(jev)._wingman_for_global_ptt("Requesting permission to land.", t)
     assert target.name == "Computer"
     assert jev.asked == []
 
@@ -81,7 +84,7 @@ def test_without_a_name_the_star_answers():
 def test_without_name_and_star_jev_picks():
     jev = FakeJev("ATC")
     t = tower(config("Computer"), config("ATC"))
-    target = core(jev)._wingman_for_global_ptt("Requesting permission to land.", t)
+    target, _ = core(jev)._wingman_for_global_ptt("Requesting permission to land.", t)
     assert target.name == "ATC"
     assert jev.asked == [("Requesting permission to land.", ["Computer", "ATC"])]
 
@@ -89,17 +92,17 @@ def test_without_name_and_star_jev_picks():
 def test_when_the_jev_call_fails_the_last_speaker_answers():
     """Someone who held the key wants an answer: nothing happening looks broken."""
     t = tower(config("Computer"), config("ATC"))
-    assert core(FakeJev(None))._wingman_for_global_ptt("Hello there.", t).name == "ATC"
+    assert core(FakeJev(None))._wingman_for_global_ptt("Hello there.", t)[0].name == "ATC"
 
 
 def test_without_jev_nobody_answers():
     t = tower(config("Computer"), config("ATC"))
-    assert core(FakeJev(None, active=False))._wingman_for_global_ptt("Hello there.", t) is None
+    assert core(FakeJev(None, active=False))._wingman_for_global_ptt("Hello there.", t) == (None, None)
 
 
 def test_a_single_wingman_answers_without_asking():
     jev = FakeJev(None)
-    target = core(jev)._wingman_for_global_ptt("Gear down.", tower(config("Computer")))
+    target, _ = core(jev)._wingman_for_global_ptt("Gear down.", tower(config("Computer")))
     assert target.name == "Computer"
     assert jev.asked == []
 
@@ -137,7 +140,7 @@ def test_a_switched_off_wingman_is_neither_addressed_nor_offered():
     jev = FakeJev("Lore")
     t = tower(config("Computer"), config("Lore"))
     t.disabled_wingmen = [config("ATC", default=True)]
-    target = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
+    target, _ = core(jev)._wingman_for_global_ptt("ATC, requesting permission to land.", t)
     assert target.name == "Lore"
     assert jev.asked == [("ATC, requesting permission to land.", ["Computer", "Lore"])]
 
@@ -174,3 +177,85 @@ def test_the_last_exchange_skips_tool_calls_and_cuts_long_answers():
     exchange = manager.last_exchange(limit=50)
     assert exchange["user"] == "Where do I sell laranite?"
     assert exchange["assistant"].startswith("Area18 ") and len(exchange["assistant"]) == 50
+
+
+# --- people a skill voices: an NPC at the user's place is a target too ---------------
+
+def with_speaker(t, host_name, name, description="", taken_over=False):
+    """`host_name` hosts a registered speaker, the way the NPC skill registers one."""
+    host = next(w for w in t.wingmen if w.name == host_name)
+    host.speaker_names = lambda: [name]
+    host.speakers = lambda: {name: (description, host_name)}
+    host.taken_over = taken_over
+    return host
+
+
+def test_a_speakers_name_reaches_the_wingman_who_hosts_them():
+    jev = FakeJev("ATC")
+    t = tower(config("Computer"), config("ATC"))
+    with_speaker(t, "Computer", "Lena")
+
+    target, speaker = core(jev)._wingman_for_global_ptt("Lena, got any work for me?", t)
+
+    assert target.name == "Computer" and speaker == "Lena"
+    assert jev.asked == []
+
+
+def test_a_running_conversation_gets_the_sentence_that_names_nobody():
+    jev = FakeJev("ATC")
+    t = tower(config("Computer"), config("ATC", default=True))
+    with_speaker(t, "Computer", "Lena", taken_over=True)
+
+    target, speaker = core(jev)._wingman_for_global_ptt("What is in the letter?", t)
+
+    assert target.name == "Computer" and speaker is None  # the takeover on Computer handles it
+    assert jev.asked == []
+
+
+def test_a_wingmans_name_wins_over_a_running_conversation():
+    t = tower(config("Computer"), config("ATC"))
+    with_speaker(t, "Computer", "Lena", taken_over=True)
+
+    target, speaker = core(FakeJev(None))._wingman_for_global_ptt("ATC, requesting landing.", t)
+
+    assert target.name == "ATC" and speaker is None
+
+
+def test_jev_is_offered_the_speakers_and_a_pick_names_the_host():
+    jev = FakeJev("Lena")
+    t = tower(config("Computer"), config("ATC"))
+    with_speaker(t, "Computer", "Lena", "Lena Varga, a person at the counter of Tammany and Sons")
+
+    target, speaker = core(jev)._wingman_for_global_ptt("Do you have work for me?", t)
+
+    assert target.name == "Computer" and speaker == "Lena"
+    assert jev.speakers == {"Lena": ("Lena Varga, a person at the counter of Tammany and Sons", "Computer")}
+
+
+def test_the_question_lists_speakers_with_their_own_instructions():
+    speakers = {"Lena": ("the trader", "Computer")}
+    question = wingman_questions([config("Computer"), config("ATC")], speakers)["wingman"]
+    assert set(question["criteria"]) == {"Computer", "ATC", "Lena"}
+    assert question["instructions"] == SPEAKER_INSTRUCTIONS
+
+    question = wingman_questions([config("Computer"), config("ATC")])["wingman"]
+    assert question["instructions"] == WINGMAN_INSTRUCTIONS
+
+
+def test_an_unsure_pick_of_a_person_gives_way_to_the_likeliest_wingman():
+    def result(pick, confidence, shares):
+        return SimpleNamespace(
+            ok=True,
+            choice=lambda key, min_confidence=0.0: pick if confidence >= min_confidence else None,
+            confidence=lambda key: confidence,
+            probabilities=lambda key: shares,
+        )
+
+    speakers = {"Lena": ("the trader", "Computer")}
+    sure = result("Lena", 0.8, {"Lena": 0.8, "Computer": 0.15, "ATC": 0.05})
+    assert read_wingman(sure, 0.0, speakers) == "Lena"
+
+    unsure = result("Lena", 0.45, {"Lena": 0.45, "Computer": 0.2, "ATC": 0.35})
+    assert read_wingman(unsure, 0.0, speakers) == "ATC"
+
+    assert read_wingman(result("ATC", 0.4, {"ATC": 0.4, "Lena": 0.35}), 0.0, speakers) == "ATC"

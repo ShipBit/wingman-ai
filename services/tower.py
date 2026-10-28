@@ -183,20 +183,50 @@ class Tower:
         return self.get_addressed_wingman(text) or self.get_default_wingman()
 
     def get_addressed_wingman(self, text: str) -> Wingman | None:
-        """The wingman named in the text.
+        """The wingman named in the text, or the one whose speaker is."""
+        return self.get_addressed(text)[0]
+
+    def get_addressed(self, text: str) -> tuple[Wingman | None, str | None]:
+        """(the wingman named in the text, None) or (the wingman a named
+        speaker belongs to, that speaker), else (None, None).
 
         A name is matched by sound, not by spelling: the speech model writes
         "Eva" for Ava and "Computa" for Computer, and an exact word match then
         sends the sentence to the wrong wingman or nowhere. Only the opening of
-        the sentence is searched, that is where people put a name.
+        the sentence is searched, that is where people put a name. A speaker
+        is someone a skill voices (an NPC, a caller), registered on the
+        wingman that hosts them; at equal distance the wingman's own name wins.
         """
         words = words_of(text)
-        best: tuple[int, Wingman | None] = (10**6, None)
+        best: tuple[int, Wingman | None, str | None] = (10**6, None, None)
         for wingman in self.wingmen:
             found = find_name(words, wingman.config.name)
             if found is not None and found[2] < best[0]:
-                best = (found[2], wingman)
-        return best[1]
+                best = (found[2], wingman, None)
+        for wingman in self.wingmen:
+            names = getattr(wingman, "speaker_names", None)
+            for name in (names() if callable(names) else []):
+                found = find_name(words, name)
+                if found is not None and found[2] < best[0]:
+                    best = (found[2], wingman, name)
+        return best[1], best[2]
+
+    def get_taken_over_wingman(self) -> Wingman | None:
+        """The wingman whose conversation someone else has right now (a skill
+        voicing an NPC): a sentence that names nobody is for them."""
+        for wingman in self.wingmen:
+            if getattr(wingman, "taken_over", False):
+                return wingman
+        return None
+
+    def speakers(self) -> dict[str, tuple[str, str]]:
+        """Every registered speaker: name to (description, host wingman name)."""
+        merged: dict[str, tuple[str, str]] = {}
+        for wingman in self.wingmen:
+            getter = getattr(wingman, "speakers", None)
+            if callable(getter):
+                merged.update(getter())
+        return merged
 
     def get_default_wingman(self) -> Wingman | None:
         """The wingman with the star: it answers what names nobody."""

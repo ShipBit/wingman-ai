@@ -1266,15 +1266,18 @@ class SkillConversation:
         Wingman knows afterwards what was said. Returns the ``Takeover``."""
         return self._wingman.take_over(speaker, handler, idle_s=idle_s)
 
-    def register_speaker(self, name: str, opener) -> Subscription:
+    def register_speaker(self, name: str, opener, *, description: str = "") -> Subscription:
         """Make ``name`` addressable like a Wingman: a sentence that starts
-        with it ("Tecia, do you have work for me?") goes to
+        with it ("Lena, do you have work for me?") goes to
         ``await opener(name, text)`` instead of the model, matched by sound
-        like Wingman names are. The opener usually takes over the conversation
-        and answers; it returns False to leave the sentence to the model after
-        all. The Wingman's own name wins when both fit. Unsubscribe in
-        ``unload()``."""
-        self._wingman.register_speaker(name, opener)
+        like Wingman names are. On the global push-to-talk key the speaker is
+        also an option when the sentence names nobody; ``description`` is what
+        the router decides by ("the trader at the counter of Tammany and Sons
+        in Lorville"). The opener usually takes over the conversation and
+        answers; it returns False to leave the sentence to the model after
+        all. The Wingman's own name wins when both fit. Register only who is
+        actually there, and unsubscribe in ``unload()``."""
+        self._wingman.register_speaker(name, opener, description)
         return Subscription(lambda: self._wingman.unregister_speaker(name))
 
     async def said_by(self, speaker: str, text: str, *, skill_name: str = "") -> None:

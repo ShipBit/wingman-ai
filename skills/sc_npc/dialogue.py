@@ -105,3 +105,11 @@ def npc_in_answer(answer: str, npcs: list):
         if npc.name.split()[0].lower() in text:
             return npc
     return None
+
+
+def speaker_description(npc: Npc) -> str:
+    """One line for the router: who this is and where they stand, so a
+    sentence without a name can be told apart from one for the Wingman."""
+    where = f"at the counter of {npc.shop} in {npc.place}" if npc.shop else f"at {npc.place}"
+    first = (npc.persona or "").strip().split(". ")[0].rstrip(".")
+    return f"{npc.name}, a person {where}, talked to in person." + (f" {first}." if first else "")

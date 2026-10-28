@@ -336,7 +336,7 @@ def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypa
 def test_a_registered_speaker_is_gone_after_unsubscribing():
     from wingmen.wingman import Wingman
 
-    wingman = SimpleNamespace(_speakers={}, _takeover=None)
+    wingman = SimpleNamespace(_speakers={}, _speaker_descriptions={}, _takeover=None)
     wingman.register_speaker = Wingman.register_speaker.__get__(wingman)
     wingman.unregister_speaker = Wingman.unregister_speaker.__get__(wingman)
     conversation = facade.SkillConversation(wingman)
@@ -344,8 +344,9 @@ def test_a_registered_speaker_is_gone_after_unsubscribing():
     async def opener(name, text):
         return True
 
-    subscription = conversation.register_speaker("Lena", opener)
+    subscription = conversation.register_speaker("Lena", opener, description="the trader")
     assert wingman._speakers == {"Lena": opener} and conversation.takeover is None
+    assert wingman._speaker_descriptions == {"Lena": "the trader"}
 
     subscription.unsubscribe()
-    assert wingman._speakers == {}
+    assert wingman._speakers == {} and wingman._speaker_descriptions == {}

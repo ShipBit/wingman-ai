@@ -229,10 +229,13 @@ class JevGate:
         configs: list[WingmanConfig],
         recent: Optional[dict[str, dict[str, str]]] = None,
         last_answer_from: Optional[str] = None,
+        speakers: Optional[dict[str, tuple[str, str]]] = None,
     ) -> Optional[str]:
         """The wingman a sentence from the global push-to-talk key is for,
-        when it named none and no wingman is the default. None only when Jev
-        is off, has no access or the call failed.
+        when it named none and no wingman is the default, or one of the
+        ``speakers`` a skill voices at the user's place (name to (description,
+        host wingman name)). None only when Jev is off, has no access or the
+        call failed.
 
         No confidence gate, unlike everywhere else Jev decides: someone who
         held the key wants an answer, and nothing happening looks broken. So
@@ -248,10 +251,10 @@ class JevGate:
             "Wingman choice",
             self.client.system_one(
                 wingman_state(transcript, recent or {}, last_answer_from),
-                wingman_questions(configs),
+                wingman_questions(configs, speakers),
             ),
         )
-        return read_wingman(result, 0.0)
+        return read_wingman(result, 0.0, speakers)
 
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.

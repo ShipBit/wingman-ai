@@ -255,18 +255,56 @@ def wingman_state(
     return state
 
 
-def wingman_questions(configs: list[WingmanConfig]) -> dict[str, dict]:
+SPEAKER_INSTRUCTIONS = (
+    "A voice app has several assistants, listed below, and the user stands at "
+    "a place with people they can talk to in person, also listed. The user "
+    "held the talk key that reaches all of them and said the sentence without "
+    "naming one. Who is the sentence for? Decide by what the user wants done or "
+    "known: ship systems, navigation and knowledge go to an assistant, small "
+    "talk, trade and questions to a person at the counter go to that person. "
+    "A follow-up that only makes sense after one of them spoke last goes to "
+    "that one. In doubt, an assistant."
+)
+
+SPEAKER_CONFIDENCE = 0.6
+"""A person at the counter gets the sentence only when Jev is this sure;
+below it the most likely assistant answers. A wrong assistant asks back, a
+wrong person answers in character."""
+
+
+def wingman_questions(
+    configs: list[WingmanConfig], speakers: Optional[dict[str, tuple[str, str]]] = None
+) -> dict[str, dict]:
+    """The question, with the people a skill voices (speaker name to
+    (description, host wingman name)) among the options when there are any."""
+    criteria: dict = {config.name: wingman_description(config) for config in configs}
+    for name, (description, _host) in (speakers or {}).items():
+        criteria[name] = description or None
     return {
         "wingman": choice(
-            instructions=WINGMAN_INSTRUCTIONS,
-            criteria={config.name: wingman_description(config) for config in configs},
+            instructions=SPEAKER_INSTRUCTIONS if speakers else WINGMAN_INSTRUCTIONS,
+            criteria=criteria,
         )
     }
 
 
-def read_wingman(result: JevResult, min_confidence: float) -> Optional[str]:
-    """The name of the wingman to answer, or None: the call failed or Jev
-    was not sure enough."""
+def read_wingman(
+    result: JevResult,
+    min_confidence: float,
+    speakers: Optional[dict[str, tuple[str, str]]] = None,
+) -> Optional[str]:
+    """The name of the wingman or speaker to answer, or None: the call failed
+    or Jev was not sure enough. A speaker below SPEAKER_CONFIDENCE gives way
+    to the most likely wingman."""
     if not result.ok:
         return None
-    return result.choice("wingman", min_confidence=min_confidence)
+    picked = result.choice("wingman", min_confidence=min_confidence)
+    if picked is None or not speakers or picked not in speakers:
+        return picked
+    if result.confidence("wingman") >= SPEAKER_CONFIDENCE:
+        return picked
+    wingmen = {
+        name: share for name, share in result.probabilities("wingman").items()
+        if name not in speakers
+    }
+    return max(wingmen, key=wingmen.get) if wingmen else picked

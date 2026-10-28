@@ -255,6 +255,8 @@ class Wingman:
         self._takeover: Takeover | None = None
         self._speakers: dict[str, Opener] = {}
         """Names a skill made addressable like a Wingman, with what opens them."""
+        self._speaker_descriptions: dict[str, str] = {}
+        """What tells the router who a speaker is, for a sentence without a name."""
 
         # --- Image generation (lazy) ---
         self._image_subscription = None
@@ -397,6 +399,7 @@ class Wingman:
         if getattr(self, "_takeover", None) is not None:
             self._takeover.release()
         getattr(self, "_speakers", {}).clear()
+        getattr(self, "_speaker_descriptions", {}).clear()
         # A filler line not out yet stays unsaid.
         if getattr(self, "_turn_filler", None) is not None:
             self._stop_turn_filler(learn=False)
@@ -585,17 +588,22 @@ class Wingman:
         transcript: str,
         images: list[tuple[str, str]] = None,
         transcription_benchmark: BenchmarkResult | None = None,
+        speaker: str | None = None,
     ):
         """Answer what the user said. While this runs the user counts as busy
         (services/user_activity.py): nothing a wingman says on its own may
-        land between the question and the answer."""
+        land between the question and the answer.
+
+        ``speaker`` is a registered speaker the router chose for this
+        sentence (the global push-to-talk key, see wingman_core): it opens
+        the conversation with them even when the sentence has no name."""
         if self._unloaded:
             # Its config was switched away from while the words were on
             # their way here.
             return
         user_activity.turn_started()
         try:
-            await self._process(transcript, images, transcription_benchmark)
+            await self._process(transcript, images, transcription_benchmark, speaker)
         finally:
             user_activity.turn_finished()
 
@@ -604,6 +612,7 @@ class Wingman:
         transcript: str,
         images: list[tuple[str, str]] = None,
         transcription_benchmark: BenchmarkResult | None = None,
+        speaker: str | None = None,
     ):
         """Answer what the user said.
 
@@ -628,7 +637,7 @@ class Wingman:
                     additional_data=additional_data,
                 )
 
-                if await self._takeover_turn(transcript):
+                if await self._takeover_turn(transcript, speaker):
                     return
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
@@ -700,19 +709,37 @@ class Wingman:
         if self._takeover is takeover:
             self._takeover = None
 
-    def register_speaker(self, name: str, opener: Opener) -> None:
-        """A sentence that starts with `name` goes to `opener` instead of the model."""
+    def register_speaker(self, name: str, opener: Opener, description: str = "") -> None:
+        """A sentence that starts with `name` goes to `opener` instead of the
+        model, and the router offers `name` (with `description`) as a target
+        of the global push-to-talk key."""
         self._speakers[name] = opener
+        self._speaker_descriptions[name] = description
 
     def unregister_speaker(self, name: str) -> None:
         self._speakers.pop(name, None)
+        self._speaker_descriptions.pop(name, None)
 
-    async def _takeover_turn(self, transcript: str) -> bool:
+    def speaker_names(self) -> list[str]:
+        return list(self._speakers)
+
+    def speakers(self) -> dict[str, tuple[str, str]]:
+        """Speaker name to (description, this Wingman's name), for the router."""
+        return {name: (self._speaker_descriptions.get(name, ""), self.name) for name in self._speakers}
+
+    @property
+    def taken_over(self) -> bool:
+        """Someone else has this Wingman's conversation, and it has not gone quiet."""
+        takeover = self._takeover
+        return takeover is not None and takeover.active and not takeover.idle()
+
+    async def _takeover_turn(self, transcript: str, speaker: str | None = None) -> bool:
         """The turn when someone else has the conversation, or is addressed by
         name: True when it was handled here and the model is not asked.
 
         The Wingman's own name at the start of a sentence always takes the
-        conversation back, like it picks the Wingman in voice activation."""
+        conversation back, like it picks the Wingman in voice activation.
+        ``speaker`` is the router's choice for a sentence without a name."""
         if self._takeover is None and not self._speakers:
             return False
         words = words_of(transcript)
@@ -729,6 +756,8 @@ class Wingman:
                 await self._takeover_failed(takeover.speaker, error)
                 takeover.release()
             return True
+        if speaker is not None and speaker in self._speakers and mine is None:
+            return await self._open_speaker(speaker, transcript)
         best = None
         for name, opener in self._speakers.items():
             found = find_name(words, name)
@@ -736,7 +765,10 @@ class Wingman:
                 best = (found[2], name, opener)
         if best is None or (mine is not None and mine[2] <= best[0]):
             return False
-        _, name, opener = best
+        return await self._open_speaker(best[1], transcript)
+
+    async def _open_speaker(self, name: str, transcript: str) -> bool:
+        opener = self._speakers[name]
         note = self._note_said_to(name, transcript)
         try:
             handled = bool(await opener(name, transcript))

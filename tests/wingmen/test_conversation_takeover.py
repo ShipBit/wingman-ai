@@ -10,13 +10,16 @@ from wingmen.wingman import Wingman
 
 def _wingman(name="Computer"):
     wingman = SimpleNamespace(
+        name=name,
         config=SimpleNamespace(name=name),
         conversation=SimpleNamespace(messages=[]),
         _takeover=None,
         _speakers={},
+        _speaker_descriptions={},
     )
     for method in ("take_over", "_takeover_released", "register_speaker", "unregister_speaker",
-                   "_takeover_turn", "_note_said_to", "_takeover_failed"):
+                   "_takeover_turn", "_open_speaker", "_note_said_to", "_takeover_failed",
+                   "speaker_names", "speakers"):
         setattr(wingman, method, getattr(Wingman, method).__get__(wingman))
     return wingman
 
@@ -146,3 +149,41 @@ def test_unregistering_a_speaker_and_a_new_takeover_replacing_the_old():
     wingman.register_speaker("Lena", None)
     wingman.unregister_speaker("Lena")
     assert wingman._speakers == {}
+
+
+def test_the_routers_choice_opens_a_speaker_without_a_name_in_the_sentence():
+    wingman = _wingman("Computer")
+    opened = []
+
+    async def opener(name, text):
+        opened.append((name, text))
+        wingman.take_over(name, Lena())
+        return True
+
+    wingman.register_speaker("Lena", opener, "the trader at Tammany and Sons")
+
+    assert asyncio.run(wingman._takeover_turn("Do you have work for me?", speaker="Lena"))
+    assert opened == [("Lena", "Do you have work for me?")]
+    assert wingman.speakers() == {"Lena": ("the trader at Tammany and Sons", "Computer")}
+    assert wingman.speaker_names() == ["Lena"]
+
+    # The Wingman's own name still wins, whatever the router thought.
+    wingman = _wingman("Computer")
+    wingman.register_speaker("Lena", opener)
+    assert not asyncio.run(wingman._takeover_turn("Computer, what time is it?", speaker="Lena"))
+
+
+def test_a_wingman_is_taken_over_only_while_the_conversation_is_alive():
+    wingman = _wingman()
+    wingman.taken_over = property(lambda self: Wingman.taken_over.fget(self))  # noqa: not used on namespace
+    assert Wingman.taken_over.fget(wingman) is False
+
+    takeover = wingman.take_over("Lena Varga", Lena(), idle_s=60)
+    assert Wingman.taken_over.fget(wingman) is True
+
+    takeover.last_at -= 61
+    assert Wingman.taken_over.fget(wingman) is False
+
+    takeover.last_at += 61
+    takeover.release()
+    assert Wingman.taken_over.fget(wingman) is False

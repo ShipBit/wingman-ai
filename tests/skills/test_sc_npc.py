@@ -240,14 +240,16 @@ class FakeConversation:
         self.said = []
         self.shown = []
         self.registered = []
+        self.descriptions = {}
 
     def take_over(self, speaker, handler, *, idle_s=300):
         self.takeover = FakeTakeover(speaker)
         self.handler = handler
         return self.takeover
 
-    def register_speaker(self, name, opener):
+    def register_speaker(self, name, opener, *, description=""):
         self.registered.append(name)
+        self.descriptions[name] = description
         return SimpleNamespace(unsubscribe=lambda: None)
 
     async def said_by(self, speaker, text, *, skill_name=""):
@@ -330,6 +332,9 @@ def test_addressing_lena_by_name_hands_the_conversation_to_her(packs, tmp_path):
     assert set(skill._names) == {"Lena", "Lena Varga", "Miss Varga", "Nico", "Nico Brandt"}  # Jonas is on Aberdeen
     assert skill._names["Miss Varga"] == "lena-varga"
     assert set(skill.wingman.conversation.registered) == set(skill._names)
+    assert skill.wingman.conversation.descriptions["Lena"].startswith(
+        "Lena Varga, a person at the counter of Tammany and Sons in Lorville, talked to in person."
+    )
 
     keep = _run(skill._addressed("Lena", "Lena, got any work?"))
 
@@ -434,7 +439,11 @@ def _looking_skill(packs, tmp_path, answer):
             raise answer
         return answer
 
-    skill.wingman.ai = SimpleNamespace(generate=generate)
+    async def sees_images():
+        return skill.sees
+
+    skill.sees = True
+    skill.wingman.ai = SimpleNamespace(generate=generate, sees_images=sees_images)
     return skill, seen
 
 
@@ -456,6 +465,10 @@ def test_the_screen_tells_who_is_in_front_of_the_user(packs, tmp_path):
     skill.retrieve_custom_property_value = lambda name, errors: False if name == "look_at_screen" else None
     assert _run(skill._look_for(npcs)) is None and seen == []
 
+    skill, seen = _looking_skill(packs, tmp_path, "Jonas")
+    skill.sees = False  # a main model known not to take images: no screenshot is sent
+    assert _run(skill._look_for(npcs)) is None and seen == []
+
 
 def test_the_vision_answer_is_matched_by_name_or_shop(packs):
     npcs = [packs.npcs["lena-varga"], packs.npcs["jonas-varga"]]
@@ -472,3 +485,12 @@ def test_without_a_name_the_screen_picks_among_the_people_here(packs, tmp_path):
 
     assert instant == "." and result.startswith("Nico Brandt is talking to the user now")
     assert skill.wingman.conversation.takeover.speaker == "Nico Brandt" and len(seen) == 1
+
+
+def test_the_router_gets_one_line_per_person(packs):
+    lena, jonas = packs.npcs["lena-varga"], packs.npcs["jonas-varga"]
+    assert dialogue.speaker_description(lena) == (
+        "Lena Varga, a person at the counter of Tammany and Sons in Lorville, talked to in person. "
+        "Former Hurston Dynamics mine worker, now runs the counter at Tammany and Sons."
+    )
+    assert dialogue.speaker_description(jonas).startswith("Jonas Varga, a person at HDMS-Anderson, talked to in person.")
