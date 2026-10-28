@@ -268,6 +268,11 @@ def test_places_are_found_loosely(bodies):
     assert geo.find_poi(micro, "nowhere") is None
     assert geo.find_poi(micro, "") is None
 
+    # The game log writes "HDMS-Anderson", the data "HDMS Anderson".
+    aberdeen = next(b for b in bodies if b.name == "Aberdeen")
+    assert geo.find_poi(aberdeen, "HDMS-Anderson").name == "HDMS Anderson"
+    assert geo.find_poi(aberdeen, "hdms_anderson").name == "HDMS Anderson"
+
 
 def test_calibrations_survive_a_restart(tmp_path):
     path = tmp_path / "calibration.json"

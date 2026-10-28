@@ -213,15 +213,21 @@ def nearest_pois(body: Body, local: tuple, count: int) -> list:
     return ranked[:count]
 
 
+def place_key(name: str) -> str:
+    """A place name as compared: case and the hyphens, spaces or underscores in
+    it do not matter. The game log says "HDMS-Anderson", the data "HDMS Anderson"."""
+    return re.sub(r"[\s\-_]+", " ", (name or "").strip().lower())
+
+
 def find_poi(body: Body, name: str) -> Optional[Poi]:
     """The place called `name` on `body`: the same name first, then one that
-    starts with it, then one that contains it. Case does not matter."""
-    wanted = (name or "").strip().lower()
+    starts with it, then one that contains it."""
+    wanted = place_key(name)
     if not wanted:
         return None
     for match in (lambda n: n == wanted, lambda n: n.startswith(wanted), lambda n: wanted in n):
         for poi in body.pois:
-            if match(poi.name.lower()):
+            if match(place_key(poi.name)):
                 return poi
     return None
 

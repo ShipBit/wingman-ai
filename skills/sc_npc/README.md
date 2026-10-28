@@ -72,3 +72,12 @@ Step types:
 - "I'll take the job" (to the NPC), or "Computer, accept the quest" → the quest starts
 - "Am I at the spot?" / "I found it" → `quests check`
 - "What am I working on?" → `quests list`
+
+## Testing without the game
+
+`scripts/sc_fake_game.py` stands in for Star Citizen: it writes arrivals and
+departures into a fake Game.log and answers the Position skill's
+`/showlocation` with coordinates for a place you name. Point Settings > Star
+Citizen > game folder at the folder it prints, then `go Lorville`, talk to
+Lena, `at Aberdeen 48.6255 8.9795 1690` and ask whether you are at the spot.
+The script's docstring lists its commands.
