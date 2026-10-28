@@ -1819,6 +1819,12 @@ there. Each panel remembers who added it; yours read as "added by the Your
 Skill skill of Computer" to the Wingmen, which read the panel with their
 `hud_read_info` tool.
 
+The info panel survives a Core restart: the HUD saves its panels to its own
+file and brings them back at start, before any skill runs. A panel that shows
+state your skill keeps elsewhere (a quest log, a job list) is the last
+session's by then. Draw it again in `prepare()` from your own data and take it
+off in `unload()`, or it stays on screen whatever your data says.
+
 Core already shows every line that goes into the conversation in the chat
 container. Show a line yourself only when it does not go there, or it appears
 twice (`chat_enabled` tells you whether Core shows it).

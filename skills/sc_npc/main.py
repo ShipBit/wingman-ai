@@ -117,12 +117,21 @@ class ScNpc(Skill):
         if state and state.get("location_status") == "at":
             self._here = str(state.get("location_name") or "")
         self._register_here()
+        # The HUD brings its info panels back from its own file at start, so
+        # the quest log of the last session is on screen before this runs.
+        # Draw it from quests.json, which takes a deleted or finished one off.
+        await self._questlog()
 
     async def unload(self) -> None:
         if self._subscription:
             self._subscription.unsubscribe()
             self._subscription = None
         self._end_talk()
+        try:
+            if self._show_in_hud() and self.wingman.hud.available:
+                await self.wingman.hud.remove_info(QUESTS_PANEL)
+        except Exception:
+            pass
         for speaker in self._speakers:
             speaker.unsubscribe()
         self._speakers.clear()

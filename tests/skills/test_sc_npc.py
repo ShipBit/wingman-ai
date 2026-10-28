@@ -419,6 +419,59 @@ def test_leaving_a_place_drops_its_people_and_the_names_are_hotwords(packs, tmp_
     }
 
 
+class FakeHud:
+    available = True
+
+    def __init__(self):
+        self.panels = {}
+
+    async def add_info(self, title, text="", **kwargs):
+        self.panels[title] = text
+        return True
+
+    async def remove_info(self, title):
+        return self.panels.pop(title, None) is not None
+
+
+async def _nothing(self):
+    return None
+
+
+async def _prepared(skill, monkeypatch):
+    """prepare() on a skill from _talking_skill: the packs and the quest log
+    stay as the helper made them, the game log and the transcription are
+    stubs."""
+    monkeypatch.setattr("skills.skill_base.Skill.prepare", _nothing)
+    monkeypatch.setattr("skills.skill_base.Skill.unload", _nothing)
+    skill._reload_packs = lambda: None
+    skill.wingman.sc_gamelog = SimpleNamespace(
+        available=False, state=lambda: None,
+        on=lambda *args, **kwargs: SimpleNamespace(unsubscribe=lambda: None),
+    )
+    skill.wingman.stt = SimpleNamespace(add_hotwords=lambda words: None, remove_hotwords=lambda words: None)
+    await skill.prepare()
+
+
+def test_starting_puts_the_quest_log_of_the_file_on_the_hud(packs, tmp_path, monkeypatch):
+    # The HUD brings its info panels back at start: the last session's quest
+    # log is on screen before the skill runs, whatever quests.json says now.
+    hud = FakeHud()
+    hud.panels["Quests"] = "- A letter for Aberdeen (step 3 of 4: reach the marked spot)"
+    skill = _talking_skill(packs, tmp_path)
+    skill.wingman.hud = hud
+    _run(_prepared(skill, monkeypatch))
+    assert "Quests" not in hud.panels, "no quests.json, no panel"
+
+    skill._log.accept(packs.quests["letter-for-aberdeen"])
+    skill = _talking_skill(packs, tmp_path)
+    skill.wingman.hud = hud
+    _run(_prepared(skill, monkeypatch))
+    assert "A letter for Aberdeen (step 1 of 4" in hud.panels["Quests"]
+
+    _run(skill.unload())
+    assert "Quests" not in hud.panels, "a skill that is off leaves no panel"
+
+
 class FakeScreen:
     async def capture(self, display=1):
         from PIL import Image
