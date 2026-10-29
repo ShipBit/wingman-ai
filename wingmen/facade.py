@@ -1830,8 +1830,8 @@ class SkillSystemOne:
     tokens for seven extra questions. One call with the questions you might
     need beats three calls with the ones you did.
 
-    **`available` is False when the user switched System One off in Settings,
-    or the plan has no access.** Check it. If you forget, nothing breaks:
+    **`available` is False when the user switched System One or its skills
+    switch off, or the plan has no access.** Check it. If you forget, nothing breaks:
     `decide()` returns an empty answer and every reader gives back None — but
     your skill then silently takes the None branch, which is rarely what you
     meant.
@@ -1844,11 +1844,11 @@ class SkillSystemOne:
     def available(self) -> bool:
         """Whether a call would reach a model.
 
-        False for all of: the user turned it off in Settings, no Wingman Pro
-        session, a plan without the role. The skill then decides some other
+        False for all of: the user turned it or its skills switch off, no
+        Wingman Pro session, a plan without the role. The skill then decides some other
         way — with `self.wingman.ai.generate()`, or a rule of its own.
         """
-        return bool(self._gate and self._gate.active)
+        return bool(self._gate and self._gate.skills_active)
 
     # --- building questions -------------------------------------------------
     #

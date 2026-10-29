@@ -22,7 +22,7 @@ def _wingman(enabled: bool):
     from wingmen.facade import SkillSystemOne
 
     settings = SimpleNamespace(
-        system_one=SimpleNamespace(enabled=enabled),
+        system_one=SimpleNamespace(enabled=enabled, skills=True),
         wingman_pro=SimpleNamespace(base_url="https://example.invalid"),
     )
     gate = JevGate("Test", settings=settings)

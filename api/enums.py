@@ -75,6 +75,7 @@ class CommandTag(Enum):
     UNAUTHORIZED = "unauthorized"
     CONFIG_LOADED = "config_loaded"
     SECRET_SAVED = "secret_saved"
+    BINDING_UNBOUND = "binding_unbound"
 
 
 class CustomPropertyType(Enum):

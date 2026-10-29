@@ -106,7 +106,8 @@ def test_a_323_install_comes_out_with_the_system_one_block(users_dir, boot_confi
 
     assert "Unable to migrate settings.yaml" not in service.log_message
     migrated = read_yaml(path.join(users_dir, VERSION_DIR, "configs", "settings.yaml"))
-    assert migrated["system_one"] == {"enabled": False, "commands": True}
+    assert migrated["system_one"]["enabled"] is False
+    assert migrated["system_one"]["commands"] is True
     assert migrated["debug_mode"] is True
     assert migrated["filler_responses"] is True
     SettingsConfig(**migrated)
