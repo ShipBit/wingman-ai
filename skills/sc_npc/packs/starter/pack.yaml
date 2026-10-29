@@ -1,11 +1,13 @@
 # Starter pack: a trader and a gun dealer in Lorville, the trader's brother at
-# an outpost on Aberdeen, and one errand between the siblings. A template for your own packs: copy this folder
-# into the skill's files folder under packs/<your-pack>/ and edit.
+# an outpost on Aberdeen, and two errands between the siblings, the second
+# offered once the first is done. A template for your own packs: copy this
+# folder into the skill's files folder under packs/<your-pack>/ and edit.
 #
 # Places are named as the Star Citizen game log names them (Lorville,
 # HDMS-Anderson, Port Tressler, New Babbage, ...). Voices are per TTS provider
 # id (edge_tts, openai, elevenlabs, wingman_pro, ...); a provider without an
-# entry uses the skill's "NPC voice" setting.
+# entry uses the skill's "NPC voice" setting. A picture goes next to this file
+# and is named in `avatar: lena.png`; without one the skill can generate it.
 #
 # The pilot addresses an NPC by name ("Lena, got any work?"), so pick names the
 # speech recognition writes reliably in the pilot's language: short, common,
@@ -106,3 +108,23 @@ quests:
         done: The crate is yours.
     reward: >
       Lena will remember this. Word of a courier who keeps quiet travels in Lorville.
+
+  - id: parts-for-jonas
+    title: Parts for Jonas
+    giver: lena-varga
+    # Offered only after the quests named here are done.
+    requires: [letter-for-aberdeen]
+    offer: >
+      Now that she knows you keep quiet: Jonas needs a box of filter parts for
+      the drills, and she wants it brought to him the same way, by hand.
+    steps:
+      - type: visit
+        place: HDMS-Anderson
+        hint: Bring the parts to Jonas at HDMS-Anderson on Aberdeen.
+        done: Back at HDMS-Anderson.
+      - type: talk
+        npc: jonas-varga
+        hint: Hand Jonas the parts.
+        done: Jonas has the parts.
+    reward: >
+      Jonas owes you one now, and Lena treats you like family.

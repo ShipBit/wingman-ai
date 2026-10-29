@@ -306,19 +306,26 @@ def test_the_linux_clipboard_prefers_wayland_tools(monkeypatch):
         service._linux_tool(read=True)
 
 
-def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypatch):
+def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypatch, tmp_path):
+    from PIL import Image
+
     from api.enums import LogSource, LogType
     from services.conversation_manager import NOTE_PREFIX
+    from services.hud_service import HudService
     from services.printr import Printr
 
-    printed = []
+    printed, on_hud = [], []
 
     async def print_async(text, **kwargs):
         printed.append((text, kwargs))
 
+    async def on_speaker_message(self, wingman, speaker, text, icon=None):
+        on_hud.append((wingman.name, speaker, text, icon))
+
     # The singleton instance, not the class: an earlier test may have put a
     # print_async on the instance, which would shadow a class patch.
     monkeypatch.setattr(Printr(), "print_async", print_async)
+    monkeypatch.setattr(HudService, "on_speaker_message", on_speaker_message)
     wingman = SimpleNamespace(name="Computer", conversation=SimpleNamespace(messages=[]), _takeover=None)
     conversation = facade.SkillConversation(wingman)
 
@@ -328,9 +335,22 @@ def test_a_line_said_by_a_character_is_shown_under_their_name_and_noted(monkeypa
     assert text == "Then we can talk."
     assert kwargs["color"] == LogType.CHARACTER and kwargs["source"] == LogSource.WINGMAN
     assert kwargs["source_name"] == "Lena Varga" and kwargs["wingman_name"] == "Computer"
+    assert kwargs["additional_data"] is None
     assert wingman.conversation.messages == [
         {"role": "user", "content": f'{NOTE_PREFIX}Lena Varga said: "Then we can talk."]'}
     ]
+    assert on_hud == [("Computer", "Lena Varga", "Then we can talk.", None)]
+
+    # With a picture: the client gets a small data URL, the HUD the file
+    picture = tmp_path / "lena.png"
+    Image.new("RGBA", (600, 400), (255, 0, 0, 255)).save(picture)
+    _run(conversation.said_by("Lena Varga", "Depends.", avatar=str(picture)))
+    avatar = printed[1][1]["additional_data"]["avatar"]
+    assert avatar.startswith("data:image/jpeg;base64,") and len(avatar) < 8000
+    assert on_hud[1] == ("Computer", "Lena Varga", "Depends.", str(picture))
+
+    _run(conversation.said_by("Lena Varga", "Hm.", avatar=str(tmp_path / "gone.png")))
+    assert printed[2][1]["additional_data"] is None and on_hud[2][3] is None
 
 
 def test_a_registered_speaker_is_gone_after_unsubscribing():

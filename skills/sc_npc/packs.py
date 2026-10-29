@@ -13,7 +13,7 @@ out, the others still load.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -41,6 +41,9 @@ class Npc:
     aliases: tuple = ()
     """Other names the user may address them by: a nickname, a spelling the
     speech recognition tends to produce."""
+    avatar: str = ""
+    """Path of their picture: in the YAML a file name in the pack's folder,
+    after loading the full path; "" when the pack has none."""
     pack: str = ""
 
     def at(self, place_name: str) -> bool:
@@ -72,6 +75,8 @@ class Quest:
     """How the giver brings it up."""
     steps: tuple
     reward: str = ""
+    requires: tuple = ()
+    """Ids of quests that have to be done before this one is offered."""
     pack: str = ""
 
     def involves(self, npc_id: str) -> bool:
@@ -85,6 +90,8 @@ class Packs:
     quests: dict = field(default_factory=dict)
     problems: list = field(default_factory=list)
     """"<pack>: <what is wrong>" per pack that was left out."""
+    warnings: list = field(default_factory=list)
+    """"<pack>: <what to look at>" per pack that loaded anyway."""
     loaded: list = field(default_factory=list)
 
     def npcs_at(self, place_name: str) -> list:
@@ -167,6 +174,7 @@ def parse_pack(data, pack_name: str) -> tuple[list, list, list]:
                 greeting=_text(item.get("greeting"), f"{what}.greeting", False, problems),
                 voices={str(k): v for k, v in voices.items()},
                 aliases=tuple(_text(a, f"{what}.aliases", False, problems) for a in aliases),
+                avatar=_text(item.get("avatar"), f"{what}.avatar", False, problems),
                 pack=pack_name,
             )
         )
@@ -202,6 +210,9 @@ def parse_pack(data, pack_name: str) -> tuple[list, list, list]:
             steps.append(parsed)
         if not steps:
             problems.append(f"{what} has no steps")
+        requires = item.get("requires") or []
+        if isinstance(requires, str):
+            requires = [requires]
         quests.append(
             Quest(
                 id=_text(item.get("id"), f"{what}.id", True, problems),
@@ -210,10 +221,30 @@ def parse_pack(data, pack_name: str) -> tuple[list, list, list]:
                 offer=_text(item.get("offer"), f"{what}.offer", False, problems),
                 steps=tuple(steps),
                 reward=_text(item.get("reward"), f"{what}.reward", False, problems),
+                requires=tuple(_text(r, f"{what}.requires", False, problems) for r in requires),
                 pack=pack_name,
             )
         )
+    quest_ids = {q.id for q in quests}
+    for quest in quests:
+        for required in quest.requires:
+            if required not in quest_ids:
+                problems.append(f"quest '{quest.id}'.requires '{required}' is no quest of this pack")
+            elif required == quest.id:
+                problems.append(f"quest '{quest.id}' requires itself")
     return npcs, quests, problems
+
+
+def _with_avatar(npc: Npc, pack_dir: Path, warnings: list) -> Npc:
+    """The avatar as a full path inside the pack's folder, or none with a warning."""
+    if not npc.avatar:
+        return npc
+    file = (pack_dir / npc.avatar).resolve()
+    inside = pack_dir.resolve() in file.parents
+    if not inside or not file.is_file():
+        warnings.append(f"{pack_dir.name}: picture '{npc.avatar}' of {npc.id} not found")
+        return replace(npc, avatar="")
+    return replace(npc, avatar=str(file))
 
 
 def load_packs(folders) -> Packs:
@@ -237,7 +268,7 @@ def load_packs(folders) -> Packs:
                 packs.problems.append(f"{pack_dir.name}: " + "; ".join(problems[:5]))
                 continue
             for npc in npcs:
-                packs.npcs[npc.id] = npc
+                packs.npcs[npc.id] = _with_avatar(npc, pack_dir, packs.warnings)
             for quest in quests:
                 packs.quests[quest.id] = quest
             packs.loaded.append(pack_dir.name)

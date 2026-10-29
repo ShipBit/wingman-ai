@@ -1280,14 +1280,20 @@ class SkillConversation:
         self._wingman.register_speaker(name, opener, description)
         return Subscription(lambda: self._wingman.unregister_speaker(name))
 
-    async def said_by(self, speaker: str, text: str, *, skill_name: str = "") -> None:
+    async def said_by(
+        self, speaker: str, text: str, *, skill_name: str = "", avatar: Optional[str] = None
+    ) -> None:
         """Show a line said by someone the skill voices, under their name and
-        in the chat's character style, and record it in the history as a
-        note. Speak it yourself with tts.speak."""
+        in the chat's character style, in the client and on the HUD's chat,
+        and record it in the history as a note. `avatar` is the path of their
+        picture (PNG, JPEG or WebP), shown next to the line; a missing file
+        shows no picture. Speak it yourself with tts.speak."""
         from api.enums import LogSource, LogType
         from services.conversation_manager import NOTE_PREFIX
+        from services.hud_service import HudService
         from services.printr import Printr
 
+        picture = _speaker_picture(avatar)
         await Printr().print_async(
             text,
             color=LogType.CHARACTER,
@@ -1295,9 +1301,13 @@ class SkillConversation:
             source_name=speaker,
             wingman_name=self._wingman.name,
             skill_name=skill_name,
+            additional_data={"avatar": picture} if picture else None,
         )
         self._wingman.conversation.messages.append(
             {"role": "user", "content": f'{NOTE_PREFIX}{speaker} said: "{text}"]'}
+        )
+        await HudService().on_speaker_message(
+            self._wingman, speaker, text, icon=avatar if picture else None
         )
 
     async def show(self, text: str, *, skill_name: str = "") -> None:
@@ -1417,6 +1427,33 @@ class SkillUi:
         if once:
             skill_dialogs.mark_shown(once)
         return True
+
+
+_PICTURES: dict = {}
+"""A speaker's picture file and its mtime to the small data URL the client gets."""
+_PICTURES_KEPT = 64
+
+
+def _speaker_picture(file_path: Optional[str]) -> str:
+    """The data URL for `file_path`, "" when there is no usable picture."""
+    if not file_path:
+        return ""
+    try:
+        key = (file_path, os.path.getmtime(file_path))
+    except OSError:
+        return ""
+    picture = _PICTURES.get(key)
+    if picture is None:
+        from services.image_generation import picture_data_url
+
+        try:
+            picture = picture_data_url(file_path)
+        except Exception:
+            picture = ""
+        if len(_PICTURES) >= _PICTURES_KEPT:
+            _PICTURES.clear()
+        _PICTURES[key] = picture
+    return picture
 
 
 class SkillHud:

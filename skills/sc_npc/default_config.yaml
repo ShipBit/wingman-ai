@@ -47,6 +47,12 @@ custom_properties:
     value: true
     required: false
     property_type: boolean
+  - id: generate_portraits
+    name: Generate portraits
+    hint: An NPC whose pack has no picture gets one made from their persona the first time you meet them, with your image generation provider (Wingman Pro, a few cents once per NPC). The picture shows on their HUD card and next to their lines. Off shows only pictures from the pack.
+    value: true
+    required: false
+    property_type: boolean
   - id: look_at_screen
     name: Look at the screen
     hint: When you talk to someone without naming them and several people stand at this place, a screenshot tells the model from the shop sign who is in front of you. Needs a main model that can see images.

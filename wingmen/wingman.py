@@ -750,6 +750,7 @@ class Wingman:
                 takeover.release()
                 return False
             note = self._note_said_to(takeover.speaker, transcript)
+            await self._show_on_hud("user", transcript, None)
             try:
                 await takeover.handle(transcript)
             except Exception as error:
@@ -770,6 +771,9 @@ class Wingman:
     async def _open_speaker(self, name: str, transcript: str) -> bool:
         opener = self._speakers[name]
         note = self._note_said_to(name, transcript)
+        # The HUD chat shows what the user said before the speaker answers. When
+        # the opener declines, the model's turn shows the line once more.
+        await self._show_on_hud("user", transcript, None)
         try:
             handled = bool(await opener(name, transcript))
         except Exception as error:

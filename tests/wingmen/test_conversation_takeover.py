@@ -19,7 +19,7 @@ def _wingman(name="Computer"):
     )
     for method in ("take_over", "_takeover_released", "register_speaker", "unregister_speaker",
                    "_takeover_turn", "_open_speaker", "_note_said_to", "_takeover_failed",
-                   "speaker_names", "speakers"):
+                   "speaker_names", "speakers", "_show_on_hud"):
         setattr(wingman, method, getattr(Wingman, method).__get__(wingman))
     return wingman
 
@@ -49,6 +49,23 @@ def test_while_taken_over_the_handler_hears_the_user_and_the_model_does_not():
     assert handled and lena.heard == ["Do you have work for me?"]
     assert takeover.active and wingman._takeover is takeover
     assert _notes(wingman) == ['The user said to Lena Varga: "Do you have work for me?"']
+
+
+def test_what_the_user_says_to_a_character_goes_on_the_hud_chat(monkeypatch):
+    from services.hud_service import HudService
+
+    shown = []
+
+    async def on_conversation_message(self, wingman, role, content, tool_calls):
+        shown.append((wingman.name, role, content))
+
+    monkeypatch.setattr(HudService, "on_conversation_message", on_conversation_message)
+    wingman = _wingman()
+    wingman.take_over("Lena Varga", Lena())
+
+    asyncio.run(wingman._takeover_turn("Do you have work for me?"))
+
+    assert shown == [("Computer", "user", "Do you have work for me?")]
 
 
 def test_the_handler_ends_the_conversation():

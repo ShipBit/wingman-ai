@@ -436,7 +436,7 @@ class HudService:
     # ─────────────────────────────── chat ─────────────────────────────── #
 
     def _chat_on(self, wingman: "Wingman") -> bool:
-        hud = getattr(wingman.config, "hud", None)
+        hud = getattr(getattr(wingman, "config", None), "hud", None)
         return self.available and bool(hud and hud.chat)
 
     def _chat_flow(self) -> bool:
@@ -485,6 +485,29 @@ class HudService:
             self._show_user_message(content)
         else:
             self._show_assistant_message(wingman, content, tool_calls)
+
+    async def on_speaker_message(
+        self, wingman: "Wingman", speaker: str, text: str, icon: Optional[str] = None
+    ) -> None:
+        """A line someone a skill voices (an NPC, a character) says in this
+        Wingman's conversation: on the chat container like the Wingman's own
+        answer, under the speaker's name, with `icon` as their picture. It
+        stays while the Wingman's speech plays it."""
+        if not text or not self._chat_on(wingman):
+            return
+        self._on_main_loop(self._show_speaker_message, wingman, speaker, text, icon)
+
+    def _show_speaker_message(
+        self, wingman: "Wingman", speaker: str, text: str, icon: Optional[str]
+    ) -> None:
+        if self._manager is None:
+            return
+        profile = self.active_profile()
+        self._manager.set_loader(GROUP_CHAT, self._chat_element(), False)
+        self._chat_owner = wingman.name
+        self._show_chat(speaker, text, icon=icon, tools=[])
+        self._chat_waiting_for_audio = True
+        self._schedule_chat_hide(profile.max_display_time if profile else 5.0, early=True)
 
     def _show_user_message(self, content: Any) -> None:
         text = content if isinstance(content, str) else ""

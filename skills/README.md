@@ -1719,7 +1719,7 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.takeover` | Who has the conversation right now (`Takeover` with `.speaker`, `.active`, `.release()`), or `None`. |
 | `.take_over(speaker, handler, *, idle_s=300)` → `Takeover` | Hand the conversation to `handler`: what the user says goes to `await handler(text)` instead of the model, and the Wingman says nothing. The handler answers in `speaker`'s name and returns `False` when the conversation is over. It also ends when the user addresses the Wingman by name, after `idle_s` without a word, on `release()` and on unload. Both sides land in the history as notes. |
 | `.register_speaker(name, opener, *, description="")` → `Subscription` | Make `name` addressable like a Wingman: a sentence starting with it goes to `await opener(name, text)`, matched by sound. On the global push-to-talk key the speaker is also an option for a sentence that names nobody, decided by `description`. The opener usually takes over and answers; `False` leaves the sentence to the model. Register only who is actually there (a place, a call), and unsubscribe in `unload()`. |
-| `await .said_by(speaker, text, *, skill_name="")` | Show a line said by someone the skill voices, under their name and in the chat's character style, and record it in the history. Speak it yourself with `tts.speak`. |
+| `await .said_by(speaker, text, *, skill_name="", avatar=None)` | Show a line said by someone the skill voices, under their name and in the chat's character style, in the client and on the HUD's chat, and record it in the history. `avatar` is the path of their picture (PNG, JPEG or WebP), shown next to the line. Speak it yourself with `tts.speak`. |
 
 #### Voicing someone else
 

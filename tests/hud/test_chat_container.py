@@ -72,6 +72,33 @@ def test_the_answer_stays_while_the_wingman_speaks_and_goes_after(service):
     manager.hide_message.assert_called_once_with(GROUP_CHAT, "message")
 
 
+def test_a_character_line_shows_under_their_name_with_their_picture(service):
+    # Someone a skill voices (an NPC) answers in the Wingman's conversation:
+    # the line is theirs, the speech that keeps it on screen is the Wingman's.
+    manager = service._server.manager
+
+    async def run():
+        wingman = _wingman()
+        await service.on_speaker_message(wingman, "Lena Varga", "Then we can talk.", icon="lena.png")
+        service.playback_started("Computer")
+        await asyncio.sleep(0.3)
+        assert manager.hide_message.call_count == 0, "spoken: stays"
+        service.playback_finished("Computer")
+        await asyncio.sleep(0.3)
+
+    asyncio.run(run())
+
+    call = manager.show_message.call_args
+    assert call.args[2] == "Then we can talk." or call.args[2] == "Lena Varga"
+    assert [c.args[2] for c in manager.show_message.call_args_list] == ["Lena Varga"]
+    assert call.kwargs["title_icon"] == "lena.png"
+    manager.set_loader.assert_called_with(GROUP_CHAT, "message", False)
+    manager.hide_message.assert_called_once_with(GROUP_CHAT, "message")
+
+    asyncio.run(service.on_speaker_message(_wingman(chat=False), "Lena Varga", "Hm.", icon=None))
+    assert manager.show_message.call_count == 1, "the Wingman's chat is off: nothing"
+
+
 def test_speech_that_starts_late_brings_the_answer_back(service):
     manager = service._server.manager
 

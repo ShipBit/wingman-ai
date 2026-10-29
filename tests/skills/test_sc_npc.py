@@ -2,15 +2,18 @@
 the skill picks whom the user talks to."""
 
 import asyncio
+import base64
+import io
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from skills.sc_npc import dialogue
 from skills.sc_npc.main import ScNpc
 from skills.sc_npc.packs import Packs, load_packs, parse_pack
-from skills.sc_npc.quests import ACTIVE, DONE, OFFERED, QuestLog
+from skills.sc_npc.quests import ACTIVE, DONE, OFFERED, QuestLog, attitude_of
 from tests.support import REPO_ROOT
 
 BUNDLED = Path(REPO_ROOT) / "skills" / "sc_npc" / "packs"
@@ -39,6 +42,58 @@ def test_the_starter_pack_loads(packs):
     assert quest.giver == "lena-varga"
     assert [s.type for s in quest.steps] == ["visit", "talk", "reach", "confirm"]
     assert quest.steps[2].target.startswith("Aberdeen ")
+    assert packs.quests["parts-for-jonas"].requires == ("letter-for-aberdeen",)
+    assert lena.avatar == "", "the starter pack brings no pictures"
+
+
+def _png_bytes(color="red", size=(4, 4)) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", size, color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_a_pack_resolves_its_pictures_and_names_a_missing_one(tmp_path):
+    folder = tmp_path / "faces"
+    folder.mkdir()
+    (folder / "lena.png").write_bytes(_png_bytes())
+    (folder / "pack.yaml").write_text(
+        "pack: faces\n"
+        "npcs:\n"
+        "  - {id: lena, name: Lena, place: Lorville, persona: Dry., avatar: lena.png}\n"
+        "  - {id: nico, name: Nico, place: Lorville, persona: Gruff., avatar: nico.png}\n"
+        "  - {id: eve, name: Eve, place: Lorville, persona: Odd., avatar: ../../secret.png}\n",
+        encoding="utf-8",
+    )
+
+    packs = load_packs([tmp_path])
+
+    assert packs.loaded == ["faces"] and packs.problems == []
+    assert Path(packs.npcs["lena"].avatar) == (folder / "lena.png").resolve()
+    assert packs.npcs["nico"].avatar == "" and packs.npcs["eve"].avatar == ""
+    assert packs.warnings == [
+        "faces: picture 'nico.png' of nico not found",
+        "faces: picture '../../secret.png' of eve not found",
+    ]
+
+
+def test_a_quest_may_only_require_quests_of_its_pack():
+    npcs, quests, problems = parse_pack(
+        {
+            "npcs": [{"id": "a", "name": "A", "place": "Lorville", "persona": "x"}],
+            "quests": [
+                {"id": "one", "title": "One", "giver": "a", "requires": "one",
+                 "steps": [{"type": "confirm"}]},
+                {"id": "two", "title": "Two", "giver": "a", "requires": ["one", "zero"],
+                 "steps": [{"type": "confirm"}]},
+            ],
+        },
+        "chain",
+    )
+    assert quests[1].requires == ("one", "zero")
+    assert problems == [
+        "quest 'one' requires itself",
+        "quest 'two'.requires 'zero' is no quest of this pack",
+    ]
 
 
 def test_npcs_and_quests_are_found_loosely(packs):
@@ -120,7 +175,8 @@ def test_a_quest_runs_through_its_steps(packs, tmp_path):
     advance = log.on_confirm(quest, now=140.0)
     assert advance.finished and advance.next_step is None
     assert log.state(quest.id).status == DONE and log.state(quest.id).finished_at == 140.0
-    assert log.active() == [] and log.offerable("lena-varga") == []
+    assert log.active() == []
+    assert [q.id for q in log.offerable("lena-varga")] == ["parts-for-jonas"], "the follow-up opens"
 
 
 def test_the_quest_log_survives_a_restart(packs, tmp_path):
@@ -247,13 +303,16 @@ class FakeConversation:
         self.handler = handler
         return self.takeover
 
+    avatars: list = []
+
     def register_speaker(self, name, opener, *, description=""):
         self.registered.append(name)
         self.descriptions[name] = description
         return SimpleNamespace(unsubscribe=lambda: None)
 
-    async def said_by(self, speaker, text, *, skill_name=""):
+    async def said_by(self, speaker, text, *, skill_name="", avatar=None):
         self.said.append((speaker, text))
+        self.avatars = [*self.avatars, avatar]
 
     async def show(self, text, *, skill_name=""):
         self.shown.append(text)
@@ -306,6 +365,8 @@ def _talking_skill(packs, tmp_path, *, here="Lorville", replies=("Then we can ta
     skill._log = QuestLog(tmp_path / "quests.json", packs)
     skill._talking = None
     skill._speakers, skill._names, skill._tasks, skill._hinted = [], {}, set(), {}
+    skill._portrait_tried = set()
+    skill._files = lambda: tmp_path
     skill.config = SimpleNamespace(display_name="Star Citizen NPCs")
     quiet = lambda *args, **kwargs: None
     skill.log = SimpleNamespace(warning=quiet, info=quiet, error=quiet)
@@ -492,6 +553,92 @@ def test_the_spot_check_says_when_the_position_could_not_be_read(packs, tmp_path
     result = _run(skill.quests("check"))
     assert result.startswith("You are at the spot") and skill._log.state(quest.id).step == 3
     assert asked[0] == ("check_position", {"waypoint": "Aberdeen 48.6255 8.9795 1690 800"})
+
+
+def _finish_letter(log, quest):
+    log.accept(quest)
+    log.on_place("HDMS-Anderson")
+    log.on_talk("jonas-varga")
+    log.on_reached(quest)
+    log.on_confirm(quest)
+
+
+def test_a_quest_waits_for_the_ones_it_requires(packs, tmp_path):
+    log = QuestLog(tmp_path / "quests.json", packs)
+    assert [q.id for q in log.offerable("lena-varga")] == ["letter-for-aberdeen"]
+    assert log.done_for("jonas-varga") == 0 and attitude_of(0) == ""
+
+    _finish_letter(log, packs.quests["letter-for-aberdeen"])
+
+    assert [q.id for q in log.offerable("lena-varga")] == ["parts-for-jonas"]
+    assert log.done_for("lena-varga") == log.done_for("jonas-varga") == 1
+    assert log.done_for("nico-brandt") == 0
+    assert attitude_of(1) == "Knows you" and attitude_of(2) == "Trusts you"
+
+
+def test_the_card_shows_the_picture_and_the_jobs_done(packs, tmp_path):
+    hud = FakeHud()
+    skill = _talking_skill(packs, tmp_path, here="Lorville")
+    skill.wingman.hud = hud
+    (tmp_path / "portraits").mkdir()
+    (tmp_path / "portraits" / "lena-varga.png").write_bytes(_png_bytes())
+    lena, nico = packs.npcs["lena-varga"], packs.npcs["nico-brandt"]
+
+    _run(skill._cards([lena, nico], "Lorville"))
+    card = hud.groups["npc"].cards["Lena Varga"]
+    assert card.startswith("![Lena Varga](") and card.endswith(".png)\n\nTammany and Sons · Lorville\n" + lena.wants[:90])
+    assert "\\" not in card, "forward slashes: a backslash escapes in Markdown"
+    assert hud.groups["npc"].cards["Nico Brandt"].startswith("Centermass · Lorville")
+
+    _finish_letter(skill._log, packs.quests["letter-for-aberdeen"])
+    _run(skill._cards([lena, nico], "Lorville"))
+    assert hud.groups["npc"].cards["Lena Varga"].endswith("\n\nKnows you · 1 job done")
+    assert "job" not in hud.groups["npc"].cards["Nico Brandt"]
+
+    _run(skill._say(lena, "Good to see you."))
+    assert skill.wingman.conversation.avatars[-1] == str(tmp_path / "portraits" / "lena-varga.png")
+    _run(skill._say(nico, "Buying?"))
+    assert skill.wingman.conversation.avatars[-1] is None
+
+
+def test_a_missing_picture_is_made_once_from_the_persona(packs, tmp_path):
+    skill = _talking_skill(packs, tmp_path, here="Lorville")
+    skill.wingman.hud = FakeHud()
+    prompts = []
+
+    async def generate_image(prompt, aspect="square", reference_images=None):
+        prompts.append(prompt)
+        return "data:image/png;base64," + base64.b64encode(_png_bytes("blue")).decode()
+
+    skill.wingman.ai.generate_image = generate_image
+    lena, jonas = packs.npcs["lena-varga"], packs.npcs["jonas-varga"]
+
+    _run(skill._ensure_portrait(lena))
+
+    file = tmp_path / "portraits" / "lena-varga.png"
+    assert file.is_file() and skill._portrait(lena) == str(file)
+    assert Image.open(file).getpixel((0, 0)) == (0, 0, 255)
+    assert prompts[0].startswith("Digital concept art") and "Lena Varga" in prompts[0]
+    assert "Tammany and Sons in Lorville" in prompts[0] and prompts[0].endswith("text or logo.")
+    assert "Lena Varga" in skill.wingman.hud.groups["npc"].cards, "the card is drawn again with the picture"
+
+    _run(skill._ensure_portrait(lena))
+    assert len(prompts) == 1, "a picture that exists is not made again"
+
+    skill.retrieve_custom_property_value = lambda name, errors: False if name == "generate_portraits" else None
+    _run(skill._ensure_portrait(jonas))
+    assert len(prompts) == 1 and skill._portrait(jonas) == "", "switched off: no picture"
+
+    skill.retrieve_custom_property_value = lambda name, errors: None
+
+    async def nothing(prompt, **kwargs):
+        prompts.append(prompt)
+        return ""
+
+    skill.wingman.ai.generate_image = nothing
+    _run(skill._ensure_portrait(jonas))
+    _run(skill._ensure_portrait(jonas))
+    assert len(prompts) == 2 and skill._portrait(jonas) == "", "a failure is tried once per session"
 
 
 def test_completed_quests_are_listed_and_the_people_in_them_remember(packs, tmp_path):

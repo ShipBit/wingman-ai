@@ -91,17 +91,40 @@ def reference_data_url(image_bytes: bytes) -> str:
     a PNG with alpha can be several megabytes."""
     image = Image.open(io.BytesIO(image_bytes))
     image.thumbnail((REFERENCE_MAX_DIMENSION, REFERENCE_MAX_DIMENSION), Image.LANCZOS)
+    return _jpeg_data_url(_as_rgb(image), quality=88)
+
+
+PICTURE_SIZE = 128
+"""Pixels of a speaker's picture sent with a chat line: the client draws it at
+56 px, twice that for a high-resolution screen."""
+
+
+def picture_data_url(file_path: str, size: int = PICTURE_SIZE) -> str:
+    """A small JPEG data URL of the image file, the long side at most `size`
+    pixels, for a picture that travels with every line someone says. Raises
+    when the file is missing or no image."""
+    with Image.open(file_path) as image:
+        image.thumbnail((size, size), Image.LANCZOS)
+        return _jpeg_data_url(_as_rgb(image), quality=85)
+
+
+def _as_rgb(image: Image.Image) -> Image.Image:
+    """Transparency goes onto white: a PNG with alpha can be several megabytes."""
     if image.mode in ("RGBA", "LA", "PA") or (
         image.mode == "P" and "transparency" in image.info
     ):
         image = image.convert("RGBA")
         background = Image.new("RGB", image.size, (255, 255, 255))
         background.paste(image, mask=image.getchannel("A"))
-        image = background
-    elif image.mode != "RGB":
-        image = image.convert("RGB")
+        return background
+    if image.mode != "RGB":
+        return image.convert("RGB")
+    return image
+
+
+def _jpeg_data_url(image: Image.Image, quality: int) -> str:
     buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=88)
+    image.save(buffer, format="JPEG", quality=quality)
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 

@@ -90,11 +90,21 @@ class QuestLog:
         return quest.steps[state.step]
 
     def offerable(self, npc_id: str) -> list:
-        """Quests this NPC gives that the player has not taken or finished."""
+        """Quests this NPC gives that the player has not taken or finished,
+        and whose required quests are done."""
         return [
             q for q in self.packs.quests_of(npc_id)
             if (self.state(q.id) is None or self.state(q.id).status in (OFFERED, ABANDONED))
+            and all(self.is_done(required) for required in q.requires)
         ]
+
+    def is_done(self, quest_id: str) -> bool:
+        state = self.state(quest_id)
+        return state is not None and state.status == DONE
+
+    def done_for(self, npc_id: str) -> int:
+        """How many finished quests this NPC gave or was talked to in."""
+        return sum(1 for quest, _ in self.done() if quest.involves(npc_id))
 
     # --- transitions ----------------------------------------------------------------
 
@@ -174,6 +184,13 @@ class QuestLog:
             where = f"step {state.step + 1} of {len(quest.steps)}: {what}" if step else "done"
             lines.append(f"- {quest.title} ({where})")
         return "\n".join(lines)
+
+
+def attitude_of(jobs_done: int) -> str:
+    """How an NPC stands to the player after this many jobs for them."""
+    if jobs_done <= 0:
+        return ""
+    return "Knows you" if jobs_done == 1 else "Trusts you"
 
 
 def describe_step(step: Optional[Step], npcs: Optional[dict] = None) -> str:

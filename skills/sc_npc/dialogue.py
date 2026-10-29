@@ -10,6 +10,7 @@ from skills.sc_npc.packs import Npc, Quest
 MAX_HISTORY = 8
 """Turns of this conversation the NPC sees (user and NPC lines together)."""
 MAX_MEMORY_CHARS = 1200
+MAX_PORTRAIT_PERSONA_CHARS = 400
 
 
 def npc_system_prompt(
@@ -64,6 +65,15 @@ def npc_system_prompt(
     if world:
         lines += ["", "What is true right now (from the pilot's ship systems):", world]
     return "\n".join(lines)
+
+
+def portrait_prompt(npc: Npc) -> str:
+    """What the image model is told for an NPC's picture: who they are and
+    where they stand. Core puts the style in front and the portrait framing
+    behind it."""
+    where = f"{npc.shop} in {npc.place}" if npc.shop else npc.place
+    persona = " ".join(npc.persona.split())[:MAX_PORTRAIT_PERSONA_CHARS]
+    return f"{npc.name}, a character in the Star Citizen universe at {where}. {persona}"
 
 
 def arrival_hint_prompt(wingman: str, language: str, npc: Npc, place: str) -> str:

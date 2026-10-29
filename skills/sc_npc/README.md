@@ -16,7 +16,11 @@ When the user talks to someone without naming them and several people stand
 at the place, a screenshot tells the main model from the shop sign who is in
 front of the user ("Look at the screen" setting; needs a model that can see).
 
-NPC lines show up in the chat under the NPC's name. Whether the user is saying
+NPC lines show up in the chat and on the HUD under the NPC's name, with their
+picture: the one the pack brings, or one the skill generates from the persona
+the first time the user meets them ("Generate portraits" setting, needs an
+image generation provider). The HUD card of an NPC shows the picture and how
+they stand to the user after the jobs done for them. Whether the user is saying
 goodbye or agreeing to an offered job is judged by System One; without it, a
 conversation ends by name, by leaving, or by silence, and a job is accepted
 with "Computer, accept the quest".
@@ -46,6 +50,7 @@ problem is logged; `quests` with action `list` names it too.
 | `wants` | no | What they are after. The hook for your quest. |
 | `greeting` | no | Said word for word the first time the player talks to them. |
 | `voices` | no | TTS provider id to voice: `edge_tts`, `openai`, `elevenlabs`, `wingman_pro`, `inworld`, `pocket_tts`... A provider without an entry uses the skill's "NPC voice" setting. |
+| `avatar` | no | Their picture, a PNG, JPEG or WebP file next to `pack.yaml` (`avatar: lena.png`), square and at least 256 px. Without one the skill generates a picture when "Generate portraits" is on. |
 
 ### Quest
 
@@ -56,6 +61,7 @@ problem is logged; `quests` with action `list` names it too.
 | `offer` | no | How the giver describes it. |
 | `steps` | yes | In order, each with a `type`, a `hint` (what the player is told when the step becomes current) and an optional `done` line. |
 | `reward` | no | Said when the last step is done. Words only; the skill cannot change the game. |
+| `requires` | no | Ids of quests that have to be done first. The giver offers this one only then: quest chains, and NPCs who open up after a first job. |
 
 Step types:
 

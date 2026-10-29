@@ -15,17 +15,18 @@ calls talk_to_npc, the NPC answers aloud. Nothing here polls the game.
 
 import asyncio
 import math
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional
 
-from api.enums import SpeechPriority
+from api.enums import ImageStyle, SpeechPriority
 from api.interface import SettingsConfig, SkillConfig
-from services.image_generation import vision_base64
+from services.image_generation import AVATAR_FRAMING, compose_prompt, store_image, vision_base64
 from services.skill_local_ai import SamplingPreset
 from skills.sc_npc import dialogue
 from skills.sc_npc.packs import Npc, Packs, Quest, load_packs
-from skills.sc_npc.quests import Advance, QuestLog, describe_step
+from skills.sc_npc.quests import Advance, QuestLog, attitude_of, describe_step
 from skills.skill_base import Skill, tool
 
 SILENT = "."
@@ -43,6 +44,10 @@ LINE_CHARS = 400
 HUD_GROUP = "npc"
 QUESTS_PANEL = "Quests"
 LISTED = 8
+PORTRAITS_DIR = "portraits"
+"""Generated pictures, <npc id>.<ext>, in the skill's files folder."""
+PORTRAIT_STYLE = ImageStyle.CINEMATIC
+PORTRAIT_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 
 
 class ScNpc(Skill):
@@ -68,6 +73,8 @@ class ScNpc(Skill):
         """Addressable name to NPC id."""
         self._talking: Optional[Npc] = None
         """The NPC the user is talking to right now (the skill has the conversation)."""
+        self._portrait_tried: set = set()
+        """NPC ids a picture was generated for this session, or tried."""
 
     # --- settings, read fresh -------------------------------------------------
 
@@ -77,6 +84,10 @@ class ScNpc(Skill):
 
     def _show_in_hud(self) -> bool:
         value = self.retrieve_custom_property_value("show_in_hud", [])
+        return True if value is None else bool(value)
+
+    def _generate_portraits(self) -> bool:
+        value = self.retrieve_custom_property_value("generate_portraits", [])
         return True if value is None else bool(value)
 
     def _npc_voice_setting(self):
@@ -102,6 +113,8 @@ class ScNpc(Skill):
         self._log = QuestLog(self._files() / "quests.json", self._packs)
         for problem in self._packs.problems:
             self.log.warning(f"NPC pack left out: {problem}")
+        for warning in self._packs.warnings:
+            self.log.warning(f"NPC pack: {warning}")
         self.log.info(
             f"NPC packs: {', '.join(self._packs.loaded) or 'none'} "
             f"({len(self._packs.npcs)} NPCs, {len(self._packs.quests)} quests)",
@@ -199,6 +212,8 @@ class ScNpc(Skill):
             if not npcs:
                 return
             await self._cards(npcs, place)
+            for npc in npcs:
+                self._schedule(self._ensure_portrait(npc))
             if not self._hint_on_arrival():
                 return
             now = time.monotonic()
@@ -247,8 +262,57 @@ class ScNpc(Skill):
             return
         group = self._group()
         for npc in npcs:
+            parts = []
+            portrait = self._portrait(npc)
+            if portrait:
+                # Forward slashes: in Markdown a backslash escapes the next character
+                parts.append(f"![{npc.name}]({portrait.replace(chr(92), '/')})")
             where = (npc.shop + " · " if npc.shop else "") + place
-            await group.add_info(npc.name, where + (f"\n{npc.wants[:90]}" if npc.wants else ""))
+            parts.append(where + (f"\n{npc.wants[:90]}" if npc.wants else ""))
+            jobs = self._log.done_for(npc.id) if self._log else 0
+            if jobs:
+                parts.append(f"{attitude_of(jobs)} · {jobs} job{'s' if jobs > 1 else ''} done")
+            await group.add_info(npc.name, "\n\n".join(parts))
+
+    # --- pictures ---------------------------------------------------------------------
+
+    def _portrait(self, npc: Npc) -> str:
+        """The path of the NPC's picture: the pack's, else a generated one, else ""."""
+        if npc.avatar and os.path.isfile(npc.avatar):
+            return npc.avatar
+        folder = self._files() / PORTRAITS_DIR
+        for extension in PORTRAIT_EXTENSIONS:
+            file = folder / f"{npc.id}.{extension}"
+            if file.is_file():
+                return str(file)
+        return ""
+
+    async def _ensure_portrait(self, npc: Npc) -> None:
+        """An NPC without a picture gets one made from their persona, once.
+        In the background: the conversation does not wait for it."""
+        if self._portrait(npc) or npc.id in self._portrait_tried or not self._generate_portraits():
+            return
+        self._portrait_tried.add(npc.id)
+        try:
+            prompt = compose_prompt(dialogue.portrait_prompt(npc), PORTRAIT_STYLE, AVATAR_FRAMING)
+            image = await self.wingman.ai.generate_image(prompt)
+            if not image:
+                self.log.info(
+                    f"No picture for {npc.name}: image generation is off or failed.", server_only=True
+                )
+                return
+            folder = self._files() / PORTRAITS_DIR
+            folder.mkdir(parents=True, exist_ok=True)
+            stored = await asyncio.to_thread(store_image, image, str(folder), npc.id)
+            final = folder / f"{npc.id}{Path(stored).suffix.lower()}"
+            os.replace(stored, final)
+            self.log.info(f"Picture of {npc.name} saved: {final}", server_only=True)
+            if self._here and npc.at(self._here):
+                await self._cards([npc], self._here)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self.log.warning(f"Picture of {npc.name}: {error}", server_only=True)
 
     async def _questlog(self) -> None:
         if not self._show_in_hud() or not self.wingman.hud.available or not self._log:
@@ -436,6 +500,7 @@ class ScNpc(Skill):
         the NPC greets once per session, then answers what was said."""
         self._talking = npc
         self.wingman.conversation.take_over(npc.name, self._turn, idle_s=TALK_IDLE_SECONDS)
+        self._schedule(self._ensure_portrait(npc))
         if npc.id not in self._met and npc.greeting:
             self._met.add(npc.id)
             self._history.setdefault(npc.id, []).append(("assistant", npc.greeting))
@@ -546,7 +611,9 @@ class ScNpc(Skill):
         return seen
 
     async def _say(self, npc: Npc, line: str) -> None:
-        await self.wingman.conversation.said_by(npc.name, line, skill_name=self.config.display_name)
+        await self.wingman.conversation.said_by(
+            npc.name, line, skill_name=self.config.display_name, avatar=self._portrait(npc) or None
+        )
         await self._speak_as(npc, line)
 
     def _giver_name(self, quest: Quest) -> str:
@@ -585,6 +652,10 @@ class ScNpc(Skill):
                 text += f" {quest.reward}"
             if advance.step and advance.step.done:
                 text = f"{advance.step.done} {text}"
+            if self._here:
+                here = [n for n in self._packs.npcs_at(self._here) if quest.involves(n.id)]
+                if here:
+                    await self._cards(here, self._here)
             return text
         text = advance.step.done or f"Step done for '{quest.title}'."
         if advance.next_step:
