@@ -11,6 +11,7 @@ from api.interface import (
     DuplicateConfigRequest,
     DuplicateWingmanRequest,
     DuplicateWingmanResult,
+    InputBinding,
     McpConfig,
     McpConnectResult,
     McpOAuthStartResult,
@@ -28,7 +29,9 @@ from api.interface import (
     WingmanConfigFileInfo,
     WingmanSkillState,
 )
+from services.binding_owners import announce, take_from_settings, wingman_owner
 from services.config_manager import ConfigManager
+from services.input_bindings import added_bindings, without_bindings
 from services.mcp_oauth import get_oauth_service
 from services.config_migration_service import ConfigMigrationService
 from services.file import get_custom_skills_dir
@@ -1454,6 +1457,45 @@ class ConfigService:
             return []
         return self.config_manager.get_wingmen_configs(config_dir)
 
+    async def take_bindings_from_wingmen(
+        self,
+        taken: list[InputBinding],
+        config_dirs: list[ConfigDirInfo],
+        keep: Optional[str] = None,
+    ) -> list[tuple[dict, InputBinding]]:
+        """Removes the bindings from the push-to-talk of every Wingman in these
+        configs but `keep` (a Wingman's name). Returns who lost which one."""
+        lost = []
+        current = self.current_config_dir.name if self.current_config_dir else None
+        for config_dir in config_dirs:
+            for wingman_file in self.config_manager.get_wingmen_configs(config_dir):
+                if wingman_file.name == keep:
+                    continue
+                try:
+                    wingman_config = self.config_manager.load_wingman_config(
+                        config_dir=config_dir, wingman_file=wingman_file
+                    )
+                except Exception:
+                    continue
+                if not wingman_config:
+                    continue
+                kept, removed = without_bindings(wingman_config.record_bindings, taken)
+                if not removed:
+                    continue
+                wingman_config.record_bindings = kept
+                await self.save_wingman_config(
+                    config_dir=config_dir,
+                    wingman_file=wingman_file,
+                    wingman_config=wingman_config,
+                    silent=True,
+                )
+                owner = wingman_owner(
+                    wingman_file.name,
+                    None if config_dir.name == current else config_dir.name,
+                )
+                lost += [(owner, binding) for binding in removed]
+        return lost
+
     # DELETE config/wingman
     async def delete_wingman_config(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
@@ -1629,6 +1671,7 @@ class ConfigService:
             existing_config = None
 
         merged_config = wingman_config
+        old_bindings = existing_config.record_bindings if existing_config else []
         if existing_config:
             # Merge partial payloads: prefer incoming values, but keep existing values
             # for fields that are omitted from the request.
@@ -1659,6 +1702,28 @@ class ConfigService:
             if not set_voice_activation_default:
                 merged_config.is_voice_activation_default = (
                     existing_config.is_voice_activation_default
+                )
+
+        # A push-to-talk binding just recorded here is this Wingman's now:
+        # nothing else may fire on it.
+        recorded = added_bindings(merged_config.record_bindings, old_bindings)
+        if recorded:
+            settings = self.config_manager.settings_config
+            lost = take_from_settings(settings, recorded)
+            if lost:
+                self.config_manager.save_settings_config()
+            lost += await self.take_bindings_from_wingmen(
+                recorded, [config_dir], keep=wingman_file.name
+            )
+            if lost:
+                is_current_dir = bool(self.current_config_dir) and (
+                    config_dir.name == self.current_config_dir.name
+                )
+                announce(
+                    wingman_owner(
+                        merged_config.name, None if is_current_dir else config_dir.name
+                    ),
+                    lost,
                 )
 
         # Before sign-in there is no Tower, only the parsed config it will be

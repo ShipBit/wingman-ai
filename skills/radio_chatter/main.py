@@ -142,10 +142,10 @@ class RadioChatter(Skill):
         return defaults
 
     def _get_interval_min(self) -> int:
-        return self._get_range("interval_range", (60, 600))[0]
+        return self._get_range("interval_range", (60, 900))[0]
 
     def _get_interval_max(self) -> int:
-        return self._get_range("interval_range", (60, 600))[1]
+        return self._get_range("interval_range", (60, 900))[1]
 
     def _get_messages_min(self) -> int:
         return self._get_range("messages_range", (1, 5))[0]
