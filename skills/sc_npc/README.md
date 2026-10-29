@@ -71,7 +71,7 @@ Step types:
 - "Computer, ..." → the Wingman is back
 - "I'll take the job" (to the NPC), or "Computer, accept the quest" → the quest starts
 - "Am I at the spot?" / "I found it" → `quests check`
-- "What am I working on?" → `quests list`
+- "What am I working on?" / "Which quests have I finished?" → `quests list`
 
 ## Testing without the game
 

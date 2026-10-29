@@ -132,7 +132,7 @@ def test_the_quest_log_survives_a_restart(packs, tmp_path):
     again = _log(packs, tmp_path)
 
     assert again.state(quest.id).step == 1
-    assert "A letter for Aberdeen (step 2 of 4: talk to jonas-varga)" in again.summary()
+    assert "A letter for Aberdeen (step 2 of 4: talk to Jonas Varga)" in again.summary()
 
 
 def test_an_abandoned_quest_can_be_offered_again(packs, tmp_path):
@@ -419,11 +419,26 @@ def test_leaving_a_place_drops_its_people_and_the_names_are_hotwords(packs, tmp_
     }
 
 
+class FakeGroup:
+    def __init__(self):
+        self.cards = {}
+
+    async def add_info(self, title, text="", **kwargs):
+        self.cards[title] = text
+
+    async def clear(self):
+        self.cards.clear()
+
+
 class FakeHud:
     available = True
 
     def __init__(self):
         self.panels = {}
+        self.groups = {}
+
+    def group(self, name, **kwargs):
+        return self.groups.setdefault(name, FakeGroup())
 
     async def add_info(self, title, text="", **kwargs):
         self.panels[title] = text
@@ -431,6 +446,82 @@ class FakeHud:
 
     async def remove_info(self, title):
         return self.panels.pop(title, None) is not None
+
+
+def test_arriving_moves_the_quest_log_on_the_hud(packs, tmp_path):
+    hud = FakeHud()
+    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson")
+    skill.wingman.hud = hud
+    skill._log.accept(packs.quests["letter-for-aberdeen"])
+    _run(skill._questlog())
+    assert "step 1 of 4: go to HDMS-Anderson" in hud.panels["Quests"]
+
+    _run(skill._arrived("HDMS-Anderson"))
+
+    assert "step 2 of 4: talk to Jonas Varga" in hud.panels["Quests"], "names, not ids, and no stale step"
+    assert skill.wingman.conversation.shown[0].startswith("You have reached HDMS-Anderson. Next: Talk to Jonas")
+    assert "Jonas Varga" in hud.groups["npc"].cards
+
+
+def test_the_spot_check_says_when_the_position_could_not_be_read(packs, tmp_path):
+    quest = packs.quests["letter-for-aberdeen"]
+    skill = _talking_skill(packs, tmp_path, here="HDMS-Anderson")
+    skill._log.accept(quest)
+    skill._log.on_place("HDMS-Anderson")
+    skill._log.on_talk("jonas-varga")
+    answers = [
+        "Could not read the position: Star Citizen did not answer /showlocation. Do not retry on your own.",
+        "Aberdeen, 1.5 km from HDMS Anderson. Waypoint 'Aberdeen 48.6255 8.9795 1690 800': 1.4 km to go.",
+        "Aberdeen, 1.5 km from HDMS Anderson. Waypoint 'Aberdeen 48.6255 8.9795 1690 800': arrived, within its 800 m.",
+    ]
+    asked = []
+
+    async def invoke(name, args):
+        asked.append((name, args))
+        return SimpleNamespace(response=answers.pop(0))
+
+    skill.wingman.tools = SimpleNamespace(has=lambda name: True, invoke=invoke)
+
+    result = _run(skill.quests("check"))
+    assert result.startswith("The spot could not be checked, the step stays open. Could not read")
+    assert "Not there yet" not in result and skill._log.state(quest.id).step == 2
+
+    result = _run(skill.quests("check"))
+    assert result.startswith("Not there yet. Aberdeen") and result.endswith("at the spot.")
+
+    result = _run(skill.quests("check"))
+    assert result.startswith("You are at the spot") and skill._log.state(quest.id).step == 3
+    assert asked[0] == ("check_position", {"waypoint": "Aberdeen 48.6255 8.9795 1690 800"})
+
+
+def test_completed_quests_are_listed_and_the_people_in_them_remember(packs, tmp_path):
+    quest = packs.quests["letter-for-aberdeen"]
+    skill = _talking_skill(packs, tmp_path)
+    log = skill._log
+    assert "Completed" not in _run(skill.quests("list"))
+    log.accept(quest)
+    log.on_place("HDMS-Anderson")
+    log.on_talk("jonas-varga")
+    log.on_reached(quest)
+    log.on_confirm(quest)
+    assert [q.id for q, _ in log.done()] == ["letter-for-aberdeen"]
+
+    listed = _run(skill.quests("list"))
+    assert listed.startswith("No active quests.") and "Completed: 'A letter for Aberdeen' (20" in listed
+
+    prompts = []
+
+    async def generate(prompt=None, *, messages=None):
+        prompts.append(messages[0]["content"])
+        return "Good to see you again."
+
+    skill.wingman.ai = SimpleNamespace(generate=generate)
+    for npc_id in ("lena-varga", "jonas-varga", "nico-brandt"):
+        _run(skill._npc_answer(packs.npcs[npc_id], "Hello."))
+    lena, jonas, nico = prompts
+    assert "already done for you: 'A letter for Aberdeen'" in lena, "the giver remembers"
+    assert "'A letter for Aberdeen'" in jonas, "so does the one talked to"
+    assert "'A letter for Aberdeen'" not in nico, "Nico had no part in it"
 
 
 async def _nothing(self):

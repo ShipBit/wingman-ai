@@ -21,12 +21,14 @@ def npc_system_prompt(
     memory: str,
     offers: list,
     active_titles: list,
+    done_titles: list = (),
 ) -> str:
     """The system prompt for one NPC's answer.
 
     `world` is what the game log says (ship, missions, time), `memory` what the
     Wingman remembers about earlier meetings, `offers` the quests this NPC may
-    bring up, `active_titles` the ones the player is already on for them."""
+    bring up, `active_titles` the ones the player is already on for them,
+    `done_titles` the ones they finished that involved this NPC."""
     lines = [
         f"You are {npc.name}, a character in the Star Citizen universe, at {place}"
         + (f" ({npc.shop})" if npc.shop else "")
@@ -46,6 +48,9 @@ def npc_system_prompt(
         lines += [f"- '{q.title}': {q.offer or q.title}" for q in offers]
     if active_titles:
         lines += ["", "The pilot already works for you on: " + ", ".join(f"'{t}'" for t in active_titles) + "."]
+    if done_titles:
+        lines += ["", "What this pilot has already done for you: " + ", ".join(f"'{t}'" for t in done_titles)
+                  + ". You remember it and treat them accordingly."]
     lines += [
         "",
         "Rules:",

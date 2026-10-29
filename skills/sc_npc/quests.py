@@ -75,6 +75,15 @@ class QuestLog:
                 pairs.append((quest, state))
         return pairs
 
+    def done(self) -> list:
+        """(Quest, QuestState) of every finished quest, oldest first."""
+        pairs = []
+        for state in sorted(self._load().values(), key=lambda s: s.finished_at):
+            quest = self.packs.quests.get(state.quest)
+            if quest and state.status == DONE:
+                pairs.append((quest, state))
+        return pairs
+
     def current_step(self, quest: Quest, state: QuestState) -> Optional[Step]:
         if state.status != ACTIVE or state.step >= len(quest.steps):
             return None
@@ -161,18 +170,21 @@ class QuestLog:
         lines = []
         for quest, state in self.active():
             step = self.current_step(quest, state)
-            where = f"step {state.step + 1} of {len(quest.steps)}: {describe_step(step)}" if step else "done"
+            what = describe_step(step, self.packs.npcs)
+            where = f"step {state.step + 1} of {len(quest.steps)}: {what}" if step else "done"
             lines.append(f"- {quest.title} ({where})")
         return "\n".join(lines)
 
 
-def describe_step(step: Optional[Step]) -> str:
+def describe_step(step: Optional[Step], npcs: Optional[dict] = None) -> str:
+    """One short clause per step; `npcs` (id -> Npc) puts names in place of ids."""
     if step is None:
         return ""
     if step.type == "visit":
         return f"go to {step.place}"
     if step.type == "talk":
-        return f"talk to {step.npc}"
+        npc = (npcs or {}).get(step.npc)
+        return f"talk to {npc.name if npc else step.npc}"
     if step.type == "reach":
         return "reach the marked spot"
     return "confirm when done"

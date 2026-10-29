@@ -188,7 +188,10 @@ class ScNpc(Skill):
 
     async def _arrived(self, place: str) -> None:
         try:
-            for advance in (self._log.on_place(place) if self._log else []):
+            advances = self._log.on_place(place) if self._log else []
+            if advances:
+                await self._questlog()
+            for advance in advances:
                 line = await self._after_advance(advance)
                 await self.wingman.conversation.show(line, skill_name=self.config.display_name)
                 await self.wingman.tts.speak(line, priority=SpeechPriority.EVENT)
@@ -302,6 +305,7 @@ class ScNpc(Skill):
     async def _npc_answer(self, npc: Npc, text: str) -> str:
         offers = self._log.offerable(npc.id) if self._log else []
         active = [q.title for q, _ in (self._log.active() if self._log else []) if q.giver == npc.id]
+        done = [q.title for q, _ in (self._log.done() if self._log else []) if q.involves(npc.id)]
         system = dialogue.npc_system_prompt(
             npc,
             language=self.wingman.language.name,
@@ -310,6 +314,7 @@ class ScNpc(Skill):
             memory=await self._memory_about(npc),
             offers=offers,
             active_titles=active,
+            done_titles=done[-LISTED:],
         )
         history = self._history.setdefault(npc.id, [])
         messages = [{"role": "system", "content": system}, *dialogue.history_messages(history),
@@ -544,17 +549,23 @@ class ScNpc(Skill):
         await self.wingman.conversation.said_by(npc.name, line, skill_name=self.config.display_name)
         await self._speak_as(npc, line)
 
+    def _giver_name(self, quest: Quest) -> str:
+        npc = self._packs.npcs.get(quest.giver)
+        return npc.name if npc else quest.giver
+
     async def _accept(self, quest: Quest) -> str:
         self._log.accept(quest)
         if self.wingman.memory.available:
+            # The step is not part of it: the quest log in the context has the
+            # current one, a step written here would go stale.
             try:
                 await self.wingman.memory.track(
-                    f"Quest '{quest.title}' for {quest.giver}: {describe_step(quest.steps[0])}"
+                    f"Quest '{quest.title}' for {self._giver_name(quest)} (steps in the NPC quest log)"
                 )
             except Exception:
                 pass
         await self._questlog()
-        return f"Accepted '{quest.title}'. First step: {quest.steps[0].hint or describe_step(quest.steps[0])}"
+        return f"Accepted '{quest.title}'. First step: {quest.steps[0].hint or describe_step(quest.steps[0], self._packs.npcs)}"
 
     # --- quests ---------------------------------------------------------------------------
 
@@ -564,7 +575,9 @@ class ScNpc(Skill):
             if self.wingman.memory.available:
                 try:
                     await self.wingman.memory.close(f"Quest '{quest.title}'", f"Quest '{quest.title}' completed.")
-                    await self.wingman.memory.remember(f"The user completed the quest '{quest.title}' for {quest.giver}.")
+                    await self.wingman.memory.remember(
+                        f"The user completed the quest '{quest.title}' for {self._giver_name(quest)}."
+                    )
                 except Exception:
                     pass
             text = f"Quest '{quest.title}' is complete."
@@ -575,7 +588,7 @@ class ScNpc(Skill):
             return text
         text = advance.step.done or f"Step done for '{quest.title}'."
         if advance.next_step:
-            text += f" Next: {advance.next_step.hint or describe_step(advance.next_step)}"
+            text += f" Next: {advance.next_step.hint or describe_step(advance.next_step, self._packs.npcs)}"
         return text
 
     def _pick_quest(self, name: str, statuses: tuple) -> tuple:
@@ -598,9 +611,9 @@ class ScNpc(Skill):
 
     @tool(
         description=(
-            "The user's quests from NPC packs: list them, accept one an NPC offered, check the "
-            "current step (a spot to reach is measured with the position skill; a confirm step "
-            "is completed), or abandon one."
+            "The user's quests from NPC packs: list them (active, offered and completed), accept "
+            "one an NPC offered, check the current step (a spot to reach is measured with the "
+            "position skill; a confirm step is completed), or abandon one."
         )
     )
     async def quests(
@@ -618,6 +631,12 @@ class ScNpc(Skill):
                        if (self._log.state(q.id).status if self._log.state(q.id) else None) == "offered"]
             if offered:
                 lines.append("Offered, not yet accepted: " + ", ".join(f"'{q.title}'" for q in offered) + ".")
+            done = self._log.done()
+            if done:
+                lines.append("Completed: " + ", ".join(
+                    f"'{q.title}' ({time.strftime('%Y-%m-%d', time.localtime(s.finished_at))})"
+                    for q, s in done[-LISTED:]
+                ) + ".")
             if self._packs.problems:
                 lines.append("Packs with problems: " + "; ".join(self._packs.problems[:3]))
             return "\n".join(lines)
@@ -661,4 +680,7 @@ class ScNpc(Skill):
             advance = self._log.on_reached(picked)
             await self._questlog()
             return await self._after_advance(advance) if advance else response
+        if "could not" in response.lower():
+            # No reading at all: the position skill's text says what to do.
+            return f"The spot could not be checked, the step stays open. {response}"
         return f"Not there yet. {response} {step.hint}".strip()

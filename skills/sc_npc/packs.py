@@ -74,6 +74,10 @@ class Quest:
     reward: str = ""
     pack: str = ""
 
+    def involves(self, npc_id: str) -> bool:
+        """The NPC gives this quest or is talked to in it."""
+        return self.giver == npc_id or any(s.type == "talk" and s.npc == npc_id for s in self.steps)
+
 
 @dataclass
 class Packs:
