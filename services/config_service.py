@@ -1682,6 +1682,18 @@ class ConfigService:
 
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
+        if wingman and not merged_config.disabled and merged_config.name != wingman_file.name:
+            # A running Wingman keeps the name it was built with: the chat, the
+            # HUD and its memory would show the old one until a restart. Built
+            # again, everything has the new name at once.
+            self.config_manager.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=merged_config,
+            )
+            await self.load_config(self.current_config_dir)
+            await self.config_events.publish("wingman_config_saved", merged_config)
+            return True
         if merged_config.disabled:
             # A disabled wingman leaves the Tower, so no sentence reaches it.
             # Its config is still saved, the user may edit it while it is off,
