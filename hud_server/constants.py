@@ -52,8 +52,12 @@ PATH_ELEMENT_HIDE = "/element/hide"
 PATH_DEFAULTS = "/defaults"
 PATH_PREVIEW = "/preview"
 PATH_OBS = "/obs"
+PATH_OBS_CHAT = "/obs/chat"
+PATH_OBS_INFO = "/obs/info"
 PATH_OBS_WS = "/obs/ws"
 PATH_OBS_FRAME = "/obs/frame.png"
+PATH_OBS_CHAT_FRAME = "/obs/chat/frame.png"
+PATH_OBS_INFO_FRAME = "/obs/info/frame.png"
 PATH_OBS_STATUS = "/obs/status"
 
 # Shared containers every Wingman writes to; their look comes from the defaults
