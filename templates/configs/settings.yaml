@@ -148,6 +148,13 @@ system_one:
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
   commands: true
+  # Pick the Wingman for a sentence from the global push-to-talk key that
+  # names none, when no Wingman has the star.
+  wingman_choice: true
+  # Confirm the game names speech recognition corrects ("cutless" to Cutlass).
+  vocabulary: true
+  # Let skills ask it: UEX Corp, Spotify, the HUD and others.
+  skills: true
 # The one language you and your Wingmen speak: en, de, fr, es, it or pt,
 # or "other" with the language in other_language (code, name, english_name).
 # Answer language, voice model and speech recognition all follow it.

@@ -2123,7 +2123,7 @@ class WingmanCore(WebSocketUser):
         target = next((w for w in tower.wingmen if w.name == name), None)
         if target:
             self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
-        elif self.routing_jev.active:
+        elif self.routing_jev.wingman_choice_active:
             # Jev is on but the call failed: whoever spoke last is the best guess.
             target = next((w for w in tower.wingmen if w.name == self._last_answer_from), None)
             if target:
@@ -2134,7 +2134,7 @@ class WingmanCore(WebSocketUser):
         if not target:
             self.printr.print(
                 f"Nobody answered '{text}': say a Wingman's name, give one the ⭐ "
-                "or switch on Fast decisions.",
+                "or let Fast decisions pick the Wingman.",
                 color=LogType.WARNING,
             )
         return target

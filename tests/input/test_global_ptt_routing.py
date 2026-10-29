@@ -42,6 +42,7 @@ class FakeJev:
     def __init__(self, pick, active=True):
         self.pick = pick
         self.active = active
+        self.wingman_choice_active = active
         self.asked = []
 
     def update_settings(self, _settings):

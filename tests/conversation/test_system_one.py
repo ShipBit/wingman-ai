@@ -162,9 +162,10 @@ def test_no_candidates_is_no_replacements():
 # ── the gate, off and on ────────────────────────────────────────────
 
 
-def _settings(enabled: bool, commands: bool = True):
+def _settings(enabled: bool, commands: bool = True, **switches):
+    places = {"wingman_choice": True, "vocabulary": True, "skills": True, **switches}
     return SimpleNamespace(
-        system_one=SimpleNamespace(enabled=enabled, commands=commands),
+        system_one=SimpleNamespace(enabled=enabled, commands=commands, **places),
         wingman_pro=SimpleNamespace(base_url="https://example.invalid"),
     )
 
@@ -415,3 +416,41 @@ def test_an_unanswered_count_does_not_block_a_confident_command():
                              "confidence": 0.99, "probabilities": {}}}
     )
     assert read_command(result, 0.8) == "ToggleShields"
+
+
+# ── a switch per place, under the master switch ─────────────────────
+
+
+def _gate_that_must_not_ask(**switches) -> JevGate:
+    gate = JevGate("T", settings=_settings(True, **switches))
+    gate.client.api_key = "k"
+    gate.client.system_one = lambda *a: pytest.fail("should not have asked")
+    return gate
+
+
+def test_the_skills_switch_closes_the_door_for_skills_only():
+    gate = _gate_that_must_not_ask(skills=False)
+    api = SkillSystemOne(gate)
+    assert api.available is False
+    assert asyncio.run(api.decide("x", {"q": SkillSystemOne.noul("?")})).ok is False
+    assert api.decide_sync("x", {"q": SkillSystemOne.noul("?")}).ok is False
+    assert gate.active is True
+
+
+def test_the_wingman_choice_switch_stops_picking_a_wingman():
+    gate = _gate_that_must_not_ask(wingman_choice=False)
+    configs = [SimpleNamespace(name="A"), SimpleNamespace(name="B")]
+    assert gate.pick_wingman("hello", configs) is None
+    assert gate.wingman_choice_active is False
+
+
+def test_the_vocabulary_switch_leaves_the_matcher_alone():
+    gate = _gate_that_must_not_ask(vocabulary=False)
+    assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
+
+
+def test_the_master_switch_wins_over_every_place():
+    gate = JevGate("T", settings=_settings(False))
+    gate.client.api_key = "k"
+    assert gate.skills_active is False
+    assert gate.wingman_choice_active is False

@@ -154,6 +154,19 @@ class JevGate:
             )
         return False
 
+    def _switched_on(self, place: str) -> bool:
+        """Whether the user lets Jev decide at this place: the master switch
+        and the place's own one under it."""
+        return self.active and bool(getattr(self.settings.system_one, place))
+
+    @property
+    def wingman_choice_active(self) -> bool:
+        return self._switched_on("wingman_choice")
+
+    @property
+    def skills_active(self) -> bool:
+        return self._switched_on("skills")
+
     def take_decisions(self) -> list[tuple[str, float]]:
         """Everything decided since the last call, and reset.
 
@@ -200,7 +213,7 @@ class JevGate:
         None means nothing was decided: off, no access, no commands, a config
         too big to ask about, or an answer below the gate.
         """
-        if not (self.active and self.settings and self.settings.system_one.commands):
+        if not self._switched_on("commands"):
             return None
 
         askable = self._askable_commands(commands)
@@ -242,7 +255,7 @@ class JevGate:
         Blocking: called on the transcription thread, which waits for the
         answer anyway before anything can be said.
         """
-        if not self.active or len(configs) < 2:
+        if not self.wingman_choice_active or len(configs) < 2:
             return None
         result = self._record(
             "Wingman choice",
@@ -305,7 +318,7 @@ class JevGate:
         speech is usually never. "Shields up." produces no candidate and
         costs nothing.
         """
-        if not self.active or not proposals:
+        if not self._switched_on("vocabulary") or not proposals:
             return None
         if time.monotonic() < self._vocabulary_paused_until:
             return None
@@ -348,15 +361,15 @@ class JevGate:
 
         Deliberately unconstrained: the two decisions above are Core's, and a
         skill's will be something we did not think of. What it does not get is
-        a way around the switch — off is off, here as everywhere.
+        a way around the switches: the master one and the one for skills.
         """
-        if not self.active:
+        if not self.skills_active:
             return None
         return await self._ask(state, questions, f"Skill: {len(questions)} question(s)")
 
     def ask_sync(self, state, questions: dict) -> Optional[JevResult]:
         """Blocking version, for a skill already off the event loop."""
-        if not self.active:
+        if not self.skills_active:
             return None
         return self._record(
             f"Skill: {len(questions)} question(s)",
