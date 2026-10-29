@@ -95,6 +95,7 @@ Skills are Python modules that give a Wingman new abilities. Grant one to a Wing
 - **Star Citizen**
   - **Star Citizen Events**: your Wingman reacts in character to what the log reader sees, and knows where you are and which missions you have
   - **Star Citizen Accountant**: books trades and rewards from the game log and tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
+  - **Star Citizen Telemetry**: reads the game's own local telemetry (speed, altitude, power, shields, warning lights, vitals) so your Wingman reacts to what happens to the ship and the pilot, and answers questions about them
   - **UEX Corp**: trade routes, commodity prices, locations, ships and items from UEX community data
 - **Other games** (Windows only)
   - **MSFS2020 Control**: controls Microsoft Flight Simulator 2020/2024 and reads its data via SimConnect

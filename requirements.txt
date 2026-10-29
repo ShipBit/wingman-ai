@@ -3,6 +3,7 @@ backports-tarfile>=1.0.0
 edge-tts==7.3.1
 fastapi==0.128.6
 google-genai==2.31.0
+grpcio==1.85.0
 httptools==0.7.1
 hume==0.13.13
 markdown==3.10.2

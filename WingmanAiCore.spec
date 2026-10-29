@@ -170,6 +170,15 @@ hiddenimports = [
     'pydantic_settings',
     'typing_inspection',
 
+    # gRPC + protobuf for the Star Citizen Telemetry skill (skills/sc_telemetry): skills are data files,
+    # so PyInstaller does not see their imports. The message classes are built at runtime from a descriptor set.
+    'grpc',
+    'grpc._cython.cygrpc',
+    'google.protobuf.descriptor_pb2',
+    'google.protobuf.descriptor_pool',
+    'google.protobuf.json_format',
+    'google.protobuf.message_factory',
+
     # Google GenAI
     'google.genai',
     'google.genai.types',

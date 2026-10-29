@@ -1,0 +1,48 @@
+# Star Citizen Telemetry. The field-test report on the game's telemetry: https://github.com/Diftic/wingman-skills/blob/feat/sc-telemetry/sc_telemetry/TELEMETRY_REPORT.md
+module: skills.sc_telemetry.main
+api_version: 3
+name: SC_Telemetry
+display_name: Star Citizen Telemetry
+author: Mallachi
+version: 0.1.0
+platforms: [windows]
+auto_activate: true
+tags:
+  - Star Citizen
+  - Game Integration
+description:
+  en: Live ship and pilot status from Star Citizen's own telemetry. Your Wingman reacts and answers.
+hint:
+  en: "<p><strong>Needs Star Citizen telemetry switched on:</strong> turn on \"Enable Star Citizen telemetry\" above, then quit the RSI Launcher completely (tray too) and start it again.</p><p><strong>Your Wingman reacts to</strong> (all on; \"Enable Proactive Notifications\" mutes them all; * = not yet confirmed in a live test):</p><ul><li><strong>Ship:</strong> being locked on, boost depleted, countermeasures empty, countermeasures low, engines damaged, engines offline, hydrogen low*, landed, landing gear down, landing gear up, new ship, powerplant offline, powerplant online, proximity warning, quantum jump finished, quantum jump started, quantum mode off, quantum mode on, shields down, shields restored, took off, under fire, weapons unpowered</li><li><strong>Vehicle:</strong> boarded a ground vehicle*</li><li><strong>On foot:</strong> air not breathable*, exhausted, health low, hunger low, intoxicated*, oxygen low*, player down, respawned, thirst low</li><li><strong>Wallet:</strong> uec balance changed</li></ul><p><strong>Always tracked</strong> (for questions to your Wingman): speed, heading, altitude, radar altitude, vertical speed, g-force, fuel, boost, landing gear, flight modes, power, warning lights, weapons and countermeasures; health, hunger, thirst, oxygen, heart rate, surroundings and the UEC balance. Position is not part of the game's telemetry.</p>"
+discovery_keywords:
+  - ship status
+  - shields
+  - speed
+  - altitude
+  - heading
+  - power
+  - warning lights
+  - countermeasures
+  - health
+  - hunger
+  - thirst
+  - oxygen
+  - telemetry
+prompt: |
+  Use get_ship_status for questions about the ship the player sits in (speed, altitude, heading, power,
+  shields, warnings, weapons, countermeasures) and get_player_status for the pilot (health, hunger, thirst,
+  oxygen, surroundings, wallet). Report the values the tools give; never estimate them. There is no
+  position in this data: for where the player is, use the game-log tools.
+custom_properties:
+  - id: enable_telemetry
+    name: "Enable Star Citizen telemetry"
+    hint: "Sets the Windows user variable GRPC_CLIENT_SERVER_ENABLED=true that switches on the game's own local telemetry (read-only, on this PC only). Takes effect after you quit the RSI Launcher completely (tray too) and start it again. Turning this off removes the variable."
+    property_type: boolean
+    required: false
+    value: false
+  - id: proactive_notifications
+    name: "Enable Proactive Notifications"
+    hint: "Lets your Wingman react to what happens to the ship and the pilot. Off: it stays quiet and only answers questions."
+    property_type: boolean
+    required: false
+    value: true

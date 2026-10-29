@@ -1,0 +1,288 @@
+// Star Citizen 4.10.2 game telemetry API, rebuilt from the FileDescriptorProto blobs embedded in
+// Bin64\StarCitizen.exe (sc/game/telemetry/v1/types.proto + api.proto). Field numbers and names are
+// exact; `optional` marks the fields the game declares as proto3 optional (synthetic `_x` oneofs).
+// Source listing: ../SC_TELEMETRY_API_4.10.2.proto.txt
+syntax = "proto3";
+
+package sc.game.telemetry.v1;
+
+enum VehicleComponentDeploymentState {
+  VEHICLE_COMPONENT_DEPLOYMENT_STATE_UNSPECIFIED = 0;
+  VEHICLE_COMPONENT_DEPLOYMENT_STATE_RETRACTED = 1;
+  VEHICLE_COMPONENT_DEPLOYMENT_STATE_DEPLOYING = 2;
+  VEHICLE_COMPONENT_DEPLOYMENT_STATE_DEPLOYED = 3;
+  VEHICLE_COMPONENT_DEPLOYMENT_STATE_RETRACTING = 4;
+}
+
+enum VehicleType {
+  VEHICLE_TYPE_UNSPECIFIED = 0;
+  VEHICLE_TYPE_SPACESHIP = 1;
+  VEHICLE_TYPE_GROUND = 2;
+  VEHICLE_TYPE_GRAVLEV = 3;
+  VEHICLE_TYPE_BOAT = 4;
+}
+
+enum ActorLocomotionState {
+  ACTOR_LOCOMOTION_STATE_UNSPECIFIED = 0;
+  ACTOR_LOCOMOTION_STATE_ON_FOOT = 1;
+  ACTOR_LOCOMOTION_STATE_EVA = 2;
+  ACTOR_LOCOMOTION_STATE_SEATED = 3;
+}
+
+enum ActorCrewRole {
+  ACTOR_CREW_ROLE_UNSPECIFIED = 0;
+  ACTOR_CREW_ROLE_PILOT = 1;
+  ACTOR_CREW_ROLE_GUNNER = 2;
+  ACTOR_CREW_ROLE_CREW = 3;
+}
+
+message Availability {
+  bool enabled = 1;
+  bool active = 2;
+}
+
+message Gauge {
+  float current = 1;
+  float max = 2;
+}
+
+message VehicleDoorState {
+  enum DoorOpenState {
+    DOOR_OPEN_STATE_UNSPECIFIED = 0;
+    DOOR_OPEN_STATE_OPENED = 1;
+    DOOR_OPEN_STATE_CLOSED = 2;
+  }
+  enum DoorLockState {
+    DOOR_LOCK_STATE_UNSPECIFIED = 0;
+    DOOR_LOCK_STATE_UNLOCKED = 1;
+    DOOR_LOCK_STATE_LOCKED = 2;
+  }
+  DoorOpenState open_state = 1;
+  DoorLockState lock_state = 2;
+}
+
+message VehicleFlightSettings {
+  Availability ifcs_coupled = 1;
+  Availability ifcs_esp = 2;
+  Availability ifcs_gravity_compensation = 3;
+  Availability ifcs_g_safe = 4;
+  Availability ifcs_cruise_mode = 5;
+  bool ifcs_spacebreak_enables_boost = 6;
+  Availability ifcs_speed_limiter = 7;
+  Availability ifcs_proximity_assist = 8;
+  Availability ifcs_proximity_assist_landing = 9;
+  Availability ifcs_stability = 10;
+  Availability ifcs_core = 11;
+  bool advanced_hud_enabled_scm = 12;
+  bool advanced_hud_enabled_nav = 13;
+  bool advanced_hud_labels = 14;
+  bool course_prediction = 15;
+  Availability ifcs_wind_compensation = 16;
+  bool ifcs_g_safe_disabled_by_boost = 17;
+  Availability ifcs_command_behaviour = 18;
+  bool flight_light_amplification = 19;
+}
+
+message VehicleFlightState {
+  bool is_landed = 1;
+  optional VehicleComponentDeploymentState gear = 2;
+  optional VehicleComponentDeploymentState vtol = 3;
+  optional VehicleComponentDeploymentState transformation = 4;
+}
+
+message VehicleFlight {
+  VehicleFlightState state = 1;
+  VehicleFlightSettings settings = 2;
+  VehicleFlightInstruments instruments = 3;
+}
+
+message VehicleFlightInstruments {
+  float speed = 1;
+  float hydrogen_fuel = 2;
+  float quantum_fuel = 3;
+  optional Gauge g_meter = 4;
+  VehicleThrusterBoost boost = 5;
+  float altitude = 6;
+  float radar_altitude = 7;
+  float vertical_speed_indicator = 8;
+  float atmospheric_density = 9;
+  float heading = 10;
+}
+
+message VehicleThrusterBoost {
+  bool engaged = 1;
+  float output = 2;
+  float reserves = 3;
+  bool critical = 4;
+}
+
+message VehiclePowerState {
+  bool powerplants = 1;
+  bool engines = 2;
+  bool weapons = 3;
+  bool coolers = 4;
+  bool life_support = 5;
+  bool gravity_generators = 6;
+  bool sensors = 7;
+  bool shield_generators = 8;
+  bool shield_emitters = 9;
+}
+
+message VehicleAnnunciator {
+  enum AnnunciatorState {
+    ANNUNCIATOR_STATE_UNSPECIFIED = 0;
+    ANNUNCIATOR_STATE_NOMINAL = 1;
+    ANNUNCIATOR_STATE_OFF = 2;
+    ANNUNCIATOR_STATE_MINOR_FLASHING = 3;
+    ANNUNCIATOR_STATE_MINOR_ON = 4;
+    ANNUNCIATOR_STATE_MAJOR_FLASHING = 5;
+    ANNUNCIATOR_STATE_MAJOR_ON = 6;
+  }
+  AnnunciatorState pwr = 1;
+  AnnunciatorState wpn = 2;
+  AnnunciatorState thr = 3;
+  AnnunciatorState shld = 4;
+  AnnunciatorState cool = 5;
+  AnnunciatorState qdrv = 6;
+  AnnunciatorState radr = 7;
+  AnnunciatorState prox = 8;
+  AnnunciatorState hit = 9;
+  AnnunciatorState misl = 10;
+}
+
+message VehicleState {
+  string name = 1;
+  string class_name = 2;
+  string manufacturer = 3;
+  VehicleType type = 4;
+  bool lights_enabled = 5;
+  optional VehicleDoorState doors = 6;
+  optional VehicleAnnunciator annunciators = 7;
+  optional VehicleFlight flight = 8;
+  optional VehiclePowerState power = 9;
+}
+
+message VehicleFrame {
+  VehicleState state = 2;
+}
+
+message WeaponsSettings {
+  bool fallback_convergence_distance = 1;
+  bool magnified_ui = 2;
+  bool precision_lines = 3;
+  bool staggered_fire = 4;
+  bool use_lag_pips = 5;
+  bool use_single_pips = 6;
+  bool use_fading_pips = 7;
+  bool gimbals_locked = 8;
+}
+
+message WeaponState {
+  string name = 1;
+  bool is_powered = 2;
+  bool ready_to_fire = 3;
+  bool contained_in_preset = 4;
+}
+
+message Countermeasures {
+  enum CountermeasureType {
+    COUNTERMEASURE_TYPE_UNSPECIFIED = 0;
+    COUNTERMEASURE_TYPE_DECOY = 1;
+    COUNTERMEASURE_TYPE_NOISE = 2;
+  }
+  CountermeasureType type = 1;
+  uint32 amount = 2;
+}
+
+message WeaponsFrame {
+  WeaponsSettings settings = 1;
+  uint32 preset_index = 2;
+  string preset_name = 3;
+  repeated WeaponState weapons = 4;
+  repeated Countermeasures countermeasures = 5;
+}
+
+message GameEvent {
+  enum GameEventType {
+    GAME_EVENT_TYPE_UNSPECIFIED = 0;
+    GAME_EVENT_TYPE_ACTOR_SPAWN = 1;
+    GAME_EVENT_TYPE_ACTOR_DEAD = 2;
+    GAME_EVENT_TYPE_ACTOR_ENTER_SEAT = 3;
+    GAME_EVENT_TYPE_ACTOR_LEAVE_SEAT = 4;
+    GAME_EVENT_TYPE_ACTOR_RESPAWN = 5;
+    GAME_EVENT_TYPE_ACTOR_DOWNED = 6;
+  }
+  GameEventType type = 1;
+}
+
+message EventsFrame {
+  repeated GameEvent events = 1;
+}
+
+message AxisFeedback {
+  float resistance = 1;
+  float damping = 2;
+}
+
+message FeedbackAxes {
+  AxisFeedback x = 1;
+  AxisFeedback y = 2;
+  AxisFeedback z = 3;
+}
+
+message ForceFeedbackFrame {
+  FeedbackAxes angular = 2;
+  FeedbackAxes linear = 3;
+  float gunfire = 4;
+  float stick_shaker = 5;
+}
+
+message ActorVitals {
+  Gauge health = 1;
+  Gauge oxygen = 2;
+  Gauge hunger = 3;
+  Gauge thirst = 4;
+  Gauge body_temperature = 5;
+  float heart_rate = 7;
+  float gravity = 8;
+  float pressure = 9;
+  int32 intoxication_level = 10;
+}
+
+message ActorEnvironment {
+  float external_temperature = 1;
+  float ambient_radiation_rate = 2;
+  bool breathable_atmosphere = 3;
+}
+
+message ActorState {
+  ActorLocomotionState locomotion = 1;
+  ActorCrewRole crew_role = 2;
+  string seat_name = 3;
+  int64 uec_balance = 4;
+}
+
+message ActorFrame {
+  ActorVitals vitals = 1;
+  ActorState state = 2;
+  ActorEnvironment environment = 3;
+}
+
+message TurretFrame {
+  bool light_amplification = 1;
+}
+
+message TelemetryStreamRequest {}
+
+message TelemetryStreamResponse {
+  VehicleFrame vehicle = 3;
+  WeaponsFrame weapons = 4;
+  EventsFrame events = 5;
+  ActorFrame actor = 6;
+  ForceFeedbackFrame force_feedback = 7;
+  TurretFrame turret = 8;
+}
+
+service GameTelemetryService {
+  rpc TelemetryStream(TelemetryStreamRequest) returns (stream TelemetryStreamResponse);
+}
