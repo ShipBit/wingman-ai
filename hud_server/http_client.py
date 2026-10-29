@@ -514,6 +514,7 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         duration: Optional[float] = None,
         added_by: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> Optional[dict]:
         """Add a persistent item to a group.
 
@@ -525,6 +526,7 @@ class HudHttpClient:
             color: Optional item color (use HudColor enum or hex string)
             duration: Optional auto-remove duration in seconds
             added_by: Who adds it, e.g. a Wingman's name
+            icon: Path of a picture shown round beside the title, e.g. a person's
 
         Returns:
             Server response dict or None if failed
@@ -551,6 +553,8 @@ class HudHttpClient:
             data["duration"] = duration
         if added_by:
             data["added_by"] = added_by
+        if icon:
+            data["icon"] = icon
 
         return await self._request("POST", PATH_ITEMS, data)
 

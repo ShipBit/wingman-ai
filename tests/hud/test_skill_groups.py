@@ -41,6 +41,15 @@ def test_a_group_reads_and_clears_its_own_items(hud):
     assert _run(group.info_items()) == []
 
 
+def test_a_panel_takes_a_picture_for_beside_its_title(hud):
+    group = hud.skill.group("npc")
+    _run(group.add_info("Lena Varga", "Lorville", icon="faces/lena.png"))
+    _run(hud.skill.add_info("Cargo", "Gold", icon="icons/crate.png"))
+
+    assert hud.manager.get_items("Bob_npc", PERSISTENT)[0]["icon"] == "faces/lena.png"
+    assert hud.manager.get_items(GROUP_INFO, PERSISTENT)[0]["icon"] == "icons/crate.png"
+
+
 def test_a_skill_reads_the_shared_panel_with_who_put_each_panel_there(hud):
     hud.manager.create_group(GROUP_INFO, PERSISTENT)
     hud.manager.add_item(GROUP_INFO, PERSISTENT, "Route", "Hurston", added_by="ATC")

@@ -984,6 +984,8 @@ class HeadsUpOverlay(PreviewMixin):
 
     AVATAR_HALO = 4
     """Room around a round picture for its ring and glow."""
+    ITEM_PICTURE = 2.25
+    """An info item's picture, in font sizes: two lines of text beside it."""
 
     def _sender_piece(
         self, name: str, icon: Optional[str], x: int, color: Tuple, size: int,
@@ -1188,10 +1190,11 @@ class HeadsUpOverlay(PreviewMixin):
         self, title: str, info: Dict, anim: Optional[Dict], now: float, props: Dict,
         style: tuple, text_color, accent, bg_rgba, separator: bool,
     ) -> Piece:
-        """One info panel item: an icon for its kind, the title, on the right
-        the time left or how far it got, a slim bar for progress, the details.
-        Its key holds what is shown, not the time: a running timer draws again
-        once a second, a moving bar once a pixel."""
+        """One info panel item: an icon for its kind (or the round picture the
+        item brings, e.g. a person's), the title, on the right the time left or
+        how far it got, a slim bar for progress, the details. Its key holds
+        what is shown, not the time: a running timer draws again once a
+        second, a moving bar once a pixel."""
         width = int(props.get("width", 300))
         padding = int(props.get("content_padding", 16))
         font_size = int(props.get("font_size", 16))
@@ -1221,10 +1224,11 @@ class HeadsUpOverlay(PreviewMixin):
         title_text = info.get("title", title)
         desc = self._strip_emotions(info.get("description", "") or "")
         progress_color = info.get("progress_color")
+        icon = info.get("icon") or None
         images = renderer.image_version if "![" in desc else 0
         key = (
             "info", title_text, desc, value, filled, progress_color,
-            width, padding, style, images, separator,
+            width, padding, style, images, separator, icon,
         )
 
         def draw(d, image, _top):
@@ -1241,13 +1245,25 @@ class HeadsUpOverlay(PreviewMixin):
             except Exception:
                 line_top, line_bottom = 0, font_size
             icon_px = max(12, font_size)
+            # The item's own picture, round in a ring, in place of the kind's icon
+            halo = self.AVATAR_HALO
+            picture_px = round(font_size * self.ITEM_PICTURE)
+            picture = self._avatar(icon, title_text, picture_px, color, initial=False) if icon else None
             # A blank title (a skill's own panel, like the mic's icon) gets
             # no icon and no title row; a time or percentage keeps its row
             titled = bool(title_text.strip())
             if titled or value:
-                row_h = max(icon_px if titled else 0, line_bottom - line_top)
+                lead = picture_px + 2 * halo if picture is not None else icon_px if titled else 0
+                row_h = max(lead, line_bottom - line_top)
                 middle = y + row_h / 2
-                if titled:
+                if picture is not None:
+                    top_px = round(middle - picture_px / 2)
+                    image.alpha_composite(
+                        glass.avatar_halo(picture_px, tuple(color[:3]), halo), (padding - halo, top_px - halo)
+                    )
+                    image.alpha_composite(picture, (padding, top_px))
+                    icon_px = picture_px
+                elif titled:
                     image.alpha_composite(glass.icon(kind, icon_px, color), (padding, round(middle - icon_px / 2)))
 
                 right = width - padding
@@ -2162,6 +2178,7 @@ class HeadsUpOverlay(PreviewMixin):
                         "title": title,
                         "description": msg.get("description", ""),
                         "added_at": win["items"].get(title, {}).get("added_at", now),
+                        "icon": msg.get("icon"),
                         "_group": group,
                     }
                     if msg.get("duration"):

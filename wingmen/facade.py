@@ -1530,16 +1530,18 @@ class SkillHud:
 
     async def add_info(
         self, title: str, text: str = "", *, color: Optional[str] = None,
-        duration: Optional[float] = None,
+        duration: Optional[float] = None, icon: Optional[str] = None,
     ) -> bool:
         """Put a panel on the shared info panel; the same title replaces it.
-        `duration` removes it after that many seconds."""
+        `duration` removes it after that many seconds. `icon` is the path of a
+        picture shown small and round beside the title, e.g. a person's."""
         from hud_server.constants import GROUP_INFO
 
         if not self.info_enabled:
             return False
         return self._service().add_info(
-            GROUP_INFO, title, text, color=color, duration=duration, added_by=self._added_by
+            GROUP_INFO, title, text, color=color, duration=duration, added_by=self._added_by,
+            icon=icon,
         )
 
     async def remove_info(self, title: str) -> bool:
@@ -1658,10 +1660,12 @@ class SkillHudGroup:
 
     async def add_info(
         self, title: str, text: str = "", *, color: Optional[str] = None,
-        duration: Optional[float] = None,
+        duration: Optional[float] = None, icon: Optional[str] = None,
     ) -> bool:
         hud = self._service()
-        return bool(hud and hud.add_info(self.name, title, text, color=color, duration=duration))
+        return bool(hud and hud.add_info(
+            self.name, title, text, color=color, duration=duration, icon=icon
+        ))
 
     async def remove_info(self, title: str) -> bool:
         hud = self._service()

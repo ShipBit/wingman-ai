@@ -14,6 +14,17 @@ def test_a_panel_remembers_who_added_it():
     ]
 
 
+def test_a_panel_keeps_its_picture_and_tells_the_overlay(tmp_path):
+    manager = HudManager()
+    sent = []
+    manager.register_command_callback(sent.append)
+
+    manager.add_item("npc", "persistent", "Lena Varga", "Lorville", icon="faces/lena.png")
+
+    assert manager.get_items("npc", "persistent")[0]["icon"] == "faces/lena.png"
+    assert sent[-1]["type"] == "add_item" and sent[-1]["icon"] == "faces/lena.png"
+
+
 def test_a_finished_countdown_that_closes_itself_is_gone():
     manager = HudManager()
     manager.show_timer("wingman_info", "persistent", "Done", 5, initial_progress=10)

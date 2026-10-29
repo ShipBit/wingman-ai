@@ -147,6 +147,9 @@ class ItemRequest(BaseModel):
     added_by: Optional[str] = None
     """Who adds it, e.g. a Wingman's name. Shown to whoever reads the panel."""
 
+    icon: Optional[str] = None
+    """Path of a picture shown round beside the title, e.g. a person's."""
+
 
 class UpdateItemRequest(BaseModel):
     """Request to update an existing item."""

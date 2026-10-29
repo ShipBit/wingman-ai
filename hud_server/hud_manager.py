@@ -43,6 +43,8 @@ class HudItem:
     added_at: float = field(default_factory=time.time)
     added_by: Optional[str] = None
     """Who put it there, e.g. a Wingman's name, so others know it is not theirs."""
+    icon: Optional[str] = None
+    """Path of a picture shown round beside the title, e.g. a person's."""
 
     # Progress bar support
     is_progress: bool = False
@@ -393,6 +395,7 @@ class HudManager:
         color: Optional[str] = None,
         duration: Optional[float] = None,
         added_by: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> bool:
         """Add a persistent item to a group."""
         key = self._make_key(group_name, element)
@@ -406,6 +409,7 @@ class HudManager:
                 color=color,
                 duration=duration,
                 added_by=added_by,
+                icon=icon,
             )
 
             self._notify_callbacks({
@@ -414,7 +418,8 @@ class HudManager:
                 "title": title,
                 "description": description,
                 "color": color,
-                "duration": duration
+                "duration": duration,
+                "icon": icon,
             })
 
             return True

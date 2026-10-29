@@ -1801,7 +1801,7 @@ not. The shared containers also follow the Wingman's own HUD switches.
 | `.chat_enabled` / `.info_enabled` | `bool` — the HUD runs and this Wingman uses the chat container / the info panel. |
 | `.profile` | The HUD profile in use, read-only: `chat` and `info` are the containers' areas (`x1`, `y1`, `x2`, `y2` in pixels), `style` their look. `None` before a config is loaded. |
 | `await .show_message(title, text, *, duration=10.0, color=None)` | A message in the shared chat container for `duration` seconds. Markdown; `color` is a hex accent. With the Wingman's name as title it shows its avatar. |
-| `await .add_info(title, text="", *, color=None, duration=None)` | A panel on the shared info panel. The same title replaces it; `duration` removes it after that many seconds. |
+| `await .add_info(title, text="", *, color=None, duration=None, icon=None)` | A panel on the shared info panel. The same title replaces it; `duration` removes it after that many seconds; `icon` is the path of a picture shown small and round beside the title, e.g. a person's. |
 | `await .remove_info(title)` | Take a panel off the info panel. |
 | `await .show_progress(title, current, maximum=100, *, text="", color=None, auto_close=False)` | A progress bar on the info panel; the same title updates it. |
 | `await .show_timer(title, seconds, *, text="", color=None, auto_close=True)` | A countdown on the info panel. |

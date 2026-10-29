@@ -483,9 +483,11 @@ def test_leaving_a_place_drops_its_people_and_the_names_are_hotwords(packs, tmp_
 class FakeGroup:
     def __init__(self):
         self.cards = {}
+        self.icons = {}
 
-    async def add_info(self, title, text="", **kwargs):
+    async def add_info(self, title, text="", *, icon=None, **kwargs):
         self.cards[title] = text
+        self.icons[title] = icon
 
     async def clear(self):
         self.cards.clear()
@@ -585,10 +587,10 @@ def test_the_card_shows_the_picture_and_the_jobs_done(packs, tmp_path):
     lena, nico = packs.npcs["lena-varga"], packs.npcs["nico-brandt"]
 
     _run(skill._cards([lena, nico], "Lorville"))
-    card = hud.groups["npc"].cards["Lena Varga"]
-    assert card.startswith("![Lena Varga](") and card.endswith(".png)\n\nTammany and Sons · Lorville\n" + lena.wants[:90])
-    assert "\\" not in card, "forward slashes: a backslash escapes in Markdown"
-    assert hud.groups["npc"].cards["Nico Brandt"].startswith("Centermass · Lorville")
+    group = hud.groups["npc"]
+    assert group.cards["Lena Varga"] == "Tammany and Sons · Lorville\n\n" + lena.wants[:90]
+    assert group.icons["Lena Varga"] == str(tmp_path / "portraits" / "lena-varga.png")
+    assert group.cards["Nico Brandt"].startswith("Centermass · Lorville") and group.icons["Nico Brandt"] is None
 
     _finish_letter(skill._log, packs.quests["letter-for-aberdeen"])
     _run(skill._cards([lena, nico], "Lorville"))

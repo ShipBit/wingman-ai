@@ -372,6 +372,7 @@ class HudServer:
                 color=request.color,
                 duration=request.duration,
                 added_by=request.added_by,
+                icon=request.icon,
             )
             return OperationResponse(status="ok")
 

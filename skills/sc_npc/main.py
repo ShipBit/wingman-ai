@@ -262,17 +262,14 @@ class ScNpc(Skill):
             return
         group = self._group()
         for npc in npcs:
-            parts = []
-            portrait = self._portrait(npc)
-            if portrait:
-                # Forward slashes: in Markdown a backslash escapes the next character
-                parts.append(f"![{npc.name}]({portrait.replace(chr(92), '/')})")
-            where = (npc.shop + " · " if npc.shop else "") + place
-            parts.append(where + (f"\n{npc.wants[:90]}" if npc.wants else ""))
+            # Paragraphs: a single line break runs on in the HUD's Markdown
+            parts = [(npc.shop + " · " if npc.shop else "") + place]
+            if npc.wants:
+                parts.append(npc.wants[:90])
             jobs = self._log.done_for(npc.id) if self._log else 0
             if jobs:
                 parts.append(f"{attitude_of(jobs)} · {jobs} job{'s' if jobs > 1 else ''} done")
-            await group.add_info(npc.name, "\n\n".join(parts))
+            await group.add_info(npc.name, "\n\n".join(parts), icon=self._portrait(npc) or None)
 
     # --- pictures ---------------------------------------------------------------------
 

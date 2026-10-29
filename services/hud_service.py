@@ -706,12 +706,14 @@ class HudService:
     def add_info(
         self, group: str, title: str, text: str = "", *, color: Optional[str] = None,
         duration: Optional[float] = None, added_by: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> bool:
         manager = self._manager
         if manager is None:
             return False
         manager.add_item(
-            group, PERSISTENT, title, text, color=color, duration=duration, added_by=added_by
+            group, PERSISTENT, title, text, color=color, duration=duration, added_by=added_by,
+            icon=icon,
         )
         self._info_changed(group)
         return True
@@ -890,5 +892,5 @@ class HudService:
                         continue
                 manager.add_item(
                     GROUP_INFO, PERSISTENT, title, description, color=item.get("color"),
-                    duration=remaining, added_by=item.get("added_by"),
+                    duration=remaining, added_by=item.get("added_by"), icon=item.get("icon"),
                 )

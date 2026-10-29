@@ -53,6 +53,7 @@ async def run(demo: Demo) -> None:
     await client.send_chat_message(CHAT, C, "Jay", f"Like this one? ![mine]({demo.data_uri(orionis, 64)})", own=True)
     await demo.pause(5)
 
-    demo.scene("A picture on the info panel")
+    demo.scene("A picture on the info panel", "and a person's picture beside a panel's title")
     await client.add_item(INFO, P, "Wanted", f"![bounty]({path(PHOTO)})\n\n**Reward:** 25,000 aUEC")
+    await client.add_item(INFO, P, "Orionis", "Port Tressler · docking bay 3\nHas a job for you.", icon=orionis)
     await demo.pause(4)

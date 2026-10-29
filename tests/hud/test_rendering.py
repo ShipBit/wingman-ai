@@ -149,6 +149,33 @@ def test_the_info_panel_keeps_its_newest_items_in_view():
     assert "Item 0" not in titles
 
 
+def test_an_info_item_shows_its_picture_small_and_round_beside_the_title(tmp_path):
+    picture = tmp_path / "lena.png"
+    Image.new("RGB", (512, 512), (255, 0, 0)).save(picture)
+    backend = FakeHudBackend()
+    overlay = make_overlay(backend)
+    overlay._handle_message({"type": "create_group", "group": "npc", "element": "persistent",
+                             "props": {"width": 320, "font_size": 16, "bg_color": "#000000"}})
+    overlay._handle_message({"type": "add_item", "group": "npc", "element": "persistent",
+                             "title": "Lena Varga", "description": "Tammany and Sons · Lorville"})
+    run_frames(overlay)
+    without = backend.window("HUD_persistent_npc").image.copy()
+
+    overlay._handle_message({"type": "add_item", "group": "npc", "element": "persistent",
+                             "title": "Lena Varga", "description": "Tammany and Sons · Lorville",
+                             "icon": str(picture)})
+    run_frames(overlay)
+    image = backend.window("HUD_persistent_npc").image
+
+    red = [(x, y) for x in range(image.width) for y in range(image.height)
+           if (p := image.getpixel((x, y)))[0] > 200 and p[1] < 60 and p[2] < 60]
+    assert red, "the picture is drawn"
+    xs, ys = [x for x, _ in red], [y for _, y in red]
+    assert max(xs) - min(xs) <= 40 and max(ys) - min(ys) <= 40, "small: a picture in a ring, not a block"
+    assert min(ys) < image.height / 2 and min(xs) < image.width / 3, "beside the title, at the top left"
+    assert image.height > without.height - 1 and image.tobytes() != without.tobytes()
+
+
 def test_in_the_chat_a_reply_has_its_picture_and_the_users_own_message_is_a_bubble_on_the_right(tmp_path):
     avatar = tmp_path / "orionis.png"
     Image.new("RGB", (64, 64), (255, 0, 0)).save(avatar)

@@ -180,7 +180,7 @@ def test_info_goes_to_the_shared_panel_with_who_added_it(monkeypatch):
     assert _run(hud.add_info("Fuel", "low"))
     service.add_info.assert_called_once_with(
         GROUP_INFO, "Fuel", "low", color=None, duration=None,
-        added_by="the Star Citizen Events skill of Bob",
+        added_by="the Star Citizen Events skill of Bob", icon=None,
     )
 
 
