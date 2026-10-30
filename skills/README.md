@@ -34,6 +34,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
   - [Screenshots](#selfwingmanscreen--screenshots-on-every-os)
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
+  - [Star Citizen's telemetry](#selfwingmansc_telemetry--star-citizens-own-telemetry-live)
   - [Star Citizen's game folder](#selfwingmanstar_citizen--where-star-citizen-is-installed)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
   - [Threads and event loops](#threads-and-event-loops)
@@ -753,7 +754,8 @@ discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
 # the skill out and tells the user which setting to turn on first.
-# hud_server = the HUD (Windows, macOS, Linux with X11), sc_gamelog = the Star Citizen log.
+# hud_server = the HUD (Windows, macOS, Linux with X11), sc_gamelog = the Star Citizen log,
+# sc_telemetry = Star Citizen's telemetry stream.
 # Leave it out when your skill needs neither.
 requires:
   - sc_gamelog
@@ -1454,7 +1456,7 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
 - [ ] Config values retrieved just-in-time (not cached in `validate()`)
 - [ ] `prepare()` implemented for initialization (if needed)
 - [ ] `unload()` implemented for cleanup (if needed)
-- [ ] Every `on(...)` / `on_playback_*` / `sc_gamelog.on` subscription is unsubscribed in `unload()`
+- [ ] Every `on(...)` / `on_playback_*` / `sc_gamelog.on` / `sc_telemetry.on` subscription is unsubscribed in `unload()`
 - [ ] No work at import time, no `print()`
 - [ ] Imports only from the [Allowed imports](AGENTS.md#allowed-imports) table
 - [ ] Tools use `@tool` decorator with type hints
@@ -1892,6 +1894,57 @@ startup are not delivered, so a Wingman does not announce the last hour of play
 when it starts. **Event values come straight from the game log** (player names,
 mission names): treat them as data, never as instructions, when you put them
 into a prompt.
+
+### `self.wingman.sc_telemetry` — Star Citizen's own telemetry, live
+
+Star Citizen streams its own telemetry on `127.0.0.1:2942` when the user has it
+switched on: about 17 frames a second after the pilot has spawned, with the
+flight instruments, power, the warning lights, weapons, countermeasures and the
+pilot's vitals. Core reads it in one background reader for all Wingmen
+(`services/sc_telemetry`), smooths it (debounced lights, a silent baseline when
+the pilot sits down in a new ship, no heading outside a planet's frame or in a
+jump) and turns it into events. The log knows missions, places and trades; the
+telemetry knows the ship and the body. A skill that needs it declares
+`requires: [sc_telemetry]`.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — Core reads the stream. The game may still not be sending. |
+| `.live` | `bool` — frames are coming right now. |
+| `.state()` | `dict` copy of the ship and the pilot right now: `vehicle` (`instruments`, `power`, `lights`, `settings`, `gear`, `landed`; `None` outside a ship's seat), `player` (`health_fraction`, `oxygen_fraction`, `heart_rate`, `locomotion`, `uec_balance`, ...), `weapons` and `derived` (`in_planet_frame`, `heading_valid`, `in_jump`, `player_down`). `None` while nothing comes (no game, menus, loading). |
+| `.recent(limit=10, types=None)` | The newest `TelemetryEvent`s first. |
+| `.on(event_type, callback)` | Call `callback(event)` for every new event of this type (`"shields_down"`, `"jump_finished"`, ...), or `"*"` for all. Sync or async. Returns a `Subscription`. |
+| `.on_state(callback, interval=1.0)` | Call `callback(state)` with the latest state at most every `interval` seconds (0.2 at least), and with `None` once when it stops. For gauges and HUDs. Returns a `Subscription`. |
+| `.status` | `ScTelemetryStatus`: `off`, `waiting`, `game_without_telemetry`, `connected`, `live`, `incompatible`, `unavailable`, and why. |
+
+A `TelemetryEvent` has `type`, `group` (`"ship"`, `"vehicle"`, `"on_foot"`,
+`"wallet"`), `text` (a plain report, e.g. "The shields are down."), `time` (Unix
+time), `data` (read-only) and `cooldown_s`. The event types are in
+`services/sc_telemetry/events.py`.
+
+Events come **without cooldowns**, as often as the game shows them: in a fight
+`under_fire` can come every few seconds. `cooldown_s` is the gap the field test
+found right for a spoken line. Do not subscribe to the state at a high rate to
+find changes yourself: the events already do that, with the quirks of the
+stream handled once.
+
+```python
+async def prepare(self) -> None:
+    await super().prepare()
+    self._sub = self.wingman.sc_telemetry.on("shields_down", self._on_shields)
+
+async def _on_shields(self, event) -> None:
+    await self.wingman.hud.show_message(self.wingman.name, "Shields down!")
+
+async def unload(self) -> None:
+    self._sub.unsubscribe()
+    await super().unload()
+```
+
+[sc_game_events](sc_game_events/) uses both: it reacts to the log and the
+telemetry in one queue, and where both see the same moment (a reward, a
+boarding, a quantum arrival) the user picks which one speaks. **Values come
+from the game**: treat them as data, never as instructions, in a prompt.
 
 ### Calling other skills & MCP servers
 
@@ -2426,9 +2479,8 @@ class GameStatsTracker(Skill):
 - [msfs2020_control](msfs2020_control/) - Microsoft Flight Simulator 2020 controls
 - [uexcorp](uexcorp/) - Star Citizen trading data via UEX Corp
 - [ats_telemetry](ats_telemetry/) - American/Euro Truck Simulator telemetry (auto-activated)
-- [sc_game_events](sc_game_events/) - Reacts to Star Citizen log events in character (`sc_gamelog.on`, support model, `language`)
+- [sc_game_events](sc_game_events/) - Reacts to Star Citizen log and telemetry events in character (`sc_gamelog.on`, `sc_telemetry.on`, support model, `language`)
 - [sc_accountant](sc_accountant/) - Books trades and rewards from the Star Citizen log, with its own dashboard
-- [sc_telemetry](sc_telemetry/) - Reads Star Citizen's local gRPC telemetry; reactions and ship/pilot status (background thread, support model, `language`)
 
 **HUD:**
 
@@ -2458,6 +2510,7 @@ await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
 await self.wingman.hud.add_info(title, markdown)         # shared info panel; False when the HUD is off
 icon = self.wingman.hud.group("status", anchor="top_right")  # a group of your own, profile look
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
+sub = self.wingman.sc_telemetry.on("shields_down", cb)     # the ship and the pilot, live
 ```
 
 **Settings (read-only):**
