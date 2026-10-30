@@ -6,6 +6,7 @@ interfaces for STT, TTS, and LLM.
 """
 
 import json
+import re
 import time
 import asyncio
 import traceback
@@ -85,6 +86,11 @@ if TYPE_CHECKING:
     from services.tower import Tower
 
 printr = Printr()
+
+# A tag like <｜tool_call｜> or <#INVALID#>. Asked for words with tool_choice
+# "none", some models still call a tool and write the call out in their own
+# tokens; a spoken answer has no tags. "3 < 5" is no tag: the space after "<".
+TOOL_MARKUP = re.compile(r"<[^\s<>][^<>\n]{0,80}>")
 
 
 def tool_names(tool_calls) -> list[str]:
@@ -1025,6 +1031,16 @@ class Wingman:
 
         if not allow_tool_calls:
             response_message.tool_calls = None
+            # A tool call written out as text is no answer. Spoken, it is
+            # noise; kept in the history, the next answer copies it.
+            if TOOL_MARKUP.search(response_message.content):
+                printr.print(
+                    f"{self.name}: dropped an answer that was a tool call written as text: "
+                    f"{response_message.content[:200]!r}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                response_message.content = ""
 
         if response_message.tool_calls:
             response_message.tool_calls = await self.tool_executor.fix_tool_calls(
