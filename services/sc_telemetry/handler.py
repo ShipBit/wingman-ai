@@ -14,6 +14,8 @@ from services.sc_telemetry.events import TelemetryEvent, make_event
 from services.sc_telemetry.normalize import normalize
 
 EVA_STABLE_S = 1.5
+GEAR_DOWN = frozenset({"deploying", "deployed", "retracting"})
+"""No proximity warning with the gear down or moving: landing is meant to be close (user, 2026-10-30)."""
 JUMP_ON_S = 1.5
 JUMP_OFF_S = 8.0
 """THR drops to NOMINAL for several seconds in the middle of a jump (seen on the Vulture)."""
@@ -296,7 +298,7 @@ class Handler:
             "quantum": holds["quantum"].update(lights["qdrv"] == "nominal", t),
             "jump": holds["jump"].update(
                 lights["thr"] == "major_on" and _weightless(instr["g"]) and not vehicle["landed"], t),
-            "prox": holds["prox"].update(lights["prox"] == "major_on", t),
+            "prox": holds["prox"].update(_proximity(vehicle), t),
             "hit": holds["hit"].update(lights["hit"] in ("major_flashing", "major_on", "minor_flashing",
                                                          "minor_on"), t),
             "lock": holds["lock"].update(lights["radr"] == "major_on", t),
@@ -335,7 +337,7 @@ class Handler:
         self._holds["landed"].reset(vehicle["landed"])
         self._holds["quantum"].reset(lights["qdrv"] == "nominal")
         self._holds["lock"].reset(lights["radr"] == "major_on")
-        self._holds["prox"].reset(lights["prox"] == "major_on")
+        self._holds["prox"].reset(_proximity(vehicle))
         self._holds["hit"].reset(lights["hit"] in ("major_flashing", "major_on", "minor_flashing", "minor_on"))
         self._holds["jump"].reset(lights["thr"] == "major_on" and _weightless(instr["g"]) and not vehicle["landed"])
         self._gear, self._vtol = vehicle["gear"], vehicle["vtol"]
@@ -370,3 +372,8 @@ class Handler:
                     fired.append(self._event("countermeasures_low", t, kind=kind.capitalize(), count=count))
             known["count"] = count
         return fired
+
+
+def _proximity(vehicle: dict) -> bool:
+    """PROX MAJOR (collision danger) while the gear is up."""
+    return vehicle["lights"]["prox"] == "major_on" and vehicle["gear"] not in GEAR_DOWN

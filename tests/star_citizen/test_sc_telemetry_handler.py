@@ -2,6 +2,7 @@
 import itertools
 import time
 
+from services.sc_telemetry.handler import Handler
 from services.sc_telemetry.normalize import normalize
 from tests.star_citizen.telemetry import (
     ids,
@@ -156,3 +157,28 @@ def test_power_restart():
     found = ids(events)
     assert "powerplant_offline" in found and "powerplant_online" in found
     assert found.index("powerplant_offline") < found.index("powerplant_online")
+
+
+def _ship(gear: str, prox: str) -> dict:
+    return {"vehicle": {"state": {
+        "name": "DRAK_Cutter_907038284543", "class_name": "DRAK_Cutter",
+        "annunciators": {"prox": f"ANNUNCIATOR_STATE_{prox.upper()}"},
+        "power": {"powerplants": True, "engines": True},
+        "flight": {"instruments": {"altitude": 900.0, "g_meter": {"current": 1.0}},
+                   "state": {"gear": f"VEHICLE_COMPONENT_DEPLOYMENT_STATE_{gear.upper()}"}}}}}
+
+
+def test_no_proximity_warning_with_the_gear_down():
+    """Landing is meant to be close (user, 2026-10-30); with the gear up the warning still fires."""
+    handler = Handler()
+    fired = []
+    frames = [(0.0, _ship("deployed", "nominal"))]
+    frames += [(1.0 + i * 0.2, _ship("deployed", "major_on")) for i in range(10)]
+    for gear in ("retracting", "deploying"):
+        frames += [(frames[-1][0] + 0.2, _ship(gear, "major_on"))]
+    for t, frame in frames:
+        fired += ids(handler.update(frame, t))
+    assert "proximity_warning" not in fired
+    for i in range(10):
+        fired += ids(handler.update(_ship("retracted", "major_on"), 10.0 + i * 0.2))
+    assert "proximity_warning" in fired
