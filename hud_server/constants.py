@@ -52,13 +52,23 @@ PATH_ELEMENT_HIDE = "/element/hide"
 PATH_DEFAULTS = "/defaults"
 PATH_PREVIEW = "/preview"
 PATH_OBS = "/obs"
+PATH_OBS_CHAT = "/obs/chat"
+PATH_OBS_INFO = "/obs/info"
 PATH_OBS_WS = "/obs/ws"
 PATH_OBS_FRAME = "/obs/frame.png"
+PATH_OBS_CHAT_FRAME = "/obs/chat/frame.png"
+PATH_OBS_INFO_FRAME = "/obs/info/frame.png"
 PATH_OBS_STATUS = "/obs/status"
 
 # Shared containers every Wingman writes to; their look comes from the defaults
 GROUP_CHAT = "wingman_chat"  # element "message"
 GROUP_INFO = "wingman_info"  # element "persistent"
+
+# Where a shared container sits until its defaults say otherwise
+CONTAINER_DEFAULTS = {
+    "chat": {"x": 20, "y": 20, "width": 400, "height": 500},
+    "info": {"x": 20, "y": 540, "width": 400, "height": 500},
+}
 
 # Layout Anchors
 ANCHOR_TOP_LEFT = "top_left"

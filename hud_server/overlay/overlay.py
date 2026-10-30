@@ -34,6 +34,7 @@ from hud_server.rendering.layers import Piece, PieceCache, compose, lay_out, ren
 
 from hud_server.platform import HudBackend, create_backend
 from hud_server.layout import LayoutManager, Anchor, LayoutMode, Align
+from hud_server.constants import CONTAINER_DEFAULTS, GROUP_CHAT, GROUP_INFO
 from hud_server.overlay.preview import PreviewMixin
 
 
@@ -203,6 +204,23 @@ class HeadsUpOverlay(PreviewMixin):
         if self._obs:
             self._obs.set_dimensions(monitor.width, monitor.height)
             self._obs.set_framerate(self._global_framerate)
+            self._update_obs_containers()
+
+    def _update_obs_containers(self) -> None:
+        if not self._obs:
+            return
+        for container, default in CONTAINER_DEFAULTS.items():
+            win = self._preview_windows.get(container)
+            if win:
+                props = win.get("props") or {}
+            else:
+                group = GROUP_CHAT if container == "chat" else GROUP_INFO
+                props = self._group_defaults.get(group) or {}
+            x = int(props.get("x") if props.get("x") is not None else default["x"])
+            y = int(props.get("y") if props.get("y") is not None else default["y"])
+            width = int(props.get("width") if props.get("width") is not None else default["width"])
+            height = int(props.get("max_height") or props.get("height") or default["height"])
+            self._obs.set_container(container, x, y, width, height)
 
     def _sync_obs(self) -> None:
         """Tell OBS what changed on screen this frame: a new picture, a move
@@ -2063,6 +2081,7 @@ class HeadsUpOverlay(PreviewMixin):
                 self._group_defaults = {
                     name: dict(p) for name, p in (msg.get("groups") or {}).items()
                 }
+                self._update_obs_containers()
                 self._refresh_windows()
                 return
 

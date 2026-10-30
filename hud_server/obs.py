@@ -1,5 +1,6 @@
 """Streams the HUD windows to an OBS Browser Source (GET /obs, WS /obs/ws).
 
+Supports /obs (full screen HUD), /obs/chat (chat panel only), and /obs/info (info panel only).
 Every window goes out as its own PNG when its picture changes; a move or a
 fade is a small JSON message. Each event carries a sequence number, so the
 page drops anything older than what it already shows, whatever order the
@@ -19,7 +20,8 @@ from PIL import Image
 from fastapi import WebSocket
 
 from api.enums import LogType
-from hud_server.constants import THREAD_NAME_OBS_ENCODER
+from hud_server.constants import CONTAINER_DEFAULTS, GROUP_CHAT, GROUP_INFO, THREAD_NAME_OBS_ENCODER
+from hud_server.rendering.glass import SHADOW
 from services.printr import Printr
 
 printr = Printr()
@@ -27,21 +29,24 @@ printr = Printr()
 # A client that takes longer than this for one message is dropped
 SEND_TIMEOUT = 5.0
 
-OBS_HTML = """<!DOCTYPE html>
+OBS_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Wingman AI HUD</title>
+    <title>__TITLE__</title>
     <link rel="icon" href="data:,">
     <style>
         * { margin: 0; padding: 0; }
-        html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent; }
-        canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+        html, body { overflow: hidden; background: transparent; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
     <canvas id="hud"></canvas>
     <script>
+        const DEFAULT_CHANNEL = "__CHANNEL__";
+        const params = new URLSearchParams(location.search);
+        const CHANNEL = params.get("channel") || DEFAULT_CHANNEL;
         const canvas = document.getElementById("hud");
         const ctx = canvas.getContext("2d");
         // id -> {x, y, opacity, visible, bitmap, content, state}: the newest picture
@@ -51,6 +56,13 @@ OBS_HTML = """<!DOCTYPE html>
         // Sequence number of the last clear: anything older is gone
         let floor = -1;
         let scheduled = false;
+
+        function setDimensions(width, height) {
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.width = width + "px";
+            canvas.style.height = height + "px";
+        }
 
         function requestRender() {
             if (scheduled) return;
@@ -100,8 +112,7 @@ OBS_HTML = """<!DOCTYPE html>
                     clearWindows();
                     floor = -1;
                 }
-                canvas.width = msg.width;
-                canvas.height = msg.height;
+                setDimensions(msg.width, msg.height);
             } else if (msg.type === "state") {
                 const win = entry(msg.id);
                 if (msg.seq <= floor || msg.seq <= win.state) return;
@@ -145,7 +156,8 @@ OBS_HTML = """<!DOCTYPE html>
         function connect() {
             const gen = ++generation;
             const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-            const ws = new WebSocket(`${protocol}//${location.host}/obs/ws`);
+            const query = CHANNEL && CHANNEL !== "all" ? `?channel=${encodeURIComponent(CHANNEL)}` : "";
+            const ws = new WebSocket(`${protocol}//${location.host}/obs/ws${query}`);
             ws.binaryType = "arraybuffer";
             ws.onmessage = (event) => {
                 if (typeof event.data === "string") {
@@ -171,6 +183,35 @@ OBS_HTML = """<!DOCTYPE html>
 """
 
 
+def obs_html(channel: str = "all") -> str:
+    titles = {
+        "chat": "Wingman AI HUD - Chat",
+        "info": "Wingman AI HUD - Info",
+    }
+    title = titles.get(channel, "Wingman AI HUD")
+    return OBS_HTML_TEMPLATE.replace("__TITLE__", title).replace("__CHANNEL__", channel)
+
+
+# Windows of the shared containers: "<element>_<group>", or the preview of a container
+_CHANNEL_WINDOWS = {
+    f"message_{GROUP_CHAT}": "chat",
+    f"chat_{GROUP_CHAT}": "chat",
+    "preview_chat": "chat",
+    f"persistent_{GROUP_INFO}": "info",
+    "preview_info": "info",
+}
+
+
+def _window_channel(name: str) -> Optional[str]:
+    """'chat' or 'info' for a window of a shared container, None for any other (a skill's own group)."""
+    return _CHANNEL_WINDOWS.get(name)
+
+
+def _pack_frame(header: dict, png: bytes) -> bytes:
+    header_bytes = json.dumps(header).encode("utf-8")
+    return struct.pack(">I", len(header_bytes)) + header_bytes + png
+
+
 @dataclass
 class _Window:
     canvas: Image.Image
@@ -181,12 +222,21 @@ class _Window:
     opacity: float
 
 
+@dataclass
+class _Container:
+    x: int
+    y: int
+    width: int
+    height: int
+
+
 class _Client:
     """One Browser Source. Keeps only the newest message of each kind per
     window until it is sent: a client that stops reading costs one HUD's worth."""
 
-    def __init__(self, ws: WebSocket) -> None:
+    def __init__(self, ws: WebSocket, channel: str = "all") -> None:
         self.ws = ws
+        self.channel = channel
         self.task: Optional[asyncio.Task] = None
         self._queue: Dict[tuple, Any] = {}
         self._ready = asyncio.Event()
@@ -229,6 +279,9 @@ class ObsBroadcaster:
         self._framerate = max(1, framerate)
         self._width = 1920
         self._height = 1080
+        self._containers: Dict[str, _Container] = {
+            name: _Container(**area) for name, area in CONTAINER_DEFAULTS.items()
+        }
         # Replaced, never changed in place: other threads read it without a lock
         self._clients: frozenset = frozenset()
 
@@ -245,13 +298,36 @@ class ObsBroadcaster:
     def set_framerate(self, framerate: int) -> None:
         self._framerate = max(1, framerate)
 
+    def set_container(self, name: str, x: int, y: int, width: int, height: int) -> None:
+        """Area of a shared HUD container on screen."""
+        if name not in ("chat", "info"):
+            return
+        width = max(1, width)
+        height = max(1, height)
+        with self._cond:
+            old = self._containers.get(name)
+            if old and (old.x, old.y, old.width, old.height) == (x, y, width, height):
+                return
+            size_changed = old is None or (old.width, old.height) != (width, height)
+            self._containers[name] = _Container(x, y, width, height)
+            if size_changed:
+                canvas_w = width + SHADOW.left + SHADOW.right
+                canvas_h = height + SHADOW.top + SHADOW.bottom
+                self._dispatch(
+                    ("resize", name),
+                    {name: {"type": "resize", "width": canvas_w, "height": canvas_h, "channel": name}},
+                )
+
     def set_dimensions(self, width: int, height: int) -> None:
         with self._cond:
             if width <= 0 or height <= 0 or (width, height) == (self._width, self._height):
                 return
             self._width, self._height = width, height
             # Under the lock: a client connecting now gets this or an init with the new size
-            self._dispatch(("resize",), {"type": "resize", "width": width, "height": height})
+            self._dispatch(
+                ("resize", "all"),
+                {"all": {"type": "resize", "width": width, "height": height, "channel": "all"}},
+            )
 
     # ─────────────────────────── from the overlay ─────────────────────────── #
 
@@ -260,7 +336,8 @@ class ObsBroadcaster:
         with self._cond:
             self._seq += 1
             self._windows[name] = _Window(canvas, self._seq, self._seq, x, y, opacity)
-            if self._clients:
+            chan = _window_channel(name)
+            if any(c.channel in ("all", chan) for c in self._clients):
                 self._pending.add(name)
                 self._cond.notify()
 
@@ -272,8 +349,17 @@ class ObsBroadcaster:
                 return
             self._seq += 1
             win.state_seq, win.x, win.y, win.opacity = self._seq, x, y, opacity
-            msg = {"type": "state", "id": name, "seq": self._seq, "x": x, "y": y, "opacity": opacity}
-        self._dispatch(("state", name), msg)
+            msg_all = {"type": "state", "id": name, "seq": self._seq, "x": x, "y": y, "opacity": opacity}
+            data_by_chan = {"all": msg_all}
+            chan = _window_channel(name)
+            if chan in ("chat", "info"):
+                c = self._containers[chan]
+                x0, y0 = c.x - SHADOW.left, c.y - SHADOW.top
+                data_by_chan[chan] = {
+                    "type": "state", "id": name, "seq": self._seq,
+                    "x": x - x0, "y": y - y0, "opacity": opacity,
+                }
+        self._dispatch(("state", name), data_by_chan)
 
     def hide_window(self, name: str) -> None:
         with self._cond:
@@ -282,7 +368,11 @@ class ObsBroadcaster:
             self._pending.discard(name)
             self._seq += 1
             msg = {"type": "hide", "id": name, "seq": self._seq}
-        self._dispatch(("hide", name), msg)
+            data_by_chan = {"all": msg}
+            chan = _window_channel(name)
+            if chan in ("chat", "info"):
+                data_by_chan[chan] = msg
+        self._dispatch(("hide", name), data_by_chan)
 
     def clear(self) -> None:
         """The overlay stopped: no windows anymore."""
@@ -291,16 +381,31 @@ class ObsBroadcaster:
             self._pending.clear()
             self._seq += 1
             msg = {"type": "clear", "seq": self._seq}
-        self._dispatch(("clear",), msg)
+            data_by_chan = {"all": msg, "chat": msg, "info": msg}
+        self._dispatch(("clear",), data_by_chan)
 
     # ─────────────────────────── from the server ─────────────────────────── #
 
-    async def connect(self, ws: WebSocket) -> None:
-        """Size the client's canvas, then send it every window."""
+    async def connect(self, ws: WebSocket, channel: str = "all") -> None:
+        """Size the client's canvas, then send it every window matching its channel."""
         self._loop = asyncio.get_running_loop()
-        client = _Client(ws)
+        channel = channel if channel in ("chat", "info") else "all"
+        client = _Client(ws, channel=channel)
         with self._cond:
-            init = {"type": "init", "width": self._width, "height": self._height, "fps": self._framerate}
+            if channel == "all":
+                init = {
+                    "type": "init", "width": self._width, "height": self._height,
+                    "fps": self._framerate, "channel": "all",
+                }
+            else:
+                c = self._containers[channel]
+                init = {
+                    "type": "init",
+                    "width": c.width + SHADOW.left + SHADOW.right,
+                    "height": c.height + SHADOW.top + SHADOW.bottom,
+                    "fps": self._framerate,
+                    "channel": channel,
+                }
             client.put(("init",), json.dumps(init))
             self._clients = self._clients | {client}
             if self._worker is None:
@@ -309,24 +414,36 @@ class ObsBroadcaster:
                     target=self._encode_loop, args=(self._worker_stop,), name=THREAD_NAME_OBS_ENCODER, daemon=True
                 )
                 self._worker.start()
-            # The others get them again too and drop them: same sequence numbers
-            self._pending.update(self._windows)
+            matching = [
+                name for name in self._windows
+                if channel == "all" or _window_channel(name) == channel
+            ]
+            self._pending.update(matching)
             self._cond.notify()
         client.task = asyncio.create_task(client.run(self.disconnect))
 
     def disconnect(self, ws: WebSocket) -> None:
         """On the event loop."""
-        gone = {client for client in self._clients if client.ws is ws}
-        self._clients = self._clients - gone
+        with self._cond:
+            gone = {client for client in self._clients if client.ws is ws}
+            self._clients = self._clients - gone
         for client in gone:
             if client.task is not None and client.task is not asyncio.current_task():
                 client.task.cancel()
 
-    def snapshot(self) -> bytes:
-        """All visible windows on one transparent screen-sized PNG."""
+    def snapshot(self, channel: str = "all") -> bytes:
+        """All visible windows matching channel on one transparent PNG."""
+        channel = channel if channel in ("chat", "info") else "all"
         with self._cond:
-            windows = [replace(win) for win in self._windows.values()]
-            size = (self._width, self._height)
+            windows = [replace(win) for name, win in self._windows.items()
+                       if channel == "all" or _window_channel(name) == channel]
+            if channel in ("chat", "info"):
+                c = self._containers[channel]
+                size = (c.width + SHADOW.left + SHADOW.right, c.height + SHADOW.top + SHADOW.bottom)
+                x0, y0 = c.x - SHADOW.left, c.y - SHADOW.top
+            else:
+                size = (self._width, self._height)
+                x0, y0 = 0, 0
         frame = Image.new("RGBA", size, (0, 0, 0, 0))
         for win in windows:
             if win.opacity <= 0:
@@ -336,20 +453,31 @@ class ObsBroadcaster:
                 image = image.copy()
                 image.putalpha(image.getchannel("A").point(lambda a: round(a * win.opacity)))
             # Part of a window may lie off screen (its shadow at the edge)
-            left, top = max(0, -win.x), max(0, -win.y)
+            wx, wy = win.x - x0, win.y - y0
+            left, top = max(0, -wx), max(0, -wy)
             if left < image.width and top < image.height:
-                frame.alpha_composite(image, (win.x + left, win.y + top), (left, top))
+                frame.alpha_composite(image, (wx + left, wy + top), (left, top))
         return _png(frame)
 
     def get_status(self) -> Dict[str, Any]:
         with self._cond:
             shown = len(self._windows)
+            chat_c = self._containers["chat"]
+            info_c = self._containers["info"]
         return {
             "subscribers": len(self._clients),
             "width": self._width,
             "height": self._height,
             "fps": self._framerate,
             "windows": shown,
+            "chat": {
+                "width": chat_c.width + SHADOW.left + SHADOW.right,
+                "height": chat_c.height + SHADOW.top + SHADOW.bottom,
+            },
+            "info": {
+                "width": info_c.width + SHADOW.left + SHADOW.right,
+                "height": info_c.height + SHADOW.top + SHADOW.bottom,
+            },
         }
 
     def stop(self) -> None:
@@ -395,31 +523,45 @@ class ObsBroadcaster:
                     # Hidden meanwhile, or a newer picture is queued already
                     if win is None or win.content_seq != content_seq:
                         continue
-                    header = {
+                    chan = _window_channel(name)
+                    header_all = {
                         "id": name, "seq": content_seq, "state": win.state_seq,
                         "x": win.x, "y": win.y, "opacity": win.opacity,
                     }
-                header_bytes = json.dumps(header).encode("utf-8")
-                self._dispatch(("picture", name), struct.pack(">I", len(header_bytes)) + header_bytes + png)
+                    data_by_chan = {"all": _pack_frame(header_all, png)}
+                    if chan in ("chat", "info"):
+                        c = self._containers[chan]
+                        x0, y0 = c.x - SHADOW.left, c.y - SHADOW.top
+                        header_chan = {
+                            "id": name, "seq": content_seq, "state": win.state_seq,
+                            "x": win.x - x0, "y": win.y - y0, "opacity": win.opacity,
+                        }
+                        data_by_chan[chan] = _pack_frame(header_chan, png)
+                self._dispatch(("picture", name), data_by_chan)
 
-    def _dispatch(self, key: tuple, message) -> None:
-        """Queue for every client, from any thread."""
+    def _dispatch(self, key: tuple, data_by_channel: Dict[str, Any]) -> None:
+        """Queue for every matching client, from any thread."""
         loop = self._loop
         if not self._clients or loop is None or loop.is_closed():
             return
-        data = message if isinstance(message, bytes) else json.dumps(message)
+        prepared = {
+            chan: val if isinstance(val, bytes) else json.dumps(val)
+            for chan, val in data_by_channel.items()
+        }
         try:
-            loop.call_soon_threadsafe(self._deliver, key, data)
+            loop.call_soon_threadsafe(self._deliver, key, prepared)
         except RuntimeError:
             pass  # The loop closed in between
 
-    def _deliver(self, key: tuple, data) -> None:
+    def _deliver(self, key: tuple, prepared_by_channel: Dict[str, Any]) -> None:
         for client in self._clients:
-            client.put(key, data)
+            data = prepared_by_channel.get(client.channel)
+            if data is not None:
+                client.put(key, data)
 
 
 def same_origin(headers) -> bool:
-    """Whether a request comes from the /obs page or no web page at all. The
+    """Whether a request comes from an /obs page or no web page at all. The
     API allows every origin, but no other site may watch the HUD. The host
     must be an IP or localhost: a site whose name was rebound to this PC
     sends its own name as both origin and host."""

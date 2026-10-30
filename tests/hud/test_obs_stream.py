@@ -9,7 +9,8 @@ import pytest
 from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
-from hud_server.constants import GROUP_CHAT
+from hud_server.constants import GROUP_CHAT, GROUP_INFO
+from hud_server.rendering.glass import SHADOW
 from hud_server.obs import _Client
 from hud_server.server import HudServer
 from tests.support import HUD_HOST, FakeHudBackend, FakeObs, hold_encoding, hud_client, make_overlay, run_frames
@@ -261,5 +262,230 @@ def test_the_page_is_served_for_the_browser_source():
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert "/obs/ws" in response.text
+    finally:
+        server.obs_broadcaster.stop()
+
+
+def test_chat_and_info_pages_are_served_for_browser_sources():
+    server = HudServer(backend=FakeHudBackend())
+    try:
+        client = hud_client(server)
+        for path, title, channel in (
+            ("/obs", "Wingman AI HUD", "all"),
+            ("/obs/chat", "Wingman AI HUD - Chat", "chat"),
+            ("/obs/info", "Wingman AI HUD - Info", "info"),
+        ):
+            res = client.get(path)
+            assert res.status_code == 200
+            assert "text/html" in res.headers["content-type"]
+            assert title in res.text
+            assert f'DEFAULT_CHANNEL = "{channel}"' in res.text
+    finally:
+        server.obs_broadcaster.stop()
+
+
+def test_obs_chat_and_info_channels_receive_only_their_windows_with_relative_coords():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        # Chat container: x=100, y=200, w=400, h=500
+        obs.set_container("chat", 100, 200, 400, 500)
+        # Info container: x=800, y=150, w=350, h=450
+        obs.set_container("info", 800, 150, 350, 450)
+
+        # Show chat window, info window, and unrelated window
+        # Body on screen at x=100, y=200 -> rect is (100 - SHADOW.left, 200 - SHADOW.top)
+        chat_x = 100 - SHADOW.left
+        chat_y = 200 - SHADOW.top
+        obs.show_window(f"chat_{GROUP_CHAT}", Image.new("RGBA", (50, 50), (255, 0, 0, 255)), chat_x, chat_y, 1.0)
+
+        info_x = 800 - SHADOW.left
+        info_y = 150 - SHADOW.top
+        obs.show_window(f"persistent_{GROUP_INFO}", Image.new("RGBA", (60, 60), (0, 255, 0, 255)), info_x, info_y, 0.8)
+
+        obs.show_window("message_atc", Image.new("RGBA", (70, 70), (0, 0, 255, 255)), 50, 50, 1.0)
+
+        # 1. Connect to /obs/ws?channel=chat
+        with client.websocket_connect("/obs/ws?channel=chat") as ws:
+            init = receive(ws)
+            assert init["type"] == "init"
+            assert init["width"] == 400 + SHADOW.left + SHADOW.right
+            assert init["height"] == 500 + SHADOW.top + SHADOW.bottom
+            assert init["channel"] == "chat"
+
+            _, header, _ = receive_picture(ws, f"chat_{GROUP_CHAT}")
+            # Inside chat container canvas, it sits at (0, 0)
+            assert (header["x"], header["y"], header["opacity"]) == (0, 0, 1.0)
+
+        # 2. Connect to /obs/ws?channel=info
+        with client.websocket_connect("/obs/ws?channel=info") as ws:
+            init = receive(ws)
+            assert init["type"] == "init"
+            assert init["width"] == 350 + SHADOW.left + SHADOW.right
+            assert init["height"] == 450 + SHADOW.top + SHADOW.bottom
+            assert init["channel"] == "info"
+
+            _, header, _ = receive_picture(ws, f"persistent_{GROUP_INFO}")
+            # Inside info container canvas, it sits at (0, 0)
+            assert (header["x"], header["y"], header["opacity"]) == (0, 0, 0.8)
+
+        # 3. Connect to /obs/ws (all)
+        with client.websocket_connect("/obs/ws") as ws:
+            init = receive(ws)
+            assert init["type"] == "init"
+            assert (init["width"], init["height"]) == (1920, 1080)
+
+            # Collect the 3 pictures in whichever order the encoder delivers them
+            headers = {}
+            for _ in range(3):
+                msg = receive(ws)
+                if isinstance(msg, tuple):
+                    headers[msg[0]["id"]] = msg[0]
+
+            assert (headers[f"chat_{GROUP_CHAT}"]["x"], headers[f"chat_{GROUP_CHAT}"]["y"]) == (chat_x, chat_y)
+            assert (headers[f"persistent_{GROUP_INFO}"]["x"], headers[f"persistent_{GROUP_INFO}"]["y"]) == (info_x, info_y)
+            assert (headers["message_atc"]["x"], headers["message_atc"]["y"]) == (50, 50)
+    finally:
+        obs.stop()
+
+
+def test_a_skill_group_named_like_a_container_stays_off_the_container_channels():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        obs.show_window(f"persistent_Bob_{GROUP_CHAT}", Image.new("RGBA", (40, 40), (255, 0, 0, 255)), 5, 5, 1.0)
+        obs.show_window("persistent_Bob_status", Image.new("RGBA", (40, 40), (0, 255, 0, 255)), 5, 5, 1.0)
+        obs.show_window(f"message_{GROUP_CHAT}", Image.new("RGBA", (50, 50), (0, 0, 255, 255)), 0, 0, 1.0)
+
+        with client.websocket_connect("/obs/ws?channel=chat") as ws:
+            receive(ws)  # init
+            receive_picture(ws, f"message_{GROUP_CHAT}")
+            obs.move_window("persistent_Bob_status", 9, 9, 1.0)
+            obs.hide_window(f"message_{GROUP_CHAT}")
+            assert receive(ws)["id"] == f"message_{GROUP_CHAT}"
+    finally:
+        obs.stop()
+
+
+def test_container_resize_notifies_channel_clients():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        obs.set_container("chat", 50, 50, 300, 400)
+        with client.websocket_connect("/obs/ws?channel=chat") as ws:
+            receive(ws)  # init
+            obs.set_container("chat", 50, 50, 450, 550)
+            msg = receive(ws)
+            assert msg["type"] == "resize"
+            assert msg["channel"] == "chat"
+            assert msg["width"] == 450 + SHADOW.left + SHADOW.right
+            assert msg["height"] == 550 + SHADOW.top + SHADOW.bottom
+    finally:
+        obs.stop()
+
+
+def test_channel_snapshots_output_exact_canvas_sizes():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        obs.set_container("chat", 100, 100, 300, 400)
+        obs.set_container("info", 500, 100, 250, 350)
+
+        chat_w = 300 + SHADOW.left + SHADOW.right
+        chat_h = 400 + SHADOW.top + SHADOW.bottom
+        info_w = 250 + SHADOW.left + SHADOW.right
+        info_h = 350 + SHADOW.top + SHADOW.bottom
+
+        # Chat snapshot
+        res = client.get("/obs/chat/frame.png")
+        assert res.status_code == 200
+        chat_frame = Image.open(io.BytesIO(res.content))
+        assert chat_frame.size == (chat_w, chat_h)
+
+        # Info snapshot
+        res = client.get("/obs/info/frame.png")
+        assert res.status_code == 200
+        info_frame = Image.open(io.BytesIO(res.content))
+        assert info_frame.size == (info_w, info_h)
+
+        # Full screen snapshot
+        res = client.get("/obs/frame.png")
+        assert res.status_code == 200
+        full_frame = Image.open(io.BytesIO(res.content))
+        assert full_frame.size == (1920, 1080)
+    finally:
+        obs.stop()
+
+
+def test_obs_status_includes_containers():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        obs.set_container("chat", 100, 100, 300, 400)
+        obs.set_container("info", 500, 100, 250, 350)
+
+        res = client.get("/obs/status")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["width"] == 1920
+        assert data["height"] == 1080
+        assert data["chat"]["width"] == 300 + SHADOW.left + SHADOW.right
+        assert data["chat"]["height"] == 400 + SHADOW.top + SHADOW.bottom
+        assert data["info"]["width"] == 250 + SHADOW.left + SHADOW.right
+        assert data["info"]["height"] == 350 + SHADOW.top + SHADOW.bottom
+    finally:
+        obs.stop()
+
+
+def test_channel_receives_translated_state_and_hides_with_isolation():
+    server = HudServer(backend=FakeHudBackend())
+    obs = server.obs_broadcaster
+    client = hud_client(server)
+    try:
+        obs.set_container("chat", 100, 200, 400, 500)
+        obs.set_container("info", 800, 150, 350, 450)
+
+        with client.websocket_connect("/obs/ws?channel=chat") as ws:
+            receive(ws)  # init
+
+            # Show chat window
+            chat_x = 100 - SHADOW.left
+            chat_y = 200 - SHADOW.top
+            obs.show_window(f"chat_{GROUP_CHAT}", Image.new("RGBA", (50, 50), (255, 0, 0, 255)), chat_x, chat_y, 1.0)
+            _, header, _ = receive_picture(ws, f"chat_{GROUP_CHAT}")
+            assert (header["x"], header["y"]) == (0, 0)
+
+            # Move chat window (simulate lift animation ending: y rises by 10)
+            obs.move_window(f"chat_{GROUP_CHAT}", chat_x, chat_y - 10, 0.9)
+            msg = receive(ws)
+            assert msg["type"] == "state"
+            assert msg["id"] == f"chat_{GROUP_CHAT}"
+            assert (msg["x"], msg["y"], msg["opacity"]) == (0, -10, 0.9)
+
+            # Move an info window - should NOT reach chat socket
+            obs.show_window(f"persistent_{GROUP_INFO}", Image.new("RGBA", (50, 50), (0, 255, 0, 255)), 800, 150, 1.0)
+            obs.move_window(f"persistent_{GROUP_INFO}", 800, 150, 0.5)
+
+            # Hide chat window
+            obs.hide_window(f"chat_{GROUP_CHAT}")
+            hide_msg = receive(ws)
+            assert hide_msg["type"] == "hide"
+            assert hide_msg["id"] == f"chat_{GROUP_CHAT}"
+    finally:
+        obs.stop()
+
+
+def test_channel_snapshots_require_same_origin():
+    server = HudServer(backend=FakeHudBackend())
+    client = hud_client(server)
+    stranger = {"origin": "https://example.com"}
+    try:
+        assert client.get("/obs/chat/frame.png", headers=stranger).status_code == 403
+        assert client.get("/obs/info/frame.png", headers=stranger).status_code == 403
     finally:
         server.obs_broadcaster.stop()
