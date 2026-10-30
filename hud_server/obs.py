@@ -20,7 +20,7 @@ from PIL import Image
 from fastapi import WebSocket
 
 from api.enums import LogType
-from hud_server.constants import GROUP_CHAT, GROUP_INFO, THREAD_NAME_OBS_ENCODER
+from hud_server.constants import CONTAINER_DEFAULTS, GROUP_CHAT, GROUP_INFO, THREAD_NAME_OBS_ENCODER
 from hud_server.rendering.glass import SHADOW
 from services.printr import Printr
 
@@ -192,16 +192,19 @@ def obs_html(channel: str = "all") -> str:
     return OBS_HTML_TEMPLATE.replace("__TITLE__", title).replace("__CHANNEL__", channel)
 
 
-OBS_HTML = obs_html("all")
+# Windows of the shared containers: "<element>_<group>", or the preview of a container
+_CHANNEL_WINDOWS = {
+    f"message_{GROUP_CHAT}": "chat",
+    f"chat_{GROUP_CHAT}": "chat",
+    "preview_chat": "chat",
+    f"persistent_{GROUP_INFO}": "info",
+    "preview_info": "info",
+}
 
 
 def _window_channel(name: str) -> Optional[str]:
-    """Which container channel a window belongs to ('chat', 'info', or None for general windows)."""
-    if name in ("chat", "preview_chat") or name.endswith(f"_{GROUP_CHAT}") or name.startswith("chat_"):
-        return "chat"
-    if name in ("info", "preview_info") or name.endswith(f"_{GROUP_INFO}") or name.startswith("info_"):
-        return "info"
-    return None
+    """'chat' or 'info' for a window of a shared container, None for any other (a skill's own group)."""
+    return _CHANNEL_WINDOWS.get(name)
 
 
 def _pack_frame(header: dict, png: bytes) -> bytes:
@@ -277,8 +280,7 @@ class ObsBroadcaster:
         self._width = 1920
         self._height = 1080
         self._containers: Dict[str, _Container] = {
-            "chat": _Container(x=20, y=20, width=400, height=500),
-            "info": _Container(x=20, y=540, width=400, height=500),
+            name: _Container(**area) for name, area in CONTAINER_DEFAULTS.items()
         }
         # Replaced, never changed in place: other threads read it without a lock
         self._clients: frozenset = frozenset()

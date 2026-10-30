@@ -64,6 +64,12 @@ PATH_OBS_STATUS = "/obs/status"
 GROUP_CHAT = "wingman_chat"  # element "message"
 GROUP_INFO = "wingman_info"  # element "persistent"
 
+# Where a shared container sits until its defaults say otherwise
+CONTAINER_DEFAULTS = {
+    "chat": {"x": 20, "y": 20, "width": 400, "height": 500},
+    "info": {"x": 20, "y": 540, "width": 400, "height": 500},
+}
+
 # Layout Anchors
 ANCHOR_TOP_LEFT = "top_left"
 ANCHOR_TOP_CENTER = "top_center"

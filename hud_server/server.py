@@ -51,7 +51,7 @@ from hud_server.models import (
 # The overlay renders on every OS; the platform backend puts it on screen
 from hud_server.overlay.overlay import HeadsUpOverlay, PIL_AVAILABLE
 from hud_server.platform import create_backend
-from hud_server.obs import ObsBroadcaster, OBS_HTML, obs_html, same_origin
+from hud_server.obs import ObsBroadcaster, obs_html, same_origin
 
 printr = Printr()
 
@@ -243,17 +243,6 @@ class HudServer:
         async def set_defaults(request: DefaultsRequest):
             """Replace the defaults. Existing windows pick them up immediately."""
             self.manager.set_defaults(request.props, request.groups)
-            if request.groups:
-                for group, name in ((hud_const.GROUP_CHAT, "chat"), (hud_const.GROUP_INFO, "info")):
-                    if group in request.groups:
-                        p = request.groups[group]
-                        self.obs_broadcaster.set_container(
-                            name,
-                            int(p.get("x") if p.get("x") is not None else 20),
-                            int(p.get("y") if p.get("y") is not None else (20 if name == "chat" else 540)),
-                            int(p.get("width") if p.get("width") is not None else 400),
-                            int(p.get("max_height") or p.get("height") or 600),
-                        )
             return OperationResponse(status="ok", message="Defaults updated")
 
         # ─────────────────────────────── Preview ─────────────────────────────── #
@@ -648,22 +637,6 @@ class HudServer:
             try:
                 await self.obs_broadcaster.connect(ws, channel=channel)
                 # The page sends nothing; this waits for it to go
-                while (await ws.receive())["type"] != "websocket.disconnect":
-                    pass
-            except (WebSocketDisconnect, RuntimeError):
-                pass
-            finally:
-                self.obs_broadcaster.disconnect(ws)
-
-        @app.websocket("/obs/{channel}/ws")
-        async def obs_channel_websocket(ws: WebSocket, channel: str):
-            """The HUD windows for a specific channel (/obs/chat or /obs/info)."""
-            if not same_origin(ws.headers):
-                await ws.close(code=1008)
-                return
-            await ws.accept()
-            try:
-                await self.obs_broadcaster.connect(ws, channel=channel)
                 while (await ws.receive())["type"] != "websocket.disconnect":
                     pass
             except (WebSocketDisconnect, RuntimeError):

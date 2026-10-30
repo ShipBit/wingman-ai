@@ -715,7 +715,7 @@ pixel dimensions with transparent background.
 
 The HUD windows for the `/obs` pages, each sent on its own whenever it changes.
 Accepts an optional `channel` query parameter (`?channel=all|chat|info`, defaults to `all`),
-or path `/obs/{channel}/ws`. Clients on `chat` or `info` channels only receive windows
+Clients on `chat` or `info` channels only receive windows
 belonging to their container, with coordinates translated relative to the container canvas.
 Pictures, `state`, `hide` and `clear` carry a sequence number `seq` that rises
 with each change. They can arrive out of order, and a client that falls behind
@@ -749,13 +749,15 @@ to a `Host` that is not an IP address or `localhost`
 
 The chat container as one transparent PNG the size of its canvas.
 
-**Response**: `200 OK` (`image/png`)
+**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
+to a `Host` that is not an IP address or `localhost`
 
 ### GET /obs/info/frame.png
 
 The info container as one transparent PNG the size of its canvas.
 
-**Response**: `200 OK` (`image/png`)
+**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
+to a `Host` that is not an IP address or `localhost`
 
 ### GET /obs/status
 

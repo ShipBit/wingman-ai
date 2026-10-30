@@ -34,7 +34,7 @@ from hud_server.rendering.layers import Piece, PieceCache, compose, lay_out, ren
 
 from hud_server.platform import HudBackend, create_backend
 from hud_server.layout import LayoutManager, Anchor, LayoutMode, Align
-from hud_server.constants import GROUP_CHAT, GROUP_INFO
+from hud_server.constants import CONTAINER_DEFAULTS, GROUP_CHAT, GROUP_INFO
 from hud_server.overlay.preview import PreviewMixin
 
 
@@ -207,19 +207,19 @@ class HeadsUpOverlay(PreviewMixin):
             self._update_obs_containers()
 
     def _update_obs_containers(self) -> None:
-        if not self._obs or not hasattr(self._obs, "set_container"):
+        if not self._obs:
             return
-        for container, default_y in (("chat", 20), ("info", 540)):
+        for container, default in CONTAINER_DEFAULTS.items():
             win = self._preview_windows.get(container)
             if win:
                 props = win.get("props") or {}
             else:
                 group = GROUP_CHAT if container == "chat" else GROUP_INFO
                 props = self._group_defaults.get(group) or {}
-            x = int(props.get("x") if props.get("x") is not None else 20)
-            y = int(props.get("y") if props.get("y") is not None else default_y)
-            width = int(props.get("width") if props.get("width") is not None else 400)
-            height = int(props.get("max_height") or props.get("height") or 600)
+            x = int(props.get("x") if props.get("x") is not None else default["x"])
+            y = int(props.get("y") if props.get("y") is not None else default["y"])
+            width = int(props.get("width") if props.get("width") is not None else default["width"])
+            height = int(props.get("max_height") or props.get("height") or default["height"])
             self._obs.set_container(container, x, y, width, height)
 
     def _sync_obs(self) -> None:

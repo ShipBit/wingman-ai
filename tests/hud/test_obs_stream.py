@@ -350,17 +350,21 @@ def test_obs_chat_and_info_channels_receive_only_their_windows_with_relative_coo
         obs.stop()
 
 
-def test_obs_channel_path_websocket():
+def test_a_skill_group_named_like_a_container_stays_off_the_container_channels():
     server = HudServer(backend=FakeHudBackend())
     obs = server.obs_broadcaster
     client = hud_client(server)
     try:
-        obs.set_container("chat", 100, 200, 400, 500)
-        with client.websocket_connect("/obs/chat/ws") as ws:
-            init = receive(ws)
-            assert init["type"] == "init"
-            assert init["channel"] == "chat"
-            assert init["width"] == 400 + SHADOW.left + SHADOW.right
+        obs.show_window(f"persistent_Bob_{GROUP_CHAT}", Image.new("RGBA", (40, 40), (255, 0, 0, 255)), 5, 5, 1.0)
+        obs.show_window("persistent_Bob_status", Image.new("RGBA", (40, 40), (0, 255, 0, 255)), 5, 5, 1.0)
+        obs.show_window(f"message_{GROUP_CHAT}", Image.new("RGBA", (50, 50), (0, 0, 255, 255)), 0, 0, 1.0)
+
+        with client.websocket_connect("/obs/ws?channel=chat") as ws:
+            receive(ws)  # init
+            receive_picture(ws, f"message_{GROUP_CHAT}")
+            obs.move_window("persistent_Bob_status", 9, 9, 1.0)
+            obs.hide_window(f"message_{GROUP_CHAT}")
+            assert receive(ws)["id"] == f"message_{GROUP_CHAT}"
     finally:
         obs.stop()
 
@@ -463,7 +467,8 @@ def test_channel_receives_translated_state_and_hides_with_isolation():
             assert msg["id"] == f"chat_{GROUP_CHAT}"
             assert (msg["x"], msg["y"], msg["opacity"]) == (0, -10, 0.9)
 
-            # Move an unrelated info window - should NOT reach chat socket
+            # Move an info window - should NOT reach chat socket
+            obs.show_window(f"persistent_{GROUP_INFO}", Image.new("RGBA", (50, 50), (0, 255, 0, 255)), 800, 150, 1.0)
             obs.move_window(f"persistent_{GROUP_INFO}", 800, 150, 0.5)
 
             # Hide chat window

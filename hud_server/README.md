@@ -228,7 +228,7 @@ Core writes every Wingman's conversation to the group `wingman_chat`
 - `GET /obs` - Transparent HTML overlay page for OBS Browser Source (full screen)
 - `GET /obs/chat` - Dedicated HTML page for just the chat container
 - `GET /obs/info` - Dedicated HTML page for just the info container
-- `WS /obs/ws` - The HUD windows (`?channel=all|chat|info` or `/obs/{channel}/ws`)
+- `WS /obs/ws` - The HUD windows (`?channel=all|chat|info`)
 - `GET /obs/frame.png` - The HUD as it is now, as one transparent PNG
 - `GET /obs/chat/frame.png` - Transparent PNG snapshot of the chat container
 - `GET /obs/info/frame.png` - Transparent PNG snapshot of the info container
