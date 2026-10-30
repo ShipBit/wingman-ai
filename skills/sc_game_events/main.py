@@ -1,12 +1,20 @@
 """Star Citizen Events: the Wingman reacts to what happens in the game.
 
-This skill is also the example for reading the game log from a skill. Core
-reads Star Citizen's Game.log (services/sc_gamelog) and every skill gets the
-events through `self.wingman.sc_gamelog`:
+This skill is also the example for reading the game from a skill. Core reads
+Star Citizen's Game.log (services/sc_gamelog) and the game's own telemetry
+stream (services/sc_telemetry), and every skill gets their events through
+`self.wingman.sc_gamelog` and `self.wingman.sc_telemetry`:
 
     self._subscription = self.wingman.sc_gamelog.on("*", self._on_event)
+    self._telemetry = self.wingman.sc_telemetry.on("*", self._on_telemetry)
     ...
-    self._subscription.unsubscribe()    # in unload()
+    self._subscription.unsubscribe()    # in unload(), both
+
+The log knows missions, places, zones and trades; the telemetry knows the
+ship and the pilot's body. Where both see the same moment (a purchase, a
+boarding, a quantum arrival) the user picks which one speaks (telemetry.py),
+so it is said once. Both go into one queue: what comes within a few seconds
+becomes one line, and one limit counts the lines of both.
 
 Which events are worth a word, and how often, decides the policy Mallachi wrote
 for the SC Log Reader skill (notifications.py), with its settings: one switch
@@ -34,6 +42,7 @@ from skills.sc_game_events.notifications import (
     _literal,
     enabled_notification_events,
 )
+from skills.sc_game_events import telemetry
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -107,6 +116,9 @@ class ScGameEvents(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self._subscription = None
+        self._telemetry = None
+        self._telemetry_offered: dict[str, float] = {}
+        """When each telemetry event was last put in the queue, for its cooldown."""
         self._policy: NotificationPolicy | None = None
         self._events: frozenset[str] = frozenset()
         self._reaction: asyncio.Task | None = None
@@ -131,7 +143,38 @@ class ScGameEvents(Skill):
             value = self.retrieve_custom_property_value(f"react_{switch}", [])
             if value is not None:  # A missing switch counts as on.
                 settings[f"notify_{switch}"] = bool(value)
-        return enabled_notification_events(settings)
+        events = enabled_notification_events(settings)
+        for topic, (_, log_events, _) in telemetry.SOURCES.items():
+            if self._source(topic) == telemetry.TELEMETRY:
+                events -= log_events
+        return events
+
+    def _enabled_telemetry(self) -> frozenset[str]:
+        enabled: set[str] = set()
+        for switch, (master, events) in telemetry.SWITCHES.items():
+            if self._switch(master) and self._switch(switch):
+                enabled.update(events)
+        for topic, (_, _, telemetry_events) in telemetry.SOURCES.items():
+            if self._source(topic) == telemetry.LOG:
+                enabled -= telemetry_events
+        return frozenset(enabled)
+
+    def _switch(self, name: str) -> bool:
+        value = self.retrieve_custom_property_value(f"react_{name}", [])
+        return True if value is None else bool(value)  # A missing switch counts as on.
+
+    def _source(self, topic: str) -> str:
+        """Which source speaks for a moment both see. The one picked speaks
+        only while Core reads it; when it is off, the other one does."""
+        default, _, _ = telemetry.SOURCES[topic]
+        chosen = self.retrieve_custom_property_value(topic, [])
+        if chosen not in (telemetry.LOG, telemetry.TELEMETRY):
+            chosen = default
+        if chosen == telemetry.TELEMETRY and not self.wingman.sc_telemetry.available:
+            return telemetry.LOG
+        if chosen == telemetry.LOG and not self.wingman.sc_gamelog.available:
+            return telemetry.TELEMETRY
+        return chosen
 
     def _max_unanswered(self) -> int:
         """0 means no limit."""
@@ -161,11 +204,15 @@ class ScGameEvents(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self._subscription = self.wingman.sc_gamelog.on("*", self._on_event)
+        self._telemetry = self.wingman.sc_telemetry.on("*", self._on_telemetry)
 
     async def unload(self) -> None:
         if self._subscription:
             self._subscription.unsubscribe()
             self._subscription = None
+        if self._telemetry:
+            self._telemetry.unsubscribe()
+            self._telemetry = None
         if self._reaction and not self._reaction.done():
             self._reaction.cancel()
         await super().unload()
@@ -221,10 +268,30 @@ class ScGameEvents(Skill):
                 reports.append(message["text"])
         if not reports:
             return
+        self._queue(reports, group, now)
+
+    def _on_telemetry(self, event) -> None:
+        """A telemetry event: one switch per event, a cooldown per event (it
+        comes as often as the game shows it: 'under fire' every few seconds in
+        a fight), and the routine pacing for what comes on every flight."""
+        if event.type not in self._enabled_telemetry():
+            return
+        now = _now()
+        offered = self._telemetry_offered.get(event.type)
+        if offered is not None and now - offered < event.cooldown_s:
+            return
+        group = telemetry.ROUTINE_GROUPS.get(event.type)
+        if group and now - self._routine_spoken.get(group, float("-inf")) < self._routine_gap():
+            return
+        self._telemetry_offered[event.type] = now
+        self._queue([event.text], group, now)
+
+    def _queue(self, reports: list[str], group: str | None, now: float) -> None:
         self._waiting = (self._waiting + [(now, r, group) for r in reports])[-MAX_WAITING:]
         # One reaction at a time and never over the Wingman's voice. What comes
         # meanwhile waits and goes into the next line while it is still fresh:
-        # an arrival logs zone, jurisdiction and place within seconds.
+        # an arrival logs zone, jurisdiction and place within seconds, and a
+        # fight shows shields, hits and a lock at once.
         if self._reaction and not self._reaction.done():
             return
         self._reaction = asyncio.create_task(self._react_to_waiting())
@@ -316,7 +383,7 @@ class ScGameEvents(Skill):
             parts.append(
                 "Your last lines:\n" + "\n".join(f"- {line}" for line in self._recent_lines)
             )
-        parts.append("Game log report:\n" + "\n".join(f"- {report}" for report in reports))
+        parts.append("Report:\n" + "\n".join(f"- {report}" for report in reports))
         # Repeating the language right before the answer keeps a small model
         # from falling back to English (measured for the filler lines).
         # The angle goes right before the answer, not into the system prompt: a
@@ -342,17 +409,23 @@ class ScGameEvents(Skill):
 
     @tool(
         description=(
-            "What the Star Citizen game log says right now: where the pilot is, "
-            "the ship, zones and injuries (overview), the active missions, or the "
-            "latest events."
+            "Star Citizen right now. From the game log: where the pilot is, "
+            "zones and injuries (overview), the active missions, the latest "
+            "events. From the live telemetry: the ship the pilot sits in "
+            "(speed, altitude, power, shields, warnings, weapons, fuel) or the "
+            "pilot (health, hunger, thirst, oxygen, wallet). Report its values, "
+            "never estimate them."
         )
     )
     async def star_citizen_status(
-        self, topic: Literal["overview", "missions", "recent_events"] = "overview"
+        self,
+        topic: Literal["overview", "missions", "recent_events", "ship", "pilot"] = "overview",
     ) -> str:
         """Args:
-        topic: overview, missions or recent_events.
+        topic: overview, missions or recent_events (game log), ship or pilot (telemetry).
         """
+        if topic in ("ship", "pilot"):
+            return self._telemetry_answer(topic)
         log = self.wingman.sc_gamelog
         if not log.available:
             return "The Star Citizen log reader is switched off in the settings."
@@ -364,6 +437,15 @@ class ScGameEvents(Skill):
         if topic == "missions":
             return self._missions(state)
         return self._overview(state)
+
+    def _telemetry_answer(self, topic: str) -> str:
+        source = self.wingman.sc_telemetry
+        if not source.available:
+            return "Star Citizen telemetry is switched off in the settings."
+        state = source.state()
+        if state is None:
+            return telemetry.not_live(source.status.state.value)
+        return telemetry.ship_summary(state) if topic == "ship" else telemetry.player_summary(state)
 
     # Everything below comes from the game log, so it goes through _literal
     # (bounded, no markup) like the reactions do.

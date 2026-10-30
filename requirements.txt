@@ -60,6 +60,13 @@ tiktoken>=0.9.0
 # Star Citizen Game.log rules: patterns run with a per-call timeout
 regex>=2024.11.6
 
+# Star Citizen telemetry (services/sc_telemetry): the game streams it over
+# gRPC. Core builds the messages from a descriptor set at runtime, so any
+# protobuf from 5.29 on works; pinned here because Core imports it itself
+# and it must not depend on what onnxruntime happens to pull in.
+grpcio==1.85.0
+protobuf>=5.29,<7
+
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
 onnx-asr>=0.3.3
 # Built against CUDA 13 since 1.27, see the NVIDIA packages above. At least

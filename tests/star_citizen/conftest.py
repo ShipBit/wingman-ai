@@ -1,4 +1,5 @@
-"""The Star Citizen tests run against a real log reader on a fake Game.log."""
+"""The Star Citizen tests run against a real log reader on a fake Game.log and a real telemetry reader on a fake
+game server."""
 
 import pytest
 
@@ -7,6 +8,9 @@ from services.sc_gamelog import service as service_module
 from services.sc_gamelog import tailer as tailer_module
 from services.sc_gamelog.item_names import ItemNamesSource
 from services.sc_gamelog.rules import RulesSource
+from services.sc_telemetry import reader as telemetry_reader_module
+from services.sc_telemetry import service as telemetry_module
+from tests.star_citizen.telemetry import FakeGame
 
 
 @pytest.fixture
@@ -29,3 +33,24 @@ def reader(tmp_path, monkeypatch):
     service_module.ScGameLogService._instance = None
     yield service_module.ScGameLogService()
     service_module.ScGameLogService._instance = None
+
+
+@pytest.fixture
+def game(monkeypatch):
+    """A fake game with telemetry, and Core's telemetry pointed at it."""
+    fake = FakeGame()
+    monkeypatch.setattr(telemetry_reader_module, "ADDRESS", fake.address)
+    yield fake
+    fake.stop()
+
+
+@pytest.fixture
+def telemetry(tmp_path, monkeypatch):
+    """A fresh telemetry service that keeps its data in tmp_path and never touches the Windows registry."""
+    monkeypatch.setattr(telemetry_module, "get_generated_files_dir", lambda _: str(tmp_path / "telemetry"))
+    monkeypatch.setattr(telemetry_module.windows_env, "MANAGED", False)
+    monkeypatch.setattr(telemetry_module, "MONITOR_S", 0.05)
+    monkeypatch.setattr(telemetry_reader_module, "RETRY_S", (0.1,))
+    telemetry_module.ScTelemetryService._instance = None
+    yield telemetry_module.ScTelemetryService()
+    telemetry_module.ScTelemetryService._instance = None

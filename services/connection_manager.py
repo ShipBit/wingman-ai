@@ -125,7 +125,11 @@ class ConnectionManager:
     # current state itself. Queued, an old one would arrive after the state
     # had changed - a log reader stopped in the meantime still warned that it
     # cannot find the game.
-    EPHEMERAL = ("core_state_changed", "sc_gamelog_state_changed")
+    EPHEMERAL = (
+        "core_state_changed",
+        "sc_gamelog_state_changed",
+        "sc_telemetry_state_changed",
+    )
 
     async def broadcast(self, command: WebSocketCommandModel) -> None:
         await self._on_main_loop(self._broadcast(command))

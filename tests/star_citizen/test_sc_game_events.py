@@ -1,4 +1,4 @@
-"""The Star Citizen Events skill on top of Core's log reader.
+"""The Star Citizen Events skill on top of Core's log reader and telemetry.
 
 The Wingman must stay quiet about the log's history, react to what happens
 now, stop after the set number of reactions until the user speaks, and answer
@@ -14,7 +14,9 @@ import yaml
 from api.interface import SkillConfig
 from tests.star_citizen.gamelog import ARMISTICE, CONTRACT, FIRST, LOGIN, until, write_game_log
 from tests.support import REPO_ROOT
-from wingmen.facade import SkillScGameLog
+from services.sc_telemetry.events import make_event
+from tests.star_citizen.telemetry import load_frames, replay
+from wingmen.facade import SkillScGameLog, SkillScTelemetry
 
 CONFIG = path.join(REPO_ROOT, "skills", "sc_game_events", "default_config.yaml")
 
@@ -37,6 +39,7 @@ class FakeWingman:
         self.prompts: list[tuple[str, str]] = []
         self.on_hud: list[str] = []
         self.sc_gamelog = SkillScGameLog()
+        self.sc_telemetry = SkillScTelemetry()
         self.language = SimpleNamespace(name="German")
         self.config = SimpleNamespace(prompts=SimpleNamespace(backstory="A calm ship AI."))
 
@@ -430,3 +433,152 @@ def test_a_trip_keeps_its_arrival(monkeypatch):
 
     asyncio.run(run())
     assert "Baijini Point" in wingman.prompts[1][1]
+
+
+# --- telemetry ------------------------------------------------------------------
+
+
+def _subscribe(event_type, callback):
+    return SimpleNamespace(unsubscribe=lambda: None)
+
+
+def _sources(wingman, log=True, telemetry=True, state=None, status="live"):
+    """Which of Core's two sources run, without starting them."""
+    wingman.sc_gamelog = SimpleNamespace(available=log, on=_subscribe, state=lambda: None)
+    wingman.sc_telemetry = SimpleNamespace(
+        available=telemetry, on=_subscribe, state=lambda: state,
+        status=SimpleNamespace(state=SimpleNamespace(value=status)),
+    )
+
+
+def test_every_telemetry_event_has_a_switch_and_every_shared_moment_a_choice():
+    from services.sc_telemetry.events import BY_ID
+    from skills.sc_game_events import telemetry
+
+    raw = yaml.safe_load(open(CONFIG, encoding="utf-8"))
+    props = {prop["id"]: prop for prop in raw["custom_properties"]}
+    assert {f"react_{switch}" for switch in telemetry.SWITCHES} <= set(props)
+    assert {"react_telemetry_ship", "react_telemetry_pilot"} <= set(props)
+    covered = {kind for _, kinds in telemetry.SWITCHES.values() for kind in kinds}
+    assert covered == set(BY_ID)
+    for topic, (default, _, _) in telemetry.SOURCES.items():
+        assert [o["value"] for o in props[topic]["options"]] == ["log", "telemetry"]
+        assert props[topic]["value"] == default
+
+
+def test_a_telemetry_event_is_said_like_a_log_event(monkeypatch):
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    _sources(wingman)
+
+    async def run():
+        skill = _skill(wingman)
+        await skill.prepare()
+        skill._on_telemetry(make_event("shields_down", 1.0))
+        await until(lambda: wingman.said)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert "The shields are down." in wingman.prompts[0][1]
+
+
+def test_a_moment_both_sources_see_is_said_once_from_the_picked_one(monkeypatch):
+    """A reward shows in the log (with its amount) and as a wallet change in the telemetry."""
+    reward = _event("reward_earned", amount_auec=12500, mission_name="Big Delivery")
+    wallet = make_event("uec_changed", 1.0, delta="+12,500", balance="37,500")
+
+    def said_reports(**values):
+        _clocked(monkeypatch)
+        wingman = FakeWingman()
+        _sources(wingman)
+
+        async def run():
+            skill = _skill(wingman, max_unanswered=0, **values)
+            skill._on_event(reward)
+            skill._on_telemetry(wallet)
+            await until(lambda: wingman.said)
+            await asyncio.sleep(0.2)
+            await skill.unload()
+
+        asyncio.run(run())
+        return " ".join(text for _, text in wingman.prompts)
+
+    by_default = said_reports()
+    assert "Big Delivery" in by_default and "wallet" not in by_default
+    picked = said_reports(source_money="telemetry")
+    assert "wallet changed by +12,500" in picked and "Big Delivery" not in picked
+
+
+def test_the_other_source_speaks_while_the_picked_one_is_off(monkeypatch):
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    _sources(wingman, telemetry=False)
+
+    async def run():
+        skill = _skill(wingman, source_money="telemetry")
+        skill._on_event(_event("reward_earned", amount_auec=500, mission_name="Small Delivery"))
+        await until(lambda: wingman.said)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert "Small Delivery" in wingman.prompts[0][1]
+
+
+def test_a_fight_does_not_repeat_the_same_report(monkeypatch):
+    """Telemetry shows hits every few seconds in a fight; one line per cooldown."""
+    clock = _clocked(monkeypatch)
+    wingman = FakeWingman()
+    _sources(wingman)
+
+    async def run():
+        skill = _skill(wingman, max_unanswered=0)
+        skill._on_telemetry(make_event("under_fire", 1.0))
+        await until(lambda: wingman.said)
+        for _ in range(5):
+            clock[0] += 5
+            skill._on_telemetry(make_event("under_fire", 1.0))
+        await asyncio.sleep(0.3)
+        assert len(wingman.said) == 1
+        clock[0] += 90
+        skill._on_telemetry(make_event("under_fire", 1.0))
+        await until(lambda: len(wingman.said) == 2)
+        await skill.unload()
+
+    asyncio.run(run())
+
+
+def test_switched_off_telemetry_stays_quiet(monkeypatch):
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    _sources(wingman)
+
+    async def run():
+        skill = _skill(wingman, react_telemetry_ship=False, react_tm_health=False)
+        skill._on_telemetry(make_event("shields_down", 1.0))
+        skill._on_telemetry(make_event("health_low", 1.0, percent=20))
+        skill._on_telemetry(make_event("exhausted", 1.0))
+        await until(lambda: wingman.said)
+        await asyncio.sleep(0.2)
+        await skill.unload()
+
+    asyncio.run(run())
+    reports = " ".join(text for _, text in wingman.prompts)
+    assert "out of breath" in reports and "shields" not in reports and "health" not in reports
+
+
+def test_the_tool_answers_about_the_ship_and_the_pilot():
+    handler, _, _ = replay(load_frames("combat_2026-10-28.jsonl"))
+    wingman = FakeWingman()
+    _sources(wingman, state=handler.state)
+    skill = _skill(wingman)
+
+    ship = asyncio.run(skill.star_citizen_status("ship"))
+    pilot = asyncio.run(skill.star_citizen_status("pilot"))
+    assert ship.startswith("Ship: DRAK Cutter (Drake)") and "Warnings:" in ship
+    assert "Wallet" in pilot and "aUEC" in pilot
+    assert len(ship) < 800 and len(pilot) < 800
+
+    _sources(wingman, state=None, status="game_without_telemetry")
+    assert "RSI Launcher" in asyncio.run(skill.star_citizen_status("ship"))
+    _sources(wingman, telemetry=False)
+    assert "switched off" in asyncio.run(skill.star_citizen_status("pilot"))

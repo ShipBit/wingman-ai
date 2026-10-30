@@ -374,6 +374,7 @@ class SettingsService:
         # Star Citizen: the game folder, and the log reader that reads it
         self.config_manager.settings_config.star_citizen = settings.star_citizen
         self.config_manager.settings_config.sc_gamelog = settings.sc_gamelog
+        self.config_manager.settings_config.sc_telemetry = settings.sc_telemetry
         # star_citizen as a whole: the answer "I play" starts or stops it too.
         if (
             settings.sc_gamelog != old.sc_gamelog
@@ -381,6 +382,13 @@ class SettingsService:
         ):
             await self.settings_events.publish(
                 "sc_gamelog_settings_changed", settings
+            )
+        if (
+            settings.sc_telemetry != old.sc_telemetry
+            or settings.star_citizen != old.star_citizen
+        ):
+            await self.settings_events.publish(
+                "sc_telemetry_settings_changed", settings
             )
 
         # save the config file

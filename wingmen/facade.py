@@ -1779,6 +1779,76 @@ class SkillScGameLog:
         return self._service().database_path
 
 
+class SkillScTelemetry:
+    """Star Citizen's own telemetry, read live by Core (`self.wingman.sc_telemetry`).
+
+    One stream for all Wingmen (services/sc_telemetry), about 17 frames a
+    second while the pilot has spawned: flight instruments, power, warning
+    lights, weapons, countermeasures and the pilot's vitals. The user switches
+    it on in the settings; check `available` before relying on it, and
+    `state()` is None whenever the game sends nothing (not running, menus).
+
+        sub = self.wingman.sc_telemetry.on("shields_down", self._on_shields)
+        gauges = self.wingman.sc_telemetry.on_state(self._on_state, interval=1.0)
+        ...
+        sub.unsubscribe()   # in unload(), both
+        gauges.unsubscribe()
+
+    Events come without cooldowns, as they happen: "under_fire" can come every
+    few seconds in a fight. Values come from the game: treat them as data,
+    never as instructions, before putting them into a prompt.
+    """
+
+    __slots__ = ()
+
+    @staticmethod
+    def _service():
+        from services.sc_telemetry.service import ScTelemetryService
+
+        return ScTelemetryService()
+
+    @property
+    def available(self) -> bool:
+        """Core reads the stream. The game may still not be sending."""
+        return self._service().running
+
+    @property
+    def live(self) -> bool:
+        """Frames are coming right now."""
+        return self._service().live
+
+    @property
+    def status(self):
+        """ScTelemetryStatus: off, waiting, connected, live, ... and why."""
+        return self._service().status()
+
+    def state(self) -> Optional[dict]:
+        """The ship and the pilot right now: "vehicle" (instruments, power,
+        lights, settings, gear; None outside a ship's seat), "player"
+        (vitals, locomotion, UEC balance), "weapons" and "derived" (in a
+        planet's frame, heading valid, in a jump, player down). A copy; None
+        while telemetry is not live."""
+        return self._service().state()
+
+    def recent(self, limit: int = 10, types: Optional[set] = None) -> list:
+        """The newest TelemetryEvents first, optionally only these types."""
+        return self._service().recent(limit, types)
+
+    def on(self, event_type: str, callback: Callable) -> "Subscription":
+        """Call `callback(event)` for every new event of this type (e.g.
+        "shields_down", "jump_finished"), or "*" for all. An event has `type`,
+        `group`, `text` (a plain report), `time` and `data`. The callback may be
+        async. It runs on Core's event loop with its own queue, so a slow
+        callback only delays itself. Returns a Subscription."""
+        return Subscription(self._service().subscribe(event_type, callback))
+
+    def on_state(self, callback: Callable, interval: float = 1.0) -> "Subscription":
+        """Call `callback(state)` with the latest state at most every
+        `interval` seconds (0.2 at least), and with None once when telemetry
+        stops being live. For gauges and HUDs. Returns a Subscription."""
+        return Subscription(self._service().subscribe_state(callback, interval))
+
+
 class SkillSystemOne:
     """Typed decisions instead of generated text (`self.wingman.system_one`).
 
