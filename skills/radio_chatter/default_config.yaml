@@ -30,14 +30,14 @@ custom_properties:
   - id: interval_range
     name: Interval (sec)
     hint: Time between radio chatter events. Also used for the first event.
-    value: [60, 600]
+    value: [60, 900]
     required: true
     property_type: range_slider
     options:
       - label: "min"
         value: 60
       - label: "max"
-        value: 600
+        value: 1800
       - label: "step"
         value: 10
   - id: messages_range

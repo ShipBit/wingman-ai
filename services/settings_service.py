@@ -12,6 +12,14 @@ from api.interface import (
 from providers.parakeet import Parakeet
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
+from services.binding_owners import (
+    SETTINGS_SLOTS,
+    announce,
+    get_slot,
+    settings_owner,
+    take_from_settings,
+)
+from services.input_bindings import added_bindings
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
 from services import other_language
@@ -181,6 +189,7 @@ class SettingsService:
     # POST /settings
     async def save_settings(self, settings: SettingsConfig):
         old = deepcopy(self.config_manager.settings_config)
+        await self._give_recorded_bindings_one_owner(settings, old)
 
         # Speech-to-text. One block for every wingman and both ways of talking.
         old_stt = old.stt
@@ -383,6 +392,24 @@ class SettingsService:
                 await wingman.update_settings(
                     settings=self.config_manager.settings_config
                 )
+
+    async def _give_recorded_bindings_one_owner(
+        self, settings: SettingsConfig, old: SettingsConfig
+    ) -> None:
+        """A key just recorded for push-to-talk for all Wingmen, shut up or
+        mute is that one's now: the other lists and every Wingman's
+        push-to-talk lose it. These keys work in every config, so the Wingmen
+        of every config lose it."""
+        for slot in SETTINGS_SLOTS:
+            recorded = added_bindings(get_slot(settings, slot), get_slot(old, slot))
+            if not recorded:
+                continue
+            lost = take_from_settings(settings, recorded, keep=slot)
+            lost += await self.config_service.take_bindings_from_wingmen(
+                recorded, self.config_manager.get_config_dirs()
+            )
+            if lost:
+                announce(settings_owner(slot), lost)
 
     def save_settings_to_disk(self):
         """Persist current settings to disk without triggering provider updates."""

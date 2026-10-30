@@ -258,3 +258,65 @@ def legacy_joystick(joystick: Optional[dict]) -> Optional[dict]:
             "name": joystick.get("name"),
         },
     }
+
+
+# ───────────────── One input, one job ───────────────── #
+
+
+def _same_stroke(a: KeyStroke, b: KeyStroke) -> bool:
+    if a.scan_code is not None and b.scan_code is not None:
+        return (a.scan_code, a.extended) == (b.scan_code, b.extended)
+    # A key known by name only (a template) is the same key as a recorded one
+    # with that name.
+    return a.name.lower() == b.name.lower()
+
+
+def same_input(a: InputBinding, b: InputBinding) -> bool:
+    """Whether the two bindings fire on the same input."""
+    if a.device != b.device or len(a.keys) != len(b.keys):
+        return False
+    if a.device == RecordingDevice.MOUSE and a.mouse_button != b.mouse_button:
+        return False
+    if a.device == RecordingDevice.JOYSTICK:
+        if a.joystick is None or b.joystick is None:
+            return False
+        if (a.joystick.guid, a.joystick.button) != (b.joystick.guid, b.joystick.button):
+            return False
+    rest = list(b.keys)
+    for stroke in a.keys:
+        match = next((other for other in rest if _same_stroke(stroke, other)), None)
+        if match is None:
+            return False
+        rest.remove(match)
+    return True
+
+
+def added_bindings(
+    new: Iterable[InputBinding] | None, old: Iterable[InputBinding] | None
+) -> list[InputBinding]:
+    """The bindings in `new` that `old` did not have: the ones just recorded."""
+    old = list(old or [])
+    return [b for b in (new or []) if not any(same_input(b, o) for o in old)]
+
+
+def without_bindings(
+    bindings: Iterable[InputBinding] | None, taken: Iterable[InputBinding]
+) -> tuple[list[InputBinding], list[InputBinding]]:
+    """The list without every binding in `taken`, and the ones removed."""
+    taken = list(taken)
+    kept, removed = [], []
+    for binding in bindings or []:
+        (removed if any(same_input(binding, t) for t in taken) else kept).append(binding)
+    return kept, removed
+
+
+def describe_binding(binding: InputBinding) -> str:
+    """What the user sees, like the client shows it: "ctrl+end", "x2",
+    "Stick - 3"."""
+    keys = [stroke.name for stroke in binding.keys]
+    if binding.device == RecordingDevice.MOUSE and binding.mouse_button:
+        return "+".join([*keys, binding.mouse_button])
+    if binding.device == RecordingDevice.JOYSTICK and binding.joystick:
+        button = f"{binding.joystick.name or 'Joystick'} - {binding.joystick.button}"
+        return "+".join([*keys, button])
+    return "+".join(keys)

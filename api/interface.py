@@ -1632,11 +1632,9 @@ class SystemOneSettings(BaseModel):
     enabled: bool
     """Whether any of Core's decisions may go to the System One model.
 
-    The master switch. The decisions it takes are spread over the turn —
-    before the main model, during transcription, inside skills — and a toggle
-    per place would be a settings page nobody could reason about. Off means
-    every one of those places decides the way it did before, which is always
-    a working path and never an error."""
+    The master switch over the four below, one per place Jev decides. Off
+    means every one of those places decides the way it did before, which is
+    always a working path and never an error."""
 
     commands: bool
     """Whether the model is asked which command a request means, before the
@@ -1653,6 +1651,20 @@ class SystemOneSettings(BaseModel):
     spoken confirmation after 1.49 s instead of 2.13 s. A request that is not
     a command costs 0.46 s and changes nothing. For someone who only talks to
     their Wingman, that is all it ever does."""
+
+    wingman_choice: bool
+    """Whether the model picks the Wingman for a sentence from the global
+    push-to-talk key that names none, when no Wingman has the star. Off,
+    such a sentence goes to nobody."""
+
+    vocabulary: bool
+    """Whether the model confirms the game names the speech recognition
+    corrects ("cutless" to Cutlass). Off, the matcher decides alone."""
+
+    skills: bool
+    """Whether skills may ask the model (`self.wingman.system_one`): UEX Corp
+    matching a ship or place, Spotify a playlist, the HUD a panel. Off, each
+    skill decides the way it does without Jev."""
 
 
 class OtherLanguageSetting(BaseModel):
