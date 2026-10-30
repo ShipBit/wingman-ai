@@ -101,9 +101,16 @@ def test_a_renamed_service_reads_as_incompatible(telemetry, monkeypatch):
 
     monkeypatch.setattr(reader, "ADDRESS", patched.address)
 
+    seen = []
+
+    async def changed(status):
+        seen.append(status.state)
+
     async def run():
+        telemetry.status_callback = changed
         await telemetry.apply_settings(True, "")
         await until(lambda: telemetry.status().state == ScTelemetryState.INCOMPATIBLE)
+        await asyncio.sleep(0.5)  # several retries
         status = telemetry.status()
         await telemetry.stop()
         return status
@@ -113,6 +120,8 @@ def test_a_renamed_service_reads_as_incompatible(telemetry, monkeypatch):
     finally:
         patched.stop()
     assert "UNIMPLEMENTED" in status.detail
+    first = seen.index(ScTelemetryState.INCOMPATIBLE)
+    assert ScTelemetryState.CONNECTED not in seen[first:]  # it does not flicker with every retry
 
 
 def test_nothing_listening_is_waiting_and_a_running_game_without_telemetry_says_so(telemetry, tmp_path, monkeypatch):

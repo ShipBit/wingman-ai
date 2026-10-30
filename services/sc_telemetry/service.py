@@ -393,6 +393,10 @@ class ScTelemetryService:
         from services.sc_telemetry import reader
 
         with self._lock:
+            if self._reader_state == reader.INCOMPATIBLE and state == reader.CONNECTED:
+                # Every retry opens the call before the game refuses it. The same game stays incompatible until
+                # a frame comes or it closes.
+                return
             self._reader_state = state
             if state == reader.INCOMPATIBLE:
                 self._detail = detail
