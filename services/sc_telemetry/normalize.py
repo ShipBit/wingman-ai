@@ -1,7 +1,7 @@
 """One telemetry frame (protobuf JSON dict, field names as in the schema) -> a plain, complete state dict.
 
 Missing fields read as their defaults (false, 0), because the stream leaves out default values. Values the game never
-fills (doors, presets, quantum fuel, manufacturer) are not reported as if they worked. Rules: the field-test report §4.
+fills (doors, presets, quantum fuel, manufacturer) are not reported as if they worked. Rules: the field-test report.
 """
 from __future__ import annotations
 
@@ -25,10 +25,13 @@ MANUFACTURERS = {
 }
 
 
-def _enum(value: str | None, prefix: str) -> str:
-    """'ACTOR_LOCOMOTION_STATE_ON_FOOT' -> 'on_foot'; missing -> 'unspecified'."""
+def _enum(value: str | int | None, prefix: str) -> str:
+    """'ACTOR_LOCOMOTION_STATE_ON_FOOT' -> 'on_foot'; missing -> 'unspecified'. A value a newer game sends but the
+    schema does not know arrives as its number: 'unknown_7', so the rest of the frame still counts."""
     if not value:
         return "unspecified"
+    if not isinstance(value, str):
+        return f"unknown_{value}"
     return value.removeprefix(prefix).lower()
 
 
@@ -141,21 +144,35 @@ def _weapons(weapons: dict | None) -> dict | None:
     }
 
 
+def _section(read, value, broken: list[str], name: str):
+    """One part of the frame. A part a game patch changed beyond reading is left out, not the whole frame."""
+    try:
+        return read(value)
+    except (TypeError, ValueError, AttributeError, KeyError) as error:
+        broken.append(f"{name}: {type(error).__name__}: {error}")
+        return None
+
+
 def normalize(frame: dict) -> dict:
-    """The full state of one frame, with the derived flags that need only this frame."""
-    vehicle = _vehicle(frame.get("vehicle"))
+    """The full state of one frame, with the derived flags that need only this frame. `broken` lists the parts
+    that could not be read."""
+    broken: list[str] = []
+    vehicle = _section(_vehicle, frame.get("vehicle"), broken, "vehicle")
     instruments = vehicle["instruments"] if vehicle else {}
     altitude = instruments.get("altitude", 0.0)
     # Inside a planet's frame the game sends a real altitude; outside it sends 3.4e38. An instrument block
     # without any altitude (e.g. a frozen Ironclad) is not trusted either.
     in_planet = bool(instruments.get("altitude_sent")) and altitude < NO_PLANET_ALTITUDE
     return {
-        "player": _player(frame.get("actor")),
+        "player": _section(_player, frame.get("actor"), broken, "actor"),
         "vehicle": vehicle,
-        "weapons": _weapons(frame.get("weapons")),
-        "turret": {"light_amplification": bool(frame["turret"].get("light_amplification", False))}
+        "weapons": _section(_weapons, frame.get("weapons"), broken, "weapons"),
+        "turret": {"light_amplification": bool((frame.get("turret") or {}).get("light_amplification", False))}
         if "turret" in frame else None,
-        "game_events": [_enum(e.get("type"), "GAME_EVENT_TYPE_") for e in frame.get("events", {}).get("events", [])],
+        "game_events": _section(
+            lambda events: [_enum(e.get("type"), "GAME_EVENT_TYPE_") for e in (events or {}).get("events", [])],
+            frame.get("events"), broken, "events") or [],
+        "broken": broken,
         "derived": {
             "in_planet_frame": in_planet,
             "heading_valid": in_planet,

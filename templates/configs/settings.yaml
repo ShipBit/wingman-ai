@@ -215,3 +215,10 @@ star_citizen:
 # On, it waits for a Game.log at almost no cost.
 sc_gamelog:
   enabled: true
+# Core reads Star Citizen's own telemetry stream (ship and pilot) and hands
+# it to skills. Runs only while star_citizen.plays is true. On Windows, on
+# also sets the user variable GRPC_CLIENT_SERVER_ENABLED=true that switches
+# telemetry on in the game (after the RSI Launcher restarts); off removes it
+# again if Wingman set it.
+sc_telemetry:
+  enabled: true

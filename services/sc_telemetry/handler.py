@@ -1,6 +1,6 @@
 """The Handler: turns the stream of normalised frames into a smoothed state and debounced events.
 
-It applies the quirk rules from the field-test report §4 once, so the Orchestrator and other skills never repeat them:
+It applies the quirk rules from the field-test report once, so no skill has to repeat them:
 heading only inside a planet frame and outside jumps, EVA flicker smoothed, settings and lights debounced, death
 from health alone, countermeasure burst size learnt, a new vehicle starts a fresh silent baseline.
 """
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import copy
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from skills.sc_telemetry.events import BY_ID, render
-from skills.sc_telemetry.normalize import normalize
+from services.sc_telemetry.events import TelemetryEvent, make_event
+from services.sc_telemetry.normalize import normalize
 
 EVA_STABLE_S = 1.5
 JUMP_ON_S = 1.5
@@ -31,6 +31,11 @@ GROUND_VEHICLE_AFTER_S = 12.0
 6-9 s after sitting down, so a shorter wait would mistake every boarding for a ground vehicle."""
 
 
+def _weightless(g: float) -> bool:
+    """The g meter reads 0 in a quantum jump; a little slack in case a patch adds noise."""
+    return abs(g) < 0.05
+
+
 @dataclass(frozen=True)
 class Thresholds:
     health_low: float = 0.30
@@ -40,15 +45,6 @@ class Thresholds:
     countermeasure_bursts: int = 3
     """'Low' means this many bursts or fewer are left."""
     hydrogen_low: float = 0.15
-
-
-@dataclass(frozen=True)
-class TelemetryEvent:
-    id: str
-    group: str
-    text: str
-    t: float
-    data: dict = field(default_factory=dict)
 
 
 class _Hold:
@@ -79,7 +75,6 @@ class _Hold:
 class Handler:
     def __init__(self) -> None:
         self._state: dict | None = None
-        self._last_fired: dict[str, float] = {}
         self._locomotion = "unspecified"
         self._locomotion_pending: tuple[str, float] | None = None
         self._vehicle_key: str | None = None
@@ -96,8 +91,6 @@ class Handler:
         self._spikes: deque[tuple[float, str]] = deque()
         self._dead = False
         """Health reached 0 and stayed there; only a return to RESPAWN_HEALTH clears it."""
-        self.last_unfiltered: list[TelemetryEvent] = []
-        """Every event of the last update, before the cooldowns: the feed for other skills wants all of them."""
         self._armed: dict[str, bool] = {}
         self._gear = self._vtol = None
         self._cm: dict[str, dict] = {}
@@ -119,9 +112,16 @@ class Handler:
         """The latest smoothed state (a copy: callers may keep it)."""
         return copy.deepcopy(self._state) if self._state else {}
 
+    @property
+    def latest(self) -> dict | None:
+        """The latest state itself, without a copy. `update` builds a new one per frame and never changes it
+        afterwards, so a reader may hold it; it must not change it."""
+        return self._state
+
     # --- per frame --------------------------------------------------------------------------------------------
 
-    def update(self, frame: dict, t: float, thresholds: Thresholds) -> list[TelemetryEvent]:
+    def update(self, frame: dict, t: float, thresholds: Thresholds = Thresholds()) -> list[TelemetryEvent]:
+        """Every event of this frame. Cooldowns are the business of whoever reacts to them."""
         state = normalize(frame)
         fired: list[TelemetryEvent] = []
         player = state["player"]
@@ -148,21 +148,11 @@ class Handler:
                 for kind, count in state["weapons"]["countermeasures"].items()
             }
         self._state = state
-        self.last_unfiltered = fired
-        return [event for event in fired if self._past_cooldown(event)]
-
-    def _past_cooldown(self, event: TelemetryEvent) -> bool:
-        spec = BY_ID[event.id]
-        last = self._last_fired.get(event.id)
-        if last is not None and event.t - last < spec.cooldown_s:
-            return False
-        self._last_fired[event.id] = event.t
-        return True
+        return fired
 
     @staticmethod
     def _event(event_id: str, t: float, **data) -> TelemetryEvent:
-        spec = BY_ID[event_id]
-        return TelemetryEvent(event_id, spec.group, render(spec, data), t, data)
+        return make_event(event_id, t, **data)
 
     # --- player -------------------------------------------------------------------------------------------------
 
@@ -287,7 +277,7 @@ class Handler:
         fired = []
         if key != self._vehicle_key:
             if self._last_vehicle_name is not None and key != self._last_vehicle_name:
-                fired.append(self._event("vehicle_changed", t, vehicle=vehicle["class_name"]))
+                fired.append(self._event("vehicle_changed", t, vehicle=vehicle["class_name"].replace("_", " ")))
             self._vehicle_key = self._last_vehicle_name = key
             self._baseline(vehicle)
             return fired
@@ -305,7 +295,7 @@ class Handler:
             "landed": holds["landed"].update(vehicle["landed"], t),
             "quantum": holds["quantum"].update(lights["qdrv"] == "nominal", t),
             "jump": holds["jump"].update(
-                lights["thr"] == "major_on" and instr["g"] == 0.0 and not vehicle["landed"], t),
+                lights["thr"] == "major_on" and _weightless(instr["g"]) and not vehicle["landed"], t),
             "prox": holds["prox"].update(lights["prox"] == "major_on", t),
             "hit": holds["hit"].update(lights["hit"] in ("major_flashing", "major_on", "minor_flashing",
                                                          "minor_on"), t),
@@ -347,7 +337,7 @@ class Handler:
         self._holds["lock"].reset(lights["radr"] == "major_on")
         self._holds["prox"].reset(lights["prox"] == "major_on")
         self._holds["hit"].reset(lights["hit"] in ("major_flashing", "major_on", "minor_flashing", "minor_on"))
-        self._holds["jump"].reset(lights["thr"] == "major_on" and instr["g"] == 0.0 and not vehicle["landed"])
+        self._holds["jump"].reset(lights["thr"] == "major_on" and _weightless(instr["g"]) and not vehicle["landed"])
         self._gear, self._vtol = vehicle["gear"], vehicle["vtol"]
         self._cm = {}
         self._armed.pop("hydrogen", None)  # a new ship's fuel level is its baseline

@@ -3,7 +3,6 @@ backports-tarfile>=1.0.0
 edge-tts==7.3.1
 fastapi==0.128.6
 google-genai==2.31.0
-grpcio==1.85.0
 httptools==0.7.1
 hume==0.13.13
 markdown==3.10.2
@@ -60,6 +59,13 @@ tiktoken>=0.9.0
 
 # Star Citizen Game.log rules: patterns run with a per-call timeout
 regex>=2024.11.6
+
+# Star Citizen telemetry (services/sc_telemetry): the game streams it over
+# gRPC. Core builds the messages from a descriptor set at runtime, so any
+# protobuf from 5.29 on works; pinned here because Core imports it itself
+# and it must not depend on what onnxruntime happens to pull in.
+grpcio==1.85.0
+protobuf>=5.29,<7
 
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
 onnx-asr>=0.3.3
