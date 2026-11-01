@@ -15,6 +15,11 @@ as it is.
 Which keys meet: the global push-to-talk, shut up and mute keys work in every
 config, so they meet every Wingman. A Wingman's push-to-talk only meets the
 Wingmen of its own config.
+
+Core also reads Star Citizen's own telemetry now (settings.sc_telemetry). It
+starts on, like the log reader, and runs only for someone who said they play
+Star Citizen. On Windows it then sets the variable that switches telemetry on
+in the game, which only Star Citizen reads.
 """
 
 from os import listdir, path
@@ -127,6 +132,9 @@ class Migration3212To3213(BaseMigration):
         for owner, bindings in self._resets(old).items():
             if owner[0] == "settings":
                 _set_settings_bindings(old, owner[1], bindings)
+
+        if not isinstance(old.get("sc_telemetry"), dict):
+            old["sc_telemetry"] = {"enabled": True}
         return old
 
     def migrate_wingman(self, old: dict) -> dict:

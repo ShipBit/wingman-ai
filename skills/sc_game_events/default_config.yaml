@@ -10,14 +10,17 @@ tags:
   - Star Citizen
   - Game Integration
 description:
-  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, injuries and trades, and knows where you are and which missions you have. Needs the Star Citizen log in the settings.
-  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Verletzungen und Handel, und weiß, wo du bist und welche Missionen du hast. Braucht das Star Citizen Log in den Einstellungen.
+  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, trades, shields, hits and quantum jumps, and knows where you are, your missions and the state of your ship. Needs the Star Citizen log in the settings, and Star Citizen telemetry for the ship and the pilot.
+  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Handel, Schilde, Treffer und Quantensprünge, und weiß, wo du bist, welche Missionen du hast und wie es deinem Schiff geht. Braucht das Star Citizen Log in den Einstellungen und für Schiff und Pilot die Star Citizen Telemetrie.
 discovery_keywords:
   - star citizen
   - game events
   - mission
   - location
   - where am i
+  - ship status
+  - shields
+  - health
 custom_properties:
   - id: react_mission
     name: All missions
@@ -330,6 +333,183 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
+  - id: react_telemetry_ship
+    name: All ship telemetry
+    hint: What the ship's own telemetry shows. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_shields
+    name: Shields Down and Back Up
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_under_fire
+    name: Taking Hits
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_locked_on
+    name: Locked On
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_countermeasures
+    name: Countermeasures Low or Empty
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_power
+    name: Powerplant Off and On
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_engines
+    name: Engines Damaged or Offline
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_weapons
+    name: Weapons Without Power
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_boost
+    name: Boost Depleted
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_proximity
+    name: Collision Warning
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_landing
+    name: Landing and Takeoff
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_jump
+    name: Quantum Jump Start and End
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_vehicle
+    name: Ship or Vehicle Boarded
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_hydrogen
+    name: Hydrogen Low
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_gear
+    name: Landing Gear
+    property_type: boolean
+    required: false
+    value: false
+  - id: react_tm_quantum_mode
+    name: Quantum Mode On and Off
+    property_type: boolean
+    required: false
+    value: false
+  - id: react_telemetry_pilot
+    name: All pilot telemetry
+    hint: What the telemetry shows about the pilot. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_health
+    name: Health Low
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_down
+    name: Down and Respawned
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_oxygen
+    name: Oxygen and Air
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_exhausted
+    name: Out of Breath
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_hunger_thirst
+    name: Hunger and Thirst
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_intoxicated
+    name: Drunk
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_wallet
+    name: Wallet Balance
+    property_type: boolean
+    required: false
+    value: true
+  - id: source_money
+    name: Purchases, sales and rewards from
+    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
+    property_type: single_select
+    required: false
+    value: log
+    options:
+      - label: Game log (item and amount)
+        value: log
+      - label: Telemetry (wallet balance)
+        value: telemetry
+  - id: source_boarding
+    name: Boarding a ship from
+    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
+    property_type: single_select
+    required: false
+    value: log
+    options:
+      - label: Game log (every boarding)
+        value: log
+      - label: Telemetry (ship changes only)
+        value: telemetry
+  - id: source_fuel
+    name: Low fuel from
+    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
+    property_type: single_select
+    required: false
+    value: log
+    options:
+      - label: Game log (the game's warning)
+        value: log
+      - label: Telemetry (hydrogen in percent)
+        value: telemetry
+  - id: source_quantum_arrival
+    name: Quantum arrival from
+    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
+    property_type: single_select
+    required: false
+    value: telemetry
+    options:
+      - label: Game log (arrival)
+        value: log
+      - label: Telemetry (jump start and end)
+        value: telemetry
+  - id: source_down
+    name: Pilot down from
+    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
+    property_type: single_select
+    required: false
+    value: telemetry
+    options:
+      - label: Game log (incapacitated)
+        value: log
+      - label: Telemetry (down and respawn)
+        value: telemetry
   - id: max_unanswered
     name: Reactions until you speak again
     hint: The Wingman stops reacting after this many reactions until you say or type something. 0 means no limit.

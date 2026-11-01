@@ -16,6 +16,7 @@ from api.interface import (
     InputBinding,
     HudProfilesState,
     ScGameLogStatus,
+    ScTelemetryStatus,
     TokenUsage,
 )
 
@@ -189,6 +190,14 @@ class ScGameLogStateChangedCommand(WebSocketCommandModel):
 
     command: Literal["sc_gamelog_state_changed"] = "sc_gamelog_state_changed"
     status: ScGameLogStatus
+
+
+class ScTelemetryStateChangedCommand(WebSocketCommandModel):
+    """Sent when Star Citizen's telemetry connects, goes live, drops, or the
+    pilot changes ships."""
+
+    command: Literal["sc_telemetry_state_changed"] = "sc_telemetry_state_changed"
+    status: ScTelemetryStatus
 
 
 class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):

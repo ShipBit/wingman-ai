@@ -170,6 +170,16 @@ hiddenimports = [
     'pydantic_settings',
     'typing_inspection',
 
+    # gRPC + protobuf for Star Citizen telemetry (services/sc_telemetry). Core imports them itself, but
+    # gRPC's Cython core and the protobuf modules the descriptor set needs are named here so a release
+    # build never misses them. The message classes are built at runtime from schema.desc (in services/).
+    'grpc',
+    'grpc._cython.cygrpc',
+    'google.protobuf.descriptor_pb2',
+    'google.protobuf.descriptor_pool',
+    'google.protobuf.json_format',
+    'google.protobuf.message_factory',
+
     # Google GenAI
     'google.genai',
     'google.genai.types',

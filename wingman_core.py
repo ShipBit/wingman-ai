@@ -20,6 +20,7 @@ from api.commands import (
     HudProfilesChangedCommand,
     LogCommand,
     ScGameLogStateChangedCommand,
+    ScTelemetryStateChangedCommand,
     SttVocabularyChangedCommand,
     VoiceActivationMutedCommand,
 )
@@ -35,6 +36,7 @@ from api.enums import (
 )
 from api.interface import (
     ScGameLogStatus,
+    ScTelemetryStatus,
     SettingsConfig,
     StarCitizenGameFolder,
     StarCitizenSetup,
@@ -101,8 +103,9 @@ from services.audio.device_names import with_full_names
 from services.backstory import parse_enhanced_backstory
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
+from services.sc_telemetry.service import ScTelemetryService
 from services.star_citizen.game_folder import inspect_game_folder
-from services.star_citizen.setup import StarCitizenSetupService, log_reader_on
+from services.star_citizen.setup import StarCitizenSetupService, log_reader_on, telemetry_on
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -229,6 +232,13 @@ class WingmanCore(WebSocketUser):
             path="/sc-gamelog/status",
             endpoint=self.get_sc_gamelog_status,
             response_model=ScGameLogStatus,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/sc-telemetry/status",
+            endpoint=self.get_sc_telemetry_status,
+            response_model=ScTelemetryStatus,
             tags=tags,
         )
         # The Star Citizen step of the first-start setup. Its switches are
@@ -941,6 +951,10 @@ class WingmanCore(WebSocketUser):
             "sc_gamelog_settings_changed", self._apply_sc_gamelog_settings
         )
         ScGameLogService().status_callback = self._broadcast_sc_gamelog_status
+        self.settings_service.settings_events.subscribe(
+            "sc_telemetry_settings_changed", self._apply_sc_telemetry_settings
+        )
+        ScTelemetryService().status_callback = self._broadcast_sc_telemetry_status
 
         self.parakeet = Parakeet(
             settings=self.settings_service.settings.stt.parakeet,
@@ -1120,8 +1134,9 @@ class WingmanCore(WebSocketUser):
             )
         await self._start_hud_server_if_enabled()
 
-        # 7. Star Citizen log reader
+        # 7. Star Citizen log reader and telemetry
         await self._apply_sc_gamelog_settings(self.settings_service.settings)
+        await self._apply_sc_telemetry_settings(self.settings_service.settings)
 
     async def _apply_sc_gamelog_settings(self, settings: SettingsConfig):
         enabled = log_reader_on(settings)
@@ -1147,6 +1162,21 @@ class WingmanCore(WebSocketUser):
     # GET /sc-gamelog/status
     async def get_sc_gamelog_status(self) -> ScGameLogStatus:
         return ScGameLogService().status()
+
+    async def _apply_sc_telemetry_settings(self, settings: SettingsConfig):
+        await ScTelemetryService().apply_settings(
+            telemetry_on(settings), settings.star_citizen.game_path
+        )
+
+    async def _broadcast_sc_telemetry_status(self, status: ScTelemetryStatus):
+        if self._connection_manager:
+            await self._connection_manager.broadcast(
+                ScTelemetryStateChangedCommand(status=status)
+            )
+
+    # GET /sc-telemetry/status
+    async def get_sc_telemetry_status(self) -> ScTelemetryStatus:
+        return ScTelemetryService().status()
 
     # GET /star-citizen/game-folder
     def check_star_citizen_game_folder(self, path: str) -> StarCitizenGameFolder:
@@ -4571,6 +4601,7 @@ class WingmanCore(WebSocketUser):
         # Stop HUD Server
         await self._stop_hud_server()
         await ScGameLogService().stop()
+        await ScTelemetryService().stop()
 
         # The wingmen first: their skills (radio chatter, timers) may still
         # be synthesizing, and their memory checkpoint needs the models.

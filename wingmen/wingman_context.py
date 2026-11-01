@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts, SkillStt,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
-        SkillSettings, SkillSystemOne, SkillScGameLog, SkillStarCitizen, SkillUi, SkillHud, SpokenLanguageInfo,
+        SkillSettings, SkillSystemOne, SkillScGameLog, SkillScTelemetry, SkillStarCitizen, SkillUi, SkillHud, SpokenLanguageInfo,
     )
     from wingmen.wingman import Wingman
 
@@ -66,6 +66,7 @@ class WingmanContext:
         self.__memory = None
         self.__system_one = None
         self.__sc_gamelog = None
+        self.__sc_telemetry = None
         self.__star_citizen = None
         self.__screen = None
         self.__ui = None
@@ -236,6 +237,14 @@ class WingmanContext:
             from wingmen.facade import SkillScGameLog
             self.__sc_gamelog = SkillScGameLog()
         return self.__sc_gamelog
+
+    @property
+    def sc_telemetry(self) -> "SkillScTelemetry":
+        """Star Citizen's own telemetry, read live by Core: ship and pilot state, events, subscriptions."""
+        if self.__sc_telemetry is None:
+            from wingmen.facade import SkillScTelemetry
+            self.__sc_telemetry = SkillScTelemetry()
+        return self.__sc_telemetry
 
     @property
     def star_citizen(self) -> "SkillStarCitizen":

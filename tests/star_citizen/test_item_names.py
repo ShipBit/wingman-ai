@@ -103,8 +103,8 @@ def test_a_confirmed_purchase_carries_the_name(reader, tmp_path, table):
 
     async def run():
         await reader.start(str(tmp_path / "game"))
-        await until(lambda: reader.recent(10, {"shop_buy"}))
-        await asyncio.sleep(0.2)
+        # Both lines, not a fixed sleep after the first: on a busy CI runner the confirmation can come later.
+        await until(lambda: {e.status for e in reader.recent(10, {"shop_buy"})} >= {"requested", "confirmed"})
         events = reader.recent(10, {"shop_buy"})
         await reader.stop()
         return events

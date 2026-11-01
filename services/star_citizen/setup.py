@@ -1,7 +1,7 @@
 """The Star Citizen step of the first-start setup.
 
 The client asks once whether the user plays Star Citizen. The answer switches
-every Star Citizen feature on or off in one go: the log reader, the bundled
+every Star Citizen feature on or off in one go: the log reader, telemetry, the bundled
 pronunciation and transcription lists, and the Star Citizen skills and MCP
 servers on the Wingmen Wingman ships for the game (ATC and Computer). After
 that the step lists those features with a switch each, and the switches are
@@ -87,6 +87,13 @@ def log_reader_on(settings) -> bool:
     return bool(settings.sc_gamelog.enabled) and settings.star_citizen.plays is True
 
 
+def telemetry_on(settings) -> bool:
+    """Whether Core reads the game's telemetry: switched on, and the user said
+    they play Star Citizen. Needs no game folder: the game streams on its own
+    port. The folder only helps to tell why nothing comes."""
+    return bool(settings.sc_telemetry.enabled) and settings.star_citizen.plays is True
+
+
 def on_by_default(feature: _Feature, wingman_name: str) -> bool:
     return feature.on_for is None or wingman_name in feature.on_for
 
@@ -140,6 +147,9 @@ class StarCitizenSetupService:
                 settings.star_citizen.game_path = folder.path
                 log_reader = True
         settings.sc_gamelog.enabled = log_reader
+        # Telemetry needs no folder, and its switch in the game is harmless:
+        # only Star Citizen reads it. The setup step shows the switch.
+        settings.sc_telemetry.enabled = plays
         await self.settings_service.save_settings(settings)
 
         if plays:

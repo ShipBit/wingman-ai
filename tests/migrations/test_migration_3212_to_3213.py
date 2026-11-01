@@ -105,6 +105,18 @@ def test_a_switch_that_is_there_is_kept(old_configs):
     assert migrated["system_one"]["skills"] is False
 
 
+# ── Star Citizen telemetry ──────────────────────────────────────────
+
+
+def test_telemetry_starts_on_and_a_setting_that_is_there_is_kept(old_configs):
+    migrated, _ = run(old_configs(settings(), {}), [])
+    assert migrated["sc_telemetry"] == {"enabled": True}
+    old = settings()
+    old["sc_telemetry"] = {"enabled": False}
+    migrated, _ = run(old_configs(old, {}), [])
+    assert migrated["sc_telemetry"] == {"enabled": False}
+
+
 # ── keys bound twice ────────────────────────────────────────────────
 
 
