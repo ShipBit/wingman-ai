@@ -216,9 +216,11 @@ class Parakeet:
         self,
         config: ParakeetSttConfig,
         filename: str,
+        api_key: str = "",
     ) -> Optional[ParakeetTranscript]:
+        """`api_key` is only sent to a remote server, and only when set."""
         if not self.settings.run_locally:
-            return self._transcribe_remote(filename)
+            return self._transcribe_remote(filename, api_key)
 
         if self._loading:
             self.printr.toast_error(
@@ -251,7 +253,9 @@ class Parakeet:
 
         return None
 
-    def _transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
+    def _transcribe_remote(
+        self, filename: str, api_key: str = ""
+    ) -> Optional[ParakeetTranscript]:
         """POST audio file to remote Parakeet server for transcription."""
         host = (self.settings.host or "").strip().rstrip("/")
         if not host:
@@ -262,15 +266,17 @@ class Parakeet:
         if not host.startswith(("http://", "https://")):
             host = f"http://{host}"
         url = f"{host}:{self.settings.port}/v1/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
             with open(filename, "rb") as f:
                 response = requests.post(
                     url=url,
                     files={"file": f},
                     data={
-                        "model": "parakeet",
+                        "model": (self.settings.model or "").strip() or "parakeet",
                         "response_format": "json",
                     },
+                    headers=headers,
                     timeout=30,
                 )
                 response.raise_for_status()

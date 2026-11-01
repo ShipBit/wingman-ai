@@ -7,6 +7,7 @@ from copy import deepcopy
 from unittest.mock import MagicMock
 
 from api.interface import McpConfig, NestedConfig, SettingsConfig
+from services.config_manager import deep_merge_configs
 from services.migrations.migration_320_to_321 import ELEVENLABS_SERVER
 from services.migrations.migration_321_to_322 import (
     ELEVENLABS_DISABLED_TOOLS,
@@ -149,10 +150,7 @@ def test_migrated_settings_validate_after_template_backfill():
     shipped = template("settings.yaml")
     out = _migration().migrate_settings(_settings_321())
 
-    merged = dict(shipped)
-    merged["stt"] = {**shipped["stt"], **out["stt"]}
-    merged["voice_activation"] = {**shipped["voice_activation"], **out["voice_activation"]}
-    settings = SettingsConfig(**merged)
+    settings = SettingsConfig(**deep_merge_configs(shipped, out))
     assert settings.stt.provider.value == "parakeet"
     assert settings.voice_activation.enabled is True
 

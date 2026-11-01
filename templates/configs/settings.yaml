@@ -48,6 +48,10 @@ stt:
     # Empty until you fill it in.
     host: ""
     port: 9876
+    # The model name the server expects. A server with several models wants
+    # its own id, e.g. parakeet-tdt-0.6b-v3. An API key goes into the secret
+    # "parakeet".
+    model: parakeet
   parakeet_config:
     temperature: 0.0
 voice_activation:
