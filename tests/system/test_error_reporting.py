@@ -308,6 +308,7 @@ def test_same_status_outside_openai_is_reported(sentry):
         "Incorrect API key provided: sk-xx***",
         "No models loaded. Please load a model in the developer page",
         "This model does not support image input",
+        "registry.ollama.ai/library/gemma3:4b does not support tools",
     ],
 )
 def test_openai_bad_requests_from_the_users_setup_are_dropped(sentry, message):

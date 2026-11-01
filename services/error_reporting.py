@@ -106,7 +106,8 @@ _IGNORED_EXCEPTIONS = {
 _IGNORED_OPENAI_STATUS = {401, 402, 403, 404, 408, 409, 413, 429}
 # 400s of the openai SDK that are the user's setup, not a payload Core built
 # wrong: an unknown model, a wrong key (some providers send it as 400), a local
-# server without a model loaded, an image sent to a model without vision.
+# server without a model loaded, an image sent to a model without vision, a
+# model without tool support (Core asks it again without tools).
 _OPENAI_USER_400_HINTS = (
     "not found",
     "does not exist",
@@ -114,6 +115,7 @@ _OPENAI_USER_400_HINTS = (
     "incorrect api key",
     "no models loaded",
     "does not support image",
+    "does not support tools",
 )
 
 # Any other HTTP client or provider SDK: a bad key (401, 403), no credit (402)
