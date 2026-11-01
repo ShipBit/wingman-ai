@@ -129,8 +129,8 @@ To capture the HUD in OBS Studio (e.g. on top of a game captured via Game Captur
 3. Set the width and height to the HUD's screen size, as shown by
    `http://127.0.0.1:7862/obs/status` (`width` and `height`). With Windows
    display scaling that is less than the monitor's resolution: a 3840×2160
-   monitor at 125 % is `3072` × `1728`. Another size scales the HUD to fit,
-   and a larger one makes it look slightly blurry.
+   monitor at 125 % is `3072` × `1728`. The page draws the HUD 1:1 and does
+   not scale it: a smaller source crops it, a larger one leaves transparent space.
 4. Set **FPS** to match your HUD server framerate (e.g. `60`, OBS defaults new browser sources to 30).
 5. Place the Browser source above your Game Capture source.
 6. Tick **Refresh browser when scene becomes active**. When OBS starts before
@@ -139,7 +139,17 @@ To capture the HUD in OBS Studio (e.g. on top of a game captured via Game Captur
 
 The page shows the HUD on a transparent background, the size of the screen
 the HUD is on. Each window is sent only when it changes, so an idle HUD costs
-nothing. For a second streaming PC, set the HUD server's host to `0.0.0.0`
+nothing.
+
+To place the chat and info panels separately in your scene, add a Browser
+source for each: `http://127.0.0.1:7862/obs/chat` and
+`http://127.0.0.1:7862/obs/info`. Each page is exactly as big as its panel
+(including the shadow margin; see `/obs/status` for `chat` and `info` sizes)
+and works the same way, also in streaming software with browser source size
+limits. Groups a skill draws itself, like the microphone icon of the Mic
+Status skill, only show on `/obs`.
+
+For a second streaming PC, set the HUD server's host to `0.0.0.0`
 (it listens on this PC only by default) and use the gaming PC's local IP in the
 URL instead of `127.0.0.1`. The page only connects through an IP address or
 `localhost`, not a host name.

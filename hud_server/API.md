@@ -693,13 +693,30 @@ Delete a chat window.
 ### GET /obs
 
 The page to add as an OBS Browser Source: the HUD on a transparent background,
-the size of the HUD's screen, scaled to fit the source.
+the size of the HUD's screen, fixed to its pixel size.
+
+**Response**: `200 OK` (`text/html`)
+
+### GET /obs/chat
+
+Dedicated Browser Source page for only the Chat panel, sized to its container
+pixel dimensions with transparent background.
+
+**Response**: `200 OK` (`text/html`)
+
+### GET /obs/info
+
+Dedicated Browser Source page for only the Info panel, sized to its container
+pixel dimensions with transparent background.
 
 **Response**: `200 OK` (`text/html`)
 
 ### WS /obs/ws
 
-The HUD windows for the `/obs` page, each sent on its own whenever it changes.
+The HUD windows for the `/obs` pages, each sent on its own whenever it changes.
+Accepts an optional `channel` query parameter (`?channel=all|chat|info`, defaults to `all`),
+Clients on `chat` or `info` channels only receive windows
+belonging to their container, with coordinates translated relative to the container canvas.
 Pictures, `state`, `hide` and `clear` carry a sequence number `seq` that rises
 with each change. They can arrive out of order, and a client that falls behind
 gets only the newest of each per window: a client ignores anything older than
@@ -708,9 +725,9 @@ of this server may connect: a handshake with another `Origin`, or with a `Host`
 that is not an IP address or `localhost`, is refused.
 
 Text messages (JSON):
-- `{"type": "init", "width": <w>, "height": <h>, "fps": <fps>}` on connect;
-  every visible window follows as a picture.
-- `{"type": "resize", "width": <w>, "height": <h>}` when the HUD moves to a screen of another size.
+- `{"type": "init", "width": <w>, "height": <h>, "fps": <fps>, "channel": <chan>}` on connect;
+  every visible matching window follows as a picture.
+- `{"type": "resize", "width": <w>, "height": <h>, "channel": <chan>}` when the screen or container changes size.
 - `{"type": "state", "id": <window>, "seq": <n>, "x": <x>, "y": <y>, "opacity": <0..1>}`
   when a window moves or fades.
 - `{"type": "hide", "id": <window>, "seq": <n>}` when a window has faded out or is gone.
@@ -728,9 +745,23 @@ The HUD as it is now, as one transparent PNG the size of its screen.
 **Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
 to a `Host` that is not an IP address or `localhost`
 
+### GET /obs/chat/frame.png
+
+The chat container as one transparent PNG the size of its canvas.
+
+**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
+to a `Host` that is not an IP address or `localhost`
+
+### GET /obs/info/frame.png
+
+The info container as one transparent PNG the size of its canvas.
+
+**Response**: `200 OK` (`image/png`), or `403` for a request from another site's page or
+to a `Host` that is not an IP address or `localhost`
+
 ### GET /obs/status
 
-Connected Browser Sources, the HUD screen's size and the number of windows shown.
+Connected Browser Sources, the HUD screen's size, container sizes, and the number of windows shown.
 `width` and `height` are in the HUD's pixels (scaled on Windows), the size to
 give the Browser Source.
 
@@ -741,7 +772,9 @@ give the Browser Source.
   "width": 1920,
   "height": 1080,
   "fps": 60,
-  "windows": 2
+  "windows": 2,
+  "chat": {"width": 432, "height": 532},
+  "info": {"width": 432, "height": 532}
 }
 ```
 

@@ -236,6 +236,9 @@ class FakeObs:
     def set_framerate(self, framerate):
         pass
 
+    def set_container(self, name, x, y, width, height):
+        pass
+
     def show_window(self, name, canvas, x, y, opacity):
         self.shown[name] = (canvas, x, y, opacity)
 

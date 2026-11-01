@@ -80,6 +80,7 @@ class PreviewMixin:
         for win in self._preview_windows.values():
             if win.get("handle") is not None:
                 self._backend.set_click_through(win["handle"], not interactive)
+        self._update_obs_containers()
 
     def _clear_preview(self) -> None:
         if self._drag:
@@ -89,6 +90,7 @@ class PreviewMixin:
             self._destroy_preview_window(container)
         self._preview_active = False
         self._hover = {}
+        self._update_obs_containers()
 
     def _is_suppressed(self, win: Dict) -> bool:
         """The real shared containers step aside while their preview is shown."""
@@ -428,6 +430,7 @@ class PreviewMixin:
             win["last_render_state"] = None
 
     def _emit_preview_event(self, container: str, final: bool) -> None:
+        self._update_obs_containers()
         if not self._event_callback:
             return
         x1, y1, x2, y2 = self._preview_rect(container)

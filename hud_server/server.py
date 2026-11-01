@@ -51,7 +51,7 @@ from hud_server.models import (
 # The overlay renders on every OS; the platform backend puts it on screen
 from hud_server.overlay.overlay import HeadsUpOverlay, PIL_AVAILABLE
 from hud_server.platform import create_backend
-from hud_server.obs import ObsBroadcaster, OBS_HTML, same_origin
+from hud_server.obs import ObsBroadcaster, obs_html, same_origin
 
 printr = Printr()
 
@@ -615,17 +615,27 @@ class HudServer:
         @app.get(hud_const.PATH_OBS, response_class=HTMLResponse, tags=["obs"])
         async def obs_overlay_page():
             """The page to add as an OBS Browser Source: the HUD on a transparent background."""
-            return HTMLResponse(content=OBS_HTML)
+            return HTMLResponse(content=obs_html("all"))
+
+        @app.get(hud_const.PATH_OBS_CHAT, response_class=HTMLResponse, tags=["obs"])
+        async def obs_chat_page():
+            """The chat panel to add as a Browser Source."""
+            return HTMLResponse(content=obs_html("chat"))
+
+        @app.get(hud_const.PATH_OBS_INFO, response_class=HTMLResponse, tags=["obs"])
+        async def obs_info_page():
+            """The info panel to add as a Browser Source."""
+            return HTMLResponse(content=obs_html("info"))
 
         @app.websocket(hud_const.PATH_OBS_WS)
-        async def obs_websocket(ws: WebSocket):
+        async def obs_websocket(ws: WebSocket, channel: str = "all"):
             """The HUD windows for the /obs page, as they change."""
             if not same_origin(ws.headers):
                 await ws.close(code=1008)
                 return
             await ws.accept()
             try:
-                await self.obs_broadcaster.connect(ws)
+                await self.obs_broadcaster.connect(ws, channel=channel)
                 # The page sends nothing; this waits for it to go
                 while (await ws.receive())["type"] != "websocket.disconnect":
                     pass
@@ -639,7 +649,21 @@ class HudServer:
             """The HUD as one screen-sized transparent PNG (sync: encoding runs in the thread pool)."""
             if not same_origin(request.headers):
                 raise HTTPException(status_code=403, detail="Not from this server's own pages")
-            return Response(content=self.obs_broadcaster.snapshot(), media_type="image/png")
+            return Response(content=self.obs_broadcaster.snapshot("all"), media_type="image/png")
+
+        @app.get(hud_const.PATH_OBS_CHAT_FRAME, tags=["obs"])
+        def obs_chat_snapshot(request: Request):
+            """The chat panel as one transparent PNG."""
+            if not same_origin(request.headers):
+                raise HTTPException(status_code=403, detail="Not from this server's own pages")
+            return Response(content=self.obs_broadcaster.snapshot("chat"), media_type="image/png")
+
+        @app.get(hud_const.PATH_OBS_INFO_FRAME, tags=["obs"])
+        def obs_info_snapshot(request: Request):
+            """The info panel as one transparent PNG."""
+            if not same_origin(request.headers):
+                raise HTTPException(status_code=403, detail="Not from this server's own pages")
+            return Response(content=self.obs_broadcaster.snapshot("info"), media_type="image/png")
 
         @app.get(hud_const.PATH_OBS_STATUS, tags=["obs"])
         async def obs_status():
