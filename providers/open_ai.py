@@ -4,7 +4,7 @@ import re
 from typing import TYPE_CHECKING, Literal, Mapping, Union
 import httpx
 from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError
-from api.enums import ConversationProvider, LogType, TtsProvider
+from api.enums import ConversationProvider, LogType, ToastType, TtsProvider
 
 from api.interface import (
     SoundConfig,
@@ -158,6 +158,7 @@ class BaseOpenAi(ABC):
                     f"{model} cannot use tools, so skills and commands are left out of its calls. "
                     "Pick a model with tool support to use them.",
                     color=LogType.WARNING,
+                    toast=ToastType.WARNING,
                 )
                 return self._perform_ask(
                     client, messages, stream, None, model=model, tool_choice=tool_choice

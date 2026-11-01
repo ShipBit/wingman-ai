@@ -9,6 +9,7 @@ import pytest
 from openai import BadRequestError
 
 import providers.open_ai as open_ai_module
+from api.enums import ToastType
 from providers.open_ai import BaseOpenAi, OpenAi
 
 TOOLS = [{"type": "function", "function": {"name": "execute_command", "parameters": {}}}]
@@ -29,7 +30,10 @@ def toasts(monkeypatch):
     monkeypatch.setattr(
         open_ai_module,
         "printr",
-        SimpleNamespace(print=lambda *a, **k: None, toast_error=shown.append),
+        SimpleNamespace(
+            print=lambda text, **k: shown.append((k.get("toast"), text)),
+            toast_error=lambda text: shown.append((ToastType.ERROR, text)),
+        ),
     )
     return shown
 
@@ -61,17 +65,21 @@ def test_a_model_that_refuses_tools_is_asked_again_without_them(toasts):
 
     assert openai.ask(messages=[], model="gemma3:4b", tools=TOOLS) == "answer"
     assert ["tools" in c for c in calls] == [True, False]
-    assert toasts == []
+    [(kind, text)] = toasts
+    assert kind == ToastType.WARNING
+    assert "gemma3:4b cannot use tools" in text
 
 
-def test_later_requests_leave_the_tools_out_at_once():
+def test_later_requests_leave_the_tools_out_at_once(toasts):
     calls = []
     openai = provider(refusing_tools(calls))
     openai.ask(messages=[], model="gemma3:4b", tools=TOOLS)
     calls.clear()
+    toasts.clear()
 
     assert openai.ask(messages=[], model="gemma3:4b", tools=TOOLS) == "answer"
     assert ["tools" in c for c in calls] == [False]
+    assert toasts == []
 
 
 def test_the_same_model_on_another_server_still_gets_its_tools():
@@ -92,4 +100,5 @@ def test_other_bad_requests_still_reach_the_user(toasts):
 
     assert provider(create).ask(messages=[], model="gemma3:4b", tools=TOOLS) is None
     assert toasts
+    assert {kind for kind, _ in toasts} == {ToastType.ERROR}
     assert BaseOpenAi._models_without_tools == set()
