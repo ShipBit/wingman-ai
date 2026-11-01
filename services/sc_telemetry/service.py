@@ -228,6 +228,12 @@ class ScTelemetryService:
         with self._lock:
             return self._state is not None and self._fresh()
 
+    @property
+    def answering(self) -> bool:
+        """The game answers on the stream: live, or connected in a menu or loading. False while nothing answers,
+        also when the game runs without telemetry, so a skill falls back to the game log."""
+        return self._current_state() in (ScTelemetryState.CONNECTED, ScTelemetryState.LIVE)
+
     def _fresh(self) -> bool:
         return bool(self._last_frame_at) and time.monotonic() - self._last_frame_at < FRAME_STALE_S
 

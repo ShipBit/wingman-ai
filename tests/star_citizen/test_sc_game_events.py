@@ -446,7 +446,8 @@ def _sources(wingman, log=True, telemetry=True, state=None, status="live"):
     """Which of Core's two sources run, without starting them."""
     wingman.sc_gamelog = SimpleNamespace(available=log, on=_subscribe, state=lambda: None)
     wingman.sc_telemetry = SimpleNamespace(
-        available=telemetry, on=_subscribe, state=lambda: state,
+        available=telemetry, answering=telemetry and status in ("live", "connected"),
+        on=_subscribe, state=lambda: state,
         status=SimpleNamespace(state=SimpleNamespace(value=status)),
     )
 
@@ -522,6 +523,23 @@ def test_the_other_source_speaks_while_the_picked_one_is_off(monkeypatch):
 
     asyncio.run(run())
     assert "Small Delivery" in wingman.prompts[0][1]
+
+
+def test_the_log_speaks_while_the_game_runs_without_telemetry(monkeypatch):
+    """Telemetry switched on, but the launcher was not restarted: the log says
+    what the telemetry would have said, instead of both staying silent."""
+    _clocked(monkeypatch)
+    wingman = FakeWingman()
+    _sources(wingman, status="game_without_telemetry")
+
+    async def run():
+        skill = _skill(wingman)
+        skill._on_event(_event("incapacitated"))
+        await until(lambda: wingman.said)
+        await skill.unload()
+
+    asyncio.run(run())
+    assert wingman.prompts
 
 
 def test_a_fight_does_not_repeat_the_same_report(monkeypatch):

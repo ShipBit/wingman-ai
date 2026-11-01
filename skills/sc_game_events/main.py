@@ -165,12 +165,15 @@ class ScGameEvents(Skill):
 
     def _source(self, topic: str) -> str:
         """Which source speaks for a moment both see. The one picked speaks
-        only while Core reads it; when it is off, the other one does."""
+        only while it can; otherwise the other one does. The telemetry can
+        only while the game answers on it: switched on is not enough, the
+        game may run without it (launcher not restarted, Linux without the
+        variable), and then the log would stay silent too."""
         default, _, _ = telemetry.SOURCES[topic]
         chosen = self.retrieve_custom_property_value(topic, [])
         if chosen not in (telemetry.LOG, telemetry.TELEMETRY):
             chosen = default
-        if chosen == telemetry.TELEMETRY and not self.wingman.sc_telemetry.available:
+        if chosen == telemetry.TELEMETRY and not self.wingman.sc_telemetry.answering:
             return telemetry.LOG
         if chosen == telemetry.LOG and not self.wingman.sc_gamelog.available:
             return telemetry.TELEMETRY

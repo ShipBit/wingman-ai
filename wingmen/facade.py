@@ -1813,6 +1813,13 @@ class SkillScTelemetry:
         return self._service().running
 
     @property
+    def answering(self) -> bool:
+        """The game answers on the stream (live, or in a menu). False while
+        the game is not running or runs without telemetry: then nothing
+        comes, though `available` is True."""
+        return self._service().answering
+
+    @property
     def live(self) -> bool:
         """Frames are coming right now."""
         return self._service().live

@@ -72,7 +72,7 @@ def test_live_turns_to_connected_when_the_frames_stop(telemetry, game, monkeypat
         await until(lambda: telemetry.status().state == ScTelemetryState.LIVE)
         # The game goes to its menu: the stream stays open, no frames come.
         await until(lambda: telemetry.status().state == ScTelemetryState.CONNECTED)
-        assert telemetry.state() is None
+        assert telemetry.state() is None and telemetry.answering
         await telemetry.stop()
 
     asyncio.run(run())
@@ -138,6 +138,7 @@ def test_nothing_listening_is_waiting_and_a_running_game_without_telemetry_says_
         log.parent.mkdir(parents=True)
         log.write_text("<2026-10-30T10:00:00.000Z> Log started on Fri Oct 30 10:00:00 2026\n")
         await until(lambda: telemetry.status().state == ScTelemetryState.GAME_WITHOUT_TELEMETRY)
+        assert not telemetry.answering
         # The next session has telemetry: back to waiting until the port opens.
         log.write_text("<2026-10-30T11:00:00.000Z> Log started on Fri Oct 30 11:00:00 2026\n"
                        "Service 'sc.game.telemetry.v1.GameTelemetryService' registered\n")

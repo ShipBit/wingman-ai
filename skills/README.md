@@ -1910,6 +1910,7 @@ telemetry knows the ship and the body. A skill that needs it declares
 | Member | Description |
 | --- | --- |
 | `.available` | `bool` — Core reads the stream. The game may still not be sending. |
+| `.answering` | `bool` — the game answers: live, or in a menu or loading. `False` while the game is not running or runs without telemetry (launcher not restarted, variable not set on Linux). Check this before leaving a moment to the telemetry. |
 | `.live` | `bool` — frames are coming right now. |
 | `.state()` | `dict` copy of the ship and the pilot right now: `vehicle` (`instruments`, `power`, `lights`, `settings`, `gear`, `landed`; `None` outside a ship's seat), `player` (`health_fraction`, `oxygen_fraction`, `heart_rate`, `locomotion`, `uec_balance`, ...), `weapons` and `derived` (`in_planet_frame`, `heading_valid`, `in_jump`, `player_down`). `None` while nothing comes (no game, menus, loading). |
 | `.recent(limit=10, types=None)` | The newest `TelemetryEvent`s first. |
