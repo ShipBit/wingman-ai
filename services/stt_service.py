@@ -134,12 +134,21 @@ class SttService:
             common_words=common_words(self.app_root_path, self.settings_service.settings.spoken_language),
         )
 
+    def _parakeet_api_key(self) -> str:
+        """The secret `parakeet`, for a remote server that wants a key.
+        Optional like `local_llm`: never prompts, empty means keyless.
+        "not-set" is the placeholder older migrations wrote."""
+        key = str(self.secret_keeper.secrets.get("parakeet") or "").strip()
+        return "" if key == "not-set" else key
+
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt
 
         if provider == SttProvider.PARAKEET:
             result = self.parakeet.transcribe(
-                config=stt.parakeet_config, filename=filename
+                config=stt.parakeet_config,
+                filename=filename,
+                api_key=self._parakeet_api_key(),
             )
             return result.text if result else None
 

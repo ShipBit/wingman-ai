@@ -117,6 +117,24 @@ def test_telemetry_starts_on_and_a_setting_that_is_there_is_kept(old_configs):
     assert migrated["sc_telemetry"] == {"enabled": False}
 
 
+# ── Parakeet model name ─────────────────────────────────────────────
+
+
+def test_a_parakeet_server_keeps_the_model_name_wingman_always_sent(old_configs):
+    old = settings()
+    old["stt"] = {"parakeet": {"run_locally": False, "host": "http://10.0.0.5", "port": 9876}}
+    migrated, _ = run(old_configs(old, {}), [])
+    assert migrated["stt"]["parakeet"]["model"] == "parakeet"
+    assert migrated["stt"]["parakeet"]["host"] == "http://10.0.0.5"
+
+
+def test_a_model_name_that_is_there_is_kept(old_configs):
+    old = settings()
+    old["stt"] = {"parakeet": {"model": "parakeet-tdt-0.6b-v3"}}
+    migrated, _ = run(old_configs(old, {}), [])
+    assert migrated["stt"]["parakeet"]["model"] == "parakeet-tdt-0.6b-v3"
+
+
 # ── keys bound twice ────────────────────────────────────────────────
 
 

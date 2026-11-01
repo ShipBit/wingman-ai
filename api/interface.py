@@ -212,6 +212,10 @@ class ParakeetSettings(BaseModel):
     """Where a Parakeet server runs when `run_locally` is off. Empty until
     the user fills it in; nothing is contacted before that."""
     port: int = 9876
+    model: str
+    """The model name sent to that server. A server that hosts several models
+    (oMLX, LM Studio) wants its own id, e.g. `parakeet-tdt-0.6b-v3`. Its API
+    key, if it needs one, is the secret `parakeet`."""
 
 
 class ParakeetSttConfig(BaseModel):
