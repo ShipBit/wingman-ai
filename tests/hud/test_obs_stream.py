@@ -361,7 +361,8 @@ def test_a_skill_group_named_like_a_container_stays_off_the_container_channels()
 
         with client.websocket_connect("/obs/ws?channel=chat") as ws:
             receive(ws)  # init
-            receive_picture(ws, f"message_{GROUP_CHAT}")
+            before, _, _ = receive_picture(ws, f"message_{GROUP_CHAT}")
+            assert before == []
             obs.move_window("persistent_Bob_status", 9, 9, 1.0)
             obs.hide_window(f"message_{GROUP_CHAT}")
             assert receive(ws)["id"] == f"message_{GROUP_CHAT}"
