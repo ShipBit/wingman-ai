@@ -89,8 +89,12 @@ printr = Printr()
 
 # A tag like <｜tool_call｜> or <#INVALID#>. Asked for words with tool_choice
 # "none", some models still call a tool and write the call out in their own
-# tokens; a spoken answer has no tags. "3 < 5" is no tag: the space after "<".
-TOOL_MARKUP = re.compile(r"<[^\s<>][^<>\n]{0,80}>")
+# tokens. "3 < 5" and "<10%, >80%" are no tag: a space or a digit after "<".
+TOOL_MARKUP = re.compile(r"<[^\s<>\d][^<>\n]{0,80}>")
+# Tags a spoken answer may have, the prompt asks for them: pauses
+# (<break time="400ms" />), spelled-out codes (<verbatim>3B</verbatim>) and
+# <sigh> for [sigh]. A closing tag other than </verbatim> is none of them.
+SPEECH_MARKUP = re.compile(r"<(?:(?i:break\b[^<>]*|/?verbatim\s*)|[a-z]+)>")
 
 
 def tool_names(tool_calls) -> list[str]:
@@ -1033,7 +1037,7 @@ class Wingman:
             response_message.tool_calls = None
             # A tool call written out as text is no answer. Spoken, it is
             # noise; kept in the history, the next answer copies it.
-            if TOOL_MARKUP.search(response_message.content):
+            if TOOL_MARKUP.search(SPEECH_MARKUP.sub("", response_message.content)):
                 printr.print(
                     f"{self.name}: dropped an answer that was a tool call written as text: "
                     f"{response_message.content[:200]!r}",

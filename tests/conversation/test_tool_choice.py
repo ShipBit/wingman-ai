@@ -82,7 +82,14 @@ def test_a_tool_call_written_out_as_text_is_not_said(monkeypatch, content):
 
 @pytest.mark.parametrize(
     "content",
-    ["One point added to shields, Captain.", "Fuel is at 3 < 5 percent, Captain."],
+    [
+        "One point added to shields, Captain.",
+        "Fuel is at 3 < 5 percent, Captain.",
+        "Fuel <10%, shields >80%.",
+        'Landing gear down. <break time="400ms" /> Mind the crosswind.',
+        "Docking clearance granted. Pad <verbatim>3B</verbatim>.",
+        "<sigh> Landing gear down, again.",
+    ],
 )
 def test_words_after_an_instant_command_are_said(monkeypatch, content):
     assert _answer(monkeypatch, content, allow_tool_calls=False) == content
