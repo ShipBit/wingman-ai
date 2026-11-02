@@ -459,7 +459,7 @@ def test_every_telemetry_event_has_a_switch_and_every_shared_moment_a_choice():
     raw = yaml.safe_load(open(CONFIG, encoding="utf-8"))
     props = {prop["id"]: prop for prop in raw["custom_properties"]}
     assert {f"react_{switch}" for switch in telemetry.SWITCHES} <= set(props)
-    assert {"react_telemetry_ship", "react_telemetry_pilot"} <= set(props)
+    assert {f"react_{master}" for master, _ in telemetry.SWITCHES.values()} <= set(props)
     covered = {kind for _, kinds in telemetry.SWITCHES.values() for kind in kinds}
     assert covered == set(BY_ID)
     for topic, (default, _, _) in telemetry.SOURCES.items():
@@ -571,17 +571,40 @@ def test_switched_off_telemetry_stays_quiet(monkeypatch):
     _sources(wingman)
 
     async def run():
-        skill = _skill(wingman, react_telemetry_ship=False, react_tm_health=False)
+        skill = _skill(wingman, react_telemetry_combat=False, react_tm_health=False)
         skill._on_telemetry(make_event("shields_down", 1.0))
         skill._on_telemetry(make_event("health_low", 1.0, percent=20))
-        skill._on_telemetry(make_event("exhausted", 1.0))
+        skill._on_telemetry(make_event("player_down", 1.0))
         await until(lambda: wingman.said)
         await asyncio.sleep(0.2)
         await skill.unload()
 
     asyncio.run(run())
     reports = " ".join(text for _, text in wingman.prompts)
-    assert "out of breath" in reports and "shields" not in reports and "health" not in reports
+    assert "pilot is down" in reports and "shields" not in reports and "health" not in reports
+
+
+def test_body_needs_are_quiet_until_the_user_turns_them_on(monkeypatch):
+    """Testers found the full stream floods the Wingman; hunger, thirst, breath and drink are flavour."""
+    def said(**values):
+        _clocked(monkeypatch)
+        wingman = FakeWingman()
+        _sources(wingman)
+
+        async def run():
+            skill = _skill(wingman, max_unanswered=0, **values)
+            skill._on_telemetry(make_event("exhausted", 1.0))
+            skill._on_telemetry(make_event("shields_down", 1.0))
+            await until(lambda: wingman.said)
+            await asyncio.sleep(0.2)
+            await skill.unload()
+
+        asyncio.run(run())
+        return " ".join(text for _, text in wingman.prompts)
+
+    by_default = said()
+    assert "shields" in by_default and "out of breath" not in by_default
+    assert "out of breath" in said(react_telemetry_body=True)
 
 
 def test_the_tool_answers_about_the_ship_and_the_pilot():

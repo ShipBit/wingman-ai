@@ -333,9 +333,9 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
-  - id: react_telemetry_ship
-    name: All ship telemetry
-    hint: What the ship's own telemetry shows. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+  - id: react_telemetry_combat
+    name: "Telemetry: combat"
+    hint: Shields, hits, locks and countermeasures. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -359,6 +359,12 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
+  - id: react_telemetry_ship_alerts
+    name: "Telemetry: ship alerts"
+    hint: Power, engines, weapons, boost, fuel and collision warnings. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: true
   - id: react_tm_power
     name: Powerplant Off and On
     property_type: boolean
@@ -379,8 +385,19 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
+  - id: react_tm_hydrogen
+    name: Hydrogen Low
+    property_type: boolean
+    required: false
+    value: true
   - id: react_tm_proximity
     name: Collision Warning
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_telemetry_flight
+    name: "Telemetry: flight and travel"
+    hint: Takeoff, landing, quantum jumps and boarding, which come on every flight. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -399,11 +416,6 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
-  - id: react_tm_hydrogen
-    name: Hydrogen Low
-    property_type: boolean
-    required: false
-    value: true
   - id: react_tm_gear
     name: Landing Gear
     property_type: boolean
@@ -414,9 +426,9 @@ custom_properties:
     property_type: boolean
     required: false
     value: false
-  - id: react_telemetry_pilot
-    name: All pilot telemetry
-    hint: What the telemetry shows about the pilot. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+  - id: react_telemetry_survival
+    name: "Telemetry: survival"
+    hint: Low health, going down, respawning and air or oxygen. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -435,6 +447,12 @@ custom_properties:
     property_type: boolean
     required: false
     value: true
+  - id: react_telemetry_body
+    name: "Telemetry: body needs"
+    hint: Out of breath, hunger, thirst and drink. Off by default. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: false
   - id: react_tm_exhausted
     name: Out of Breath
     property_type: boolean
@@ -447,6 +465,12 @@ custom_properties:
     value: true
   - id: react_tm_intoxicated
     name: Drunk
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_telemetry_wallet
+    name: "Telemetry: wallet"
+    hint: Wallet balance changes. Only speaks when purchases, sales and rewards are set to come from the telemetry. Turns the group on or off.
     property_type: boolean
     required: false
     value: true
