@@ -27,6 +27,7 @@ Skills run on our API, so every token is paid by us or the user.
 - `default_config.yaml` needs `api_version: 3`, or the skill is treated as legacy and not loaded. `name` must equal the class name.
 - No work at import time: the catalog imports the module without creating the skill.
 - Read custom properties when you need them, never cache them in `__init__`: the user changes them while the skill runs. Secrets go through `self.wingman.secrets`, never custom properties. Paths use the `directory` or `file` property type.
+- From about ten custom properties on, group them with `property_groups`. Follow [Grouping Custom Properties](README.md#grouping-custom-properties): sentence case, the most used settings ungrouped, a `toggle` only for a real master switch.
 - `self.wingman.ai.generate` and `self.wingman.local_ai` do not get the Wingman's system prompt. Put `self.wingman.language.name` into every prompt whose output the user hears or reads.
 - Prefer the support model (`local_ai`) for background work, with a `SamplingPreset` per call (`PRECISE` for extraction and yes/no). Use System One to pick, rate or judge.
 - Lines a skill says on its own pass a `priority` to `tts.speak` (`EVENT` or `BACKGROUND`), or they cut off the Wingman's answer.

@@ -24,6 +24,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Required Files](#required-files)
   - [default_config.yaml - Skill Metadata](#default_configyaml---skill-metadata)
   - [Custom Properties — Available Types](#custom-properties--available-types)
+  - [Grouping Custom Properties](#grouping-custom-properties)
   - [Accessing Custom Properties](#accessing-custom-properties-in-your-skill)
 - [Creating a Skill](#creating-a-skill)
 - [Bundling Dependencies](#bundling-dependencies)
@@ -790,6 +791,7 @@ custom_properties: # User-configurable settings
     value: default_value # Default value
     required: true # Is this property required?
     property_type: string # See "Custom Properties — Available Types" below
+    group: your_group_id # Optional, see "Grouping Custom Properties" below
 ```
 
 ### Custom Properties — Available Types
@@ -1120,6 +1122,63 @@ AudioFileConfig(
 
 ---
 
+### Grouping Custom Properties
+
+A skill with many settings can show them under collapsible headings, like the command groups in the client. Define the groups in `property_groups`, in the order the UI shows them, and name a group's `id` in the `group` of each property:
+
+```yaml
+property_groups:
+  - id: combat
+    name: Combat # The heading
+    hint: Shields, hits and locks. # Optional, shown below the heading
+    toggle: react_combat # Optional: a boolean setting shown as the switch in the heading
+  - id: survival
+    name: Survival
+
+custom_properties:
+  - id: max_reactions
+    name: Reactions until you speak again
+    property_type: number
+    value: 10 # No group: shown above all groups
+  - id: react_combat
+    name: Enabled # Only shown if the switch cannot be used in the heading
+    hint: Turns the whole group on or off.
+    property_type: boolean
+    value: true
+    group: combat
+  - id: react_shields
+    name: Shields down and back up
+    property_type: boolean
+    value: true
+    group: combat
+```
+
+How it is shown:
+
+- Properties without a `group` come first, above all groups, sorted by type. Groups start collapsed and show how many settings they hold.
+- Within a group, the properties keep the order of the manifest.
+- A group with a `toggle` shows that boolean setting as an "Enabled" switch at the right of its heading, like the other panels, and not again inside the group. While it is off, the group's settings are hidden.
+- A skill without `property_groups` shows one flat list.
+
+When and how to group:
+
+- Group from about ten settings on. Below that, a flat list is easier to scan.
+- Give each group at least two settings, and keep the number of groups small. A group of one is a heading the user has to open for nothing.
+- Leave the settings most users change ungrouped, so they see them without opening anything. A switch that starts or stops the whole skill belongs there too.
+- Group by what the user thinks about ("Timing", "Sound"), not by how your code is built.
+- Name groups with a short noun in sentence case ("Zones and safety"). Put a condition every setting of the group shares into the group's `hint` instead of repeating it in each setting ("Needs Star Citizen telemetry in the settings.").
+- Name settings in sentence case and do not repeat the group's name in them: in a group "Sound", call it "Volume", not "Sound volume".
+- Use a `toggle` only for a setting that really switches the whole group off. Call it "Enabled" with the hint "Turns the whole group on or off.", and give it the same `group`, so it is in the right place if the switch cannot be shown. Your skill still reads the toggle like any other setting and decides what "off" means, for example by ignoring the group's other switches.
+
+Robustness:
+
+- Groups only change the display. Renaming or moving them later keeps the user's values, because those belong to the property `id`. Saved Wingmen take the groups from your manifest, so there is nothing to migrate.
+- A mistake never stops the skill: a group without `id` or `name` is left out, the first of two groups with the same `id` wins, a property in a group the skill does not define is shown ungrouped, and a `toggle` that is no boolean setting of the skill is ignored. Core logs a warning when it scans the skills, and the client shows one for unknown groups.
+
+Examples: `sc_game_events` (14 groups, most with a switch) and `radio_chatter` (three groups, no switches).
+
+---
+
 ### Accessing Custom Properties in Your Skill
 
 **Always retrieve custom properties just-in-time, never cache them.** Users can change property values in the UI while the skill is running. Retrieving values fresh ensures your skill always uses current settings without requiring restart or reactivation.
@@ -1447,6 +1506,7 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
   - [ ] `tags` are appropriate
   - [ ] `description` (English at minimum)
   - [ ] `custom_properties` are defined (if needed)
+  - [ ] `property_groups` are defined if there are about ten settings or more
 - [ ] Create `logo.png` (256x256 or 512x512, PNG format)
 
 ### Code Implementation

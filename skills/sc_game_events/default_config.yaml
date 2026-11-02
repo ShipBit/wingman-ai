@@ -21,443 +21,605 @@ discovery_keywords:
   - ship status
   - shields
   - health
+property_groups:
+  - id: missions
+    name: Missions
+    toggle: react_mission
+  - id: safety
+    name: Zones and safety
+    toggle: react_safety
+  - id: health
+    name: Health
+    toggle: react_health
+  - id: ship
+    name: Ship and hangar
+    toggle: react_ship
+  - id: money
+    name: Trade and rewards
+    toggle: react_money
+  - id: location
+    hint: These come often.
+    name: Location and quantum travel
+    toggle: react_location
+  - id: session
+    name: Session and social
+    toggle: react_session
+  - id: combat
+    hint: Needs Star Citizen telemetry in the settings.
+    name: Combat
+    toggle: react_telemetry_combat
+  - id: ship_alerts
+    hint: Needs Star Citizen telemetry in the settings.
+    name: Ship alerts
+    toggle: react_telemetry_ship_alerts
+  - id: flight
+    hint: Needs Star Citizen telemetry in the settings. These come on every flight.
+    name: Flight and travel
+    toggle: react_telemetry_flight
+  - id: survival
+    hint: Needs Star Citizen telemetry in the settings.
+    name: Survival
+    toggle: react_telemetry_survival
+  - id: body
+    hint: Needs Star Citizen telemetry in the settings.
+    name: Body needs
+    toggle: react_telemetry_body
+  - id: wallet
+    hint: Needs Star Citizen telemetry in the settings. Only speaks when purchases, sales and rewards come from the telemetry (see Game log or telemetry).
+    name: Wallet
+    toggle: react_telemetry_wallet
+  - id: sources
+    name: Game log or telemetry
+    hint: Both see these events. Pick which one speaks. If the one you pick is off, the other one speaks.
 custom_properties:
   - id: react_mission
-    name: All missions
-    hint: Turns the whole group on or off. Pick single types below.
+    group: missions
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_mission_accepted
-    name: Contract Accepted
+    group: missions
+    name: Contract accepted
     property_type: boolean
     required: false
     value: true
   - id: react_mission_complete
-    name: Contract Completed
+    group: missions
+    name: Contract completed
     property_type: boolean
     required: false
     value: true
   - id: react_mission_failed
-    name: Contract Failed
+    group: missions
+    name: Contract failed
     property_type: boolean
     required: false
     value: true
   - id: react_mission_withdrawn
-    name: Contract Withdrawn
+    group: missions
+    name: Contract withdrawn
     property_type: boolean
     required: false
     value: true
   - id: react_contract_shared
-    name: Contract Shared
+    group: missions
+    name: Contract shared
     property_type: boolean
     required: false
     value: true
   - id: react_contract_available
-    name: Contract Available
+    group: missions
+    name: Contract available
     property_type: boolean
     required: false
     value: true
   - id: react_mission_objective_new
-    name: New Objective
+    group: missions
+    name: New objective
     property_type: boolean
     required: false
     value: true
   - id: react_objective_complete
-    name: Objective Completed
+    group: missions
+    name: Objective completed
     property_type: boolean
     required: false
     value: true
   - id: react_objective_withdrawn
-    name: Objective Withdrawn
+    group: missions
+    name: Objective withdrawn
     property_type: boolean
     required: false
     value: true
   - id: react_safety
-    name: All zones and safety
-    hint: Turns the whole group on or off. Pick single types below.
+    group: safety
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_armistice_zone
-    name: Armistice Zone
+    group: safety
+    name: Armistice zone
     hint: Both entering and leaving armistice zones.
     property_type: boolean
     required: false
     value: true
   - id: react_restricted_area
-    name: Restricted Area
+    group: safety
+    name: Restricted area
     property_type: boolean
     required: false
     value: true
   - id: react_monitored_space
-    name: Monitored Space
+    group: safety
+    name: Monitored space
     hint: Both entering and leaving monitored space.
     property_type: boolean
     required: false
     value: true
   - id: react_monitored_space_availability
-    name: Monitoring Offline or Restored
+    group: safety
+    name: Monitoring offline or restored
     property_type: boolean
     required: false
     value: true
   - id: react_jurisdiction_change
-    name: Jurisdiction Changes
+    group: safety
+    name: Jurisdiction changes
     property_type: boolean
     required: false
     value: true
   - id: react_crimestat_increased
-    name: CrimeStat Increase
+    group: safety
+    name: CrimeStat increase
     property_type: boolean
     required: false
     value: true
   - id: react_health
-    name: All health
-    hint: Turns the whole group on or off. Pick single types below.
+    group: health
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_injury
+    group: health
     name: Injuries
     property_type: boolean
     required: false
     value: true
   - id: react_med_bed_heal
-    name: Medical Bed Treatment
+    group: health
+    name: Medical bed treatment
     property_type: boolean
     required: false
     value: true
   - id: react_emergency_services
-    name: Emergency Services
+    group: health
+    name: Emergency services
     property_type: boolean
     required: false
     value: true
   - id: react_bleeding
+    group: health
     name: Bleeding
     property_type: boolean
     required: false
     value: true
   - id: react_incapacitated
+    group: health
     name: Incapacitation
     property_type: boolean
     required: false
     value: true
   - id: react_ship
-    name: All ship and hangar
-    hint: Turns the whole group on or off. Pick single types below.
+    group: ship
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_hangar_ready
-    name: Hangar Ready
+    group: ship
+    name: Hangar ready
     property_type: boolean
     required: false
     value: true
   - id: react_hangar_queue
-    name: Hangar Queue
+    group: ship
+    name: Hangar queue
     property_type: boolean
     required: false
     value: true
   - id: react_ship_boarding
-    name: Ship Boarding
+    group: ship
+    name: Ship boarding
     hint: Both boarding and leaving a ship.
     property_type: boolean
     required: false
     value: true
   - id: react_fuel_low
-    name: Low Fuel
+    group: ship
+    name: Low fuel
     property_type: boolean
     required: false
     value: true
   - id: react_vehicle_impounded
-    name: Vehicle Impounded
+    group: ship
+    name: Vehicle impounded
     property_type: boolean
     required: false
     value: true
   - id: react_fatal_collision
-    name: Fatal Vehicle Collision
+    group: ship
+    name: Fatal vehicle collision
     property_type: boolean
     required: false
     value: true
   - id: react_insurance_claim
-    name: Insurance Claim Requests
+    group: ship
+    name: Insurance claim requests
     property_type: boolean
     required: false
     value: true
   - id: react_insurance_claim_complete
-    name: Insurance Claim Results
+    group: ship
+    name: Insurance claim results
     property_type: boolean
     required: false
     value: true
   - id: react_money
-    name: All trade and rewards
-    hint: Turns the whole group on or off. Pick single types below.
+    group: money
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_reward_earned
+    group: money
     name: Rewards
     property_type: boolean
     required: false
     value: true
   - id: react_fined
+    group: money
     name: Fines
     property_type: boolean
     required: false
     value: true
   - id: react_money_sent
-    name: Money Sent
+    group: money
+    name: Money sent
     property_type: boolean
     required: false
     value: true
   - id: react_shop_buy
-    name: Shop Purchases
+    group: money
+    name: Shop purchases
     property_type: boolean
     required: false
     value: true
   - id: react_shop_sell
-    name: Shop Sales
+    group: money
+    name: Shop sales
     property_type: boolean
     required: false
     value: true
   - id: react_transaction_complete
-    name: Transaction Completed
+    group: money
+    name: Transaction completed
     property_type: boolean
     required: false
     value: true
   - id: react_commodity_buy
-    name: Commodity Purchase Requests
+    group: money
+    name: Commodity purchase requests
     property_type: boolean
     required: false
     value: true
   - id: react_commodity_sell
-    name: Commodity Sale Requests
+    group: money
+    name: Commodity sale requests
     property_type: boolean
     required: false
     value: true
   - id: react_cargo_transfer
-    name: Cargo Transfer Requests
+    group: money
+    name: Cargo transfer requests
     property_type: boolean
     required: false
     value: true
   - id: react_refinery_submitted
-    name: Refinery Submission Requests
+    group: money
+    name: Refinery submission requests
     property_type: boolean
     required: false
     value: true
   - id: react_refinery_complete
-    name: Refinery Work Order Notifications
+    group: money
+    name: Refinery work orders
     property_type: boolean
     required: false
     value: true
   - id: react_blueprint_received
-    name: Blueprints Received
+    group: money
+    name: Blueprints received
     property_type: boolean
     required: false
     value: true
   - id: react_location
-    name: All location and quantum travel
-    hint: Turns the whole group on or off. Pick single types below. These come often.
+    group: location
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: false
   - id: react_location_updates
-    name: Location Changes
+    group: location
+    name: Location changes
     hint: Arrival and departure notifications.
     property_type: boolean
     required: false
     value: true
   - id: react_quantum_route_set
-    name: Quantum Route Set
+    group: location
+    name: Quantum route set
     property_type: boolean
     required: false
     value: true
   - id: react_quantum_calibration_started
-    name: Quantum Calibration Started
+    group: location
+    name: Quantum calibration started
     property_type: boolean
     required: false
     value: true
   - id: react_quantum_calibration_complete
-    name: Quantum Calibration Complete
+    group: location
+    name: Quantum calibration completed
     property_type: boolean
     required: false
     value: true
   - id: react_qt_calibration_complete_group
-    name: Party Member Quantum Ready
+    group: location
+    name: Party member quantum ready
     property_type: boolean
     required: false
     value: true
   - id: react_qt_arrived
-    name: Quantum Arrival
+    group: location
+    name: Quantum arrival
     property_type: boolean
     required: false
     value: true
   - id: react_session
-    name: All session and social
-    hint: Turns the whole group on or off. Pick single types below.
+    group: session
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: false
   - id: react_user_login
-    name: Player Login
+    group: session
+    name: Player login
     property_type: boolean
     required: false
     value: true
   - id: react_session_start
-    name: Session Started
+    group: session
+    name: Session started
     property_type: boolean
     required: false
     value: true
   - id: react_join_pu
+    group: session
     name: Joined Persistent Universe
     property_type: boolean
     required: false
     value: true
   - id: react_party_invite
-    name: Party Invitations
+    group: session
+    name: Party invitations
     property_type: boolean
     required: false
     value: true
   - id: react_incoming_call
-    name: Incoming Calls
+    group: session
+    name: Incoming calls
     property_type: boolean
     required: false
     value: true
   - id: react_party_membership
-    name: Party Membership Changes
+    group: session
+    name: Party membership changes
     property_type: boolean
     required: false
     value: true
   - id: react_journal_entry
-    name: Journal Entries
+    group: session
+    name: Journal entries
     property_type: boolean
     required: false
     value: true
-  - id: react_telemetry_ship
-    name: All ship telemetry
-    hint: What the ship's own telemetry shows. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+  - id: react_telemetry_combat
+    group: combat
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_tm_shields
-    name: Shields Down and Back Up
+    group: combat
+    name: Shields down and back up
     property_type: boolean
     required: false
     value: true
   - id: react_tm_under_fire
-    name: Taking Hits
+    group: combat
+    name: Taking hits
     property_type: boolean
     required: false
     value: true
   - id: react_tm_locked_on
-    name: Locked On
+    group: combat
+    name: Locked on
     property_type: boolean
     required: false
     value: true
   - id: react_tm_countermeasures
-    name: Countermeasures Low or Empty
+    group: combat
+    name: Countermeasures low or empty
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_telemetry_ship_alerts
+    group: ship_alerts
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_tm_power
-    name: Powerplant Off and On
+    group: ship_alerts
+    name: Powerplant off and on
     property_type: boolean
     required: false
     value: true
   - id: react_tm_engines
-    name: Engines Damaged or Offline
+    group: ship_alerts
+    name: Engines damaged or offline
     property_type: boolean
     required: false
     value: true
   - id: react_tm_weapons
-    name: Weapons Without Power
+    group: ship_alerts
+    name: Weapons without power
     property_type: boolean
     required: false
     value: true
   - id: react_tm_boost
-    name: Boost Depleted
-    property_type: boolean
-    required: false
-    value: true
-  - id: react_tm_proximity
-    name: Collision Warning
-    property_type: boolean
-    required: false
-    value: true
-  - id: react_tm_landing
-    name: Landing and Takeoff
-    property_type: boolean
-    required: false
-    value: true
-  - id: react_tm_jump
-    name: Quantum Jump Start and End
-    property_type: boolean
-    required: false
-    value: true
-  - id: react_tm_vehicle
-    name: Ship or Vehicle Boarded
+    group: ship_alerts
+    name: Boost depleted
     property_type: boolean
     required: false
     value: true
   - id: react_tm_hydrogen
-    name: Hydrogen Low
+    group: ship_alerts
+    name: Low hydrogen
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_proximity
+    group: ship_alerts
+    name: Collision warning
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_telemetry_flight
+    group: flight
+    name: Enabled
+    hint: Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_landing
+    group: flight
+    name: Landing and takeoff
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_jump
+    group: flight
+    name: Quantum jump start and end
+    property_type: boolean
+    required: false
+    value: true
+  - id: react_tm_vehicle
+    group: flight
+    name: Ship or vehicle boarded
     property_type: boolean
     required: false
     value: true
   - id: react_tm_gear
-    name: Landing Gear
+    group: flight
+    name: Landing gear
     property_type: boolean
     required: false
     value: false
   - id: react_tm_quantum_mode
-    name: Quantum Mode On and Off
+    group: flight
+    name: Quantum mode on and off
     property_type: boolean
     required: false
     value: false
-  - id: react_telemetry_pilot
-    name: All pilot telemetry
-    hint: What the telemetry shows about the pilot. Needs Star Citizen telemetry in the settings. Turns the whole group on or off.
+  - id: react_telemetry_survival
+    group: survival
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
   - id: react_tm_health
-    name: Health Low
+    group: survival
+    name: Low health
     property_type: boolean
     required: false
     value: true
   - id: react_tm_down
-    name: Down and Respawned
+    group: survival
+    name: Down and respawned
     property_type: boolean
     required: false
     value: true
   - id: react_tm_oxygen
-    name: Oxygen and Air
+    group: survival
+    name: Oxygen and air
     property_type: boolean
     required: false
     value: true
+  - id: react_telemetry_body
+    group: body
+    name: Enabled
+    hint: Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: false
   - id: react_tm_exhausted
-    name: Out of Breath
+    group: body
+    name: Out of breath
     property_type: boolean
     required: false
     value: true
   - id: react_tm_hunger_thirst
-    name: Hunger and Thirst
+    group: body
+    name: Hunger and thirst
     property_type: boolean
     required: false
     value: true
   - id: react_tm_intoxicated
+    group: body
     name: Drunk
     property_type: boolean
     required: false
     value: true
+  - id: react_telemetry_wallet
+    group: wallet
+    name: Enabled
+    hint: Turns the whole group on or off.
+    property_type: boolean
+    required: false
+    value: true
   - id: react_tm_wallet
-    name: Wallet Balance
+    group: wallet
+    name: Wallet balance
     property_type: boolean
     required: false
     value: true
   - id: source_money
+    group: sources
     name: Purchases, sales and rewards from
-    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
     property_type: single_select
     required: false
     value: log
@@ -467,8 +629,8 @@ custom_properties:
       - label: Telemetry (wallet balance)
         value: telemetry
   - id: source_boarding
+    group: sources
     name: Boarding a ship from
-    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
     property_type: single_select
     required: false
     value: log
@@ -478,8 +640,8 @@ custom_properties:
       - label: Telemetry (ship changes only)
         value: telemetry
   - id: source_fuel
+    group: sources
     name: Low fuel from
-    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
     property_type: single_select
     required: false
     value: log
@@ -489,8 +651,8 @@ custom_properties:
       - label: Telemetry (hydrogen in percent)
         value: telemetry
   - id: source_quantum_arrival
+    group: sources
     name: Quantum arrival from
-    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
     property_type: single_select
     required: false
     value: telemetry
@@ -500,8 +662,8 @@ custom_properties:
       - label: Telemetry (jump start and end)
         value: telemetry
   - id: source_down
+    group: sources
     name: Pilot down from
-    hint: Game log and telemetry both see this. Pick which one speaks. If the one you pick is off, the other one speaks.
     property_type: single_select
     required: false
     value: telemetry
@@ -518,7 +680,7 @@ custom_properties:
     value: 10
   - id: routine_gap_minutes
     name: Minutes between routine lines
-    hint: Zones, quantum travel, the hangar and the login are said at most once in this many minutes, per group. Arrivals, departures, missions, money and injuries are not held back by this.
+    hint: Zones, quantum travel, the hangar, the login, the landing gear and quantum mode are each said at most once in this many minutes. Arrivals, departures, missions, money and injuries are not held back by this.
     property_type: slider
     options:
       - label: "min"

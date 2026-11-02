@@ -1,6 +1,13 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    Base64Str,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from api.enums import (
     VoiceCloneState,
     ConversationProvider,
@@ -938,6 +945,28 @@ class CustomProperty(BaseModel):
     """Marks the property as required in the UI."""
     options: Optional[list[LabelValuePair]] = None
     """If property_type is set to 'single_select', you can provide options here. May also hold meta information for other property types like "multiple" for voice_selection."""
+    group: Optional[str] = None
+    """The id of a group from the skill's `property_groups`. None shows the property above all groups."""
+
+    @field_validator("group", mode="before")
+    @classmethod
+    def _group_id(cls, group):
+        # A typo in a manifest must not cost the skill: anything but an id
+        # shows the property ungrouped.
+        return group if isinstance(group, str) and group else None
+
+
+class CustomPropertyGroup(BaseModel):
+    """A heading in the UI that custom properties are grouped under."""
+
+    id: str
+    """Unique within the skill. Properties name it in their `group`."""
+    name: str
+    """The heading displayed in the UI."""
+    hint: Optional[str] = None
+    """A line below the heading."""
+    toggle: Optional[str] = None
+    """The id of a boolean property that turns the whole group on or off. The UI shows it as the switch in the heading."""
 
 
 class LocalizedMetadata(BaseModel):
@@ -956,6 +985,8 @@ class SkillConfig(CustomClassConfig):
     """An additional prompt that extends the system prompt of the Wingman."""
     custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
+    property_groups: Optional[list[CustomPropertyGroup]] = None
+    """Groups for the custom properties, in the order the UI shows them. None shows all properties ungrouped."""
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[LocalizedMetadata]] = None
     platforms: Optional[list[str]] = None
@@ -994,6 +1025,37 @@ class SkillConfig(CustomClassConfig):
     without this field are treated as legacy (pre-v3) and are not loaded. Current: 3."""
     version: Optional[str] = None
     """Optional skill release version (free-form, e.g. '2.0.1'). Used for telemetry only."""
+
+    @field_validator("property_groups", mode="before")
+    @classmethod
+    def _usable_property_groups(cls, groups):
+        # A broken group must not cost the skill: it is left out, and its
+        # properties are shown ungrouped. The first of two equal ids wins.
+        if not isinstance(groups, list):
+            return None
+        usable = []
+        seen = set()
+        for group in groups:
+            if isinstance(group, CustomPropertyGroup):
+                group = group.model_dump()
+            if not isinstance(group, dict):
+                continue
+            group_id, name = group.get("id"), group.get("name")
+            hint, toggle = group.get("hint"), group.get("toggle")
+            if not (isinstance(group_id, str) and group_id and isinstance(name, str) and name):
+                continue
+            if group_id in seen:
+                continue
+            seen.add(group_id)
+            usable.append(
+                {
+                    "id": group_id,
+                    "name": name,
+                    "hint": hint if isinstance(hint, str) else None,
+                    "toggle": toggle if isinstance(toggle, str) and toggle else None,
+                }
+            )
+        return usable or None
 
 
 class SkillToolInfo(BaseModel):
