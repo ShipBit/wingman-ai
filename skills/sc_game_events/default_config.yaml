@@ -24,45 +24,58 @@ discovery_keywords:
 property_groups:
   - id: missions
     name: Missions
+    toggle: react_mission
   - id: safety
     name: Zones and safety
+    toggle: react_safety
   - id: health
     name: Health
+    toggle: react_health
   - id: ship
     name: Ship and hangar
+    toggle: react_ship
   - id: money
     name: Trade and rewards
+    toggle: react_money
   - id: location
     hint: These come often.
     name: Location and quantum travel
+    toggle: react_location
   - id: session
     name: Session and social
+    toggle: react_session
   - id: combat
     hint: Needs Star Citizen telemetry in the settings.
     name: Combat
+    toggle: react_telemetry_combat
   - id: ship_alerts
     hint: Needs Star Citizen telemetry in the settings.
     name: Ship alerts
+    toggle: react_telemetry_ship_alerts
   - id: flight
     hint: Needs Star Citizen telemetry in the settings. These come on every flight.
     name: Flight and travel
+    toggle: react_telemetry_flight
   - id: survival
     hint: Needs Star Citizen telemetry in the settings.
     name: Survival
+    toggle: react_telemetry_survival
   - id: body
     hint: Needs Star Citizen telemetry in the settings.
     name: Body needs
+    toggle: react_telemetry_body
   - id: wallet
     hint: Needs Star Citizen telemetry in the settings. Only speaks when purchases, sales and rewards come from the telemetry (see Game log or telemetry).
     name: Wallet
+    toggle: react_telemetry_wallet
   - id: sources
     name: Game log or telemetry
     hint: Both see these events. Pick which one speaks. If the one you pick is off, the other one speaks.
 custom_properties:
   - id: react_mission
     group: missions
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -122,8 +135,8 @@ custom_properties:
     value: true
   - id: react_safety
     group: safety
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -167,8 +180,8 @@ custom_properties:
     value: true
   - id: react_health
     group: health
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -204,8 +217,8 @@ custom_properties:
     value: true
   - id: react_ship
     group: ship
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -260,8 +273,8 @@ custom_properties:
     value: true
   - id: react_money
     group: money
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -339,8 +352,8 @@ custom_properties:
     value: true
   - id: react_location
     group: location
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: false
@@ -383,8 +396,8 @@ custom_properties:
     value: true
   - id: react_session
     group: session
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: false
@@ -432,8 +445,8 @@ custom_properties:
     value: true
   - id: react_telemetry_combat
     group: combat
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -463,8 +476,8 @@ custom_properties:
     value: true
   - id: react_telemetry_ship_alerts
     group: ship_alerts
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -506,8 +519,8 @@ custom_properties:
     value: true
   - id: react_telemetry_flight
     group: flight
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -543,8 +556,8 @@ custom_properties:
     value: false
   - id: react_telemetry_survival
     group: survival
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true
@@ -568,8 +581,8 @@ custom_properties:
     value: true
   - id: react_telemetry_body
     group: body
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: false
@@ -593,8 +606,8 @@ custom_properties:
     value: true
   - id: react_telemetry_wallet
     group: wallet
-    name: Whole group
-    hint: Turns the whole group on or off. Pick single types below.
+    name: Enabled
+    hint: Turns the whole group on or off.
     property_type: boolean
     required: false
     value: true

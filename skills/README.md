@@ -1131,10 +1131,16 @@ property_groups:
   - id: combat
     name: Combat # The heading
     hint: Shields, hits and locks # Optional, shown below the heading
+    toggle: react_combat # Optional: a boolean setting shown as the switch in the heading
   - id: survival
     name: Survival
 
 custom_properties:
+  - id: react_combat
+    name: Enabled # Only shown if the switch cannot be used in the heading
+    property_type: boolean
+    value: true
+    group: combat
   - id: react_shields
     name: Shields Down and Back Up
     property_type: boolean
@@ -1147,9 +1153,10 @@ custom_properties:
 ```
 
 - Within a group, the properties keep the order of the manifest.
+- A group with a `toggle` shows that boolean setting as an "Enabled" switch in its heading, like the other panels. While it is off, the group's settings are hidden. Your skill still reads the toggle like any other setting and decides what "off" means.
 - Properties without a `group` come first, above all groups. Put the settings most users change there.
 - Groups only change the display. Renaming or moving them later keeps the user's values, because those belong to the property `id`.
-- A mistake never stops the skill: a group without `id` or `name` is left out, and a property in a group the skill does not define is shown ungrouped. Core logs a warning, and the client shows one.
+- A mistake never stops the skill: a group without `id` or `name` is left out, a property in a group the skill does not define is shown ungrouped, and a `toggle` that is no boolean setting of the skill is ignored. Core logs a warning, and the client shows one for unknown groups.
 
 ---
 

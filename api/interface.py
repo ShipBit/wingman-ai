@@ -965,6 +965,8 @@ class CustomPropertyGroup(BaseModel):
     """The heading displayed in the UI."""
     hint: Optional[str] = None
     """A line below the heading."""
+    toggle: Optional[str] = None
+    """The id of a boolean property that turns the whole group on or off. The UI shows it as the switch in the heading."""
 
 
 class LocalizedMetadata(BaseModel):
@@ -1038,14 +1040,20 @@ class SkillConfig(CustomClassConfig):
                 group = group.model_dump()
             if not isinstance(group, dict):
                 continue
-            group_id, name, hint = group.get("id"), group.get("name"), group.get("hint")
+            group_id, name = group.get("id"), group.get("name")
+            hint, toggle = group.get("hint"), group.get("toggle")
             if not (isinstance(group_id, str) and group_id and isinstance(name, str) and name):
                 continue
             if group_id in seen:
                 continue
             seen.add(group_id)
             usable.append(
-                {"id": group_id, "name": name, "hint": hint if isinstance(hint, str) else None}
+                {
+                    "id": group_id,
+                    "name": name,
+                    "hint": hint if isinstance(hint, str) else None,
+                    "toggle": toggle if isinstance(toggle, str) and toggle else None,
+                }
             )
         return usable or None
 

@@ -34,14 +34,17 @@ def prop(prop_id, group=None):
 def test_groups_keep_the_order_of_the_manifest():
     config = SkillConfig(
         **manifest(
-            [{"id": "combat", "name": "Combat", "hint": "In a fight."}, {"id": "body", "name": "Body"}],
-            [prop("hunger", "body"), prop("shields", "combat"), prop("limit")],
+            [
+                {"id": "combat", "name": "Combat", "hint": "In a fight.", "toggle": "combat_on"},
+                {"id": "body", "name": "Body"},
+            ],
+            [prop("hunger", "body"), prop("combat_on", "combat"), prop("limit")],
         )
     )
 
-    assert [(g.id, g.name, g.hint) for g in config.property_groups] == [
-        ("combat", "Combat", "In a fight."),
-        ("body", "Body", None),
+    assert [(g.id, g.name, g.hint, g.toggle) for g in config.property_groups] == [
+        ("combat", "Combat", "In a fight.", "combat_on"),
+        ("body", "Body", None, None),
     ]
     assert [p.group for p in config.custom_properties] == ["body", "combat", None]
     assert property_group_problems(config) == []
@@ -56,15 +59,15 @@ def test_broken_groups_are_left_out_instead_of_failing_the_skill():
                 {"name": "No id"},
                 "just a string",
                 {"id": "combat", "name": "Second combat"},
-                {"id": "body", "name": "Body", "hint": ["not", "text"]},
+                {"id": "body", "name": "Body", "hint": ["not", "text"], "toggle": 5},
             ],
             [prop("shields", "combat")],
         )
     )
 
-    assert [(g.id, g.name, g.hint) for g in config.property_groups] == [
-        ("combat", "Combat", None),
-        ("body", "Body", None),
+    assert [(g.id, g.name, g.hint, g.toggle) for g in config.property_groups] == [
+        ("combat", "Combat", None, None),
+        ("body", "Body", None, None),
     ]
 
 
@@ -93,6 +96,26 @@ def test_settings_in_a_group_the_skill_does_not_define_are_reported():
     assert len(problems) == 2
     assert "'hunger'" in problems[0] and "'nameless'" in problems[0]
     assert "'fuel'" in problems[1] and "'typo'" in problems[1]
+
+
+def test_a_switch_that_is_no_boolean_setting_is_reported():
+    limit = prop("limit", "combat") | {"property_type": "number", "value": 3}
+    config = SkillConfig(
+        **manifest(
+            [
+                {"id": "combat", "name": "Combat", "toggle": "limit"},
+                {"id": "body", "name": "Body", "toggle": "gone"},
+                {"id": "flight", "name": "Flight", "toggle": "flight_on"},
+            ],
+            [limit, prop("flight_on", "flight")],
+        )
+    )
+
+    problems = property_group_problems(config)
+
+    assert len(problems) == 2
+    assert "'combat'" in problems[0] and "'limit'" in problems[0]
+    assert "'body'" in problems[1] and "'gone'" in problems[1]
 
 
 def test_a_saved_wingman_gets_the_group_from_the_manifest():

@@ -467,14 +467,16 @@ def test_every_telemetry_event_has_a_switch_and_every_shared_moment_a_choice():
         assert props[topic]["value"] == default
 
 
-def test_every_telemetry_switch_is_shown_in_the_group_of_its_master():
-    """The master turns the group off, so the UI must show its switches under it."""
+def test_every_telemetry_switch_is_shown_in_the_group_its_master_switches():
+    """The master is the switch in the group's heading, so its switches belong below it."""
     from skills.sc_game_events import telemetry
 
     raw = yaml.safe_load(open(CONFIG, encoding="utf-8"))
     groups = {prop["id"]: prop.get("group") for prop in raw["custom_properties"]}
+    toggles = {group["id"]: group.get("toggle") for group in raw["property_groups"]}
     for switch, (master, _) in telemetry.SWITCHES.items():
-        assert groups[f"react_{switch}"] == groups[f"react_{master}"] is not None
+        group = groups[f"react_{switch}"]
+        assert toggles[group] == f"react_{master}"
 
 
 def test_a_telemetry_event_is_said_like_a_log_event(monkeypatch):

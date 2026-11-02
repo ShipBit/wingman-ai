@@ -47,15 +47,29 @@ REPLACED_BY_CORE = {
 }
 
 
+def _is_boolean(prop) -> bool:
+    kind = getattr(prop, "property_type", None)
+    return getattr(kind, "value", kind) == "boolean"
+
+
 def property_group_problems(config: SkillConfig) -> list[str]:
-    """Settings that name a group the skill does not define. The UI shows them ungrouped."""
-    known = {group.id for group in config.property_groups or []}
-    return [
+    """Mistakes in a skill's groups. The UI works around each of them."""
+    groups = config.property_groups or []
+    props = {prop.id: prop for prop in config.custom_properties or []}
+    known = {group.id for group in groups}
+    problems = [
         f"setting '{prop.id}' names the group '{prop.group}', which property_groups "
         "does not define with an id and a name. It is shown ungrouped."
-        for prop in config.custom_properties or []
+        for prop in props.values()
         if prop.group and prop.group not in known
     ]
+    problems += [
+        f"group '{group.id}' is switched by '{group.toggle}', which is no boolean "
+        "setting of the skill. The group has no switch in its heading."
+        for group in groups
+        if group.toggle and not _is_boolean(props.get(group.toggle))
+    ]
+    return problems
 
 
 def _id_hash(folder: str) -> str:
