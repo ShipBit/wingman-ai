@@ -6,34 +6,42 @@ answers are kept small: they go into the conversation on every tool call (Wingma
 """
 from __future__ import annotations
 
-SHIP_MASTER = "telemetry_ship"
-PILOT_MASTER = "telemetry_pilot"
+# Grouped by when a pilot wants to hear it, not by ship or pilot: the whole stream on at once floods the Wingman
+# (tester feedback, 2026-11-02), and a group is what most users switch.
+COMBAT = "telemetry_combat"
+SHIP_ALERTS = "telemetry_ship_alerts"
+FLIGHT = "telemetry_flight"
+SURVIVAL = "telemetry_survival"
+BODY = "telemetry_body"
+WALLET = "telemetry_wallet"
 SWITCHES: dict[str, tuple[str, tuple[str, ...]]] = {
-    # react_<switch>: (the master it sits under, the telemetry events it speaks for)
-    "tm_shields": (SHIP_MASTER, ("shields_down", "shields_restored")),
-    "tm_under_fire": (SHIP_MASTER, ("under_fire",)),
-    "tm_locked_on": (SHIP_MASTER, ("locked_on",)),
-    "tm_countermeasures": (SHIP_MASTER, ("countermeasures_low", "countermeasures_empty")),
-    "tm_power": (SHIP_MASTER, ("powerplant_offline", "powerplant_online")),
-    "tm_engines": (SHIP_MASTER, ("engines_damaged", "engines_offline")),
-    "tm_weapons": (SHIP_MASTER, ("weapons_unavailable",)),
-    "tm_boost": (SHIP_MASTER, ("boost_depleted",)),
-    "tm_proximity": (SHIP_MASTER, ("proximity_warning",)),
-    "tm_landing": (SHIP_MASTER, ("landed", "took_off")),
-    "tm_jump": (SHIP_MASTER, ("jump_started", "jump_finished")),
-    "tm_vehicle": (SHIP_MASTER, ("vehicle_changed", "ground_vehicle_entered")),
-    "tm_hydrogen": (SHIP_MASTER, ("hydrogen_low",)),
-    "tm_gear": (SHIP_MASTER, ("gear_deployed", "gear_retracted")),
-    "tm_quantum_mode": (SHIP_MASTER, ("quantum_mode_on", "quantum_mode_off")),
-    "tm_health": (PILOT_MASTER, ("health_low",)),
-    "tm_down": (PILOT_MASTER, ("player_down", "respawned")),
-    "tm_oxygen": (PILOT_MASTER, ("oxygen_low", "not_breathable")),
-    "tm_exhausted": (PILOT_MASTER, ("exhausted",)),
-    "tm_hunger_thirst": (PILOT_MASTER, ("hunger_low", "thirst_low")),
-    "tm_intoxicated": (PILOT_MASTER, ("intoxicated",)),
-    "tm_wallet": (PILOT_MASTER, ("uec_changed",)),
+    # react_<switch>: (the group it sits under, the telemetry events it speaks for)
+    "tm_shields": (COMBAT, ("shields_down", "shields_restored")),
+    "tm_under_fire": (COMBAT, ("under_fire",)),
+    "tm_locked_on": (COMBAT, ("locked_on",)),
+    "tm_countermeasures": (COMBAT, ("countermeasures_low", "countermeasures_empty")),
+    "tm_power": (SHIP_ALERTS, ("powerplant_offline", "powerplant_online")),
+    "tm_engines": (SHIP_ALERTS, ("engines_damaged", "engines_offline")),
+    "tm_weapons": (SHIP_ALERTS, ("weapons_unavailable",)),
+    "tm_boost": (SHIP_ALERTS, ("boost_depleted",)),
+    "tm_hydrogen": (SHIP_ALERTS, ("hydrogen_low",)),
+    "tm_proximity": (SHIP_ALERTS, ("proximity_warning",)),
+    "tm_landing": (FLIGHT, ("landed", "took_off")),
+    "tm_jump": (FLIGHT, ("jump_started", "jump_finished")),
+    "tm_vehicle": (FLIGHT, ("vehicle_changed", "ground_vehicle_entered")),
+    "tm_gear": (FLIGHT, ("gear_deployed", "gear_retracted")),
+    "tm_quantum_mode": (FLIGHT, ("quantum_mode_on", "quantum_mode_off")),
+    "tm_health": (SURVIVAL, ("health_low",)),
+    "tm_down": (SURVIVAL, ("player_down", "respawned")),
+    "tm_oxygen": (SURVIVAL, ("oxygen_low", "not_breathable")),
+    "tm_exhausted": (BODY, ("exhausted",)),
+    "tm_hunger_thirst": (BODY, ("hunger_low", "thirst_low")),
+    "tm_intoxicated": (BODY, ("intoxicated",)),
+    "tm_wallet": (WALLET, ("uec_changed",)),
 }
-"""Off by default (default_config.yaml): landing gear and quantum mode, which come on every flight."""
+"""Off by default (default_config.yaml): the body-needs group, and landing gear and quantum mode, which come on every
+flight. Flight and wallet stay on: the quantum arrival and money pick a source, and the picked one speaks even while
+its switch is off, so turning them off would silence the game log's line too."""
 
 LOG = "log"
 TELEMETRY = "telemetry"
