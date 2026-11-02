@@ -41,6 +41,13 @@ def device_blocksize(rate: int) -> int:
 # No block for this long while the stream is open means the stream is dead.
 STALL_SECONDS = 3.0
 
+STALL_SECONDS_MAX = 30.0
+"""Each reopen that brings no block doubles the wait, up to this. An Arctis
+Nova Pro behind Sonic Studio on Windows was reopened every 3 s for minutes
+without ever delivering, and the user lost the microphone each start
+(2026-11-02). A device slow to start gets the time it needs, and a dead one
+is not opened and closed under the system every 3 s."""
+
 REOPEN_AFTER_PLAYBACK_SECONDS = 0.5
 """No block for this long when a playback ends: the microphone stopped while
 the speakers played and is opened again right away."""
@@ -70,6 +77,7 @@ class AudioInput:
         # It is reopened when the playback ends instead.
         self._output_busy = False
         self._last_block = time.monotonic()
+        self._stall_seconds = STALL_SECONDS
 
     # --- lifecycle ---
 
@@ -177,34 +185,40 @@ class AudioInput:
     def _consume(self) -> None:
         while True:
             try:
-                block = self._queue.get(timeout=STALL_SECONDS)
+                block = self._queue.get(timeout=self._stall_seconds)
             except queue.Empty:
-                if self._stopped or self._output_busy:
-                    continue
-                if self.available:
-                    self.printr.print(
-                        "Microphone stopped delivering audio; reopening the stream.",
-                        color=LogType.WARNING,
-                        server_only=True,
-                    )
-                    self.restart()
-                else:
-                    # The device was busy or missing when we last tried. Try
-                    # again quietly; the toast was shown on the first failure.
-                    self.restart()
+                self._on_stall()
                 continue
             if block is None:
                 return
-            self._last_block = time.monotonic()
-            resampler = self._resampler
-            if resampler is None:
-                continue
-            try:
-                for frame in resampler.push(block):
-                    self.on_frame(frame)
-            except Exception as e:
-                self.printr.print(
-                    f"Audio input: frame handler failed: {e}",
-                    color=LogType.ERROR,
-                    server_only=True,
-                )
+            self._on_block(block)
+
+    def _on_stall(self) -> None:
+        if self._stopped or self._output_busy:
+            return
+        if self.available:
+            self.printr.print(
+                f"Microphone delivered no audio for {self._stall_seconds:.0f} s; reopening the stream.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+        # Otherwise the device was busy or missing when we last tried. Try
+        # again quietly; the toast was shown on the first failure.
+        self.restart()
+        self._stall_seconds = min(self._stall_seconds * 2, STALL_SECONDS_MAX)
+
+    def _on_block(self, block: np.ndarray) -> None:
+        self._last_block = time.monotonic()
+        self._stall_seconds = STALL_SECONDS
+        resampler = self._resampler
+        if resampler is None:
+            return
+        try:
+            for frame in resampler.push(block):
+                self.on_frame(frame)
+        except Exception as e:
+            self.printr.print(
+                f"Audio input: frame handler failed: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
