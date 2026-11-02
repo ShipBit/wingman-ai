@@ -47,6 +47,17 @@ REPLACED_BY_CORE = {
 }
 
 
+def property_group_problems(config: SkillConfig) -> list[str]:
+    """Settings that name a group the skill does not define. The UI shows them ungrouped."""
+    known = {group.id for group in config.property_groups or []}
+    return [
+        f"setting '{prop.id}' names the group '{prop.group}', which property_groups "
+        "does not define with an id and a name. It is shown ungrouped."
+        for prop in config.custom_properties or []
+        if prop.group and prop.group not in known
+    ]
+
+
 def _id_hash(folder: str) -> str:
     return hashlib.sha256(folder.encode("utf-8")).hexdigest()[:12]
 
@@ -125,6 +136,9 @@ class SkillCatalog:
         except Exception as e:
             return SkillCatalogEntry(folder, name, version, origin, api_version,
                                      SkillVerdict.INVALID, f"invalid manifest: {e}", h)
+
+        for problem in property_group_problems(config):
+            printr.print(f"Skill '{folder}': {problem}", color=LogType.WARNING, server_only=True)
 
         if config.platforms and normalize_platform() not in config.platforms:
             return SkillCatalogEntry(folder, name, version, origin, api_version,

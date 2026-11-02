@@ -24,6 +24,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Required Files](#required-files)
   - [default_config.yaml - Skill Metadata](#default_configyaml---skill-metadata)
   - [Custom Properties — Available Types](#custom-properties--available-types)
+  - [Grouping Custom Properties](#grouping-custom-properties)
   - [Accessing Custom Properties](#accessing-custom-properties-in-your-skill)
 - [Creating a Skill](#creating-a-skill)
 - [Bundling Dependencies](#bundling-dependencies)
@@ -790,6 +791,7 @@ custom_properties: # User-configurable settings
     value: default_value # Default value
     required: true # Is this property required?
     property_type: string # See "Custom Properties — Available Types" below
+    group: your_group_id # Optional, see "Grouping Custom Properties" below
 ```
 
 ### Custom Properties — Available Types
@@ -1117,6 +1119,37 @@ AudioFileConfig(
     resume=False   # Resume last stopped audio
 )
 ```
+
+---
+
+### Grouping Custom Properties
+
+A skill with many settings can show them under headings. Define the groups in `property_groups`, in the order the UI shows them, and name a group's `id` in the `group` of each property:
+
+```yaml
+property_groups:
+  - id: combat
+    name: Combat # The heading
+    hint: Shields, hits and locks # Optional, shown below the heading
+  - id: survival
+    name: Survival
+
+custom_properties:
+  - id: react_shields
+    name: Shields Down and Back Up
+    property_type: boolean
+    value: true
+    group: combat
+  - id: max_reactions
+    name: Reactions until you speak again
+    property_type: number
+    value: 10 # No group: shown above all groups
+```
+
+- Within a group, the properties keep the order of the manifest.
+- Properties without a `group` come first, above all groups. Put the settings most users change there.
+- Groups only change the display. Renaming or moving them later keeps the user's values, because those belong to the property `id`.
+- A mistake never stops the skill: a group without `id` or `name` is left out, and a property in a group the skill does not define is shown ungrouped. Core logs a warning, and the client shows one.
 
 ---
 
