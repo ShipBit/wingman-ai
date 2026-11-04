@@ -64,3 +64,47 @@ def test_without_wayland_mss_takes_it(monkeypatch):
     monkeypatch.setattr(screen, "_mss", lambda display, region: ("mss", display, region))
 
     assert screen.capture(2) == ("mss", 2, None)
+
+
+@pytest.fixture
+def windows(monkeypatch):
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    monkeypatch.setattr(screen.sys, "platform", "win32")
+    used = []
+    monkeypatch.setattr(screen, "_mss", lambda display, region: used.append("mss") or SHOT)
+    return used
+
+
+def test_dxcam_takes_the_shot_when_switched_on(monkeypatch, windows):
+    import services.screen_capture_dxcam as dxcam
+
+    monkeypatch.setattr(dxcam, "capture", lambda display: windows.append("dxcam") or SHOT)
+
+    screen.capture(1, dxcam=True)
+
+    assert windows == ["dxcam"]
+
+
+def test_mss_takes_the_shot_when_dxcam_fails(monkeypatch, windows):
+    import services.screen_capture_dxcam as dxcam
+
+    def broken(display):
+        raise ImportError("No module named 'dxcam'")
+
+    monkeypatch.setattr(dxcam, "_capture", broken)
+
+    image = screen.capture(1, dxcam=True)
+
+    assert image is SHOT
+    assert windows == ["mss"]
+
+
+def test_a_region_is_always_taken_with_mss(monkeypatch, windows):
+    import services.screen_capture_dxcam as dxcam
+
+    monkeypatch.setattr(dxcam, "capture", lambda display: windows.append("dxcam") or SHOT)
+
+    screen.capture(1, {"left": 0, "top": 0, "width": 10, "height": 10}, dxcam=True)
+
+    assert windows == ["mss"]

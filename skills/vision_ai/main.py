@@ -37,6 +37,11 @@ class VisionAI(Skill):
         errors: list[WingmanInitializationError] = []
         return self.retrieve_custom_property_value("show_screenshots", errors) or False
 
+    def _get_use_dxcam(self) -> bool:
+        """Only on Windows: elsewhere Core drops the property."""
+        prop = next((p for p in self.config.custom_properties or [] if p.id == "use_dxcam"), None)
+        return bool(prop and prop.value)
+
     @tool(
         name="analyse_what_you_or_user_sees",
         description="""Captures and analyzes the user's screen to answer questions about visual content.
@@ -75,7 +80,7 @@ class VisionAI(Skill):
         except (TypeError, ValueError):
             display = 1
         try:
-            image = await self.wingman.screen.capture(max(1, display))
+            image = await self.wingman.screen.capture(max(1, display), dxcam=self._get_use_dxcam())
         except RuntimeError as e:
             return f"Could not see the screen: {e}"
         jpeg_base64 = await asyncio.to_thread(vision_base64, image)

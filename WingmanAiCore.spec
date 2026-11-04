@@ -296,6 +296,16 @@ datas += onnx_asr_datas
 binaries += onnx_asr_binaries
 hiddenimports += onnx_asr_hidden
 
+# dxcam (Vision AI's "Use DXCam capture", Windows only). Core imports it only
+# when the user switches it on, and dxcam loads its Cython kernel and its
+# backends through importlib, so name all of it. Missing, the capture falls
+# back to mss (services/screen_capture_dxcam.py).
+if sys.platform == 'win32':
+    dxcam_datas, dxcam_binaries, dxcam_hidden = collect_all('dxcam')
+    datas += dxcam_datas
+    binaries += dxcam_binaries
+    hiddenimports += dxcam_hidden + ['services.screen_capture_dxcam']
+
 # Config migration modules (services/migrations/migration_*.py) are discovered
 # from the filesystem and imported via importlib at runtime, so static analysis
 # never traces them — or anything only they import. 3.1.5 shipped without the

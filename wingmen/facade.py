@@ -1648,15 +1648,18 @@ class SkillScreen:
 
         return is_wayland()
 
-    async def capture(self, display: int = 1, region: Optional[dict] = None):
+    async def capture(self, display: int = 1, region: Optional[dict] = None, dxcam: bool = False):
         """A PIL image (RGB) of monitor `display` (1 = the first, 0 = all), or
         of `region` ({"left", "top", "width", "height"}). Raises RuntimeError
-        with what the user has to do when the screen cannot be captured."""
+        with what the user has to do when the screen cannot be captured.
+        `dxcam` (Windows, one whole monitor) takes the shot through DirectX,
+        which can spare a game a stutter; it falls back to the standard
+        capture on its own."""
         import asyncio
 
         from services.screen_capture import capture
 
-        return await asyncio.to_thread(capture, display, region)
+        return await asyncio.to_thread(capture, display, region, dxcam)
 
 
 class SkillStarCitizen:
