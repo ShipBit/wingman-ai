@@ -1,4 +1,5 @@
 import gc
+import os
 import platform
 import threading
 import time
@@ -27,6 +28,15 @@ EXECUTION_PROVIDER_MAP = {
     "directml": ["DmlExecutionProvider", "CPUExecutionProvider"],
     "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
 }
+
+CPU_THREADS = min(4, max(1, (os.cpu_count() or 2) // 2))
+"""Threads for a sentence on the CPU. ONNX Runtime takes every core by default
+and a game running unlimited wants them all too. Measured 2026-11-04 on an M5
+Max, 4 threads took 73-108 ms per sentence against 74-115 ms with all cores."""
+
+CUDA_OPTIONS = {"arena_extend_strategy": "kSameAsRequested"}
+"""The default arena grows in powers of two, so it can hold far more VRAM than
+the model needs. VRAM a game is short of makes it stutter."""
 
 # v3 only. v2 transcribes English alone and was only marginally better at it;
 # with one spoken language per user it was a setting that could only break.
@@ -96,7 +106,14 @@ class Parakeet:
             if "CUDAExecutionProvider" in effective_providers:
                 self._preload_cuda_libraries()
 
-            load_kwargs = {"providers": effective_providers}
+            load_kwargs = {
+                "providers": effective_providers,
+                "provider_options": [
+                    CUDA_OPTIONS if p == "CUDAExecutionProvider" else {}
+                    for p in effective_providers
+                ],
+                "sess_options": self._session_options(),
+            }
             if model_path:
                 load_kwargs["path"] = model_path
 
@@ -130,6 +147,19 @@ class Parakeet:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
             )
+
+    @staticmethod
+    def _session_options():
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = CPU_THREADS
+        # After a sentence ONNX Runtime's threads keep spinning on the cores
+        # for the next one. Here the next one comes seconds later, and the
+        # spinning only takes the CPU from the game.
+        options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+        return options
 
     def _preload_cuda_libraries(self):
         """Load the bundled CUDA and cuDNN libraries before the sessions start.
