@@ -27,6 +27,7 @@ that is down or slow must cost a few milliseconds, not the turn.
 """
 
 import json
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -41,6 +42,9 @@ printr = Printr()
 
 GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 """The direct route, for a user with their own AI Gateway key."""
+
+OPENROUTER_URL = "https://openrouter.ai/api/alpha/decisions"
+OPENROUTER_MODEL = "typesafe/jev-1.14"
 
 MODEL = "typesafe-ai/jev"
 """Only sent on the direct route. Through Wingman Pro the backend picks the
@@ -349,12 +353,11 @@ def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -
 
 
 class JevClient:
-    """One HTTP call per decision batch. Holds no state beyond the credential.
+    """One HTTP call per decision batch. Holds no state beyond the credentials.
 
-    The credential is an AI Gateway key, not a TypeSafe key: the gateway bills
-    the call and passes the request through unchanged, so the request and
-    response shapes are TypeSafe's own and a later move to TypeSafe direct is
-    a base URL change.
+    By default the credential is an AI Gateway key, not a TypeSafe key: the
+    gateway bills the call and passes the request through unchanged. An
+    explicit ``WINGMAN_JEV_PROVIDER=openrouter`` selects OpenRouter instead.
     """
 
     def __init__(
@@ -383,7 +386,24 @@ class JevClient:
             self._secret_keeper = SecretKeeper()
         return self._secret_keeper.secrets.get("wingman_pro", "") or ""
 
+    @staticmethod
+    def _uses_openrouter() -> bool:
+        provider = os.environ.get("WINGMAN_JEV_PROVIDER", "").strip().lower()
+        return provider == "openrouter"
+
+    def _openrouter_key(self) -> str:
+        key = os.environ.get("OPENROUTER_API_KEY", "")
+        if key:
+            return key
+        if self._secret_keeper is None:
+            from services.secret_keeper import SecretKeeper
+
+            self._secret_keeper = SecretKeeper()
+        return self._secret_keeper.secrets.get("Openrouter", "") or ""
+
     def is_ready(self) -> bool:
+        if self._uses_openrouter():
+            return bool(self._openrouter_key())
         return bool(self._pro_token() or self.api_key)
 
     def system_one(self, state: Any, questions: dict[str, dict]) -> JevResult:
@@ -395,19 +415,34 @@ class JevClient:
         if not questions:
             return JevResult(error="no questions")
 
-        token = self._pro_token()
-        if token:
-            url = f"{self.subscription.base_url}/api/v1/systemone"
-            payload = {"state": state, "questions": questions}
-        elif self.api_key:
-            token = self.api_key
-            url = GATEWAY_URL
-            payload = {"model": MODEL, "state": state, "questions": questions}
+        openrouter = self._uses_openrouter()
+        if openrouter:
+            token = self._openrouter_key()
+            if not token:
+                return JevResult(
+                    error="OpenRouter selected but no OPENROUTER_API_KEY or Openrouter secret"
+                )
+            url = OPENROUTER_URL
+            payload = {
+                "model": OPENROUTER_MODEL,
+                "state": state,
+                "questions": questions,
+            }
         else:
-            return JevResult(error="not signed in to Wingman Pro and no AI_GATEWAY_API_KEY")
+            token = self._pro_token()
+            if token:
+                url = f"{self.subscription.base_url}/api/v1/systemone"
+                payload = {"state": state, "questions": questions}
+            elif self.api_key:
+                token = self.api_key
+                url = GATEWAY_URL
+                payload = {"model": MODEL, "state": state, "questions": questions}
+            else:
+                return JevResult(error="not signed in to Wingman Pro and no AI_GATEWAY_API_KEY")
 
         started = time.perf_counter()
         try:
+            request_options = {"allow_redirects": False} if openrouter else {}
             response = self._session.post(
                 url,
                 headers={
@@ -416,6 +451,7 @@ class JevClient:
                 },
                 json=payload,
                 timeout=self.timeout,
+                **request_options,
             )
         except requests.RequestException as e:
             # The pooled connection may be one the network dropped without
@@ -425,12 +461,15 @@ class JevClient:
             self._session.close()
             self._session = requests.Session()
             return _log_failure(state, questions, JevResult(
-                seconds=time.perf_counter() - started, error=str(e)))
+                seconds=time.perf_counter() - started,
+                error="OpenRouter request failed" if openrouter else str(e)))
 
         seconds = time.perf_counter() - started
-        if not response.ok:
+        if not response.ok or (openrouter and 300 <= response.status_code < 400):
             return _log_failure(state, questions, JevResult(
-                seconds=seconds, error=f"HTTP {response.status_code}: {response.text[:300]}"))
+                seconds=seconds,
+                error=(f"HTTP {response.status_code}" if openrouter
+                       else f"HTTP {response.status_code}: {response.text[:300]}")))
         try:
             body = response.json()
         except json.JSONDecodeError as e:
@@ -439,10 +478,20 @@ class JevClient:
 
         usage = body.get("usage") or {}
         gateway = ((body.get("provider_metadata") or {}).get("gateway")) or {}
+        if openrouter:
+            raw_cost = usage.get("cost")
+            try:
+                cost = float(raw_cost)
+                if type(raw_cost) not in (int, float) or not math.isfinite(cost) or cost < 0:
+                    cost = 0.0
+            except (TypeError, ValueError, OverflowError):
+                cost = 0.0
+        else:
+            cost = float(gateway.get("cost") or 0.0)
         result = JevResult(
             answers=body.get("answers") or {},
             seconds=seconds,
-            cost=float(gateway.get("cost") or 0.0),
+            cost=cost,
             input_tokens=int(usage.get("input_tokens") or 0),
         )
         _log_exchange(state, questions, result)
