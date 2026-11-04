@@ -17,6 +17,7 @@ import requests
 from PIL import Image
 
 from api.enums import ImageStyle
+from services.thread_priority import below_normal_priority
 
 STYLE_PROMPTS: dict[ImageStyle, str] = {
     ImageStyle.NONE: "",
@@ -120,6 +121,11 @@ def vision_base64(image: Image.Image, max_chars: int = VISION_MAX_CHARS) -> str:
     characters at 1000 pixels; JPEG keeps the text readable at a fraction of
     that. Too big: lower quality first, then the size.
     Transparency goes onto white."""
+    with below_normal_priority():
+        return _vision_base64(image, max_chars)
+
+
+def _vision_base64(image: Image.Image, max_chars: int) -> str:
     if image.mode in ("RGBA", "LA", "PA") or (
         image.mode == "P" and "transparency" in image.info
     ):
@@ -132,7 +138,9 @@ def vision_base64(image: Image.Image, max_chars: int = VISION_MAX_CHARS) -> str:
     scale = min(1.0, (VISION_MAX_PIXELS / (image.width * image.height)) ** 0.5)
     while True:
         size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
-        scaled = image if scale == 1.0 else image.resize(size, Image.LANCZOS)
+        # A 4K screen first halves by averaging: half the time of LANCZOS
+        # alone, and the text reads the same
+        scaled = image if scale == 1.0 else image.resize(size, Image.LANCZOS, reducing_gap=1.0)
         for quality in (85, 70, 55):
             buffer = io.BytesIO()
             scaled.save(buffer, format="JPEG", quality=quality)
