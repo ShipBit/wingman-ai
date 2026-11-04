@@ -11,6 +11,7 @@ import shutil
 from os import path
 from types import SimpleNamespace
 
+import requests
 import yaml
 
 from hud_server.platform.base import HudBackend, Monitor
@@ -315,3 +316,41 @@ def overlay_errors(overlay) -> list:
         if isinstance(report, dict) and report.get("type") == "error":
             reports.append(report)
     return reports
+
+
+# A model download over a connection that breaks
+
+BODY = bytes(range(256)) * 40  # 10,240 bytes
+
+
+class FlakyServer:
+    """Serves BODY, honours Range, and breaks the connection after `cut`
+    bytes for the first `breaks` requests."""
+
+    def __init__(self, cut: int, breaks: int):
+        self.cut = cut
+        self.breaks = breaks
+        self.ranges: list[str | None] = []
+
+    def get(self, url, stream=True, timeout=None, headers=None):
+        start = 0
+        rng = (headers or {}).get("Range")
+        self.ranges.append(rng)
+        if rng:
+            start = int(rng.split("=")[1].rstrip("-"))
+        body = BODY[start:]
+        broken = self.breaks > 0
+        self.breaks -= 1
+
+        def iter_content(chunk_size):
+            if broken:
+                yield body[: self.cut]
+                raise requests.exceptions.ChunkedEncodingError("Connection broken")
+            yield body
+
+        return SimpleNamespace(
+            status_code=206 if start else 200,
+            headers={"content-length": str(len(body))},
+            raise_for_status=lambda: None,
+            iter_content=iter_content,
+        )

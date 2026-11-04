@@ -1,17 +1,16 @@
 import asyncio
 import os
+import shutil
 from typing import Awaitable, Callable, Optional
 
 from api.enums import LogType, SttProvider
 from api.interface import ParakeetSttConfig
+from providers import parakeet_r2
 from providers.parakeet import Parakeet
 from services.model_downloader import ModelDownloader
 from services.printr import Printr
 from services.system_manager import SystemManager
 
-
-# HuggingFace repo of the Parakeet model (v3, 25 languages)
-PARAKEET_REPO = "istupakov/parakeet-tdt-0.6b-v3-onnx"
 
 class SttProviderManager:
     """Manages STT provider lifecycle: CUDA detection, model download, load/unload."""
@@ -69,18 +68,30 @@ class SttProviderManager:
         """Download and initialize Parakeet."""
         pk_settings = self.settings_service.settings.stt.parakeet
 
-        # Download model
-        repo_id = PARAKEET_REPO
+        # Download model (our R2 mirror, see providers/parakeet_r2.py)
+        loop = asyncio.get_running_loop()
 
-        model_path = None
-        try:
+        def progress(filename: str, pct: float, downloaded_mb: float, total_mb: float):
             if on_status:
-                await on_status("Downloading STT model (Parakeet)...", None)
+                asyncio.run_coroutine_threadsafe(
+                    on_status(
+                        f"Downloading speech-to-text model ({downloaded_mb} of {total_mb} MB)...",
+                        pct / 100,
+                    ),
+                    loop,
+                )
 
-            model_path = await self.model_downloader.download_huggingface(
-                repo_id=repo_id,
-                category="parakeet",
-            )
+        try:
+            for name, (_source, size, sha256) in parakeet_r2.FILES.items():
+                path = await self.model_downloader.download_file(
+                    url=parakeet_r2.file_url(name),
+                    category=parakeet_r2.MODEL_DIR,
+                    filename=name,
+                    on_progress=progress,
+                    size=size,
+                    sha256=sha256,
+                )
+            model_path = os.path.dirname(path)
         except Exception as e:
             self.printr.toast_error(
                 f"Could not download the Parakeet STT model. "
@@ -106,7 +117,8 @@ class SttProviderManager:
         if on_status:
             await on_status("Verifying speech-to-text...", None)
 
-        await self._health_check_parakeet()
+        if await self._health_check_parakeet():
+            await asyncio.to_thread(self._remove_old_parakeet)
 
     async def switch_provider(
         self,
@@ -145,6 +157,7 @@ class SttProviderManager:
                     server_only=True,
                     color=LogType.POSITIVE,
                 )
+                return True
             else:
                 self.printr.toast_warning(
                     "STT loaded but verification failed — transcription may not work correctly."
@@ -152,6 +165,26 @@ class SttProviderManager:
         except Exception as e:
             self.printr.toast_warning(
                 f"STT verification failed: {e}. Transcription may not work correctly."
+            )
+        return False
+
+    def _remove_old_parakeet(self):
+        """Delete the istupakov v3 export Core ran before (3.2 GB), once the
+        new model works. Only that folder, and only when it holds that model."""
+        old = os.path.join(self.model_downloader.models_root, parakeet_r2.OLD_MODEL_DIR)
+        if not os.path.exists(os.path.join(old, "encoder-model.onnx.data")):
+            return
+        try:
+            shutil.rmtree(old)
+            self.printr.print(
+                "Removed the previous Parakeet model (3.2 GB).",
+                server_only=True,
+            )
+        except OSError as e:
+            self.printr.print(
+                f"Could not remove the previous Parakeet model in {old}: {e}",
+                color=LogType.WARNING,
+                server_only=True,
             )
 
     def unload_all(self):
