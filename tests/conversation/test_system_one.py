@@ -35,6 +35,12 @@ from services.jev_gate import MAX_COMMAND_OPTIONS, JevGate
 from wingmen.facade import SkillSystemOne, SystemOneAnswers
 
 
+@pytest.fixture(autouse=True)
+def _clear_openrouter_provider_environment(monkeypatch):
+    monkeypatch.delenv("WINGMAN_JEV_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+
 def _command(name, instant=None) -> CommandConfig:
     return CommandConfig(
         name=name,
