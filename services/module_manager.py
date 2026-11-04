@@ -14,6 +14,7 @@ from api.interface import (
     SkillToolInfo,
 )
 from services.file import get_custom_skills_dir
+from services.platform_utils import drop_other_platform_properties
 from services.printr import Printr
 from skills.skill_base import Skill
 
@@ -307,7 +308,9 @@ class ModuleManager:
         available_skill_configs = ModuleManager.read_available_skill_configs()
         # Load each skill from its config
         for skill_folder_name, skill_config_path, is_custom, is_local in available_skill_configs:
-            skill_config = ModuleManager.read_config(skill_config_path)
+            skill_config = drop_other_platform_properties(
+                ModuleManager.read_config(skill_config_path)
+            )
 
             logo = None
             logo_path = path.join(path.dirname(skill_config_path), "logo.png")

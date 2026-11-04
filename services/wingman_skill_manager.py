@@ -19,7 +19,7 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from services.module_manager import ModuleManager
-from services.platform_utils import normalize_platform
+from services.platform_utils import drop_other_platform_properties, normalize_platform
 from services.printr import Printr
 from services.skill_registry import SkillRegistry
 from skills.skill_base import Skill
@@ -90,7 +90,9 @@ class WingmanSkillManager:
         user_skill_configs: dict[str, SkillConfig],
     ) -> SkillConfig | None:
         """Read yaml config + merge user overrides; return SkillConfig or None."""
-        skill_config_dict = ModuleManager.read_config(skill_config_path)
+        skill_config_dict = drop_other_platform_properties(
+            ModuleManager.read_config(skill_config_path)
+        )
         if not skill_config_dict:
             return None
 
