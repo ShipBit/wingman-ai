@@ -23,6 +23,34 @@ FIXTURES = path.join(REPO_ROOT, "tests", "fixtures")
 VERSION_DIR = LOCAL_VERSION.replace(".", "_")
 
 
+class FakeDecisionResponse:
+    def __init__(self, body, status_code=200):
+        self.body = body
+        self.status_code = status_code
+        self.ok = status_code < 400
+        self.text = "provider error"
+
+    def json(self):
+        return self.body
+
+
+class FakeDecisionSession:
+    def __init__(self, response=None, exception=None):
+        self.response = response
+        self.exception = exception
+        self.requests = []
+        self.closed = False
+
+    def post(self, *args, **kwargs):
+        self.requests.append((args, kwargs))
+        if self.exception is not None:
+            raise self.exception
+        return self.response
+
+    def close(self):
+        self.closed = True
+
+
 def read_yaml(file_path: str):
     with open(file_path, "r", encoding="UTF-8") as f:
         return yaml.safe_load(f)

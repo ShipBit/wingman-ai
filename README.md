@@ -173,7 +173,7 @@ You don't need the subscription to use Wingman AI: Parakeet, a local LLM and Poc
 
 ### System One decisions
 
-System One uses the configured Wingman Subscription or Vercel AI Gateway route by default. To use OpenRouter directly, set `WINGMAN_JEV_PROVIDER=openrouter` and provide `OPENROUTER_API_KEY`, or save the key in Wingman's secrets under the exact name `Openrouter`. The OpenRouter selection and key are read for each decision. When OpenRouter is selected without a key, the call falls back through Jev's existing error path; the key is not sent to Wingman Pro or Vercel. Remove `WINGMAN_JEV_PROVIDER` to restore the default route.
+System One uses the configured Wingman Subscription or Vercel AI Gateway route by default. To use OpenRouter directly, set `WINGMAN_JEV_PROVIDER=openrouter` and provide `OPENROUTER_API_KEY`, or use the existing `openrouter` secret (`Openrouter` is also accepted). The OpenRouter selection and key are read for each decision. When OpenRouter is selected without a key, the call falls back through Jev's existing error path; the key is not sent to Wingman Pro or Vercel. Remove `WINGMAN_JEV_PROVIDER` to restore the default route. See the [setup and fallback details](docs/README.md#system-one-provider).
 
 ### OpenAI
 

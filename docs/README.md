@@ -22,6 +22,23 @@ Learn how to create custom extensions for Wingman AI:
   - Bundling dependencies
   - Best practices and examples
 
+## System One provider
+
+System One's existing master and per-feature switches still control Jev. Its default
+Wingman Subscription/Vercel route is unchanged. For OpenRouter:
+
+1. Set `WINGMAN_JEV_PROVIDER=openrouter` in the environment that launches Core.
+2. Set `OPENROUTER_API_KEY`, or use Wingman's existing `openrouter` secret.
+   The older `Openrouter` spelling is accepted too; the lowercase name takes precedence.
+3. Enable the existing fast-decision settings for the features you want.
+
+The environment key takes precedence over saved secrets. Each decision reads the
+selection and current key; an already running Core inherits its launch environment.
+Missing credentials or request failures use Jev's existing fallback to the normal
+model/matcher, without sending the OpenRouter key to Pro or Vercel. Remove the
+provider environment setting to restore the default route. This does not select
+Jev as the conversation model or change other speech/model providers.
+
 ## Reference
 
 Additional reference documentation:

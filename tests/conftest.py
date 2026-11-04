@@ -17,6 +17,19 @@ set_bundled_skills_dir(path.join(REPO_ROOT, "skills"))
 
 
 @pytest.fixture
+def clear_openrouter_provider_environment(monkeypatch):
+    from types import SimpleNamespace
+
+    import services.secret_keeper as secret_keeper
+
+    monkeypatch.delenv("WINGMAN_JEV_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        secret_keeper, "SecretKeeper", lambda: SimpleNamespace(secrets={})
+    )
+
+
+@pytest.fixture
 def users_dir(tmp_path, monkeypatch):
     """A fake APPDATA/WingmanAI folder. All path helpers point into it."""
     users = tmp_path / "WingmanAI"

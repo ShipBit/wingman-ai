@@ -32,13 +32,11 @@ from services.jev_decisions import (
 )
 from services import jev_gate
 from services.jev_gate import MAX_COMMAND_OPTIONS, JevGate
+from tests.support import FakeDecisionResponse, FakeDecisionSession
 from wingmen.facade import SkillSystemOne, SystemOneAnswers
 
 
-@pytest.fixture(autouse=True)
-def _clear_openrouter_provider_environment(monkeypatch):
-    monkeypatch.delenv("WINGMAN_JEV_PROVIDER", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+pytestmark = pytest.mark.usefixtures("clear_openrouter_provider_environment")
 
 
 def _command(name, instant=None) -> CommandConfig:
@@ -128,33 +126,12 @@ def test_a_failed_request_starts_the_next_on_a_fresh_connection():
     assert client._session is not dead
 
 
-class _DecisionResponse:
-    def __init__(self, body, status_code=200):
-        self.body = body
-        self.status_code = status_code
-        self.ok = status_code < 400
-        self.text = "provider error"
-
-    def json(self):
-        return self.body
-
-
-class _DecisionSession:
-    def __init__(self, response):
-        self.response = response
-        self.requests = []
-
-    def post(self, *args, **kwargs):
-        self.requests.append((args, kwargs))
-        return self.response
-
-
 def test_provider_defaults_to_the_existing_gateway_route(monkeypatch):
     monkeypatch.delenv("WINGMAN_JEV_PROVIDER", raising=False)
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "gateway-key")
     client = JevClient()
     client._pro_token = lambda: ""
-    session = _DecisionSession(_DecisionResponse({
+    session = FakeDecisionSession(FakeDecisionResponse({
         "answers": {"q": {"type": "noul", "noul": 0.8}},
         "usage": {"input_tokens": 12},
         "provider_metadata": {"gateway": {"cost": 0.003}},
@@ -177,7 +154,7 @@ def test_openrouter_is_explicit_and_reads_its_key_fresh(monkeypatch):
     client = JevClient(api_key="gateway-key")
     client._secret_keeper = SimpleNamespace(secrets={})
     client._pro_token = lambda: pytest.fail("OpenRouter must not use Wingman Pro")
-    session = _DecisionSession(_DecisionResponse({
+    session = FakeDecisionSession(FakeDecisionResponse({
         "answers": {"q": {"type": "noul", "noul": 0.8}},
         "usage": {"input_tokens": 12, "cost": 0.000012852},
     }))
@@ -200,13 +177,16 @@ def test_openrouter_is_explicit_and_reads_its_key_fresh(monkeypatch):
     assert result.cost == pytest.approx(0.000012852)
 
 
-def test_openrouter_uses_the_existing_native_secret_and_never_falls_back(monkeypatch):
+@pytest.mark.parametrize("secret_name", ["openrouter", "Openrouter"])
+def test_openrouter_uses_the_existing_native_secret_and_never_falls_back(
+    secret_name, monkeypatch
+):
     monkeypatch.setenv("WINGMAN_JEV_PROVIDER", "openrouter")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     client = JevClient(api_key="gateway-key")
-    client._secret_keeper = SimpleNamespace(secrets={"Openrouter": "saved-key"})
+    client._secret_keeper = SimpleNamespace(secrets={secret_name: "saved-key"})
     client._pro_token = lambda: pytest.fail("selected OpenRouter must not inspect Pro")
-    session = _DecisionSession(_DecisionResponse({}, status_code=503))
+    session = FakeDecisionSession(FakeDecisionResponse({}, status_code=503))
     client._session = session
 
     assert client.is_ready()
@@ -225,6 +205,27 @@ def test_openrouter_uses_the_existing_native_secret_and_never_falls_back(monkeyp
     assert session.requests == []
 
 
+@pytest.mark.parametrize("environment_key,saved_keys,expected", [
+    ("environment-key", {"openrouter": "lowercase-key", "Openrouter": "legacy-key"}, "environment-key"),
+    ("", {"openrouter": "lowercase-key", "Openrouter": "legacy-key"}, "lowercase-key"),
+    ("", {"Openrouter": "legacy-key"}, "legacy-key"),
+])
+def test_openrouter_key_precedence(environment_key, saved_keys, expected, monkeypatch):
+    monkeypatch.setenv("WINGMAN_JEV_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", environment_key)
+    client = JevClient()
+    client._secret_keeper = SimpleNamespace(secrets=saved_keys)
+    session = FakeDecisionSession(FakeDecisionResponse({
+        "answers": {"q": {"type": "noul", "noul": 0.8}},
+        "usage": {"input_tokens": 12, "cost": 0.000012852},
+    }))
+    client._session = session
+
+    result = client.system_one({"transcript": "hi"}, {"q": {"type": "noul"}})
+    assert result.ok
+    assert session.requests[0][1]["headers"]["Authorization"] == f"Bearer {expected}"
+
+
 @pytest.mark.parametrize("failure", ["request", "response"])
 def test_openrouter_failure_diagnostics_do_not_expose_its_key(failure, monkeypatch):
     api_key = "synthetic-openrouter-key"
@@ -237,20 +238,15 @@ def test_openrouter_failure_diagnostics_do_not_expose_its_key(failure, monkeypat
     client = JevClient()
 
     if failure == "request":
-        class FailingSession:
-            def post(self, *args, **kwargs):
-                raise requests.exceptions.InvalidHeader(
-                    f"invalid authorization value: Bearer {api_key}"
-                )
-
-            def close(self):
-                pass
-
-        client._session = FailingSession()
+        client._session = FakeDecisionSession(
+            exception=requests.exceptions.InvalidHeader(
+                f"invalid authorization value: Bearer {api_key}"
+            )
+        )
     else:
-        response = _DecisionResponse({}, status_code=503)
+        response = FakeDecisionResponse({}, status_code=503)
         response.text = f"provider echoed {api_key}"
-        client._session = _DecisionSession(response)
+        client._session = FakeDecisionSession(response)
 
     result = client.system_one({"transcript": "hi"}, {"q": {"type": "noul"}})
 

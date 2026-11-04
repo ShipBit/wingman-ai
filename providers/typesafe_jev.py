@@ -399,7 +399,8 @@ class JevClient:
             from services.secret_keeper import SecretKeeper
 
             self._secret_keeper = SecretKeeper()
-        return self._secret_keeper.secrets.get("Openrouter", "") or ""
+        return (self._secret_keeper.secrets.get("openrouter", "")
+                or self._secret_keeper.secrets.get("Openrouter", "") or "")
 
     def is_ready(self) -> bool:
         if self._uses_openrouter():
@@ -420,7 +421,7 @@ class JevClient:
             token = self._openrouter_key()
             if not token:
                 return JevResult(
-                    error="OpenRouter selected but no OPENROUTER_API_KEY or Openrouter secret"
+                    error="OpenRouter selected but no OPENROUTER_API_KEY or openrouter secret"
                 )
             url = OPENROUTER_URL
             payload = {
