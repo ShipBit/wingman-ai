@@ -232,8 +232,12 @@ def test_openrouter_failure_diagnostics_do_not_expose_its_key(failure, monkeypat
     monkeypatch.setenv("WINGMAN_JEV_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", api_key)
     logged = []
+    shared_logger = typesafe_jev.printr
+    shared_print_override = shared_logger.__dict__.get("print")
     monkeypatch.setattr(
-        typesafe_jev.printr, "print", lambda message, **_kwargs: logged.append(message)
+        typesafe_jev, "printr", SimpleNamespace(
+            print=lambda message, **_kwargs: logged.append(message)
+        )
     )
     client = JevClient()
 
@@ -253,6 +257,7 @@ def test_openrouter_failure_diagnostics_do_not_expose_its_key(failure, monkeypat
     assert result.error and api_key not in result.error
     assert logged
     assert all(api_key not in message for message in logged)
+    assert shared_logger.__dict__.get("print") is shared_print_override
 
 
 # ── vocabulary gating ───────────────────────────────────────────────
