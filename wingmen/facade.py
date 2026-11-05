@@ -1816,6 +1816,15 @@ class SkillScTelemetry:
         return self._service().running
 
     @property
+    def released(self) -> bool:
+        """This build offers telemetry at all. False on a channel it has not
+        reached yet: then it is never available, and a skill should not
+        mention it or its setting to the user."""
+        from services.features import SC_TELEMETRY, released
+
+        return released(SC_TELEMETRY)
+
+    @property
     def answering(self) -> bool:
         """The game answers on the stream (live, or in a menu). False while
         the game is not running or runs without telemetry: then nothing

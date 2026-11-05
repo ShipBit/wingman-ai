@@ -30,6 +30,7 @@ from typing import Any, Awaitable, Callable, Optional
 from api.enums import LogType, ScTelemetryState
 from api.interface import ScTelemetryStatus
 from services.event_subscribers import CALLBACK_TIMEOUT_SECONDS, Subscriber
+from services.features import SC_TELEMETRY, released
 from services.file import get_generated_files_dir
 from services.printr import Printr
 from services.sc_telemetry import windows_env
@@ -299,6 +300,7 @@ class ScTelemetryService:
         state = self._current_state()
         return ScTelemetryStatus(
             state=state,
+            released=released(SC_TELEMETRY),
             variable_managed=windows_env.MANAGED,
             variable_set=self._variable_set,
             vehicle=vehicle if state == ScTelemetryState.LIVE else None,

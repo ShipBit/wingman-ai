@@ -442,11 +442,11 @@ def _subscribe(event_type, callback):
     return SimpleNamespace(unsubscribe=lambda: None)
 
 
-def _sources(wingman, log=True, telemetry=True, state=None, status="live"):
+def _sources(wingman, log=True, telemetry=True, state=None, status="live", released=True):
     """Which of Core's two sources run, without starting them."""
     wingman.sc_gamelog = SimpleNamespace(available=log, on=_subscribe, state=lambda: None)
     wingman.sc_telemetry = SimpleNamespace(
-        available=telemetry, answering=telemetry and status in ("live", "connected"),
+        released=released, available=telemetry, answering=telemetry and status in ("live", "connected"),
         on=_subscribe, state=lambda: state,
         status=SimpleNamespace(state=SimpleNamespace(value=status)),
     )
@@ -635,3 +635,7 @@ def test_the_tool_answers_about_the_ship_and_the_pilot():
     assert "RSI Launcher" in asyncio.run(skill.star_citizen_status("ship"))
     _sources(wingman, telemetry=False)
     assert "switched off" in asyncio.run(skill.star_citizen_status("pilot"))
+    # Where telemetry is not released, there is no setting to point to.
+    _sources(wingman, telemetry=False, released=False)
+    answer = asyncio.run(skill.star_citizen_status("pilot"))
+    assert "telemetry" not in answer.lower() and "settings" not in answer

@@ -30,6 +30,7 @@ from api.interface import (
     StarCitizenSetupWingman,
     WingmanConfigFileInfo,
 )
+from services.features import SC_TELEMETRY, released
 from services.module_manager import ModuleManager
 from services.platform_utils import normalize_platform
 from services.printr import Printr
@@ -90,8 +91,13 @@ def log_reader_on(settings) -> bool:
 def telemetry_on(settings) -> bool:
     """Whether Core reads the game's telemetry: switched on, and the user said
     they play Star Citizen. Needs no game folder: the game streams on its own
-    port. The folder only helps to tell why nothing comes."""
-    return bool(settings.sc_telemetry.enabled) and settings.star_citizen.plays is True
+    port. The folder only helps to tell why nothing comes. Never while the
+    feature is not released on this channel (services/features.py)."""
+    return (
+        released(SC_TELEMETRY)
+        and bool(settings.sc_telemetry.enabled)
+        and settings.star_citizen.plays is True
+    )
 
 
 def on_by_default(feature: _Feature, wingman_name: str) -> bool:
