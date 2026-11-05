@@ -75,6 +75,7 @@ class CommandTag(Enum):
     UNAUTHORIZED = "unauthorized"
     CONFIG_LOADED = "config_loaded"
     SECRET_SAVED = "secret_saved"
+    BINDING_UNBOUND = "binding_unbound"
 
 
 class CustomPropertyType(Enum):
@@ -209,6 +210,25 @@ class ScGameLogRulesProblem(Enum):
     """The published rules need a newer Wingman."""
 
 
+class ScTelemetryState(Enum):
+    """What Star Citizen's telemetry stream is doing (services/sc_telemetry)."""
+
+    OFF = "off"
+    """Switched off in the settings, or the user does not play Star Citizen."""
+    UNAVAILABLE = "unavailable"
+    """This build of Wingman cannot read it: gRPC or protobuf is missing."""
+    WAITING = "waiting"
+    """Nothing answers: the game is not running, or runs without telemetry."""
+    GAME_WITHOUT_TELEMETRY = "game_without_telemetry"
+    """The game runs, but its Game.log shows no telemetry. On Windows the RSI
+    Launcher was started before the switch: quit it completely and start it again."""
+    CONNECTED = "connected"
+    """The game answers but sends no frames: menus or loading."""
+    LIVE = "live"
+    INCOMPATIBLE = "incompatible"
+    """The game answers, but not in the shape Wingman knows: a game patch changed it."""
+
+
 class SkillRequirement(Enum):
     """A Core service a skill needs switched on in the settings.
 
@@ -220,6 +240,8 @@ class SkillRequirement(Enum):
     """The HUD (settings.hud_server). Runs on Windows, macOS and Linux with X11."""
     SC_GAMELOG = "sc_gamelog"
     """The Star Citizen log reader (settings.sc_gamelog)."""
+    SC_TELEMETRY = "sc_telemetry"
+    """Star Citizen's telemetry stream (settings.sc_telemetry)."""
 
 
 class StarCitizenFeatureKind(Enum):
@@ -257,6 +279,21 @@ class LocalAiMode(Enum):
     CLOUD = "cloud"
     LOCAL = "local"
     SERVER = "server"
+
+
+class DecisionModelProvider(Enum):
+    """Who answers the decision model's questions.
+
+    All three take TypeSafe's System One request unchanged, so switching is a
+    different URL, key and model name, nothing else.
+    """
+
+    WINGMAN_PRO = "wingman_pro"
+    """The default: the plan pays and the backend picks the model."""
+    OPENROUTER = "openrouter"
+    """The user's own OpenRouter key and any decision model OpenRouter lists."""
+    SERVER = "server"
+    """A System One server the user runs: oMLX, local-jev, opendecider."""
 
 
 class ConversationProvider(Enum):
@@ -453,6 +490,10 @@ class ScGameLogRulesProblemEnumModel(BaseEnumModel):
     sc_gamelog_rules_problem: ScGameLogRulesProblem
 
 
+class ScTelemetryStateEnumModel(BaseEnumModel):
+    sc_telemetry_state: ScTelemetryState
+
+
 class SkillRequirementEnumModel(BaseEnumModel):
     skill_requirement: SkillRequirement
 
@@ -467,6 +508,10 @@ class HudAlignEnumModel(BaseEnumModel):
 
 class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
+
+
+class DecisionModelProviderEnumModel(BaseEnumModel):
+    decision_model_provider: DecisionModelProvider
 
 
 class SpokenLanguageEnumModel(BaseEnumModel):
@@ -500,7 +545,9 @@ ENUM_TYPES = {
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
     "LocalAiMode": LocalAiModeEnumModel,
+    "DecisionModelProvider": DecisionModelProviderEnumModel,
     "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
+    "ScTelemetryState": ScTelemetryStateEnumModel,
     "SkillRequirement": SkillRequirementEnumModel,
     "StarCitizenFeatureKind": StarCitizenFeatureKindEnumModel,
     "HudAlign": HudAlignEnumModel,

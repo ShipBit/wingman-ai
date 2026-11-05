@@ -93,7 +93,7 @@ Skills are Python modules that give a Wingman new abilities. Grant one to a Wing
   - **Vision AI**: looks at your screen, reads text and describes what it sees
   - **Voice Changer**: changes the voice of your Wingman automatically
 - **Star Citizen**
-  - **Star Citizen Events**: your Wingman reacts in character to what the log reader sees, and knows where you are and which missions you have
+  - **Star Citizen Events**: your Wingman reacts in character to what the game log and the game's own telemetry show (missions, zones, trades, shields, hits, quantum jumps, vitals), and knows where you are, your missions and the state of your ship
   - **Star Citizen Accountant**: books trades and rewards from the game log and tracks money, cargo, refining, fleet and plans, with a dashboard for your computer or phone
   - **UEX Corp**: trade routes, commodity prices, locations, ships and items from UEX community data
 - **Other games** (Windows only)
@@ -131,6 +131,7 @@ Speech-to-text, the AI model and text-to-speech are three separate steps. Take t
   - any OpenAI-compatible server, e.g. a remote Pocket TTS or XVASynth
 - **Image generation**: OpenAI and the Wingman Subscription
 - **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server.
+- **Decision model** (optional, under Settings > General) for the quick decisions in front of the main model: which command you meant, which Wingman a sentence is for, whether a heard word is a game name. It picks from options instead of writing text, in a few hundred milliseconds. It runs through the Wingman Subscription (recommended: Jev uses hardly any of your quota), any decision model on OpenRouter with your own key (TypeSafe's Jev, Cloudflare's Clef, Perplexity's Decider and others), or your own server with TypeSafe's Jev API, like oMLX. Expect a local model on your own server to decide clearly worse than Jev.
 
 ### For developers
 
@@ -381,7 +382,6 @@ Wingman makes use of other Open Source projects internally. We would like to tha
 We use them without changes, except for [keyboard](https://github.com/boppreh/keyboard) and [mouse](https://github.com/boppreh/mouse), which ship as copies in this repository with our own fixes for macOS and Linux.
 
 - [edge-tts](https://github.com/rany2/edge-tts) - LGPL-3.0
-- [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2023 lugia19
 - [FastAPI](https://github.com/fastapi/fastapi) - MIT, © 2018 Sebastián Ramírez
 - [google-genai](https://github.com/googleapis/python-genai) - Apache-2.0
 - [httpx](https://github.com/encode/httpx) - BSD 3, © 2019 Encode OSS Ltd.
@@ -421,7 +421,7 @@ We use them without changes, except for [keyboard](https://github.com/boppreh/ke
 
 Wingman ships or downloads these models. We use them without changes.
 
-- [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) - © NVIDIA, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), in the ONNX conversion by Ilya Stupakov ([istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)). Local speech recognition.
+- [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra) - © moondream, a post-trained [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) © NVIDIA, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), in the int8 ONNX export by Olicorne ([Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx](https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx)). Local speech recognition.
 - pocket-tts model weights - © Kyutai Labs, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), redistributed unmodified from [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Subject to Kyutai's acceptable-use terms: no voice cloning without explicit, lawful consent; no unlawful, harmful, deceptive or privacy-invasive use.
 - [Silero VAD](https://github.com/snakers4/silero-vad) - MIT, © 2020-present Silero Team. Detects speech for voice activation.
 - [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) - by Qwen, Apache-2.0, as GGUF from [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF). Local support model.

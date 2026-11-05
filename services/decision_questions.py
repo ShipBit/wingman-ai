@@ -1,20 +1,20 @@
-"""The two decisions the prototype hands to Jev, and how to read the answers.
+"""The decisions Core hands to the decision model, and how to read the answers.
 
 Kept apart from the places that use them so each one can be measured on its
 own against the path it would replace. Every function here is pure: it builds
-questions or reads a ``JevResult``. Nothing calls the gateway, nothing touches
+questions or reads a ``DecisionResult``. Nothing calls a provider, nothing touches
 a wingman.
 
 Each decision has a fallback and a threshold, and the two belong together:
 below the threshold the caller does what it does today. That is what makes
-this safe to switch on — a Jev that is unsure costs a few hundred milliseconds
+this safe to switch on — a model that is unsure costs a few hundred milliseconds
 and changes nothing.
 """
 
 from typing import Optional
 
-from api.interface import CommandConfig
-from providers.typesafe_jev import JevResult, choice, noul
+from api.interface import CommandConfig, WingmanConfig
+from providers.decision_model import DecisionResult, choice, noul
 
 NONE_OPTION = "none_of_these"
 """The option that means the user did not ask for any command. Jev's docs
@@ -127,7 +127,7 @@ wrongly called multiple only costs the main-model round it would have taken
 anyway."""
 
 
-def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
+def read_command(result: DecisionResult, min_confidence: float) -> Optional[str]:
     """The command to execute, or None to let the main model decide.
 
     None covers every way this ends without a keypress: the call failed, the
@@ -180,7 +180,7 @@ def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
 
 
 def read_vocabulary(
-    result: JevResult, candidates: list[tuple[str, str]], threshold: float
+    result: DecisionResult, candidates: list[tuple[str, str]], threshold: float
 ) -> Optional[set[int]]:
     """Indices of the candidates to actually replace, or None to change nothing.
 
@@ -195,3 +195,78 @@ def read_vocabulary(
         if value is not None and value >= threshold:
             confirmed.add(index)
     return confirmed
+
+
+# ── 3. Which wingman a sentence without a name is for ───────────────
+
+WINGMAN_INSTRUCTIONS = (
+    "A voice app has several assistants, listed below. The user held the talk "
+    "key that reaches all of them and said the sentence without naming one. "
+    "Which assistant is the sentence for? Decide by what the user wants done "
+    "or known. A follow-up that only makes sense after one assistant's last "
+    "answer goes to that assistant."
+)
+
+
+def wingman_description(config: WingmanConfig) -> Optional[str]:
+    """What tells this wingman apart from the others: its description, the
+    tools it can use and the commands it can trigger.
+
+    Measured 2026-10-26 on 42 sentences without a name, four wingmen
+    (evals/jev_bench/run_wingman_pick.py): the name alone picked right 81% of
+    the time, the description 95%, description, tools and every command name
+    98.8%. The question grew from 351 to 734 input tokens and the answer took
+    200 ms either way, so it gets everything. The backstory stays out: often
+    long, and not measured.
+    """
+    parts = []
+    if config.description and config.description.strip():
+        parts.append(" ".join(config.description.split()))
+    tools = [*(config.discoverable_skills or []), *(config.discoverable_mcps or [])]
+    if tools:
+        parts.append("Tools: " + ", ".join(tools))
+    commands = [
+        command.name
+        for command in config.commands or []
+        if command.actions and not command.force_instant_activation
+    ]
+    if commands:
+        parts.append("Commands: " + ", ".join(commands))
+    return " ".join(parts) if parts else None
+
+
+def wingman_state(
+    transcript: str,
+    recent: dict[str, dict[str, str]],
+    last_answer_from: Optional[str],
+) -> dict:
+    """The sentence, the last exchange with each wingman and who answered
+    last. Measured 2026-10-26 on 24 follow-ups like "And where exactly?"
+    (evals/jev_bench/run_wingman_context.py): the sentence alone 77% right,
+    who answered last alone 96% but with wrong picks above the gate, the last
+    exchanges alone 79%, both together 100% and no wrong pick. Standalone
+    sentences stayed at 96%, at the same latency."""
+    state: dict = {"transcript": transcript}
+    if last_answer_from:
+        state["last_answer_from"] = last_answer_from
+    recent = {name: exchange for name, exchange in recent.items() if exchange}
+    if recent:
+        state["recent"] = recent
+    return state
+
+
+def wingman_questions(configs: list[WingmanConfig]) -> dict[str, dict]:
+    return {
+        "wingman": choice(
+            instructions=WINGMAN_INSTRUCTIONS,
+            criteria={config.name: wingman_description(config) for config in configs},
+        )
+    }
+
+
+def read_wingman(result: DecisionResult, min_confidence: float) -> Optional[str]:
+    """The name of the wingman to answer, or None: the call failed or the
+    model was not sure enough."""
+    if not result.ok:
+        return None
+    return result.choice("wingman", min_confidence=min_confidence)

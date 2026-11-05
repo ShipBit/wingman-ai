@@ -223,6 +223,17 @@ Core writes every Wingman's conversation to the group `wingman_chat`
 (element `message`) and the info panels to `wingman_info` (element
 `persistent`). Their area and look come from the defaults.
 
+### OBS Studio & Web Streaming
+
+- `GET /obs` - Transparent HTML overlay page for OBS Browser Source (full screen)
+- `GET /obs/chat` - Dedicated HTML page for just the chat container
+- `GET /obs/info` - Dedicated HTML page for just the info container
+- `WS /obs/ws` - The HUD windows (`?channel=all|chat|info`)
+- `GET /obs/frame.png` - The HUD as it is now, as one transparent PNG
+- `GET /obs/chat/frame.png` - Transparent PNG snapshot of the chat container
+- `GET /obs/info/frame.png` - Transparent PNG snapshot of the info container
+- `GET /obs/status` - Connected Browser Sources, screen and container sizes, windows shown
+
 ### Preview
 
 - `PUT /preview` (or `POST`) - Show the chat and info containers as preview panels that fill their whole area, in their real style

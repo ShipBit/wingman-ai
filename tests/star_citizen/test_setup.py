@@ -11,6 +11,7 @@ import pytest
 
 from api.enums import StarCitizenFeatureKind
 from api.interface import ConfigDirInfo, WingmanConfigFileInfo
+from services import features
 from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
 from tests.support import template
@@ -101,6 +102,7 @@ def service(monkeypatch, tmp_path):
     settings_service = SimpleNamespace(
         settings=SimpleNamespace(
             sc_gamelog=SimpleNamespace(enabled=True),
+            sc_telemetry=SimpleNamespace(enabled=True),
             pronunciation=SimpleNamespace(presets=["star_citizen"]),
             stt=SimpleNamespace(presets=["star_citizen", "elite"]),
             star_citizen=SimpleNamespace(plays=None, game_path=str(game)),
@@ -120,6 +122,7 @@ def test_no_switches_everything_off(service):
     asyncio.run(service.apply_answer(False))
     settings = service.saved[0]
     assert settings.sc_gamelog.enabled is False
+    assert settings.sc_telemetry.enabled is False
     assert settings.pronunciation.presets == []
     assert settings.stt.presets == ["elite"]
     assert settings.star_citizen.plays is False
@@ -130,10 +133,12 @@ def test_no_switches_everything_off(service):
 
 def test_yes_switches_on_what_is_on_by_default_and_leaves_the_rest(service):
     service.settings_service.settings.sc_gamelog.enabled = False
+    service.settings_service.settings.sc_telemetry.enabled = False
     service.settings_service.settings.pronunciation.presets = []
     asyncio.run(service.apply_answer(True))
     settings = service.saved[0]
     assert settings.sc_gamelog.enabled is True
+    assert settings.sc_telemetry.enabled is True
     assert settings.pronunciation.presets == ["star_citizen"]
     assert settings.star_citizen.plays is True
     assert service.files["ATC"].discoverable_skills == ["UEXCorp"]
@@ -233,9 +238,13 @@ def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(servi
     "enabled, plays, runs",
     [(True, True, True), (True, None, False), (False, True, False)],
 )
-def test_the_log_reader_runs_only_for_players(enabled, plays, runs):
+def test_the_log_reader_and_telemetry_run_only_for_players(enabled, plays, runs, monkeypatch):
+    # Telemetry is switched off on stable release branches (services/features.py).
+    monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", True)
     settings = SimpleNamespace(
         sc_gamelog=SimpleNamespace(enabled=enabled),
+        sc_telemetry=SimpleNamespace(enabled=enabled),
         star_citizen=SimpleNamespace(plays=plays),
     )
     assert sc_setup.log_reader_on(settings) is runs
+    assert sc_setup.telemetry_on(settings) is runs

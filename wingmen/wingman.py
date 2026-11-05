@@ -6,6 +6,7 @@ interfaces for STT, TTS, and LLM.
 """
 
 import json
+import re
 import time
 import asyncio
 import traceback
@@ -18,11 +19,13 @@ from typing import (
     Optional,
     TYPE_CHECKING,
 )
+import httpx
 from openai import APIConnectionError
 from openai.types.chat import ChatCompletion
 from api.interface import (
     BenchmarkResult,
     CommandConfig,
+    InputBinding,
     SettingsConfig,
     SkillConfig,
     SoundConfig,
@@ -76,13 +79,22 @@ from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.turn_metrics import TurnMetrics
 from services.filler_response import FillerLine, FillerResponder
-from services.jev_gate import JevGate
+from services.decision_gate import DecisionGate
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from services.tower import Tower
 
 printr = Printr()
+
+# A tag like <｜tool_call｜> or <#INVALID#>. Asked for words with tool_choice
+# "none", some models still call a tool and write the call out in their own
+# tokens. "3 < 5" and "<10%, >80%" are no tag: a space or a digit after "<".
+TOOL_MARKUP = re.compile(r"<[^\s<>\d][^<>\n]{0,80}>")
+# Tags a spoken answer may have, the prompt asks for them: pauses
+# (<break time="400ms" />), spelled-out codes (<verbatim>3B</verbatim>) and
+# <sigh> for [sigh]. A closing tag other than </verbatim> is none of them.
+SPEECH_MARKUP = re.compile(r"<(?:(?i:break\b[^<>]*|/?verbatim\s*)|[a-z]+)>")
 
 
 def tool_names(tool_calls) -> list[str]:
@@ -264,8 +276,8 @@ class Wingman:
         # --- Conversation state ---
         self.last_gpt_call = None
 
-        # --- System One decisions (settings.system_one.enabled) ---
-        self.jev = JevGate(wingman_name=name, settings=settings)
+        # --- System One decisions (settings.decision_model.enabled) ---
+        self.decision_gate = DecisionGate(wingman_name=name, settings=settings)
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -288,16 +300,8 @@ class Wingman:
 
     # ──────────────────────────────── Record keys ─────────────────────────────── #
 
-    def get_record_key(self) -> str | int:
-        return self.config.record_key_codes or self.config.record_key
-
-    def get_record_mouse_button(self) -> str:
-        return self.config.record_mouse_button
-
-    def get_record_joystick_button(self) -> str:
-        if not self.config.record_joystick_button:
-            return None
-        return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
+    def get_record_bindings(self) -> list[InputBinding]:
+        return self.config.record_bindings
 
     # ──────────────────────────────── Secrets ──────────────────────────────────── #
 
@@ -359,6 +363,18 @@ class Wingman:
             )
             self.tts = await factory.create_tts(errors)
             self.llm = await factory.create_llm(errors)
+        except httpx.InvalidURL as e:
+            # An endpoint the user typed in, like "localhost:1234:1234". Theirs
+            # to correct in the settings, so a warning and not an error report.
+            message = f"Invalid server address in the provider settings: {e}."
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message=message,
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+            printr.print(message, color=LogType.WARNING, server_only=True)
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -632,7 +648,7 @@ class Wingman:
                 # that end early on a command. Skills add their own decisions
                 # to the same list on the way, so this is the whole layer.
                 self.metrics.add_system_one_snapshot(
-                    benchmark_llm, self.jev.take_decisions()
+                    benchmark_llm, self.decision_gate.take_decisions()
                 )
 
                 actual_response = instant_response or process_result
@@ -697,12 +713,12 @@ class Wingman:
         # No snapshot around this: the gate times every decision it takes,
         # including the ones skills make later in the turn, and they are added
         # together at the end.
-        if self.jev.active and not instant_command_executed:
-            jev_executed, jev_response = await self._ask_jev_about_the_turn(transcript)
-            if jev_response:
-                await self.conversation.add_assistant_message(jev_response)
-                return jev_response, jev_response, None, True
-            instant_command_executed = instant_command_executed or jev_executed
+        if self.decision_gate.active and not instant_command_executed:
+            decided_executed, decided_response = await self._ask_decision_model_about_the_turn(transcript)
+            if decided_response:
+                await self.conversation.add_assistant_message(decided_response)
+                return decided_response, decided_response, None, True
+            instant_command_executed = instant_command_executed or decided_executed
 
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
@@ -869,6 +885,18 @@ class Wingman:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
+        # Some providers answer without a single choice (a filtered or
+        # aborted response). Every caller reads choices[0].
+        if completion is not None and not getattr(completion, "choices", None):
+            provider = self.config.features.conversation_provider.value
+            await printr.print_async(
+                f"{provider} sent an empty answer. Please try again.",
+                color=LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            return None
+
         return completion
 
     async def _llm_call(self, allow_tool_calls: bool = True):
@@ -1007,6 +1035,16 @@ class Wingman:
 
         if not allow_tool_calls:
             response_message.tool_calls = None
+            # A tool call written out as text is no answer. Spoken, it is
+            # noise; kept in the history, the next answer copies it.
+            if TOOL_MARKUP.search(SPEECH_MARKUP.sub("", response_message.content)):
+                printr.print(
+                    f"{self.name}: dropped an answer that was a tool call written as text: "
+                    f"{response_message.content[:200]!r}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                response_message.content = ""
 
         if response_message.tool_calls:
             response_message.tool_calls = await self.tool_executor.fix_tool_calls(
@@ -1103,16 +1141,16 @@ class Wingman:
             wingman_name=self.name,
         )
 
-    async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
+    async def _ask_decision_model_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
         """Ask which command the request means, and run it if the answer holds."""
-        name = await self.jev.pick_command(
+        name = await self.decision_gate.pick_command(
             transcript, self.command_executor.eligible_commands()
         )
         if not name:
             return False, None
-        return await self._run_jev_command(name)
+        return await self._run_decided_command(name)
 
-    async def _run_jev_command(self, name: str) -> tuple[bool, str | None]:
+    async def _run_decided_command(self, name: str) -> tuple[bool, str | None]:
         """Run the command the System One model picked.
 
         Returns ``(executed, spoken_response)``. ``executed`` without a
@@ -1598,7 +1636,7 @@ class Wingman:
             self.tool_executor._settings = settings
             self.mcp_manager.settings = settings
             self.skill_manager.settings = settings
-            self.jev.update_settings(settings)
+            self.decision_gate.update_settings(settings)
 
             for skill in self.skills:
                 skill.settings = settings

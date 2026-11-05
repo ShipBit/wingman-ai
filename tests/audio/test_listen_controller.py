@@ -171,6 +171,19 @@ def test_capture_for_the_mic_test_keeps_the_clip():
     assert controller.state == ListenState.ARMED
 
 
+def test_mic_test_numbers_survive_voice_activation_arming_again():
+    """Stopping the test arms voice activation, which starts fresh numbers.
+    The test must still report the level and score of the clip it recorded."""
+    controller, _, gate = make()
+    controller.set_voice_activation(True)
+    controller.capture_start("__test__")
+    speak(controller, silence_frames=0)
+    controller.capture_stop("__test__")
+    controller.feed(SILENCE)
+    assert gate.clip_peak == np.float32(0.3)
+    assert gate.clip_best_score == 1.0
+
+
 def test_a_long_capture_keeps_every_piece():
     """The gate cuts at max_utterance_s. A mic test held longer than that must
     still come back whole, not just its tail."""
@@ -313,3 +326,16 @@ def test_a_hold_for_a_wingman_whose_config_was_unloaded_goes_nowhere():
     assert controller.state == ListenState.OFF
     # The next key works as usual.
     assert controller.ptt_down("key:2", object())
+
+
+
+def test_the_global_key_sends_its_clip_for_any_wingman():
+    """The global push-to-talk key: the transcript picks the wingman afterwards."""
+    controller, rec, _ = make()
+    assert controller.ptt_down("key:29:1", lc.ANY_WINGMAN)
+    assert controller.state == ListenState.HELD
+    speak(controller, speech_frames=10, silence_frames=0)
+    release(controller, "key:29:1")
+    assert len(rec.utterances) == 1
+    assert rec.utterances[0][1] is lc.ANY_WINGMAN
+    assert controller.state == ListenState.OFF

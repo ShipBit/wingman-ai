@@ -199,7 +199,7 @@ async def run_hud_tool(wingman: "Wingman", name: str, args: dict[str, Any]) -> s
             from wingmen.facade import SkillSystemOne
 
             found = await resolve_title(
-                SkillSystemOne(getattr(wingman, "jev", None)), title, [i["title"] for i in items]
+                SkillSystemOne(getattr(wingman, "decision_gate", None)), title, [i["title"] for i in items]
             )
             if found is None:
                 return f"No panel '{title}' on the HUD. " + describe_panels(items, time.time(), me)
@@ -224,7 +224,7 @@ async def run_hud_tool(wingman: "Wingman", name: str, args: dict[str, Any]) -> s
 
         items = hud.info_items()
         titles = [i["title"] for i in items]
-        found = await resolve_title(SkillSystemOne(getattr(wingman, "jev", None)), title, titles)
+        found = await resolve_title(SkillSystemOne(getattr(wingman, "decision_gate", None)), title, titles)
         if found is None:
             listed = ", ".join(f"'{t}'" for t in titles) or "none"
             return f"No panel '{title}' on the HUD. Panels: {listed}."

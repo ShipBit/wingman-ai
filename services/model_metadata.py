@@ -3,7 +3,7 @@ from typing import Optional
 
 import aiohttp
 
-from api.enums import LogType
+from api.enums import ConversationProvider, LogType
 from services.printr import Printr
 
 printr = Printr()
@@ -104,3 +104,53 @@ class ModelMetadataService:
     async def supports_vision(self, model_id: str) -> bool:
         meta = await self.get(model_id)
         return meta.get("supports_vision", False) if meta else False
+
+    async def known_without_vision(self, model_id: str) -> bool:
+        """True only when the model is listed and cannot take images. An
+        unknown model (a local one, a new one, no metadata offline) is not:
+        it may well see, and the provider says so if it does not."""
+        if not model_id:
+            return False
+        meta = await self.get(model_id)
+        return bool(meta) and not meta.get("supports_vision", False)
+
+
+_shared: Optional[ModelMetadataService] = None
+
+
+def get_model_metadata_service() -> ModelMetadataService:
+    """The one instance, so Core and the skills share its cache."""
+    global _shared
+    if _shared is None:
+        _shared = ModelMetadataService()
+    return _shared
+
+
+def conversation_model_id(config) -> str:
+    """The conversation model a Wingman config uses, as the provider names
+    it. It sits under the provider's own sub-config, not under features."""
+    features = getattr(config, "features", None)
+    if features is None:
+        return ""
+    provider = features.conversation_provider
+    if provider == ConversationProvider.WINGMAN_PRO:
+        sub = getattr(config, "wingman_pro", None)
+        return (sub.conversation_deployment or "") if sub else ""
+    if provider == ConversationProvider.PERPLEXITY:
+        sub = getattr(config, "perplexity", None)
+        if not sub:
+            return ""
+        model = sub.conversation_model
+        return model.value if hasattr(model, "value") else str(model or "")
+    attribute = {
+        ConversationProvider.OPENAI: "openai",
+        ConversationProvider.MISTRAL: "mistral",
+        ConversationProvider.GROQ: "groq",
+        ConversationProvider.CEREBRAS: "cerebras",
+        ConversationProvider.GOOGLE: "google",
+        ConversationProvider.OPENROUTER: "openrouter",
+        ConversationProvider.LOCAL_LLM: "local_llm",
+        ConversationProvider.XAI: "xai",
+    }.get(provider)
+    sub = getattr(config, attribute, None) if attribute else None
+    return (sub.conversation_model or "") if sub else ""

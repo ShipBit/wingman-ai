@@ -13,22 +13,18 @@ import threading
 from os import path
 from types import SimpleNamespace
 
-from tests.support import REPO_ROOT
+from tests.support import REPO_ROOT, decision_model_settings, with_secrets
 
 
 def _wingman(enabled: bool):
-    """A wingman whose System One is on or off, without a network in sight."""
-    from services.jev_gate import JevGate
+    """A wingman whose decision model is on or off, without a network in sight."""
+    from services.decision_gate import DecisionGate
     from wingmen.facade import SkillSystemOne
 
-    settings = SimpleNamespace(
-        system_one=SimpleNamespace(enabled=enabled),
-        wingman_pro=SimpleNamespace(base_url="https://example.invalid"),
-    )
-    gate = JevGate("Test", settings=settings)
+    gate = DecisionGate("Test", settings=decision_model_settings(enabled=enabled))
     # A credential on purpose: "off" has to mean off even when a call could
     # have been made.
-    gate.client.api_key = "not-used"
+    with_secrets(gate.client, wingman_pro="not-used")
     return SimpleNamespace(system_one=SkillSystemOne(gate))
 
 
@@ -62,9 +58,9 @@ def test_uex_still_finds_an_exact_name_with_system_one_off():
 def test_uex_refuses_to_ask_about_an_unbounded_shortlist():
     """The substring pass after difflib has no limit; a choice takes 255, and
     a list that long is not a disambiguation anyway."""
+    llm = _uex_llm(True)  # Puts skills/uexcorp on the path first.
     from uexcorp.api.llm import Llm
 
-    llm = _uex_llm(True)
     huge = [f"Ship {i}" for i in range(Llm.SYSTEM_ONE_MAX_OPTIONS + 5)]
     # (None, None): System One was not asked, the main model decides as before
     assert asyncio.run(llm._Llm__system_one_match("Ship", huge)) == (None, None)

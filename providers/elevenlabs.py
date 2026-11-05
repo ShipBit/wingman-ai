@@ -3,42 +3,61 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Optional
 import requests
-from threading import Event
 import numpy as np
 import sounddevice as sd
-from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
 from api.enums import LogType, SoundEffect, TtsProvider, WingmanInitializationErrorType
-from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
+from api.interface import (
+    ElevenlabsConfig,
+    ElevenlabsModel,
+    SoundConfig,
+    WingmanInitializationError,
+)
 from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from services.spoken_language import elevenlabs_language
 from services.sound_effects import get_sound_effects
 from services.websocket_user import WebSocketUser
 
 if TYPE_CHECKING:
-    from api.interface import WingmanConfig
+    from api.interface import SettingsConfig, WingmanConfig
 
 
-# The client asks for models, voices and subscription data at the same time, and
-# elevenlabslib turns that into a burst: every Model.maxCharacters and every
-# get_available_voices() fetches /v1/user/subscription again. ElevenLabs answers
-# the burst with 429. So all account lookups (not TTS) go through one lock, keep a
-# gap between requests and reuse answers for a short while.
+API_URL = "https://api.elevenlabs.io"
+
+# The client asks for models, voices and subscription data at the same time.
+# ElevenLabs answers a burst with 429, so all account lookups (not TTS) go
+# through one lock, keep a gap between requests and reuse answers for a while.
 _LOOKUP_LOCK = threading.RLock()
 _LOOKUP_GAP_SECONDS = 0.3
 _LOOKUP_CACHE_SECONDS = 60.0
+# Every answer asks which languages its model speaks: the list barely changes.
+_MODELS_CACHE_SECONDS = 3600.0
 _lookup_cache: dict[tuple[str, str], tuple[float, Any]] = {}
 _last_lookup_at = 0.0
 
+# 44.1 kHz PCM needs the Pro tier. Accounts below it stream at 24 kHz, and
+# after the first refusal we ask for 24 kHz right away.
+_PCM_FORMATS = ("pcm_44100", "pcm_24000")
+_pcm_format_by_key: dict[str, str] = {}
 
-def _throttled_lookup(api_key: str, name: str, fetch: Callable[[], Any]) -> Any:
+# mp3_44100_128 is the best MP3 every tier gets.
+_MP3_FORMAT = "mp3_44100_128"
+
+
+def _throttled_lookup(
+    api_key: str,
+    name: str,
+    fetch: Callable[[], Any],
+    max_age: float = _LOOKUP_CACHE_SECONDS,
+) -> Any:
     global _last_lookup_at
     key = (api_key, name)
     # Holding the lock during the fetch makes concurrent callers wait for the
     # first one and then take its cached answer instead of asking again.
     with _LOOKUP_LOCK:
         cached = _lookup_cache.get(key)
-        if cached and time.monotonic() - cached[0] < _LOOKUP_CACHE_SECONDS:
+        if cached and time.monotonic() - cached[0] < max_age:
             return cached[1]
 
         wait = _last_lookup_at + _LOOKUP_GAP_SECONDS - time.monotonic()
@@ -52,97 +71,229 @@ def _throttled_lookup(api_key: str, name: str, fetch: Callable[[], Any]) -> Any:
         return result
 
 
-class _ThrottledUser(User):
-    """elevenlabslib's User with the account lookups routed through the throttle.
-    Model and Voice objects call back into their linked User, so the overrides
-    also cover the lookups the library makes internally."""
+def _error_message(response: requests.Response) -> str:
+    """The readable part of an ElevenLabs error answer."""
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return f"{response.status_code} {response.text[:300]}"
+    if isinstance(detail, dict):
+        return detail.get("message") or str(detail)
+    return str(detail or response.status_code)
 
-    def get_subscription_data(self) -> dict:
-        return _throttled_lookup(
-            self.xi_api_key, "subscription", super().get_subscription_data
-        )
 
-    def get_models(self):
-        return _throttled_lookup(self.xi_api_key, "models", super().get_models)
-
-    def get_available_voices(self, show_legacy: bool = True):
-        return _throttled_lookup(
-            self.xi_api_key,
-            f"voices:{show_legacy}",
-            lambda: super(_ThrottledUser, self).get_available_voices(show_legacy),
-        )
+def _error_code(response: requests.Response) -> str:
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return ""
+    if isinstance(detail, dict):
+        return detail.get("code") or detail.get("status") or ""
+    return ""
 
 
 class ElevenLabs:
     def __init__(self, api_key: str, wingman_name: str):
         self.wingman_name = wingman_name
-        self.user = _ThrottledUser(api_key)
         self.printr = Printr()
         self.api_key = api_key
 
-    def _quantize_stability(self, stability: float) -> float:
-        if stability <= 0.25:
-            return 0.0
-        if stability <= 0.75:
-            return 0.5
-        return 1.0
+    # ─── HTTP ────────────────────────────────────────────────────────────
 
-    def _get_voice_id(self, voice, config: ElevenlabsConfig) -> str:
+    def _request(
+        self, method: str, path: str, retries: int = 2, **kwargs
+    ) -> requests.Response:
+        """One call to the ElevenLabs API. Retries a 429 with a short wait.
+        Raises ValueError with ElevenLabs' message on any other error."""
+        headers = {"xi-api-key": self.api_key, **kwargs.pop("headers", {})}
+        kwargs.setdefault("timeout", 60)
+        for attempt in range(retries + 1):
+            response = requests.request(
+                method, f"{API_URL}{path}", headers=headers, **kwargs
+            )
+            if response.status_code == 429 and attempt < retries:
+                response.close()
+                time.sleep(1.0 + attempt)
+                continue
+            if response.status_code >= 400:
+                message = _error_message(response)
+                response.close()
+                raise ValueError(message)
+            return response
+        raise ValueError("Too many requests")
+
+    def _get_json(self, path: str, **kwargs) -> Any:
+        return self._request("GET", path, **kwargs).json()
+
+    # ─── Account lookups ─────────────────────────────────────────────────
+
+    def get_subscription_data(self) -> dict:
+        return _throttled_lookup(
+            self.api_key,
+            "subscription",
+            lambda: self._get_json("/v1/user/subscription"),
+        )
+
+    def get_available_voices(self) -> list[dict]:
+        def fetch():
+            voices: list[dict] = []
+            params: dict[str, Any] = {"page_size": 100}
+            while True:
+                page = self._get_json("/v2/voices", params=params)
+                voices.extend(page.get("voices", []))
+                token = page.get("next_page_token")
+                if not page.get("has_more") or not token:
+                    return voices
+                params["next_page_token"] = token
+
+        return _throttled_lookup(self.api_key, "voices", fetch)
+
+    def get_available_models(self) -> list[dict]:
+        return _throttled_lookup(
+            self.api_key,
+            "models",
+            lambda: self._get_json("/v1/models"),
+            max_age=_MODELS_CACHE_SECONDS,
+        )
+
+    def get_models(self) -> list[ElevenlabsModel]:
+        """The text to speech models, with the request limit of this account."""
+        free = self.get_subscription_data().get("tier") == "free"
+        return [
+            ElevenlabsModel(
+                name=model["name"],
+                model_id=model["model_id"],
+                description=model.get("description", ""),
+                max_characters=model[
+                    (
+                        "max_characters_request_free_user"
+                        if free
+                        else "max_characters_request_subscribed_user"
+                    )
+                ],
+                cost_factor=model["token_cost_factor"],
+                supported_languages=[
+                    {"language_id": l["language_id"], "name": l["name"]}
+                    for l in model.get("languages", [])
+                ],
+                metadata=model,
+            )
+            for model in self.get_available_models()
+            if model.get("can_do_text_to_speech", True)
+        ]
+
+    def _forget_subscription(self):
+        with _LOOKUP_LOCK:
+            _lookup_cache.pop((self.api_key, "subscription"), None)
+
+    # ─── Text to speech ──────────────────────────────────────────────────
+
+    def _get_voice_id(self, config: ElevenlabsConfig) -> str:
+        """The configured ID, or the voice with that name. ElevenLabs names
+        voices "Adam - Dominant, Firm", while configs say "Adam": the part
+        before " - " counts too, an ElevenLabs voice before one of the
+        user's own."""
         if config.voice.id:
             return config.voice.id
+        name = (config.voice.name or "").strip().lower()
+        voices = self.get_available_voices()
+        for voice in voices:
+            if voice.get("name", "").strip().lower() == name:
+                return voice["voice_id"]
+        matches = [
+            voice
+            for voice in voices
+            if voice.get("name", "").split(" - ")[0].strip().lower() == name
+        ]
+        matches.sort(key=lambda voice: voice.get("category") != "premade")
+        if matches:
+            return matches[0]["voice_id"]
+        raise ValueError(f"ElevenLabs voice '{config.voice.name}' not found.")
 
-        voice_id = getattr(voice, "voiceID", None) or getattr(voice, "voice_id", None)
-        if not voice_id:
-            raise ValueError("Unable to resolve ElevenLabs voice ID.")
+    def _speaks(self, model_id: str, language: str) -> bool:
+        """Whether the model lists the language. ElevenLabs answers 400 when a
+        request names one it doesn't."""
+        for model in self.get_available_models():
+            if model.get("model_id") == model_id:
+                return any(
+                    l.get("language_id") == language for l in model.get("languages", [])
+                )
+        return False
 
-        return voice_id
+    def _tts_payload(
+        self, text: str, config: ElevenlabsConfig, language: Optional[str] = None
+    ) -> dict:
+        settings = config.voice_settings
+        voice_settings = {
+            "stability": settings.stability,
+            "similarity_boost": settings.similarity_boost,
+            "use_speaker_boost": settings.use_speaker_boost,
+            "speed": settings.speed,
+        }
+        if config.model != "eleven_turbo_v2":
+            voice_settings["style"] = settings.style
+        payload = {"text": text, "model_id": config.model, "voice_settings": voice_settings}
+        if language:
+            try:
+                if self._speaks(config.model, language):
+                    payload["language_code"] = language
+            except (ValueError, requests.RequestException):
+                pass  # without the hint the model detects the language itself
+        return payload
 
-    async def _generate_audio_direct(
+    def _generate_audio(
         self,
         text: str,
         config: ElevenlabsConfig,
         voice_id: str,
+        language: Optional[str] = None,
     ) -> bytes:
-        stability = self._quantize_stability(config.voice_settings.stability)
-
-        payload = {
-            "text": text,
-            "model_id": config.model,
-            "voice_settings": {
-                "stability": stability,
-                "similarity_boost": config.voice_settings.similarity_boost,
-                "style": config.voice_settings.style,
-                "use_speaker_boost": config.voice_settings.use_speaker_boost,
-            },
-        }
-
-        headers = {
-            "xi-api-key": self.api_key,
-            "accept": "audio/mpeg",
-            "content-type": "application/json",
-        }
-
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-        params = {"output_format": "mp3_44100_192"}
-
-        response = await asyncio.to_thread(
-            requests.post,
-            url,
-            headers=headers,
-            json=payload,
-            params=params,
-            timeout=60,
+        response = self._request(
+            "POST",
+            f"/v1/text-to-speech/{voice_id}",
+            params={"output_format": _MP3_FORMAT},
+            json=self._tts_payload(text, config, language),
+            headers={"accept": "audio/mpeg"},
         )
-        if response.status_code >= 400:
-            self.printr.print(
-                f"ElevenLabs direct TTS failed: {response.status_code} {response.text}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-        response.raise_for_status()
         return response.content
 
-    async def _stream_audio_direct_v3(
+    def _open_pcm_stream(
+        self,
+        text: str,
+        config: ElevenlabsConfig,
+        voice_id: str,
+        language: Optional[str] = None,
+    ) -> tuple[requests.Response, int]:
+        """Starts a PCM stream and returns it with its sample rate. Falls back
+        to 24 kHz when the account's tier doesn't get 44.1 kHz."""
+        preferred = _pcm_format_by_key.get(self.api_key, _PCM_FORMATS[0])
+        formats = _PCM_FORMATS[_PCM_FORMATS.index(preferred) :]
+        payload = self._tts_payload(text, config, language)
+        for output_format in formats:
+            response = requests.post(
+                f"{API_URL}/v1/text-to-speech/{voice_id}/stream",
+                headers={"xi-api-key": self.api_key, "accept": "audio/pcm"},
+                params={"output_format": output_format},
+                json=payload,
+                stream=True,
+                timeout=60,
+            )
+            if response.status_code == 403 and output_format != formats[-1]:
+                code = _error_code(response)
+                response.close()
+                if code in ("subscription_required", "output_format_not_allowed"):
+                    _pcm_format_by_key[self.api_key] = formats[-1]
+                    continue
+                raise ValueError(_error_message(response))
+            if response.status_code >= 400:
+                message = _error_message(response)
+                response.close()
+                raise ValueError(message)
+            _pcm_format_by_key[self.api_key] = output_format
+            return response, int(output_format.split("_")[1])
+        raise ValueError("No PCM output format available.")
+
+    async def _stream_audio(
         self,
         text: str,
         config: ElevenlabsConfig,
@@ -153,56 +304,11 @@ class ElevenLabs:
         sound_config: SoundConfig,
         on_playback_started: Callable[[], None],
         on_playback_finished: Callable[[], None],
-    ) -> bool:
-        stability = self._quantize_stability(config.voice_settings.stability)
-
-        payload = {
-            "text": text,
-            "model_id": config.model,
-            "voice_settings": {
-                "stability": stability,
-                "similarity_boost": config.voice_settings.similarity_boost,
-                "style": config.voice_settings.style,
-                "use_speaker_boost": config.voice_settings.use_speaker_boost,
-            },
-        }
-
-        headers = {
-            "xi-api-key": self.api_key,
-            "accept": "audio/pcm",
-            "content-type": "application/json",
-        }
-
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
-        params = {"output_format": "pcm_44100"}
-
-        response = await asyncio.to_thread(
-            requests.post,
-            url,
-            headers=headers,
-            json=payload,
-            params=params,
-            stream=True,
-            timeout=60,
+        language: Optional[str] = None,
+    ):
+        response, sample_rate = await asyncio.to_thread(
+            self._open_pcm_stream, text, config, voice_id, language
         )
-        if response.status_code >= 400:
-            self.printr.print(
-                f"ElevenLabs direct streaming failed: {response.status_code} {response.text}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-            if (
-                response.status_code == 403
-                and "output_format_not_allowed" in response.text
-            ):
-                self.printr.print(
-                    "ElevenLabs PCM streaming is not available for this account tier. Falling back to non-streaming playback.",
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
-                response.close()
-                return False
-        response.raise_for_status()
 
         if audio_player.is_playing:
             await audio_player.stop_playback()
@@ -215,7 +321,7 @@ class ElevenLabs:
             try:
                 on_playback_started()
                 my_stream = sd.RawOutputStream(
-                    samplerate=44100,
+                    samplerate=sample_rate,
                     channels=1,
                     dtype="int16",
                 )
@@ -223,10 +329,17 @@ class ElevenLabs:
                 my_stream.start()
 
                 volume = sound_config.volume
+                # int16 samples are 2 bytes: a chunk can end in the middle of one.
+                leftover = b""
                 for chunk in response.iter_content(chunk_size=4096):
                     # raw_stream replaced by stop_playback() or a newer playback: stop.
                     if audio_player.raw_stream is not my_stream:
                         break
+                    if not chunk:
+                        continue
+                    chunk = leftover + chunk
+                    usable = len(chunk) - len(chunk) % 2
+                    chunk, leftover = chunk[:usable], chunk[usable:]
                     if not chunk:
                         continue
 
@@ -236,7 +349,7 @@ class ElevenLabs:
                     )
                     audio_chunk = audio_chunk.reshape(-1, 1)
                     for sound_effect in sound_effects:
-                        audio_chunk = sound_effect(audio_chunk, 44100, reset=False)
+                        audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
                     if volume != 1.0:
                         audio_chunk = audio_chunk * volume
                     audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
@@ -268,7 +381,6 @@ class ElevenLabs:
 
         # await the blocking stream (on a worker thread) so callers serialize playback
         await asyncio.to_thread(stream_audio)
-        return True
 
     def validate_config(
         self, config: ElevenlabsConfig, errors: list[WingmanInitializationError]
@@ -295,37 +407,62 @@ class ElevenLabs:
         audio_player: AudioPlayer,
         wingman_name: str,
         stream: bool,
+        language: Optional[str] = None,
     ):
-        use_stream = stream
-        use_direct_api = config.model.startswith("eleven_v3")
+        """language: ISO 639-1 code of the spoken language, sent when the
+        model speaks it (services/spoken_language.elevenlabs_language)."""
+        try:
+            voice_id = await asyncio.to_thread(self._get_voice_id, config)
+            if stream:
+                await self._play_streamed(
+                    text,
+                    config,
+                    voice_id,
+                    sound_config,
+                    audio_player,
+                    wingman_name,
+                    language,
+                )
+            else:
+                audio_bytes = await asyncio.to_thread(
+                    self._generate_audio, text, config, voice_id, language
+                )
+                if audio_bytes:
+                    await audio_player.play_with_effects(
+                        input_data=audio_bytes,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                    )
+        except (ValueError, requests.RequestException) as e:
+            self.printr.toast_error(f"ElevenLabs: {e}")
 
-        voice = (
-            self.user.get_voice_by_ID(config.voice.id)
-            if config.voice.id
-            else self.user.get_voices_by_name_v2(config.voice.name)[0]
-        )
+    async def _play_streamed(
+        self,
+        text: str,
+        config: ElevenlabsConfig,
+        voice_id: str,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        language: Optional[str],
+    ):
+        def notify_playback_started():
+            if sound_config.play_beep:
+                audio_player.play_wav_sample("beep.wav", sound_config.volume)
+            elif sound_config.play_beep_apollo:
+                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
 
-        # signals playback end (natural or interrupt) for the streaming await below
-        playback_complete = Event()
-        # Set to the lib output stream in the lib path below. Used to detect when this
-        # playback has already been superseded before its (async) onPlaybackEnd fires.
-        lib_owned_stream = {"stream": None}
+            if SoundEffect.HIGH_END_RADIO in sound_config.effects:
+                audio_player.play_wav_sample(
+                    "Radio_Static_Beep.wav", sound_config.volume
+                )
+
+            WebSocketUser.ensure_async(
+                audio_player.notify_playback_started(wingman_name)
+            )
 
         def handle_playback_finished():
-            # lib path only: if a newer playback already took over the shared audio
-            # state, don't clear is_playing / notify Core for a playback that's gone -
-            # that would clobber the successor and resume VA mid-playback. Still release
-            # our own waiter. (The direct path leaves lib_owned_stream None and is
-            # guarded by its caller's raw_stream identity check instead.)
-            if (
-                lib_owned_stream["stream"] is not None
-                and audio_player.raw_stream is not lib_owned_stream["stream"]
-            ):
-                playback_complete.set()
-                return
-
-            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
-            if contains_high_end_radio:
+            if SoundEffect.HIGH_END_RADIO in sound_config.effects:
                 audio_player.play_wav_sample(
                     "Radio_Static_Beep.wav", sound_config.volume
                 )
@@ -340,176 +477,58 @@ class ElevenLabs:
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
             )
-            playback_complete.set()
 
-        def notify_playback_started():
-            if sound_config.play_beep:
-                audio_player.play_wav_sample("beep.wav", sound_config.volume)
-            elif sound_config.play_beep_apollo:
-                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
-
-            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
-            if contains_high_end_radio:
-                audio_player.play_wav_sample(
-                    "Radio_Static_Beep.wav", sound_config.volume
-                )
-
-            WebSocketUser.ensure_async(
-                audio_player.notify_playback_started(wingman_name)
-            )
-
-        sound_effects = get_sound_effects(sound_config)
-
-        def audio_post_processor(audio_chunk, sample_rate):
-            for sound_effect in sound_effects:
-                audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
-
-            return audio_chunk
-
-        playback_options = (
-            PlaybackOptions(
-                runInBackground=True,
-                onPlaybackStart=notify_playback_started,
-                onPlaybackEnd=handle_playback_finished,
-            )
-            if use_stream
-            else PlaybackOptions(runInBackground=True)
+        await self._stream_audio(
+            text=text,
+            config=config,
+            voice_id=voice_id,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+            sound_effects=get_sound_effects(sound_config),
+            sound_config=sound_config,
+            on_playback_started=notify_playback_started,
+            on_playback_finished=handle_playback_finished,
+            language=language,
         )
 
-        if use_stream and len(sound_effects) > 0:
-            playback_options.audioPostProcessor = audio_post_processor
-
-        generation_options = GenerationOptions(
-            model=config.model,
-            use_speaker_boost=config.voice_settings.use_speaker_boost,
-            stability=config.voice_settings.stability,
-            similarity_boost=config.voice_settings.similarity_boost,
-            style=(
-                config.voice_settings.style
-                if config.model != "eleven_turbo_v2"
-                else None
-            ),
-        )
-
-        if use_direct_api and use_stream:
-            voice_id = self._get_voice_id(voice, config)
-            stream_ok = await self._stream_audio_direct_v3(
-                text=text,
-                config=config,
-                voice_id=voice_id,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-                sound_effects=sound_effects,
-                sound_config=sound_config,
-                on_playback_started=notify_playback_started,
-                on_playback_finished=handle_playback_finished,
-            )
-            if not stream_ok:
-                audio_bytes = await self._generate_audio_direct(text, config, voice_id)
-                if audio_bytes:
-                    await audio_player.play_with_effects(
-                        input_data=audio_bytes,
-                        config=sound_config,
-                        wingman_name=wingman_name,
-                    )
-        elif use_direct_api:
-            voice_id = self._get_voice_id(voice, config)
-            audio_bytes = await self._generate_audio_direct(text, config, voice_id)
-            if audio_bytes:
-                await audio_player.play_with_effects(
-                    input_data=audio_bytes,
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
-        elif not use_stream:
-            # play with our audio player so that we call our started and ended callbacks
-            audio_bytes, generation_info = voice.generate_audio_v3(
-                prompt=text,
-                generation_options=generation_options,
-            )
-            if audio_bytes:
-                await audio_player.play_with_effects(
-                    input_data=audio_bytes.result(),
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
-        else:
-            # playback using elevenlabslib
-            if audio_player.is_playing:
-                await audio_player.stop_playback()
-            audio_player.is_playing = True
-            audio_player.wingman_name = wingman_name
-            output_stream = None
-            try:
-                _, _, output_stream_future, _ = voice.stream_audio_v3(
-                    prompt=text,
-                    generation_options=generation_options,
-                    playback_options=playback_options,
-                )
-                output_stream = output_stream_future.result()
-                # Register the lib's stream as raw_stream so stop_playback() halts it and
-                # a superseding playback is detectable by identity (same contract as the
-                # direct path). onPlaybackEnd sets playback_complete on natural end.
-                audio_player.raw_stream = output_stream
-                # After raw_stream: a stray onPlaybackEnd in the gap then sees
-                # lib_owned_stream still None and finishes normally, never mis-guards.
-                lib_owned_stream["stream"] = output_stream
-                # playback_complete is set by onPlaybackEnd, which fires on every real
-                # stream termination (natural end, CallbackStop, abort, stop). The
-                # raw_stream identity check exits if a newer playback supersedes us.
-                while (
-                    not playback_complete.is_set()
-                    and audio_player.raw_stream is output_stream
-                ):
-                    await asyncio.sleep(0.1)
-            finally:
-                if audio_player.raw_stream is output_stream:
-                    audio_player.raw_stream = None
-                    audio_player.is_playing = False
+    # ─── Sound effects ───────────────────────────────────────────────────
 
     async def generate_sound_effect(
         self,
         prompt: str,
         duration_seconds: Optional[float] = None,
         prompt_influence: Optional[float] = None,
-    ):
-        options = SFXOptions(
-            duration_seconds=duration_seconds, prompt_influence=prompt_influence
+    ) -> bytes:
+        payload: dict[str, Any] = {"text": prompt}
+        if duration_seconds is not None:
+            payload["duration_seconds"] = duration_seconds
+        if prompt_influence is not None:
+            payload["prompt_influence"] = prompt_influence
+
+        response = await asyncio.to_thread(
+            self._request,
+            "POST",
+            "/v1/sound-generation",
+            params={"output_format": _MP3_FORMAT},
+            json=payload,
+            timeout=120,
         )
-        req, _ = self.user.generate_sfx(prompt, options)
-
-        result_ready = asyncio.Event()
-        audio: bytes = None
-
-        def get_result(future: asyncio.Future[bytes]):
-            nonlocal audio
-            audio = future.result()
-            result_ready.set()  # Signal that the result is ready
-
-        req.add_done_callback(get_result)
-
-        # Wait for the result to be ready
-        await result_ready.wait()
-        # The effect used up characters: the Audio Library reloads the count next.
-        with _LOOKUP_LOCK:
-            _lookup_cache.pop((self.api_key, "subscription"), None)
-        return audio
-
-    def get_available_voices(self):
-        return self.user.get_available_voices()
-
-    def get_available_models(self):
-        return self.user.get_models()
-
-    def get_subscription_data(self):
-        return self.user.get_subscription_data()
+        # The effect used up credits: the Audio Library reloads the count next.
+        self._forget_subscription()
+        return response.content
 
 
 @tts_provider(TtsProvider.ELEVENLABS)
 class ElevenLabsTts(TtsInterface):
-    def __init__(self, elevenlabs_instance: "ElevenLabs", config: "WingmanConfig"):
+    def __init__(
+        self,
+        elevenlabs_instance: "ElevenLabs",
+        config: "WingmanConfig",
+        settings: "SettingsConfig",
+    ):
         self._elevenlabs = elevenlabs_instance
         self._config = config
+        self._settings = settings
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         await self._elevenlabs.play_audio(
@@ -519,4 +538,7 @@ class ElevenLabsTts(TtsInterface):
             audio_player=audio_player,
             wingman_name=wingman_name,
             stream=self._config.elevenlabs.output_streaming,
+            language=elevenlabs_language(
+                self._settings.spoken_language, self._settings.other_language
+            ),
         )

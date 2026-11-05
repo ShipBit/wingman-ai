@@ -1,9 +1,9 @@
-"""Where Core asks the System One model, and what it does without an answer.
+"""Where Core asks the decision model, and what it does without an answer.
 
 One object per caller, built whether or not the feature is switched on, so
 the call sites stay a single ``if`` and never grow a second code path.
-Switched off — ``settings.system_one.enabled`` false, or nothing to
-authenticate with — every method returns the value that means "decide the way
+Switched off — ``settings.decision_model.enabled`` false, or a provider
+without what it needs — every method returns the value that means "decide the way
 you did before", and nothing reaches the network.
 
 The switch is read on every call rather than captured at construction. A user
@@ -23,13 +23,16 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Optional
 
 from api.enums import LogType
-from api.interface import CommandConfig, SettingsConfig
-from providers.typesafe_jev import JevClient, JevResult
-from services.jev_decisions import (
+from api.interface import CommandConfig, SettingsConfig, WingmanConfig
+from providers.decision_model import DecisionModelClient, DecisionResult
+from services.decision_questions import (
     command_questions,
     read_command,
     read_vocabulary,
+    read_wingman,
     vocabulary_questions,
+    wingman_questions,
+    wingman_state,
 )
 from services.printr import Printr
 
@@ -43,8 +46,9 @@ def _threshold(name: str, fallback: float) -> float:
         return fallback
 
 
-COMMAND_CONFIDENCE = _threshold("WINGMAN_JEV_COMMAND_CONFIDENCE", 0.8)
-"""How sure Jev has to be before a key is pressed without asking the main model.
+COMMAND_CONFIDENCE = _threshold("WINGMAN_DECISION_COMMAND_CONFIDENCE", 0.8)
+"""How sure the decision model has to be before a key is pressed without
+asking the main model. Measured on Jev; other models may want their own.
 
 Measured on the shipped Star Citizen config, 40 command turns and 22 that are
 not commands (evals/jev_bench, 2026-09-20):
@@ -64,7 +68,7 @@ MAX_COMMAND_OPTIONS = 254
 """How many commands fit in one question. TypeSafe's limit is 255 options and
 one of them is the "no command" escape hatch."""
 
-VOCABULARY_THRESHOLD = _threshold("WINGMAN_JEV_VOCABULARY_THRESHOLD", 0.5)
+VOCABULARY_THRESHOLD = _threshold("WINGMAN_DECISION_VOCABULARY_THRESHOLD", 0.5)
 """Where "the speaker meant the Star Citizen name" starts.
 
 The middle, and the measurement put a clean gap around it: on 20 cases every
@@ -73,7 +77,7 @@ should not scored 0.36 or below. Both errors cost the same here — a wrong
 replacement and a missed one each hand the model a word the user did not
 say — so there is no reason to lean either way."""
 
-VOCABULARY_DEADLINE = _threshold("WINGMAN_JEV_VOCABULARY_DEADLINE", 1.5)
+VOCABULARY_DEADLINE = _threshold("WINGMAN_DECISION_VOCABULARY_DEADLINE", 1.5)
 """Seconds the transcript waits for the vocabulary check, end to end.
 
 The check sits between the speech model and the wingman, so every second
@@ -84,72 +88,89 @@ own answer goes through, exactly as with the gate switched off.
 1.5 s is about twice the median System One call in the field (770 ms over
 28 calls, 2026-10-11), and above all but two of them."""
 
-VOCABULARY_PAUSE = _threshold("WINGMAN_JEV_VOCABULARY_PAUSE", 60.0)
+VOCABULARY_PAUSE = _threshold("WINGMAN_DECISION_VOCABULARY_PAUSE", 60.0)
 """Seconds the check is not asked again after it failed or ran out of time.
 
 A gateway that is down or slow stays that way for a while. Without a pause,
 every utterance with a name in it would wait out the deadline again."""
 
 
-class JevGate:
-    """The wingman's line to the System One model.
+class DecisionGate:
+    """The wingman's line to the decision model.
 
     Every method here is allowed to fail. What it returns on failure is what
-    the caller did before Jev existed, so a gateway outage shows up as the
+    the caller did before the decision model existed, so a gateway outage shows up as the
     old latency and nothing else.
     """
 
     def __init__(self, wingman_name: str = "", settings: Optional[SettingsConfig] = None):
         self.wingman_name = wingman_name
         self.settings = settings
-        self.client = JevClient(subscription=settings.wingman_pro if settings else None)
-        self.last: Optional[JevResult] = None
+        self.client = DecisionModelClient(settings=settings)
+        self.last: Optional[DecisionResult] = None
         """The most recent answer, for the log."""
         self.turn_decisions: list[tuple[str, float]] = []
         """What this turn asked and how long each took, for the benchmark the
         client shows. Skills share the wingman's gate, so their decisions land
         here too and the user sees the whole cost of the layer, not only
         Core's part of it."""
-        self._warned_without_access = False
-        """A plan without System One access must not say so on every utterance."""
+        self._warned_reason = ""
+        """Why the last warning said no call was possible. A missing key must
+        not be reported on every utterance, but a different reason — the
+        user switched provider — is news."""
         self._warned_about_command_count = False
         """Nor must a config too big to ask about."""
         self._vocabulary_paused_until = 0.0
         """Until when the vocabulary check is skipped after a failure, in
         ``time.monotonic()`` seconds."""
         self._vocabulary_pool = ThreadPoolExecutor(
-            max_workers=2, thread_name_prefix="jev-vocabulary"
+            max_workers=2, thread_name_prefix="decision-vocabulary"
         )
         """Runs the call so the transcript can stop waiting at the deadline.
         A call that outlives it finishes here, and its answer is dropped."""
 
     def update_settings(self, settings: SettingsConfig) -> None:
-        """Settings changed in the client. The subscription goes with them: a
-        user who signs in gets a token the client has to start using."""
+        """Settings changed in the client. The provider goes with them: the
+        next call already goes where the user just pointed it."""
         self.settings = settings
-        self.client.subscription = settings.wingman_pro if settings else None
+        self.client.settings = settings
 
     @property
     def enabled(self) -> bool:
         """What the user asked for, read fresh on every call."""
-        return bool(self.settings and self.settings.system_one.enabled)
+        return bool(self.settings and self.settings.decision_model.enabled)
 
     @property
     def active(self) -> bool:
         """Whether a call would actually reach a model."""
         if not self.enabled:
             return False
-        if self.client.is_ready():
+        route, reason = self.client.route()
+        if route is not None:
+            self._warned_reason = ""
             return True
-        if not self._warned_without_access:
-            self._warned_without_access = True
+        if reason != self._warned_reason:
+            self._warned_reason = reason
             printr.print(
-                "System One is on, but there is no Wingman Pro session and no "
-                "AI_GATEWAY_API_KEY - decisions stay with the main model.",
+                f"The decision model is on, but {reason} - decisions stay "
+                "with the main model.",
                 color=LogType.WARNING,
                 server_only=True,
             )
         return False
+
+    def _switched_on(self, place: str) -> bool:
+        """Whether the user lets the decision model decide at this place: the master switch
+        and the place's own one under it."""
+        return self.active and bool(getattr(self.settings.decision_model, place))
+
+    @property
+    def wingman_choice_active(self) -> bool:
+        return self._switched_on("wingman_choice")
+
+    @property
+    def skills_active(self) -> bool:
+        return self._switched_on("skills")
 
     def take_decisions(self) -> list[tuple[str, float]]:
         """Everything decided since the last call, and reset.
@@ -161,17 +182,17 @@ class JevGate:
         decisions, self.turn_decisions = self.turn_decisions, []
         return decisions
 
-    def _record(self, label: str, result: JevResult) -> JevResult:
+    def _record(self, label: str, result: DecisionResult) -> DecisionResult:
         self.last = result
         self.turn_decisions.append((label, result.seconds * 1000))
         return result
 
-    async def _ask(self, state, questions, label: str = "System One") -> JevResult:
+    async def _ask(self, state, questions, label: str = "Decision model") -> DecisionResult:
         """Off the event loop. An HTTP call of several seconds on the loop
         would hold up playback and the next utterance behind it."""
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, lambda: self.client.system_one(state, questions)
+            None, lambda: self.client.decide(state, questions)
         )
         return self._record(label, result)
 
@@ -197,7 +218,7 @@ class JevGate:
         None means nothing was decided: off, no access, no commands, a config
         too big to ask about, or an answer below the gate.
         """
-        if not (self.active and self.settings and self.settings.system_one.commands):
+        if not self._switched_on("commands"):
             return None
 
         askable = self._askable_commands(commands)
@@ -213,12 +234,42 @@ class JevGate:
         picked = read_command(result, COMMAND_CONFIDENCE)
         if not picked:
             printr.print(
-                f"Jev: no command at {COMMAND_CONFIDENCE} or above, the main "
+                f"Decision model: no command at {COMMAND_CONFIDENCE} or above, the main "
                 "model decides.",
                 color=LogType.SYSTEM,
                 server_only=True,
             )
         return picked
+
+    def pick_wingman(
+        self,
+        transcript: str,
+        configs: list[WingmanConfig],
+        recent: Optional[dict[str, dict[str, str]]] = None,
+        last_answer_from: Optional[str] = None,
+    ) -> Optional[str]:
+        """The wingman a sentence from the global push-to-talk key is for,
+        when it named none and no wingman is the default. None only when the
+        decision model is off, has no access or the call failed.
+
+        No confidence gate, unlike everywhere else the decision model decides:
+        someone who held the key wants an answer, and nothing happening looks
+        broken. So the most likely wingman answers even when it is unsure. Measured
+        2026-10-26 on 42 sentences x 2: 98.8% right taking the top pick.
+
+        Blocking: called on the transcription thread, which waits for the
+        answer anyway before anything can be said.
+        """
+        if not self.wingman_choice_active or len(configs) < 2:
+            return None
+        result = self._record(
+            "Wingman choice",
+            self.client.decide(
+                wingman_state(transcript, recent or {}, last_answer_from),
+                wingman_questions(configs),
+            ),
+        )
+        return read_wingman(result, 0.0)
 
     def _askable_commands(self, commands: list[CommandConfig]) -> list[CommandConfig]:
         """The commands that fit in one question, or none at all.
@@ -226,7 +277,7 @@ class JevGate:
         Nothing is limited or truncated by this. A Wingman may have as many
         commands as its owner likes and the main model is offered every one
         of them, exactly as before. The only thing that stops past the
-        ceiling is *asking the System One model*, and that Wingman then
+        ceiling is *asking the decision model*, and that Wingman then
         works the way it did in 3.2.3.
 
         A choice takes 255 options and one of them is the "no command"
@@ -272,18 +323,18 @@ class JevGate:
         speech is usually never. "Shields up." produces no candidate and
         costs nothing.
         """
-        if not self.active or not proposals:
+        if not self._switched_on("vocabulary") or not proposals:
             return None
         if time.monotonic() < self._vocabulary_paused_until:
             return None
         candidates = [(heard, entry) for heard, entry, _blocked in proposals]
         future = self._vocabulary_pool.submit(
-            self.client.system_one, {"transcript": text}, vocabulary_questions(candidates)
+            self.client.decide, {"transcript": text}, vocabulary_questions(candidates)
         )
         try:
             result = future.result(timeout=VOCABULARY_DEADLINE)
         except FutureTimeout:
-            result = JevResult(
+            result = DecisionResult(
                 seconds=VOCABULARY_DEADLINE,
                 error=f"no answer within {VOCABULARY_DEADLINE:.1f} s",
             )
@@ -291,7 +342,7 @@ class JevGate:
         if result.error:
             self._vocabulary_paused_until = time.monotonic() + VOCABULARY_PAUSE
             printr.print(
-                f"Jev vocabulary check failed ({result.error}) - the matcher "
+                f"Decision model vocabulary check failed ({result.error}) - the matcher "
                 f"decides alone for the next {VOCABULARY_PAUSE:.0f} s.",
                 color=LogType.WARNING,
                 server_only=True,
@@ -301,7 +352,7 @@ class JevGate:
         applied = [candidates[i] for i in sorted(confirmed or set())]
         if applied:
             printr.print(
-                "Jev vocabulary, replacing: "
+                "Decision model vocabulary, replacing: "
                 + ", ".join(f"{heard} -> {entry}" for heard, entry in applied),
                 color=LogType.SYSTEM,
                 server_only=True,
@@ -310,22 +361,22 @@ class JevGate:
 
     # ── the open door for skills ────────────────────────────────────
 
-    async def ask(self, state, questions: dict) -> Optional[JevResult]:
+    async def ask(self, state, questions: dict) -> Optional[DecisionResult]:
         """Any questions a skill wants answered. None when the feature is off.
 
         Deliberately unconstrained: the two decisions above are Core's, and a
         skill's will be something we did not think of. What it does not get is
-        a way around the switch — off is off, here as everywhere.
+        a way around the switches: the master one and the one for skills.
         """
-        if not self.active:
+        if not self.skills_active:
             return None
         return await self._ask(state, questions, f"Skill: {len(questions)} question(s)")
 
-    def ask_sync(self, state, questions: dict) -> Optional[JevResult]:
+    def ask_sync(self, state, questions: dict) -> Optional[DecisionResult]:
         """Blocking version, for a skill already off the event loop."""
-        if not self.active:
+        if not self.skills_active:
             return None
         return self._record(
             f"Skill: {len(questions)} question(s)",
-            self.client.system_one(state, questions),
+            self.client.decide(state, questions),
         )

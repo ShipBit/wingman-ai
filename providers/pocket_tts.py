@@ -2,12 +2,14 @@ import os
 import copy
 import io
 import glob
+import ssl
 import asyncio
 import threading
 import time
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Callable, Optional
 
+import requests
 import torch
 import torchaudio
 from pocket_tts import TTSModel
@@ -142,6 +144,50 @@ class VoiceNotFoundError(ValueError):
     folder: a setting to fix, not a bug."""
 
 
+class BuiltinVoiceUnavailableError(ValueError):
+    """A built-in voice was asked for while a custom model config is loaded.
+    Upstream has no embeddings for that model: a setting to fix, not a bug."""
+
+
+class ModelNotLoadedError(RuntimeError):
+    """The model was unloaded (stopped, switched or disabled) before or while a
+    line was synthesized. The user did that; it is not a bug."""
+
+    def __init__(self):
+        super().__init__("PocketTTS model is not loaded.")
+
+
+class BuiltinVoiceDownloadError(ValueError):
+    """A built-in voice could not be downloaded because of the network (no
+    internet, a timeout, a proxy that breaks certificates). Not a bug."""
+
+
+_NETWORK_ERRORS = (
+    requests.RequestException,
+    ConnectionError,
+    TimeoutError,
+    ssl.SSLError,
+)
+
+
+def _is_network_error(error: BaseException) -> bool:
+    """The download failed on the way: no internet, a timeout, a proxy that
+    breaks certificates. Looks through the causes, since the downloader wraps
+    the last attempt's error in its own."""
+    seen: set[int] = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, requests.HTTPError):
+            # The server answered (a 404 for a moved file, a 500): the
+            # connection works, the download itself is broken.
+            return False
+        if isinstance(current, _NETWORK_ERRORS):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class PocketTTS:
     @staticmethod
     def normalize_remote_url(host: str, port: int) -> str:
@@ -232,9 +278,11 @@ class PocketTTS:
         #   _model_swap_lock); cross-thread model safety is _model_swap_lock's job.
         # - _model_swap_lock: reload (daemon thread) waits for in-flight
         #   generation (executor / audio callback threads) before unloading.
+        #   Reentrant: unload_model() takes it too, and the reload calls it
+        #   while holding it.
         self._async_gen_lock: Optional[asyncio.Lock] = None
         self._async_gen_lock_loop: Optional[asyncio.AbstractEventLoop] = None
-        self._model_swap_lock = threading.Lock()
+        self._model_swap_lock = threading.RLock()
         # The startup load, POST /pocket_tts/start and a settings reload may
         # all call load_model() at once; they load one after the other.
         self._load_lock = threading.Lock()
@@ -448,17 +496,20 @@ class PocketTTS:
                 )
 
     def unload_model(self):
-        """Unload the model to free resources."""
-        if self.model:
-            del self.model
-            self.model = None
+        """Unload the model to free resources. Waits for a line being
+        synthesized: generation holds _model_swap_lock and reads self.model
+        throughout."""
+        with self._model_swap_lock:
+            if self.model:
+                del self.model
+                self.model = None
 
-        # Explicitly clear CUDA cache if using GPU to free GPU memory
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+            # Explicitly clear CUDA cache if using GPU to free GPU memory
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-        self.voice_cache.clear()
-        self._warmed_model = None
+            self.voice_cache.clear()
+            self._warmed_model = None
 
         self.printr.print(
             "PocketTTS Model unloaded.", color=LogType.INFO, server_only=True
@@ -918,7 +969,7 @@ class PocketTTS:
         dest = self._builtin_voice_cache_path(voice_id)
         active_tag = self._active_model_tag()
         if active_tag not in {m["id"] for m in BUILTIN_MODELS}:
-            raise ValueError(
+            raise BuiltinVoiceUnavailableError(
                 f"Built-in voice '{voice_id}' is not available for custom model "
                 f"config '{active_tag}'. Use a cloned/custom voice instead."
             )
@@ -1158,14 +1209,28 @@ class PocketTTS:
         ):
             try:
                 self._ensure_builtin_voice(voice_id_or_path)
+            except BuiltinVoiceUnavailableError as e:
+                self.printr.print(str(e), color=LogType.WARNING, server_only=True)
+                raise
             except Exception as e:
+                if _is_network_error(e):
+                    # The user's connection, not a bug: a warning with the hint.
+                    self.printr.print(
+                        f"Failed to download built-in voice '{voice_id_or_path}': {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    raise BuiltinVoiceDownloadError(
+                        f"Built-in voice '{voice_id_or_path}' could not be downloaded "
+                        "for the current model. Check your internet connection."
+                    ) from e
                 self.printr.print(
-                    f"Failed to download built-in voice '{voice_id_or_path}': {e}",
+                    f"Failed to prepare built-in voice '{voice_id_or_path}': {e}",
                     color=LogType.ERROR,
                 )
                 raise ValueError(
-                    f"Built-in voice '{voice_id_or_path}' could not be downloaded "
-                    "for the current model. Check your internet connection."
+                    f"Built-in voice '{voice_id_or_path}' could not be prepared "
+                    f"for the current model: {e}"
                 ) from e
 
         resolved_key = self._resolve_voice_path(voice_id_or_path)
@@ -1302,7 +1367,7 @@ class PocketTTS:
         if not self.model:
             self.printr.toast_error("PocketTTS model not loaded.")
             return
-        voice_missing = None
+        voice_problem = None
         try:
             # We assume config.voice holds the voice ID or path
             voice_id = config.voice if config.voice else "alba"
@@ -1322,16 +1387,23 @@ class PocketTTS:
                         text, voice_state, sound_config, audio_player, wingman_name, voice_id
                     )
 
-        except VoiceNotFoundError as e:
-            voice_missing = str(e)
+        except (
+            VoiceNotFoundError,
+            BuiltinVoiceUnavailableError,
+            BuiltinVoiceDownloadError,
+            ModelNotLoadedError,
+        ) as e:
+            voice_problem = str(e)
         except Exception as e:
             self.printr.toast_error(
                 f"PocketTTS Synthesis failed for {wingman_name}: {str(e)}"
             )
             self.printr.print(f"PocketTTS Generation failed: {e}", color=LogType.ERROR)
-        if voice_missing:
-            # Told outside the except: a missing voice is not reported as a bug.
-            self.printr.toast_error(f"{wingman_name}: {voice_missing}")
+        if voice_problem:
+            # Told outside the except: a missing voice, a built-in voice the
+            # custom model has none of, no internet or a model unloaded
+            # meanwhile is not reported as a bug.
+            self.printr.toast_error(f"{wingman_name}: {voice_problem}")
 
     async def _generate_and_play(
         self, text, voice_state, sound_config, audio_player, wingman_name, voice_id=None
@@ -1344,13 +1416,16 @@ class PocketTTS:
         """
         loop = asyncio.get_running_loop()
 
-        def _generate() -> torch.Tensor:
+        def _generate() -> tuple[torch.Tensor, int]:
             # Protect model lifecycle: a settings-change reload waits on this
             # lock before swapping self.model out.
             with self._model_swap_lock:
-                return torch.cat(list(self._speech_stream(voice_state, text, voice_id)))
+                audio = torch.cat(list(self._speech_stream(voice_state, text, voice_id)))
+                return audio, self.model.sample_rate
 
-        audio_tensor = await loop.run_in_executor(None, _generate)
+        # The sample rate is read under the lock too: the model may be
+        # unloaded as soon as it is released.
+        audio_tensor, sample_rate = await loop.run_in_executor(None, _generate)
 
         # Convert to int16 PCM bytes (same format as the streaming path)
         if audio_tensor.is_cuda:
@@ -1378,7 +1453,7 @@ class PocketTTS:
             buffer_callback=buffer_callback,
             config=sound_config,
             wingman_name=wingman_name,
-            sample_rate=self.model.sample_rate,
+            sample_rate=sample_rate,
             dtype="int16",
             channels=1,
             use_gain_boost=True,
@@ -1388,7 +1463,10 @@ class PocketTTS:
         """Audio chunks for ``text``, generated piece by piece so no piece
         is longer than the model handles cleanly, each faded in and out so
         the joins neither click nor pause too long (see pocket_tts_chunks). Caller holds
-        ``_model_swap_lock``."""
+        ``_model_swap_lock``, so the model cannot go away once this started;
+        raises ModelNotLoadedError when it already had."""
+        if self.model is None:
+            raise ModelNotLoadedError()
         try:
             tokenizer = self.model.flow_lm.conditioner.tokenizer
             pieces = pieces_for_speech(
@@ -1499,7 +1577,10 @@ class PocketTTS:
         settings-change reload waits until the text is spoken.
         """
         loop = asyncio.get_running_loop()
-        sample_rate = self.model.sample_rate
+        model = self.model
+        if model is None:
+            raise ModelNotLoadedError()
+        sample_rate = model.sample_rate
         chunks: asyncio.Queue[Optional[bytes]] = asyncio.Queue()
         cancelled = threading.Event()
 
@@ -1520,6 +1601,11 @@ class PocketTTS:
                             tensor = tensor.cpu()
                         pcm = (tensor * 32767).clamp(-32768, 32767).to(torch.int16)
                         hand_over(pcm.numpy().tobytes())
+            except ModelNotLoadedError as e:
+                # Unloaded between the start of the line and this thread.
+                self.printr.print(
+                    f"PocketTTS stream stopped: {e}", color=LogType.WARNING, server_only=True
+                )
             except Exception as e:
                 self.printr.print(
                     f"PocketTTS stream error: {e}", color=LogType.ERROR, server_only=True

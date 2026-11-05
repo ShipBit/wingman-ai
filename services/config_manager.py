@@ -27,6 +27,8 @@ from api.interface import (
 )
 from services.config_sanitizer import sanitize
 from services.file import get_writable_dir, get_custom_skills_dir
+from services.features import drop_unreleased_properties
+from services.platform_utils import drop_other_platform_properties
 from services.printr import Printr
 from services.system_manager import LOCAL_VERSION
 
@@ -610,7 +612,7 @@ class ConfigManager:
         wingman_config = {
             "name": "",
             "description": "",
-            "record_key": "",
+            "record_bindings": [],
             "disabled": False,
             "commands": [],
             "skills": [],
@@ -626,6 +628,15 @@ class ConfigManager:
             ),
         )
 
+    @staticmethod
+    def _wingman_file_names(config_path: str) -> list[str]:
+        """The wingman YAML files of a config folder. Only its top level: a
+        backup or copied folder inside it must not add each wingman twice."""
+        files = next(walk(config_path), (None, None, []))[2]
+        return sorted(
+            f for f in files if f.endswith(".yaml") and not f.startswith(".")
+        )
+
     def parse_config(
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> Tuple[ConfigDirInfo, Config]:
@@ -636,23 +647,17 @@ class ConfigManager:
         config_path = path.join(self.config_dir, config_dir.directory)
         default_config = self.read_default_config()
 
-        for root, _, files in walk(config_path):
-            for filename in files:
-                if filename.endswith(".yaml") and not filename.startswith("."):
-                    wingman_config = self.read_config(path.join(root, filename))
-                    try:
-                        merged_config = self.merge_configs(
-                            default_config, wingman_config
-                        )
-                    except ConfigValidationError as e:
-                        # Re-raise with the source YAML file name prepended so the
-                        # user immediately knows which file to open and fix.
-                        raise ConfigValidationError(
-                            f"Invalid config in '{filename}':\n{e}"
-                        ) from None
-                    default_config["wingmen"][
-                        filename.replace(".yaml", "")
-                    ] = merged_config
+        for filename in self._wingman_file_names(config_path):
+            wingman_config = self.read_config(path.join(config_path, filename))
+            try:
+                merged_config = self.merge_configs(default_config, wingman_config)
+            except ConfigValidationError as e:
+                # Re-raise with the source YAML file name prepended so the
+                # user immediately knows which file to open and fix.
+                raise ConfigValidationError(
+                    f"Invalid config in '{filename}':\n{e}"
+                ) from None
+            default_config["wingmen"][filename.replace(".yaml", "")] = merged_config
 
         try:
             validated_config = Config(**default_config)
@@ -796,19 +801,17 @@ class ConfigManager:
         """Gets all wingmen configs for a given config."""
         config_path = path.join(self.config_dir, config_dir.directory)
         wingmen: list[WingmanConfigFileInfo] = []
-        for _, _, files in walk(config_path):
-            for filename in files:
-                if filename.endswith(".yaml") and not filename.startswith("."):
-                    base_file_name = filename.removesuffix(".yaml")
-                    wingman_file = WingmanConfigFileInfo(
-                        file=filename,
-                        name=base_file_name,
-                        is_deleted=False,
-                        avatar=self.__load_image_as_base64(
-                            self.get_wingman_avatar_path(config_dir, base_file_name)
-                        ),
-                    )
-                    wingmen.append(wingman_file)
+        for filename in self._wingman_file_names(config_path):
+            base_file_name = filename.removesuffix(".yaml")
+            wingman_file = WingmanConfigFileInfo(
+                file=filename,
+                name=base_file_name,
+                is_deleted=False,
+                avatar=self.__load_image_as_base64(
+                    self.get_wingman_avatar_path(config_dir, base_file_name)
+                ),
+            )
+            wingmen.append(wingman_file)
         return wingmen
 
     def _validate_wingman_name(self, name: str) -> str:
@@ -842,15 +845,10 @@ class ConfigManager:
         target_path = path.join(self.config_dir, config_dir.directory)
         wanted = name.casefold()
 
-        for _, _, files in walk(target_path):
-            for filename in files:
-                if not filename.endswith(".yaml") or filename.startswith("."):
-                    continue
-
-                if filename.removesuffix(".yaml").casefold() == wanted:
-                    return True
-
-        return False
+        return any(
+            filename.removesuffix(".yaml").casefold() == wanted
+            for filename in self._wingman_file_names(target_path)
+        )
 
     def duplicate_wingman_config(
         self,
@@ -891,10 +889,7 @@ class ConfigManager:
         source_config_raw["name"] = cleaned_name
 
         # Clear push-to-talk binding in the duplicate so the user can rebind.
-        source_config_raw["record_key"] = ""
-        source_config_raw["record_key_codes"] = None
-        source_config_raw["record_mouse_button"] = ""
-        source_config_raw["record_joystick_button"] = None
+        source_config_raw["record_bindings"] = []
         source_config_raw["is_voice_activation_default"] = False
 
         target_config_path = path.join(
@@ -2082,7 +2077,9 @@ class ConfigManager:
                 )
 
                 if skill_default_config_path:
-                    skill_config = self.read_config(skill_default_config_path)
+                    skill_config = drop_unreleased_properties(
+                        drop_other_platform_properties(self.read_config(skill_default_config_path))
+                    )
                     skill_config_wingman = self._drop_orphaned_skill_properties(
                         skill_dir, skill_config, skill_config_wingman
                     )

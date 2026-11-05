@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
-import inspect
 import json
 import sqlite3
 import threading
@@ -29,6 +28,7 @@ from typing import Any, Awaitable, Callable, Mapping, Optional
 
 from api.enums import LogType
 from api.interface import ScGameLogMaintainer, ScGameLogStatus
+from services.event_subscribers import Subscriber
 from services.file import get_generated_files_dir
 from services.printr import Printr
 from services.sc_gamelog.history import EventHistory
@@ -47,8 +47,6 @@ POLL_SECONDS = 0.25
 IDLE_SECONDS = 2.0
 """Between looks while no environment has a Game.log."""
 RECENT_EVENTS = 200
-SUBSCRIBER_QUEUE = 256
-CALLBACK_TIMEOUT_SECONDS = 30
 DATA_DIR_NAME = "sc_gamelog"
 
 # Top-level fields of a state row that belong to the event, next to its data.
@@ -81,41 +79,6 @@ class GameEvent:
     """True for events read from the log's history when the reader started."""
 
 
-class _Subscriber:
-    """One callback with its own queue, so a slow or failing skill never
-    holds up the others or the reader."""
-
-    def __init__(self, event_type: str, callback: Callable, loop) -> None:
-        self.event_type = event_type
-        self.callback = callback
-        self.queue: asyncio.Queue = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE)
-        self.failures = 0
-        self.task = loop.create_task(self._run())
-
-    def wants(self, event: GameEvent) -> bool:
-        return self.event_type == "*" or self.event_type == event.type
-
-    def offer(self, event: GameEvent) -> None:
-        if self.queue.full():
-            self.queue.get_nowait()  # Drop the oldest; stale news is worth least.
-        self.queue.put_nowait(event)
-
-    async def _run(self) -> None:
-        name = getattr(self.callback, "__qualname__", repr(self.callback))
-        while True:
-            event = await self.queue.get()
-            try:
-                result = self.callback(event)
-                if inspect.isawaitable(result):
-                    await asyncio.wait_for(result, CALLBACK_TIMEOUT_SECONDS)
-            except asyncio.CancelledError:
-                raise
-            except Exception as error:  # A skill's bug must not stop delivery.
-                self.failures += 1
-                if self.failures in (1, 10, 100):
-                    _log(f"{name} failed on {event.type} ({self.failures}x): {error!r}")
-
-
 class ScGameLogService:
     """Process-wide singleton (house pattern, like Printr/SkillCatalog)."""
 
@@ -146,7 +109,7 @@ class ScGameLogService:
         self._tails: dict[str, LogTail] = {}
         self._states: dict[str, State] = {}
         self._recent: deque[GameEvent] = deque(maxlen=RECENT_EVENTS)
-        self._subscribers: list[_Subscriber] = []
+        self._subscribers: list[Subscriber] = []
         self._game_path = ""
         self._error: Optional[str] = None
         self._found: tuple[str, ...] = ()
@@ -257,7 +220,7 @@ class ScGameLogService:
         """Call `callback(event)` for every live event of this type ("*" for
         all). Returns the function that unsubscribes."""
         loop = self._loop or asyncio.get_running_loop()
-        subscriber = _Subscriber(event_type, callback, loop)
+        subscriber = Subscriber(event_type, callback, loop, _log)
         self._subscribers.append(subscriber)
 
         def off() -> None:

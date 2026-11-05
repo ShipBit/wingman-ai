@@ -11,8 +11,24 @@ pronunciation:
   presets:
     - wingman
     - star_citizen
-cancel_tts_key: "shift+y"
-cancel_tts_joystick_button: null
+# Stop a wingman mid-answer ("shut up"): keys, mouse or joystick buttons.
+cancel_tts_bindings:
+  - device: keyboard
+    keys:
+      - name: shift
+        scan_code: null
+        extended: false
+      - name: "y"
+        scan_code: null
+        extended: false
+# Push-to-talk for every wingman: hold it and say the wingman's name.
+# The period key, known by its place on the keyboard so every layout finds it.
+global_ptt_bindings:
+  - device: keyboard
+    keys:
+      - name: "."
+        scan_code: null
+        extended: false
 stt:
   # Which provider transcribes what you say: parakeet (on this machine, or
   # on a server of yours) or wingman_pro (the subscription's cloud service).
@@ -32,11 +48,24 @@ stt:
     # Empty until you fill it in.
     host: ""
     port: 9876
+    # The model name the server expects. A server with several models wants
+    # its own id, e.g. parakeet-tdt-0.6b-v3. An API key goes into the secret
+    # "parakeet".
+    model: parakeet
   parakeet_config:
     temperature: 0.0
 voice_activation:
   enabled: false
-  mute_toggle_key: "shift+x"
+  # Switch the microphone on and off while voice activation is on.
+  mute_toggle_bindings:
+    - device: keyboard
+      keys:
+        - name: shift
+          scan_code: null
+          extended: false
+        - name: x
+          scan_code: null
+          extended: false
   # How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
   # whisper. Applies to push-to-talk too, where it trims silence off the clip.
   sensitivity: 0.5
@@ -113,16 +142,35 @@ llama_cpp:
   support_remote_port: 49152
   embed_remote_host: "http://127.0.0.1"
   embed_remote_port: 49153
-system_one:
+decision_model:
   # The decision model in front of the main model: faster, cheaper and unable
-  # to answer outside the options it is given. Which model serves it comes from
-  # the subscription. Off means every decision is taken the way it was before.
+  # to answer outside the options it is given. Off means every decision is
+  # taken the way it was before.
   # Off by default: whoever wants it switches it on under Settings.
   enabled: false
+  # Who answers: wingman_pro (the Wingman Subscription; the plan picks the
+  # model, recommended), openrouter (your key, the secret "openrouter") or
+  # server (your own server with TypeSafe's Jev API at /v1/systemone; its key,
+  # if any, is the secret "decision_model_server"). In our tests local models
+  # on a server decided clearly worse than Jev.
+  provider: wingman_pro
+  openrouter:
+    model: "~typesafe/jev-latest"
+  server:
+    # e.g. http://127.0.0.1:8000/v1 for oMLX
+    endpoint: ""
+    model: ""
   # Ask which command a request means before the main model is asked anything.
   # The keypress lands after 0.48 s instead of 1.13 s; a request that is not a
   # command costs 0.46 s and changes nothing.
   commands: true
+  # Pick the Wingman for a sentence from the global push-to-talk key that
+  # names none, when no Wingman has the star.
+  wingman_choice: true
+  # Confirm the game names speech recognition corrects ("cutless" to Cutlass).
+  vocabulary: true
+  # Let skills ask it: UEX Corp, Spotify, the HUD and others.
+  skills: true
 # The one language you and your Wingmen speak: en, de, fr, es, it or pt,
 # or "other" with the language in other_language (code, name, english_name).
 # Answer language, voice model and speech recognition all follow it.
@@ -182,4 +230,11 @@ star_citizen:
 # hands the events to skills. Switch it off if you do not play Star Citizen.
 # On, it waits for a Game.log at almost no cost.
 sc_gamelog:
+  enabled: true
+# Core reads Star Citizen's own telemetry stream (ship and pilot) and hands
+# it to skills. Runs only while star_citizen.plays is true. On Windows, on
+# also sets the user variable GRPC_CLIENT_SERVER_ENABLED=true that switches
+# telemetry on in the game (after the RSI Launcher restarts); off removes it
+# again if Wingman set it.
+sc_telemetry:
   enabled: true

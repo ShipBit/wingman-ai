@@ -219,7 +219,13 @@ prompts:
     - "Clippy would never judge! Clippy is just here to help. Always. Watching. Helping."
 
     '
-record_key: end
+record_bindings:
+  # Known by name: each OS has its own scan code for it.
+  - device: keyboard
+    keys:
+      - name: end
+        scan_code: null
+        extended: false
 wingman_pro:
   azure:
     voice: en-US-AndrewMultilingualNeural

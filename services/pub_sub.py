@@ -28,13 +28,15 @@ class PubSub:
                 # Determine if the function expects an argument (excluding 'self' for methods)
                 expects_arg = (param_count > 1) if is_method else (param_count > 0)
 
+                # A subscriber that takes an argument always gets one, None
+                # included: called without it, it raises a TypeError.
                 if asyncio.iscoroutinefunction(fn):
-                    if expects_arg and data is not None:
+                    if expects_arg:
                         await fn(data)
                     else:
                         await fn()
                 else:
-                    if expects_arg and data is not None:
+                    if expects_arg:
                         fn(data)
                     else:
                         fn()

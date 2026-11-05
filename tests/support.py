@@ -11,8 +11,10 @@ import shutil
 from os import path
 from types import SimpleNamespace
 
+import requests
 import yaml
 
+from api.enums import DecisionModelProvider
 from hud_server.platform.base import HudBackend, Monitor
 from services.system_manager import LOCAL_VERSION
 
@@ -21,6 +23,59 @@ TEMPLATES = path.join(REPO_ROOT, "templates", "configs")
 FIXTURES = path.join(REPO_ROOT, "tests", "fixtures")
 # The config folder name of the version under test, e.g. "3_2_5".
 VERSION_DIR = LOCAL_VERSION.replace(".", "_")
+
+
+def decision_model_settings(
+    enabled: bool = True,
+    provider: DecisionModelProvider = DecisionModelProvider.WINGMAN_PRO,
+    endpoint: str = "",
+    model: str = "",
+    openrouter_model: str = "~typesafe/jev-latest",
+    **switches,
+) -> SimpleNamespace:
+    """Settings with only what the decision model reads: its switches, its
+    provider, and where Wingman Pro lives."""
+    places = {"commands": True, "wingman_choice": True, "vocabulary": True, "skills": True}
+    places.update(switches)
+    return SimpleNamespace(
+        decision_model=SimpleNamespace(
+            enabled=enabled,
+            provider=provider,
+            openrouter=SimpleNamespace(model=openrouter_model),
+            server=SimpleNamespace(endpoint=endpoint, model=model),
+            **places,
+        ),
+        wingman_pro=SimpleNamespace(base_url="https://pro.invalid"),
+    )
+
+
+def with_secrets(client, **secrets):
+    """The client reads its keys from the secret store on every call; this
+    gives it a store of its own instead of the user's."""
+    client._secret_keeper = SimpleNamespace(secrets=secrets)
+    return client
+
+
+class FakeDecisionSession:
+    """Records what the client would have sent and answers with ``body``."""
+
+    def __init__(self, body=None, status_code=200):
+        self.body = body if body is not None else {"answers": {}}
+        self.status_code = status_code
+        self.requests = []
+        self.closed = False
+
+    def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        return SimpleNamespace(
+            ok=self.status_code < 400,
+            status_code=self.status_code,
+            text="provider error",
+            json=lambda: self.body,
+        )
+
+    def close(self):
+        self.closed = True
 
 
 def read_yaml(file_path: str):
@@ -221,7 +276,62 @@ class FakeHudBackend(HudBackend):
         return window.handler(event, x, y) if window.handler else None
 
 
-def make_overlay(backend, events=None):
+HUD_HOST = "127.0.0.1:7862"
+
+
+class FakeObs:
+    """Stands in for the OBS broadcaster: what the overlay says is on screen."""
+
+    def __init__(self):
+        self.shown = {}  # window name -> (canvas, x, y, opacity)
+
+    def set_dimensions(self, width, height):
+        pass
+
+    def set_framerate(self, framerate):
+        pass
+
+    def set_container(self, name, x, y, width, height):
+        pass
+
+    def show_window(self, name, canvas, x, y, opacity):
+        self.shown[name] = (canvas, x, y, opacity)
+
+    def move_window(self, name, x, y, opacity):
+        self.shown[name] = (self.shown[name][0], x, y, opacity)
+
+    def hide_window(self, name):
+        self.shown.pop(name, None)
+
+
+def hud_client(server):
+    """A test client for the HUD server, reached on 127.0.0.1 as the /obs page is."""
+    from fastapi.testclient import TestClient
+
+    return TestClient(server.app, headers={"host": HUD_HOST})
+
+
+def hold_encoding(monkeypatch, size):
+    """Make the OBS encoder stop on pictures of `size` until released.
+    Returns (started, release): events for "it is encoding now" and "go on"."""
+    import threading
+
+    from hud_server import obs
+
+    started, release = threading.Event(), threading.Event()
+    encode = obs._png
+
+    def held(image):
+        if image.size == size:
+            started.set()
+            release.wait(5)
+        return encode(image)
+
+    monkeypatch.setattr(obs, "_png", held)
+    return started, release
+
+
+def make_overlay(backend, events=None, obs_broadcaster=None):
     """A HUD overlay on `backend`, fonts loaded, ready to step frames by hand."""
     from hud_server.overlay.overlay import HeadsUpOverlay
 
@@ -230,6 +340,7 @@ def make_overlay(backend, events=None):
         error_queue=queue.Queue(),
         event_callback=(events.append if events is not None else None),
         backend=backend,
+        obs_broadcaster=obs_broadcaster,
     )
     overlay._init_fonts()
     overlay.dt = 0.05
@@ -259,3 +370,41 @@ def overlay_errors(overlay) -> list:
         if isinstance(report, dict) and report.get("type") == "error":
             reports.append(report)
     return reports
+
+
+# A model download over a connection that breaks
+
+BODY = bytes(range(256)) * 40  # 10,240 bytes
+
+
+class FlakyServer:
+    """Serves BODY, honours Range, and breaks the connection after `cut`
+    bytes for the first `breaks` requests."""
+
+    def __init__(self, cut: int, breaks: int):
+        self.cut = cut
+        self.breaks = breaks
+        self.ranges: list[str | None] = []
+
+    def get(self, url, stream=True, timeout=None, headers=None):
+        start = 0
+        rng = (headers or {}).get("Range")
+        self.ranges.append(rng)
+        if rng:
+            start = int(rng.split("=")[1].rstrip("-"))
+        body = BODY[start:]
+        broken = self.breaks > 0
+        self.breaks -= 1
+
+        def iter_content(chunk_size):
+            if broken:
+                yield body[: self.cut]
+                raise requests.exceptions.ChunkedEncodingError("Connection broken")
+            yield body
+
+        return SimpleNamespace(
+            status_code=206 if start else 200,
+            headers={"content-length": str(len(body))},
+            raise_for_status=lambda: None,
+            iter_content=iter_content,
+        )

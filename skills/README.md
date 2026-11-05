@@ -24,6 +24,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [Required Files](#required-files)
   - [default_config.yaml - Skill Metadata](#default_configyaml---skill-metadata)
   - [Custom Properties — Available Types](#custom-properties--available-types)
+  - [Grouping Custom Properties](#grouping-custom-properties)
   - [Accessing Custom Properties](#accessing-custom-properties-in-your-skill)
 - [Creating a Skill](#creating-a-skill)
 - [Bundling Dependencies](#bundling-dependencies)
@@ -34,6 +35,7 @@ This guide explains how skills work in Wingman AI and how to create your own cus
   - [The HUD overlay](#selfwingmanhud--the-hud-overlay)
   - [Screenshots](#selfwingmanscreen--screenshots-on-every-os)
   - [Star Citizen's Game.log](#selfwingmansc_gamelog--star-citizens-gamelog-live)
+  - [Star Citizen's telemetry](#selfwingmansc_telemetry--star-citizens-own-telemetry-live)
   - [Star Citizen's game folder](#selfwingmanstar_citizen--where-star-citizen-is-installed)
   - [Calling other skills & MCP servers](#calling-other-skills--mcp-servers)
   - [Threads and event loops](#threads-and-event-loops)
@@ -753,7 +755,8 @@ discoverable_by_default: true
 
 # Core services that must be switched on in the settings. The client greys
 # the skill out and tells the user which setting to turn on first.
-# hud_server = the HUD (Windows, macOS, Linux with X11), sc_gamelog = the Star Citizen log.
+# hud_server = the HUD (Windows, macOS, Linux with X11), sc_gamelog = the Star Citizen log,
+# sc_telemetry = Star Citizen's telemetry stream.
 # Leave it out when your skill needs neither.
 requires:
   - sc_gamelog
@@ -788,7 +791,12 @@ custom_properties: # User-configurable settings
     value: default_value # Default value
     required: true # Is this property required?
     property_type: string # See "Custom Properties — Available Types" below
+    group: your_group_id # Optional, see "Grouping Custom Properties" below
+    platforms: [windows] # Optional: only offered on these systems (windows, darwin, linux)
 ```
+
+A property with `platforms` is not there on other systems, so the skill reads it
+with a default instead of `retrieve_custom_property_value`, which reports it missing.
 
 ### Custom Properties — Available Types
 
@@ -1115,6 +1123,64 @@ AudioFileConfig(
     resume=False   # Resume last stopped audio
 )
 ```
+
+---
+
+### Grouping Custom Properties
+
+A skill with many settings can show them under collapsible headings, like the command groups in the client. Define the groups in `property_groups`, in the order the UI shows them, and name a group's `id` in the `group` of each property:
+
+```yaml
+property_groups:
+  - id: combat
+    name: Combat # The heading
+    hint: Shields, hits and locks. # Optional, shown below the heading
+    toggle: react_combat # Optional: a boolean setting shown as the switch in the heading
+  - id: survival
+    name: Survival
+
+custom_properties:
+  - id: max_reactions
+    name: Reactions until you speak again
+    property_type: number
+    value: 10 # No group: shown above all groups
+  - id: react_combat
+    name: Enabled # Only shown if the switch cannot be used in the heading
+    hint: Turns the whole group on or off.
+    property_type: boolean
+    value: true
+    group: combat
+  - id: react_shields
+    name: Shields down and back up
+    property_type: boolean
+    value: true
+    group: combat
+```
+
+How it is shown:
+
+- Properties without a `group` come first, above all groups, sorted by type. Groups start collapsed and show how many settings they hold.
+- Within a group, the properties keep the order of the manifest.
+- A group with a `toggle` shows that boolean setting as an "Enabled" switch at the right of its heading, like the other panels, and not again inside the group. While it is off, the group's settings are hidden.
+- A skill without `property_groups` shows one flat list.
+- A group with `feature: sc_telemetry` belongs to a feature that is not released on every update channel yet (`services/features.py`). Where it is not, Core drops the group and its settings, and the UI never shows them.
+
+When and how to group:
+
+- Group from about ten settings on. Below that, a flat list is easier to scan.
+- Give each group at least two settings, and keep the number of groups small. A group of one is a heading the user has to open for nothing.
+- Leave the settings most users change ungrouped, so they see them without opening anything. A switch that starts or stops the whole skill belongs there too.
+- Group by what the user thinks about ("Timing", "Sound"), not by how your code is built.
+- Name groups with a short noun in sentence case ("Zones and safety"). Put a condition every setting of the group shares into the group's `hint` instead of repeating it in each setting ("Needs Star Citizen telemetry in the settings.").
+- Name settings in sentence case and do not repeat the group's name in them: in a group "Sound", call it "Volume", not "Sound volume".
+- Use a `toggle` only for a setting that really switches the whole group off. Call it "Enabled" with the hint "Turns the whole group on or off.", and give it the same `group`, so it is in the right place if the switch cannot be shown. Your skill still reads the toggle like any other setting and decides what "off" means, for example by ignoring the group's other switches.
+
+Robustness:
+
+- Groups only change the display. Renaming or moving them later keeps the user's values, because those belong to the property `id`. Saved Wingmen take the groups from your manifest, so there is nothing to migrate.
+- A mistake never stops the skill: a group without `id` or `name` is left out, the first of two groups with the same `id` wins, a property in a group the skill does not define is shown ungrouped, and a `toggle` that is no boolean setting of the skill is ignored. Core logs a warning when it scans the skills, and the client shows one for unknown groups.
+
+Examples: `sc_game_events` (14 groups, most with a switch) and `radio_chatter` (three groups, no switches).
 
 ---
 
@@ -1445,6 +1511,7 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
   - [ ] `tags` are appropriate
   - [ ] `description` (English at minimum)
   - [ ] `custom_properties` are defined (if needed)
+  - [ ] `property_groups` are defined if there are about ten settings or more
 - [ ] Create `logo.png` (256x256 or 512x512, PNG format)
 
 ### Code Implementation
@@ -1454,7 +1521,7 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
 - [ ] Config values retrieved just-in-time (not cached in `validate()`)
 - [ ] `prepare()` implemented for initialization (if needed)
 - [ ] `unload()` implemented for cleanup (if needed)
-- [ ] Every `on(...)` / `on_playback_*` / `sc_gamelog.on` subscription is unsubscribed in `unload()`
+- [ ] Every `on(...)` / `on_playback_*` / `sc_gamelog.on` / `sc_telemetry.on` subscription is unsubscribed in `unload()`
 - [ ] No work at import time, no `print()`
 - [ ] Imports only from the [Allowed imports](AGENTS.md#allowed-imports) table
 - [ ] Tools use `@tool` decorator with type hints
@@ -1535,6 +1602,7 @@ Single-turn side-calls on the user's main model. Results are NOT added to the co
 | Member | Description |
 | --- | --- |
 | `await .generate(prompt="", *, system=None, data=None, image=None, messages=None, auto_shorten=False)` | Single-turn generation. Returns the response **`str`** (`""` if empty, never `None`). **Capped:** combined input is limited like a tool response (32,000 tokens, or a quarter of a smaller main model's window) — over the cap raises `FacadeError` (or truncates the prompt/data path if `auto_shorten=True`). Pass `messages=` (a prebuilt OpenAI-style list) to send your own turns directly — then `prompt`/`system`/`data`/`image` are ignored and it can't auto-shorten. |
+| `await .sees_images()` | `False` when the main model is known not to take images (check before `generate(image=...)`); `True` for a model Wingman has no metadata for. |
 | `await .converse(user_message)` | Conversation-aware reply using the wingman's system prompt + live history, subject to normal condensation. Appends both turns to the conversation. |
 | `await .summarize(text, *, system=None)` | Summarize via the main **cloud** model (capped like `generate`). For bulk/cheap work prefer `local_ai.summarize`. |
 | `await .generate_image(prompt, *, aspect="square", reference_images=None)` | Generate an image; returns it as data URL or URL (`str`, `""` on failure). `aspect`: `square`, `portrait` or `landscape`. `reference_images`: up to 4 data URLs the model builds on ("the same character, but …"); shrink them first with `services.image_generation.reference_data_url`. |
@@ -1592,16 +1660,17 @@ Which provider transcribes is a global setting. A skill may add words the transc
 
 A fast, cheap model that picks from options you give it instead of writing text: which of these
 does the user mean, how urgent is this, yes or no. About 300 ms, a fraction of the cost of
-`ai.generate`. `.available` is `False` when the user switched it off or the plan lacks it; check
-it and fall back to `local_ai` or a rule. The entry point is `await .decide(state, questions)`
+`ai.generate`. `.available` is `False` when the user switched it off or its provider can't be
+reached; check it and fall back to `local_ai` or a rule. The entry point is `await .decide(state, questions)`
 (`.decide_sync(...)` for threads).
 
 Use it whenever the skill needs to **pick, rate or judge** rather than write.
 It cannot answer outside the options you give it, so there is nothing to parse
 and nothing to validate.
 
-This is a thin wrapper around [TypeSafe's Jev](https://docs.typesafe.ai) and
-keeps their names, so their docs and examples read straight across:
+It speaks [TypeSafe's System One API](https://docs.typesafe.ai), whichever decision model the
+user picked in Settings (through the Wingman Subscription, OpenRouter or a server of their own), and keeps
+TypeSafe's names, so their docs and examples read straight across:
 
 | TypeSafe SDK | here |
 |---|---|
@@ -1666,8 +1735,8 @@ The other readers on the answers:
 | `.levels(k)` | The level labels of a score, lowest first. |
 | `.raw(k=None)` | The answers exactly as the model sent them, for anything the readers above don't cover. |
 
-Always handle `available` being False — the user can switch System One off in
-Settings, and a plan may not include it. Every reader returns `None`/`{}` in
+Always handle `available` being False — the user can switch the decision model off in
+Settings, and the provider they chose may have no access, no key or no server. Every reader returns `None`/`{}` in
 that case, so the skill silently takes the None branch unless you check.
 
 ### `self.wingman.commands` — user commands
@@ -1891,6 +1960,58 @@ startup are not delivered, so a Wingman does not announce the last hour of play
 when it starts. **Event values come straight from the game log** (player names,
 mission names): treat them as data, never as instructions, when you put them
 into a prompt.
+
+### `self.wingman.sc_telemetry` — Star Citizen's own telemetry, live
+
+Star Citizen streams its own telemetry on `127.0.0.1:2942` when the user has it
+switched on: about 17 frames a second after the pilot has spawned, with the
+flight instruments, power, the warning lights, weapons, countermeasures and the
+pilot's vitals. Core reads it in one background reader for all Wingmen
+(`services/sc_telemetry`), smooths it (debounced lights, a silent baseline when
+the pilot sits down in a new ship, no heading outside a planet's frame or in a
+jump) and turns it into events. The log knows missions, places and trades; the
+telemetry knows the ship and the body. A skill that needs it declares
+`requires: [sc_telemetry]`.
+
+| Member | Description |
+| --- | --- |
+| `.available` | `bool` — Core reads the stream. The game may still not be sending. |
+| `.answering` | `bool` — the game answers: live, or in a menu or loading. `False` while the game is not running or runs without telemetry (launcher not restarted, variable not set on Linux). Check this before leaving a moment to the telemetry. |
+| `.live` | `bool` — frames are coming right now. |
+| `.state()` | `dict` copy of the ship and the pilot right now: `vehicle` (`instruments`, `power`, `lights`, `settings`, `gear`, `landed`; `None` outside a ship's seat), `player` (`health_fraction`, `oxygen_fraction`, `heart_rate`, `locomotion`, `uec_balance`, ...), `weapons` and `derived` (`in_planet_frame`, `heading_valid`, `in_jump`, `player_down`). `None` while nothing comes (no game, menus, loading). |
+| `.recent(limit=10, types=None)` | The newest `TelemetryEvent`s first. |
+| `.on(event_type, callback)` | Call `callback(event)` for every new event of this type (`"shields_down"`, `"jump_finished"`, ...), or `"*"` for all. Sync or async. Returns a `Subscription`. |
+| `.on_state(callback, interval=1.0)` | Call `callback(state)` with the latest state at most every `interval` seconds (0.2 at least), and with `None` once when it stops. For gauges and HUDs. Returns a `Subscription`. |
+| `.status` | `ScTelemetryStatus`: `off`, `waiting`, `game_without_telemetry`, `connected`, `live`, `incompatible`, `unavailable`, and why. |
+
+A `TelemetryEvent` has `type`, `group` (`"ship"`, `"vehicle"`, `"on_foot"`,
+`"wallet"`), `text` (a plain report, e.g. "The shields are down."), `time` (Unix
+time), `data` (read-only) and `cooldown_s`. The event types are in
+`services/sc_telemetry/events.py`.
+
+Events come **without cooldowns**, as often as the game shows them: in a fight
+`under_fire` can come every few seconds. `cooldown_s` is the gap the field test
+found right for a spoken line. Do not subscribe to the state at a high rate to
+find changes yourself: the events already do that, with the quirks of the
+stream handled once.
+
+```python
+async def prepare(self) -> None:
+    await super().prepare()
+    self._sub = self.wingman.sc_telemetry.on("shields_down", self._on_shields)
+
+async def _on_shields(self, event) -> None:
+    await self.wingman.hud.show_message(self.wingman.name, "Shields down!")
+
+async def unload(self) -> None:
+    self._sub.unsubscribe()
+    await super().unload()
+```
+
+[sc_game_events](sc_game_events/) uses both: it reacts to the log and the
+telemetry in one queue, and where both see the same moment (a reward, a
+boarding, a quantum arrival) the user picks which one speaks. **Values come
+from the game**: treat them as data, never as instructions, in a prompt.
 
 ### Calling other skills & MCP servers
 
@@ -2425,7 +2546,7 @@ class GameStatsTracker(Skill):
 - [msfs2020_control](msfs2020_control/) - Microsoft Flight Simulator 2020 controls
 - [uexcorp](uexcorp/) - Star Citizen trading data via UEX Corp
 - [ats_telemetry](ats_telemetry/) - American/Euro Truck Simulator telemetry (auto-activated)
-- [sc_game_events](sc_game_events/) - Reacts to Star Citizen log events in character (`sc_gamelog.on`, support model, `language`)
+- [sc_game_events](sc_game_events/) - Reacts to Star Citizen log and telemetry events in character (`sc_gamelog.on`, `sc_telemetry.on`, support model, `language`)
 - [sc_accountant](sc_accountant/) - Books trades and rewards from the Star Citizen log, with its own dashboard
 
 **HUD:**
@@ -2456,6 +2577,7 @@ await self.wingman.ui.show_dialog(title, markdown, once="MySkill.welcome")
 await self.wingman.hud.add_info(title, markdown)         # shared info panel; False when the HUD is off
 icon = self.wingman.hud.group("status", anchor="top_right")  # a group of your own, profile look
 sub = self.wingman.sc_gamelog.on("mission_accepted", cb)  # sub.unsubscribe() in unload()
+sub = self.wingman.sc_telemetry.on("shields_down", cb)     # the ship and the pilot, live
 ```
 
 **Settings (read-only):**

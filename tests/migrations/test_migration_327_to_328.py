@@ -48,5 +48,5 @@ def test_a_missing_system_one_block_is_written_switched_off():
     assert migrate({})["system_one"] == {"enabled": False, "commands": True}
 
 
-def test_the_template_starts_with_system_one_off():
-    assert template("settings.yaml")["system_one"]["enabled"] is False
+def test_the_template_starts_with_the_decision_model_off():
+    assert template("settings.yaml")["decision_model"]["enabled"] is False

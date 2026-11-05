@@ -4,7 +4,7 @@ import re
 from typing import TYPE_CHECKING, Literal, Mapping, Union
 import httpx
 from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError
-from api.enums import ConversationProvider, LogType, TtsProvider
+from api.enums import ConversationProvider, LogType, ToastType, TtsProvider
 
 from api.interface import (
     SoundConfig,
@@ -25,7 +25,18 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def _refuses_tools(error: APIStatusError) -> bool:
+    """A 400 for a model that cannot call tools at all, like gemma3 on Ollama:
+    `registry.ollama.ai/library/gemma3:4b does not support tools`."""
+    text = f"{getattr(error, 'message', '') or ''} {error}".lower()
+    return error.status_code == 400 and "does not support tools" in text
+
+
 class BaseOpenAi(ABC):
+    # (server, model) pairs that refused tools. The request goes without them
+    # from then on, instead of failing every message of a wingman with skills.
+    _models_without_tools: set[tuple[str, str]] = set()
+
     @abstractmethod
     def _create_client(self, *args, **kwargs):
         """Subclasses should implement this method to create their specific client."""
@@ -110,6 +121,9 @@ class BaseOpenAi(ABC):
         model: str = None,
         tool_choice: str = "auto",
     ):
+        server_model = (str(getattr(client, "base_url", "")), model)
+        if tools and server_model in self._models_without_tools:
+            tools = None
         try:
             # Get minimal reasoning effort for the model to reduce latency
             reasoning_params = (
@@ -138,6 +152,17 @@ class BaseOpenAi(ABC):
             # wingman learns the window from it, shortens and retries once.
             if is_context_overflow(getattr(e, "message", "") or str(e)):
                 raise ContextOverflowError(getattr(e, "message", "") or str(e)) from e
+            if tools and _refuses_tools(e):
+                self._models_without_tools.add(server_model)
+                printr.print(
+                    f"{model} cannot use tools, so skills and commands are left out of its calls. "
+                    "Pick a model with tool support to use them.",
+                    color=LogType.WARNING,
+                    toast=ToastType.WARNING,
+                )
+                return self._perform_ask(
+                    client, messages, stream, None, model=model, tool_choice=tool_choice
+                )
             self._handle_api_error(e)
             return None
         except UnicodeEncodeError:

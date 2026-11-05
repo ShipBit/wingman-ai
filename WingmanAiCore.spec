@@ -170,6 +170,16 @@ hiddenimports = [
     'pydantic_settings',
     'typing_inspection',
 
+    # gRPC + protobuf for Star Citizen telemetry (services/sc_telemetry). Core imports them itself, but
+    # gRPC's Cython core and the protobuf modules the descriptor set needs are named here so a release
+    # build never misses them. The message classes are built at runtime from schema.desc (in services/).
+    'grpc',
+    'grpc._cython.cygrpc',
+    'google.protobuf.descriptor_pb2',
+    'google.protobuf.descriptor_pool',
+    'google.protobuf.json_format',
+    'google.protobuf.message_factory',
+
     # Google GenAI
     'google.genai',
     'google.genai.types',
@@ -285,6 +295,16 @@ onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
 datas += onnx_asr_datas
 binaries += onnx_asr_binaries
 hiddenimports += onnx_asr_hidden
+
+# dxcam (Vision AI's "Use DXCam capture", Windows only). Core imports it only
+# when the user switches it on, and dxcam loads its Cython kernel and its
+# backends through importlib, so name all of it. Missing, the capture falls
+# back to mss (services/screen_capture_dxcam.py).
+if sys.platform == 'win32':
+    dxcam_datas, dxcam_binaries, dxcam_hidden = collect_all('dxcam')
+    datas += dxcam_datas
+    binaries += dxcam_binaries
+    hiddenimports += dxcam_hidden + ['services.screen_capture_dxcam']
 
 # Config migration modules (services/migrations/migration_*.py) are discovered
 # from the filesystem and imported via importlib at runtime, so static analysis

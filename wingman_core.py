@@ -20,12 +20,12 @@ from api.commands import (
     HudProfilesChangedCommand,
     LogCommand,
     ScGameLogStateChangedCommand,
+    ScTelemetryStateChangedCommand,
     SttVocabularyChangedCommand,
     VoiceActivationMutedCommand,
 )
 from api.enums import (
     CommandTag,
-    ConversationProvider,
     CoreState,
     LocalAiMode,
     LogSource,
@@ -36,6 +36,7 @@ from api.enums import (
 )
 from api.interface import (
     ScGameLogStatus,
+    ScTelemetryStatus,
     SettingsConfig,
     StarCitizenGameFolder,
     StarCitizenSetup,
@@ -47,6 +48,7 @@ from api.interface import (
     AvatarVariant,
     BenchmarkResult,
     CommandJoystickConfig,
+    InputBinding,
     Config,
     ConfigWithDirInfo,
     CoreStatusResponse,
@@ -98,10 +100,12 @@ from services.file import (
     get_prompt,
 )
 from services.audio.device_names import with_full_names
+from services.backstory import parse_enhanced_backstory
 from services.model_downloader import ModelDownloader
 from services.sc_gamelog.service import ScGameLogService
+from services.sc_telemetry.service import ScTelemetryService
 from services.star_citizen.game_folder import inspect_game_folder
-from services.star_citizen.setup import StarCitizenSetupService, log_reader_on
+from services.star_citizen.setup import StarCitizenSetupService, log_reader_on, telemetry_on
 from services import avatar_studio
 from services.stt_provider_manager import SttProviderManager
 from services.stt_service import SttService
@@ -116,11 +120,12 @@ from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
 from services.image_processing import process_images, validate_image_mime
-from services.model_metadata import ModelMetadataService
+from services.model_metadata import conversation_model_id, get_model_metadata_service
 from services.audio import (
     AudioInput,
     GateParams,
     ListenController,
+    ANY_WINGMAN,
     ListenState,
     SileroVad,
     TranscriptionWorker,
@@ -130,6 +135,8 @@ from services.audio import (
 from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
+from services import input_bindings
+from services.decision_gate import DecisionGate
 from services import speech_text
 from services.printr import Printr
 from services.user_activity import user_activity
@@ -154,14 +161,19 @@ MIN_ECHO_RUN = 3
 # "Stop" said while the wingman is still thinking: the answer that starts
 # within this many seconds is cut off right away instead of being played.
 STOP_AHEAD_SECONDS = 6.0
+# How long the global push-to-talk key must be held before the client shows
+# a recording. Its default is the period: a typed one is up well before this.
+GLOBAL_PTT_ANNOUNCE_S = 0.3
 
 
 def _key_source(key) -> str:
     """What identifies a key while it is held. The scan code, not the name:
     the hook may name the same key differently on the way down and up
     ("shift" against "left shift"), and a release under another name would
-    leave the key held for good."""
-    return f"key:{key.scan_code}"
+    leave the key held for good. With the extended flag, since left and right
+    Ctrl share a scan code on Windows."""
+    scan_code, extended = input_bindings.held_key(key)
+    return f"key:{scan_code}:{int(extended)}"
 
 
 def _words(text: str) -> list[str]:
@@ -220,6 +232,13 @@ class WingmanCore(WebSocketUser):
             path="/sc-gamelog/status",
             endpoint=self.get_sc_gamelog_status,
             response_model=ScGameLogStatus,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/sc-telemetry/status",
+            endpoint=self.get_sc_telemetry_status,
+            response_model=ScTelemetryStatus,
             tags=tags,
         )
         # The Star Citizen step of the first-start setup. Its switches are
@@ -551,6 +570,7 @@ class WingmanCore(WebSocketUser):
             ("/settings/test/local-ai-embed", self.test_local_ai_embed),
             ("/settings/test/hud-server", self.test_hud_server),
             ("/settings/test/openai-compatible-tts", self.test_openai_compatible_tts),
+            ("/settings/test/decision-model", self.test_decision_model),
         ):
             self.router.add_api_route(
                 methods=["POST"],
@@ -630,6 +650,20 @@ class WingmanCore(WebSocketUser):
             path="/models/openrouter",
             response_model=list,
             endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter/decisions",
+            response_model=list,
+            endpoint=self.get_openrouter_decision_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/decision-model-server",
+            response_model=list[str],
+            endpoint=self.get_decision_model_server_models,
             tags=tags,
         )
         self.router.add_api_route(
@@ -904,6 +938,19 @@ class WingmanCore(WebSocketUser):
         self.settings_service.stt_done_callback = self._broadcast_ready
         self.settings_service.vocabulary_changed_callback = self._broadcast_vocabulary
         self.settings_service.settings_events.subscribe(
+            "input_bindings_changed", self.on_input_bindings_changed
+        )
+        # Picks the wingman for a global push-to-talk sentence that named none.
+        self._last_answer_from: Optional[str] = None
+        # Whether the global key was held long enough to show the recording.
+        self._global_ptt_announced = False
+        self._global_ptt_timer: Optional[threading.Timer] = None
+        # Keyboard keys held when a joystick button went down while recording.
+        self._joystick_recording_held: list = []
+        self.routing_decision_gate = DecisionGate(
+            wingman_name="Routing", settings=self.settings_service.settings
+        )
+        self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
         )
         self.settings_service.settings_events.subscribe(
@@ -919,6 +966,10 @@ class WingmanCore(WebSocketUser):
             "sc_gamelog_settings_changed", self._apply_sc_gamelog_settings
         )
         ScGameLogService().status_callback = self._broadcast_sc_gamelog_status
+        self.settings_service.settings_events.subscribe(
+            "sc_telemetry_settings_changed", self._apply_sc_telemetry_settings
+        )
+        ScTelemetryService().status_callback = self._broadcast_sc_telemetry_status
 
         self.parakeet = Parakeet(
             settings=self.settings_service.settings.stt.parakeet,
@@ -987,7 +1038,7 @@ class WingmanCore(WebSocketUser):
             pocket_tts=self.pocket_tts,
         )
 
-        self.model_metadata_service = ModelMetadataService()
+        self.model_metadata_service = get_model_metadata_service()
 
         # Microphone: one stream, one voice gate, one state machine. Push-to-talk
         # and voice activation only differ in who opens the gate.
@@ -1098,8 +1149,9 @@ class WingmanCore(WebSocketUser):
             )
         await self._start_hud_server_if_enabled()
 
-        # 7. Star Citizen log reader
+        # 7. Star Citizen log reader and telemetry
         await self._apply_sc_gamelog_settings(self.settings_service.settings)
+        await self._apply_sc_telemetry_settings(self.settings_service.settings)
 
     async def _apply_sc_gamelog_settings(self, settings: SettingsConfig):
         enabled = log_reader_on(settings)
@@ -1125,6 +1177,21 @@ class WingmanCore(WebSocketUser):
     # GET /sc-gamelog/status
     async def get_sc_gamelog_status(self) -> ScGameLogStatus:
         return ScGameLogService().status()
+
+    async def _apply_sc_telemetry_settings(self, settings: SettingsConfig):
+        await ScTelemetryService().apply_settings(
+            telemetry_on(settings), settings.star_citizen.game_path
+        )
+
+    async def _broadcast_sc_telemetry_status(self, status: ScTelemetryStatus):
+        if self._connection_manager:
+            await self._connection_manager.broadcast(
+                ScTelemetryStateChangedCommand(status=status)
+            )
+
+    # GET /sc-telemetry/status
+    async def get_sc_telemetry_status(self) -> ScTelemetryStatus:
+        return ScTelemetryService().status()
 
     # GET /star-citizen/game-folder
     def check_star_citizen_game_folder(self, path: str) -> StarCitizenGameFolder:
@@ -1352,28 +1419,28 @@ class WingmanCore(WebSocketUser):
         self.audio_player.voice_state = status
         self._run_on_main_loop(self.audio_player.voice_events.publish("changed", status))
 
+    def _settings_bindings(self) -> list[InputBinding]:
+        """The bindings that belong to no wingman: shut up, mute, global PTT."""
+        settings = self.settings_service.settings
+        return [
+            *settings.cancel_tts_bindings,
+            *settings.voice_activation.mute_toggle_bindings,
+            *settings.global_ptt_bindings,
+        ]
+
+    def _all_bindings(self, wingman_configs) -> list[InputBinding]:
+        bindings = list(self._settings_bindings())
+        for wingman_config in wingman_configs:
+            bindings.extend(wingman_config.record_bindings)
+        return bindings
+
     def is_mouse_configured(self, config: Config) -> bool:
-        return any(
-            config.wingmen[wingman].record_mouse_button for wingman in config.wingmen
-        )
+        return input_bindings.uses_mouse(self._all_bindings(config.wingmen.values()))
 
     def is_joystick_configured(self, config: Config) -> bool:
-        is_any_wingman_joystick_configured = any(
-            config.wingmen[wingman].record_joystick_button for wingman in config.wingmen
+        return bool(
+            input_bindings.joystick_configs(self._all_bindings(config.wingmen.values()))
         )
-
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings,
-            "cancel_tts_joystick_button",
-            None,
-        )
-
-        is_cancel_tts_joystick_configured = (
-            cancel_tts_joystick_button is not None
-            and cancel_tts_joystick_button.guid is not None
-        )
-
-        return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
 
     async def start_joysticks(self):
         # This runs on its own thread, and pygame.init() starts EVERY pygame
@@ -1407,6 +1474,10 @@ class WingmanCore(WebSocketUser):
                     running = False
                 elif event.type == pygame.JOYBUTTONDOWN:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
+                    if self._joystick_recording_active:
+                        # The keys held with the button, taken on the way down:
+                        # they may be let go before the button comes up.
+                        self._joystick_recording_held = list(self.key_events.values())
                     # In recording mode, skip normal press handling
                     if not self._joystick_recording_active:
                         for joystick_config in self._joystick_configs:
@@ -1446,17 +1517,9 @@ class WingmanCore(WebSocketUser):
 
     def _build_joystick_configs(self, config: Config) -> list:
         """Build the list of joystick configs from wingman and settings config."""
-        joystick_configs: list[CommandJoystickConfig] = [
-            config.wingmen[wingman].record_joystick_button
-            for wingman in config.wingmen
-            if config.wingmen[wingman].record_joystick_button
-        ]
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
+        return input_bindings.joystick_configs(
+            self._all_bindings(config.wingmen.values())
         )
-        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
-            joystick_configs.append(cancel_tts_joystick_button)
-        return joystick_configs
 
     async def init_joystick(self, config: Config):
         # Update the configs that the joystick loop reads dynamically
@@ -1557,10 +1620,8 @@ class WingmanCore(WebSocketUser):
         if not self.tower:
             return
 
-        # Check if any wingman has a mouse button configured
-        needs_mouse = any(
-            wingman.get_record_mouse_button() for wingman in self.tower.wingmen
-        )
+        wingman_configs = [wingman.config for wingman in self.tower.wingmen]
+        needs_mouse = input_bindings.uses_mouse(self._all_bindings(wingman_configs))
 
         # Register mouse hook if needed and not already registered
         if needs_mouse and not self._mouse_hook_registered:
@@ -1572,17 +1633,9 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
-        # Check if any wingman has a joystick button configured
-        needs_joystick = any(
-            wingman.get_record_joystick_button() for wingman in self.tower.wingmen
+        needs_joystick = bool(
+            input_bindings.joystick_configs(self._all_bindings(wingman_configs))
         )
-
-        # Also check for cancel TTS joystick button in settings
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
-        )
-        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
-            needs_joystick = True
 
         joystick_running = (
             self._joystick_thread is not None and self._joystick_thread.is_alive()
@@ -1607,6 +1660,9 @@ class WingmanCore(WebSocketUser):
             # No joystick needed anymore — clear configs so the loop idles,
             # but keep the thread alive for future recordings.
             self._joystick_configs = []
+
+    async def on_input_bindings_changed(self, _):
+        await self.refresh_input_hooks()
 
     async def on_wingman_config_saved(self, wingman_config):
         """Called when a wingman config is saved. Refreshes input hooks if needed."""
@@ -1759,89 +1815,58 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
-    def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
-        codes = []
-
-        if isinstance(hotkey, str):
-            hotkey_codes = keyboard.parse_hotkey(hotkey)
-            codes = [item[0] for tup in hotkey_codes for item in tup]
-
-        if isinstance(hotkey, list):
-            codes = hotkey
-
-        if not codes:
-            return False
-
-        # check if all hotkey codes are in the key events code list
-        is_pressed = all(code in self.key_events for code in codes)
-
-        return is_pressed
-
     def on_press(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
     ):
-        is_mute_hotkey_pressed = self.is_hotkey_pressed(
-            self.settings_service.settings.voice_activation.mute_toggle_key_codes
-            or self.settings_service.settings.voice_activation.mute_toggle_key
-        )
-        if (
-            self.settings_service.settings.voice_activation.enabled
-            and is_mute_hotkey_pressed
+        settings = self.settings_service.settings
+        held = list(self.key_events)
+        event = {}
+        if key is not None:
+            event["key"] = input_bindings.held_key(key)
+        elif mouse_button is not None:
+            event["mouse_button"] = mouse_button
+        elif joystick_config is not None:
+            event["joystick"] = joystick_config
+        else:
+            return
+
+        if settings.voice_activation.enabled and input_bindings.any_matches(
+            settings.voice_activation.mute_toggle_bindings, held, **event
         ):
             self.listen_controller.toggle_muted()
 
-        is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
-            self.settings_service.settings.cancel_tts_key_codes
-            or self.settings_service.settings.cancel_tts_key
-        )
-        if is_cancel_tts_hotkey_pressed:
+        if input_bindings.any_matches(settings.cancel_tts_bindings, held, **event):
             self.ensure_async(self.stop_playback())
 
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
-        )
-        if (
-            joystick_config
-            and cancel_tts_joystick_button is not None
-            and cancel_tts_joystick_button.guid is not None
-            and cancel_tts_joystick_button.button is not None
-            and joystick_config.guid == cancel_tts_joystick_button.guid
-            and joystick_config.button == cancel_tts_joystick_button.button
-        ):
-            self.ensure_async(self.stop_playback())
+        if not self.tower or self.listen_controller.held_source is not None:
+            return
 
-        if self.tower and self.listen_controller.held_source is None:
-            wingman = None
-            for potential_wingman in self.tower.wingmen:
-                if key:
-                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(
-                        potential_wingman.get_record_key()
-                    ):
-                        wingman = potential_wingman
-                        break
-                if mouse_button:
-                    if potential_wingman.get_record_mouse_button() == mouse_button:
-                        wingman = potential_wingman
-                        break
-                if joystick_config:
-                    if (
-                        potential_wingman.get_record_joystick_button()
-                        == f"{joystick_config.guid}{joystick_config.button}"
-                    ):
-                        wingman = potential_wingman
-                        break
+        # A wingman's own binding first, then the global one that lets the
+        # spoken name pick the wingman. The binding needing more keys wins.
+        candidates = [
+            (binding, wingman)
+            for wingman in self.tower.wingmen
+            for binding in wingman.get_record_bindings()
+        ]
+        candidates += [(binding, ANY_WINGMAN) for binding in settings.global_ptt_bindings]
+        owner = input_bindings.best_match(candidates, held, **event)
+        if owner is None:
+            return
 
-            if wingman:
-                if key:
-                    source = _key_source(key)
-                    label = f"key '{key.name}'"
-                elif mouse_button:
-                    source = mouse_button
-                    label = f"mouse button '{mouse_button}'"
-                else:
-                    source = f"{joystick_config.guid}{joystick_config.button}"
-                    label = f"joystick button {joystick_config.button}"
-                self._ptt_down(source, wingman, label)
+        if key is not None:
+            source = _key_source(key)
+            label = f"key '{key.name}'"
+        elif mouse_button is not None:
+            source = mouse_button
+            label = f"mouse button '{mouse_button}'"
+        else:
+            source = f"{joystick_config.guid}{joystick_config.button}"
+            label = f"joystick button {joystick_config.button}"
+
+        if owner is ANY_WINGMAN:
+            self._global_ptt_down(source, label)
+        else:
+            self._ptt_down(source, owner, label)
 
     def on_release(
         self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
@@ -1882,11 +1907,50 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
+    def _global_ptt_down(self, source: str, label: str = "") -> None:
+        """The global push-to-talk key: the spoken name picks the wingman, as
+        with voice activation."""
+        if not self.listen_controller.ptt_down(source, ANY_WINGMAN):
+            self.printr.print(
+                f"Global push-to-talk ignored: "
+                f"'{self.listen_controller.held_source}' still holds the microphone.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return
+        if label:
+            self.printr.print(f"Global push-to-talk: {label}", server_only=True)
+        # The default global key is the period, which people also type. A tap
+        # while typing must not flash the recording indicator in the client:
+        # it is announced only once the key is really held.
+        self._global_ptt_announced = False
+        timer = threading.Timer(GLOBAL_PTT_ANNOUNCE_S, self._announce_global_ptt, args=(source,))
+        timer.daemon = True
+        self._global_ptt_timer = timer
+        timer.start()
+
+    def _announce_global_ptt(self, source: str) -> None:
+        # A release cancels this timer, so a key still holding is a real hold.
+        if (
+            self.listen_controller.held_source == source
+            and self.listen_controller.held_wingman is ANY_WINGMAN
+        ):
+            self._global_ptt_announced = True
+            self.printr.print(
+                "Recording started",
+                command_tag=CommandTag.RECORDING_STARTED,
+            )
+
     def _ptt_up(self, source: str) -> None:
         wingman = self.listen_controller.held_wingman
         name = wingman.name if wingman else ""
         if not self.listen_controller.ptt_up(source):
             return
+        if wingman is ANY_WINGMAN:
+            if self._global_ptt_timer:
+                self._global_ptt_timer.cancel()
+            if not self._global_ptt_announced:
+                return
         self.printr.print(
             f"Recording stopped ({name})",
             source_name=name,
@@ -1904,9 +1968,15 @@ class WingmanCore(WebSocketUser):
         """The clip behind a push-to-talk key held no speech."""
         name = wingman.name if wingman else ""
         gate = self.voice_gate
+        if wingman is ANY_WINGMAN and not self._global_ptt_announced:
+            # A period typed somewhere, not a try to talk: the log only.
+            self.printr.print(
+                "Global push-to-talk tapped without speech.", server_only=True
+            )
+            return
         self.printr.print(
             f"Skipped recording ({name}) - no speech detected "
-            f"(level {gate.last_peak:.3f}, best speech score {gate.last_best_score:.2f}, "
+            f"(level {gate.clip_peak:.3f}, best speech score {gate.clip_best_score:.2f}, "
             f"threshold {gate.params.threshold:.2f})",
             color=LogType.WARNING,
             source_name=name,
@@ -1914,13 +1984,16 @@ class WingmanCore(WebSocketUser):
         )
 
     def on_key(self, key):
+        held = input_bindings.held_key(key)
         if key.event_type == "down":
-            if key.scan_code not in self.key_events:
-                self.key_events[key.scan_code] = key
+            if held in self.key_events:
+                # Auto-repeat of a held key: it would toggle mute again and
+                # again. The binding fired on the first press already.
+                return
+            self.key_events[held] = key
             self.on_press(key=key)
         elif key.event_type == "up":
-            if key.scan_code in self.key_events:
-                del self.key_events[key.scan_code]
+            self.key_events.pop(held, None)
             self.on_release(key=key)
 
     def on_mouse(self, event):
@@ -2044,7 +2117,10 @@ class WingmanCore(WebSocketUser):
         tower = self.tower
         if not tower:
             return
-        target = wingman or tower.get_wingman_from_text(text)
+        if wingman is ANY_WINGMAN:
+            target = self._wingman_for_global_ptt(text, tower)
+        else:
+            target = wingman or tower.get_wingman_from_text(text)
         if not target:
             return
         if target not in tower.wingmen:
@@ -2071,6 +2147,42 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         threading.Thread(target=run, name="wingman-process").start()
+
+    def _wingman_for_global_ptt(self, text: str, tower) -> Wingman | None:
+        """Who answers the global push-to-talk key: the wingman named in the
+        first words, else the one with the star, else the one the decision
+        model thinks most likely when it is on. If that call fails, the wingman who
+        answered last. Otherwise nobody: there is no one to guess from."""
+        target = tower.get_addressed_wingman(text) or tower.get_default_wingman()
+        if target:
+            return target
+        if len(tower.wingmen) == 1:
+            return tower.wingmen[0]
+        self.routing_decision_gate.update_settings(self.settings_service.settings)
+        name = self.routing_decision_gate.pick_wingman(
+            text,
+            [w.config for w in tower.wingmen],
+            recent={w.name: w.conversation.last_exchange() for w in tower.wingmen},
+            last_answer_from=self._last_answer_from,
+        )
+        target = next((w for w in tower.wingmen if w.name == name), None)
+        if target:
+            self.printr.print(f"The decision model picked {target.name} for '{text}'.", server_only=True)
+        elif self.routing_decision_gate.wingman_choice_active:
+            # The decision model is on but the call failed: whoever spoke last is the best guess.
+            target = next((w for w in tower.wingmen if w.name == self._last_answer_from), None)
+            if target:
+                self.printr.print(
+                    f"The decision model gave no answer, {target.name} answered last and gets '{text}'.",
+                    server_only=True,
+                )
+        if not target:
+            self.printr.print(
+                f"Nobody answered '{text}': say a Wingman's name, give one the ⭐ "
+                "or let Fast decisions pick the Wingman.",
+                color=LogType.WARNING,
+            )
+        return target
 
     def _is_stop(self, words: list[str]) -> bool:
         """Whether the whole utterance is a stop command. The phrases are read
@@ -2384,8 +2496,8 @@ class WingmanCore(WebSocketUser):
             return SttTestResult(
                 text="",
                 duration_s=0.0,
-                level=gate.last_peak,
-                best_score=gate.last_best_score,
+                level=gate.clip_peak,
+                best_score=gate.clip_best_score,
                 threshold=gate.params.threshold,
             )
         wav_path = self.transcription_worker.write(utterance)
@@ -2395,8 +2507,8 @@ class WingmanCore(WebSocketUser):
             text=text or "",
             duration_s=utterance.duration_s,
             transcribe_ms=int((time.perf_counter() - started) * 1000),
-            level=gate.last_peak,
-            best_score=gate.last_best_score,
+            level=gate.clip_peak,
+            best_score=gate.clip_best_score,
             threshold=gate.params.threshold,
         )
 
@@ -2445,6 +2557,8 @@ class WingmanCore(WebSocketUser):
         self.listen_controller.set_voice_activation(is_enabled)
 
     async def on_playback_started(self, wingman_name: str):
+        # For a follow-up on the global push-to-talk key that names nobody.
+        self._last_answer_from = wingman_name
         await self.printr.print_async(
             text=f"Playback started ({wingman_name})",
             source_name=wingman_name,
@@ -2512,6 +2626,13 @@ class WingmanCore(WebSocketUser):
     def get_startup_errors(self):
         return self.startup_errors
 
+    def _loaded_wingman(self, wingman_name: str):
+        """The loaded Wingman of that name, or None. There is no Tower before
+        sign-in or while the config reloads, and the client may already call."""
+        if not self.tower:
+            return None
+        return self.tower.get_wingman_by_name(wingman_name)
+
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
@@ -2537,7 +2658,7 @@ class WingmanCore(WebSocketUser):
     async def ask_wingman_conversation_provider(
         self, wingman_name: str, text: str = Body(...)
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
 
         if wingman and text:
             if isinstance(wingman, OpenAiWingman):
@@ -2545,13 +2666,14 @@ class WingmanCore(WebSocketUser):
 
                 completion = await wingman.actual_llm_call(messages=messages)
 
-                return completion.choices[0].message.content
+                if completion and completion.choices:
+                    return completion.choices[0].message.content
 
         return None
 
     # POST /generate-image
     async def generate_image(self, text: str, wingman_name: str):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
 
         if wingman and text:
             if isinstance(wingman, OpenAiWingman):
@@ -2607,7 +2729,7 @@ class WingmanCore(WebSocketUser):
         wingman_name: str = Form(""),
         images: list[UploadFile] = None,
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not text:
             return
 
@@ -2618,34 +2740,7 @@ class WingmanCore(WebSocketUser):
                     status_code=422, detail="Maximum 2 images allowed per message."
                 )
 
-            # Resolve the active conversation model ID from the wingman config.
-            # The model lives under the provider-specific sub-config, not features.
-            model_id = ""
-            if hasattr(wingman, "config") and hasattr(wingman.config, "features"):
-                provider = wingman.config.features.conversation_provider
-                cfg = wingman.config
-                if provider == ConversationProvider.OPENAI and cfg.openai:
-                    model_id = cfg.openai.conversation_model or ""
-                elif provider == ConversationProvider.MISTRAL and cfg.mistral:
-                    model_id = cfg.mistral.conversation_model or ""
-                elif provider == ConversationProvider.GROQ and cfg.groq:
-                    model_id = cfg.groq.conversation_model or ""
-                elif provider == ConversationProvider.CEREBRAS and cfg.cerebras:
-                    model_id = cfg.cerebras.conversation_model or ""
-                elif provider == ConversationProvider.GOOGLE and cfg.google:
-                    model_id = cfg.google.conversation_model or ""
-                elif provider == ConversationProvider.OPENROUTER and cfg.openrouter:
-                    model_id = cfg.openrouter.conversation_model or ""
-                elif provider == ConversationProvider.LOCAL_LLM and cfg.local_llm:
-                    model_id = cfg.local_llm.conversation_model or ""
-                elif provider == ConversationProvider.WINGMAN_PRO and cfg.wingman_pro:
-                    model_id = cfg.wingman_pro.conversation_deployment or ""
-                elif provider == ConversationProvider.PERPLEXITY and cfg.perplexity:
-                    pmodel = cfg.perplexity.conversation_model
-                    model_id = pmodel.value if hasattr(pmodel, "value") else str(pmodel)
-                elif provider == ConversationProvider.XAI and cfg.xai:
-                    model_id = cfg.xai.conversation_model or ""
-
+            model_id = conversation_model_id(getattr(wingman, "config", None))
             if model_id:
                 supports_vision = await self.model_metadata_service.supports_vision(model_id)
                 if not supports_vision:
@@ -2681,7 +2776,7 @@ class WingmanCore(WebSocketUser):
     async def send_audio_to_wingman(
         self, wingman_name: str, file: UploadFile = File(...)
     ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman:
             return
 
@@ -2700,13 +2795,13 @@ class WingmanCore(WebSocketUser):
     # POST /reset-conversation-history
     async def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
-            wingman = self.tower.get_wingman_by_name(wingman_name)
+            wingman = self._loaded_wingman(wingman_name)
             if wingman:
                 await wingman.reset_conversation_history()
                 self.printr.toast(
                     f"Conversation history cleared for {wingman_name}.",
                 )
-        else:
+        elif self.tower:
             for wingman in self.tower.wingmen:
                 await wingman.reset_conversation_history()
             self.printr.toast(
@@ -2716,7 +2811,7 @@ class WingmanCore(WebSocketUser):
 
     # POST /condense-conversation
     async def condense_conversation(self, wingman_name: str):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman:
             self.printr.toast_warning(
                 f"Cannot summarize: Wingman '{wingman_name}' not found."
@@ -2731,7 +2826,7 @@ class WingmanCore(WebSocketUser):
 
     # GET /wingman-context
     def get_wingman_context(self, wingman_name: str) -> str:
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not hasattr(wingman, "get_last_context"):
             return ""
         return wingman.get_last_context()
@@ -2740,7 +2835,7 @@ class WingmanCore(WebSocketUser):
     def get_wingman_conversation(
         self, wingman_name: str, strip_nulls: bool = True
     ) -> list[dict]:
-        wingman = self.tower.get_wingman_by_name(wingman_name)
+        wingman = self._loaded_wingman(wingman_name)
         if not wingman or not hasattr(wingman, "get_conversation_messages"):
             return []
         return wingman.get_conversation_messages(strip_nulls=strip_nulls)
@@ -3258,6 +3353,52 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"OpenRouter: \n{str(e)}")
             return []
 
+    # GET /models/openrouter/decisions
+    async def get_openrouter_decision_models(self):
+        """The decision models OpenRouter lists. They answer only its System
+        One route, not chat completions, so the main model's list must not
+        offer them and this one offers nothing else."""
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                url="https://openrouter.ai/api/v1/models",
+                params={"output_modalities": "decisions"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            return response.json().get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"OpenRouter: \n{str(e)}")
+            return []
+
+    # GET /models/decision-model-server
+    async def get_decision_model_server_models(self) -> list[str]:
+        """The model ids the user's decision model server offers, for the
+        model field. oMLX and local-jev list theirs at /v1/models; a server
+        that does not gets an empty list and the field stays free text."""
+        from providers.decision_model import SERVER_SECRET, server_base_url
+
+        base = server_base_url(self.settings_service.settings.decision_model.server.endpoint)
+        if not base:
+            return []
+        key = self.secret_keeper.secrets.get(SERVER_SECRET, "")
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                url=f"{base}/v1/models",
+                headers={"Authorization": f"Bearer {key}"} if key else {},
+                timeout=5,
+            )
+            response.raise_for_status()
+            return [str(m["id"]) for m in response.json().get("data", []) if m.get("id")]
+        except Exception as e:
+            self.printr.print(
+                f"Decision model server: no model list from {base} ({e})",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return []
+
     # GET /models/openrouter/endpoints
     async def get_openrouter_model_endpoints(self, model_id: str):
         if not model_id:
@@ -3458,23 +3599,9 @@ class WingmanCore(WebSocketUser):
         try:
             elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
 
-            # maxCharacters asks ElevenLabs for the subscription tier, and the
+            # The request limit depends on the subscription tier, and the
             # lookups wait for each other, so all of it runs off the event loop.
-            def load_models():
-                return [
-                    ElevenlabsModel(
-                        name=model.name,
-                        model_id=model.modelID,
-                        description=model.description,
-                        max_characters=model.maxCharacters,
-                        cost_factor=model.costFactor,
-                        supported_languages=model.supportedLanguages,
-                        metadata=model.metadata,
-                    )
-                    for model in elevenlabs.get_available_models()
-                ]
-
-            return await asyncio.to_thread(load_models)
+            return await asyncio.to_thread(elevenlabs.get_models)
         except Exception as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
             return []
@@ -4132,6 +4259,28 @@ class WingmanCore(WebSocketUser):
                 success=False, provider="parakeet", error=str(e)
             )
 
+    # POST /settings/test/decision-model
+    async def test_decision_model(self) -> TestConnectionResult:
+        """Ask the chosen decision model one yes/no question, the way a turn
+        would, with the provider, model and key saved right now."""
+        from providers.decision_model import DecisionModelClient, noul
+
+        settings = self.settings_service.settings
+        provider = settings.decision_model.provider.value
+        client = DecisionModelClient(settings=settings)
+        result = await asyncio.to_thread(
+            client.decide,
+            {"transcript": "Shields up!"},
+            {"order": noul("The speaker is giving an order.")},
+        )
+        if result.ok and result.answers.get("order"):
+            return TestConnectionResult(success=True, provider=provider)
+        return TestConnectionResult(
+            success=False,
+            provider=provider,
+            error=result.error or "The model answered, but not the question.",
+        )
+
     # POST /settings/test/xvasynth
     async def test_xvasynth(self) -> TestConnectionResult:
         """Test the XVASynth server connection."""
@@ -4398,17 +4547,19 @@ class WingmanCore(WebSocketUser):
             {"role": "user", "content": backstory},
         ]
 
+        # 424, not 500: the provider failed (and actual_llm_call already told
+        # the user why). A 5xx would be reported as a bug in Core.
         try:
             completion = await wingman.actual_llm_call(messages)
         except Exception as e:
             raise HTTPException(
-                status_code=500,
+                status_code=424,
                 detail=f"LLM call failed: {e}",
             )
 
         if not completion or not completion.choices:
             raise HTTPException(
-                status_code=500,
+                status_code=424,
                 detail="Backstory enhancement failed — no response from LLM.",
             )
 
@@ -4419,26 +4570,11 @@ class WingmanCore(WebSocketUser):
                 detail="Backstory enhancement failed — empty response.",
             )
 
-        # Parse JSON response: {"backstory": "...", "summary": "..."}
-        # Strip markdown code fences if the model wrapped the JSON
-        import re as _re
-        import json as _json
-        stripped = result_text.strip()
-        fence_match = _re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$", stripped)
-        if fence_match:
-            stripped = fence_match.group(1).strip()
-        try:
-            parsed = _json.loads(stripped)
-            enhanced = parsed.get("backstory", result_text)
-            summary = parsed.get("summary", "")
-        except (_json.JSONDecodeError, AttributeError):
-            # Model didn't return valid JSON — use raw text as backstory
-            enhanced = result_text
-            summary = ""
+        enhanced, summary = parse_enhanced_backstory(result_text)
 
         raw_model = getattr(completion, "model", None) or ""
         # Strip date suffixes like "-2025-04-14" for a friendlier display name
-        model_name = _re.sub(r"-\d{4}-\d{2}-\d{2}$", "", raw_model)
+        model_name = re.sub(r"-\d{4}-\d{2}-\d{2}$", "", raw_model)
         usage = getattr(completion, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
@@ -4548,6 +4684,7 @@ class WingmanCore(WebSocketUser):
         # Stop HUD Server
         await self._stop_hud_server()
         await ScGameLogService().stop()
+        await ScTelemetryService().stop()
 
         # The wingmen first: their skills (radio chatter, timers) may still
         # be synthesizing, and their memory checkpoint needs the models.

@@ -1,7 +1,15 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    Base64Str,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from api.enums import (
+    DecisionModelProvider,
     VoiceCloneState,
     ConversationProvider,
     CoreState,
@@ -11,6 +19,7 @@ from api.enums import (
     LocalAiMode,
     PocketTtsQuality,
     ScGameLogRulesProblem,
+    ScTelemetryState,
     SkillRequirement,
     StarCitizenFeatureKind,
     SpokenLanguage,
@@ -24,6 +33,7 @@ from api.enums import (
     WingmanInitializationErrorType,
     WingmanProTtsProvider,
     PerplexityModel,
+    RecordingDevice,
 )
 
 
@@ -210,6 +220,10 @@ class ParakeetSettings(BaseModel):
     """Where a Parakeet server runs when `run_locally` is off. Empty until
     the user fills it in; nothing is contacted before that."""
     port: int = 9876
+    model: str
+    """The model name sent to that server. A server that hosts several models
+    (oMLX, LM Studio) wants its own id, e.g. `parakeet-tdt-0.6b-v3`. Its API
+    key, if it needs one, is the secret `parakeet`."""
 
 
 class ParakeetSttConfig(BaseModel):
@@ -283,6 +297,9 @@ class ElevenlabsVoiceSettingsConfig(BaseModel):
 
     use_speaker_boost: bool
     """Adds a delay to the playback"""
+
+    speed: Annotated[float, Field(strict=True, ge=0.7, le=1.2)]
+    """Speaking rate, 1.0 is normal. 0.7 - 1.2, the range every model takes."""
 
 
 class ElevenlabsConfig(BaseModel):
@@ -534,6 +551,49 @@ class SoundConfig(BaseModel):
     """The volume for playback. 0.0 - 1.0"""
 
 
+class CommandJoystickConfig(BaseModel):
+    button: Optional[int] = None
+    """The joystick button to press. Optional."""
+
+    name: Optional[str] = None
+    """The joystick name to use. Optional."""
+
+    guid: Optional[str] = None
+    """The joystick GUID to use. Optional."""
+
+
+class KeyStroke(BaseModel):
+    """One keyboard key. On Windows left and right Ctrl (also Alt, Enter and
+    the arrows against the numpad) share a scan code and differ only in
+    `extended`, so a key is the pair, never the scan code alone."""
+
+    scan_code: Optional[int] = None
+    """None: the key is known by name only (templates, and keys saved without
+    a code before 3.2.12). It is then looked up on the machine that runs it,
+    since scan codes differ between Windows, macOS and Linux."""
+    extended: bool
+    name: str
+    """Shown to the user. Matching uses scan_code and extended when there is a
+    scan code."""
+
+
+class InputBinding(BaseModel):
+    """One way to trigger something: a key combination, a mouse button or a
+    joystick button. Mouse and joystick may come with keyboard keys that must
+    be held as well, like Ctrl + Mouse 4."""
+
+    device: RecordingDevice
+    keys: list[KeyStroke]
+    """Keyboard: the whole combination. Mouse and joystick: the keys held with
+    the button, usually none."""
+
+    mouse_button: Optional[str] = None
+    """Set when device is mouse."""
+
+    joystick: Optional[CommandJoystickConfig] = None
+    """Set when device is joystick."""
+
+
 class VoiceActivationSettings(BaseModel):
     """Hands-free listening. Off means the user holds a wingman's record key.
     Which provider transcribes is not decided here but in ``SttSettings``:
@@ -542,10 +602,9 @@ class VoiceActivationSettings(BaseModel):
     enabled: bool
     """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
 
-    mute_toggle_key: str
-    """If you want to use a key to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
-
-    mute_toggle_key_codes: Optional[list[int]] = None
+    mute_toggle_bindings: list[InputBinding]
+    """Keys that switch the microphone on and off while voice activation is on,
+    to talk to other people without the Wingman listening."""
 
     sensitivity: float = 0.5
     """How easily the voice detector opens: 0 needs a clear voice, 1 opens on a
@@ -706,7 +765,12 @@ class CommandKeyboardConfig(BaseModel):
     """The hotkey codes. Can be a single key like 65 or a combination like 162+160+65. Optional."""
 
     hotkey_extended: Optional[bool] = None
-    """Whether the hotkey is an extended key. Optional."""
+    """Whether the hotkey is an extended key. Optional. One flag for the whole
+    combination: older recordings only. A combination with `keys` ignores it."""
+
+    keys: Optional[list[KeyStroke]] = None
+    """The keys with an extended flag each, written by recordings since 3.2.12.
+    None in older actions, which then play exactly as they always did."""
 
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
@@ -733,17 +797,6 @@ class CommandMouseConfig(BaseModel):
 
     move_to: Optional[list[int]] = None
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
-
-
-class CommandJoystickConfig(BaseModel):
-    button: Optional[int] = None
-    """The joystick button to press. Optional."""
-
-    name: Optional[str] = None
-    """The joystick name to use. Optional."""
-
-    guid: Optional[str] = None
-    """The joystick GUID to use. Optional."""
 
 
 class CommandSkillActionConfig(BaseModel):
@@ -893,6 +946,30 @@ class CustomProperty(BaseModel):
     """Marks the property as required in the UI."""
     options: Optional[list[LabelValuePair]] = None
     """If property_type is set to 'single_select', you can provide options here. May also hold meta information for other property types like "multiple" for voice_selection."""
+    group: Optional[str] = None
+    """The id of a group from the skill's `property_groups`. None shows the property above all groups."""
+    platforms: Optional[list[str]] = None
+    """The systems the property is offered on: 'windows', 'darwin' (macOS), 'linux'. Core drops it elsewhere. None offers it everywhere."""
+
+    @field_validator("group", mode="before")
+    @classmethod
+    def _group_id(cls, group):
+        # A typo in a manifest must not cost the skill: anything but an id
+        # shows the property ungrouped.
+        return group if isinstance(group, str) and group else None
+
+
+class CustomPropertyGroup(BaseModel):
+    """A heading in the UI that custom properties are grouped under."""
+
+    id: str
+    """Unique within the skill. Properties name it in their `group`."""
+    name: str
+    """The heading displayed in the UI."""
+    hint: Optional[str] = None
+    """A line below the heading."""
+    toggle: Optional[str] = None
+    """The id of a boolean property that turns the whole group on or off. The UI shows it as the switch in the heading."""
 
 
 class LocalizedMetadata(BaseModel):
@@ -911,6 +988,8 @@ class SkillConfig(CustomClassConfig):
     """An additional prompt that extends the system prompt of the Wingman."""
     custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
+    property_groups: Optional[list[CustomPropertyGroup]] = None
+    """Groups for the custom properties, in the order the UI shows them. None shows all properties ungrouped."""
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[LocalizedMetadata]] = None
     platforms: Optional[list[str]] = None
@@ -949,6 +1028,37 @@ class SkillConfig(CustomClassConfig):
     without this field are treated as legacy (pre-v3) and are not loaded. Current: 3."""
     version: Optional[str] = None
     """Optional skill release version (free-form, e.g. '2.0.1'). Used for telemetry only."""
+
+    @field_validator("property_groups", mode="before")
+    @classmethod
+    def _usable_property_groups(cls, groups):
+        # A broken group must not cost the skill: it is left out, and its
+        # properties are shown ungrouped. The first of two equal ids wins.
+        if not isinstance(groups, list):
+            return None
+        usable = []
+        seen = set()
+        for group in groups:
+            if isinstance(group, CustomPropertyGroup):
+                group = group.model_dump()
+            if not isinstance(group, dict):
+                continue
+            group_id, name = group.get("id"), group.get("name")
+            hint, toggle = group.get("hint"), group.get("toggle")
+            if not (isinstance(group_id, str) and group_id and isinstance(name, str) and name):
+                continue
+            if group_id in seen:
+                continue
+            seen.add(group_id)
+            usable.append(
+                {
+                    "id": group_id,
+                    "name": name,
+                    "hint": hint if isinstance(hint, str) else None,
+                    "toggle": toggle if isinstance(toggle, str) and toggle else None,
+                }
+            )
+        return usable or None
 
 
 class SkillToolInfo(BaseModel):
@@ -1330,14 +1440,9 @@ class WingmanConfig(NestedConfig):
     """The "friendly" name of this Wingman. Can be changed by the user."""
     description: Optional[str] = None
     """A short description of this Wingman."""
-    record_key: Optional[str] = None
-    """The "push-to-talk" key for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
-    record_key_codes: Optional[list[int]] = None
-    """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
-    record_mouse_button: Optional[str] = None
-    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
-    record_joystick_button: Optional[CommandJoystickConfig] = None
-    """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
+    record_bindings: list[InputBinding]
+    """The "push-to-talk" keys, mouse and joystick buttons for this wingman.
+    Keep one pressed while talking. Each binding belongs to one wingman only."""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
     persistent_memory: bool = True
@@ -1580,28 +1685,49 @@ class LlamaCppSettings(BaseModel):
         return self.mode != LocalAiMode.SERVER
 
 
-class SystemOneSettings(BaseModel):
-    """The System One model: a decision layer in front of the main model.
+class DecisionModelOpenRouterSettings(BaseModel):
+    model: str
+    """OpenRouter id of the decision model, e.g. `~typesafe/jev-latest` or
+    `cloudflare/clef-flash`. Its key is the secret `openrouter`, the same one
+    the main model uses."""
 
-    A System One model answers typed questions instead of writing text — which
+
+class DecisionModelServerSettings(BaseModel):
+    endpoint: str
+    """Where a server of the user's answers `/v1/systemone`, e.g.
+    `http://127.0.0.1:8000/v1` for oMLX. With or without the `/v1`. Empty
+    until the user fills it in; nothing is contacted before that."""
+    model: str
+    """The model name sent to that server. Its API key, if it needs one, is
+    the secret `decision_model_server`."""
+
+
+class DecisionModelSettings(BaseModel):
+    """The decision model: a layer in front of the main model.
+
+    A decision model answers typed questions instead of writing text — which
     command was asked for, which skills a turn needs, whether the microphone
     heard a request at all, whether a heard word is a game name. It answers in
     about 300 ms where a chat model takes over a second, and it cannot return
     a value outside the options it was given.
 
-    Which model that is comes from the subscription, not from here: it is a
-    fixed role like transcription and speech, so it can be changed in /admin
-    without a Wingman release. The user's choice is whether to use one at all.
+    Who answers is `provider`: the Wingman Subscription, where the plan picks
+    the model and /admin can change it without a Wingman release, or
+    OpenRouter or a server of the user's, where the user names it.
     """
 
-    enabled: bool
-    """Whether any of Core's decisions may go to the System One model.
+    provider: DecisionModelProvider
+    """Who answers. The Wingman Subscription unless the user picked another."""
 
-    The master switch. The decisions it takes are spread over the turn —
-    before the main model, during transcription, inside skills — and a toggle
-    per place would be a settings page nobody could reason about. Off means
-    every one of those places decides the way it did before, which is always
-    a working path and never an error."""
+    openrouter: DecisionModelOpenRouterSettings
+    server: DecisionModelServerSettings
+
+    enabled: bool
+    """Whether any of Core's decisions may go to the decision model.
+
+    The master switch over the four below, one per place it decides. Off
+    means every one of those places decides the way it did before, which is
+    always a working path and never an error."""
 
     commands: bool
     """Whether the model is asked which command a request means, before the
@@ -1618,6 +1744,20 @@ class SystemOneSettings(BaseModel):
     spoken confirmation after 1.49 s instead of 2.13 s. A request that is not
     a command costs 0.46 s and changes nothing. For someone who only talks to
     their Wingman, that is all it ever does."""
+
+    wingman_choice: bool
+    """Whether the model picks the Wingman for a sentence from the global
+    push-to-talk key that names none, when no Wingman has the star. Off,
+    such a sentence goes to nobody."""
+
+    vocabulary: bool
+    """Whether the model confirms the game names the speech recognition
+    corrects ("cutless" to Cutlass). Off, the matcher decides alone."""
+
+    skills: bool
+    """Whether skills may ask the model (`self.wingman.system_one`): UEX Corp
+    matching a ship or place, Spotify a playlist, the HUD a panel. Off, each
+    skill decides the way it does without it."""
 
 
 class OtherLanguageSetting(BaseModel):
@@ -1731,6 +1871,34 @@ class ScGameLogStatus(BaseModel):
     """Why the reader cannot run, e.g. its database cannot be opened."""
 
 
+class ScTelemetrySettings(BaseModel):
+    """Core reads Star Citizen's own telemetry stream (ship and pilot, about 17
+    times a second) and hands it to skills (services/sc_telemetry,
+    `self.wingman.sc_telemetry`). Runs only while `star_citizen.plays` is true."""
+
+    enabled: bool
+    """On Windows, on also sets the user variable GRPC_CLIENT_SERVER_ENABLED
+    that switches telemetry on in the game, and off removes it again if Core
+    set it. Elsewhere the user sets it in their launcher."""
+
+
+class ScTelemetryStatus(BaseModel):
+    """What Star Citizen's telemetry is doing, for the settings page."""
+
+    state: ScTelemetryState
+    released: bool
+    """False on a channel the feature has not reached yet (services/features.py):
+    the client shows nothing of it then."""
+    variable_managed: bool
+    """Core can switch telemetry in the game itself (Windows)."""
+    variable_set: Optional[bool] = None
+    """Whether the game's switch is set; None where Core cannot see it."""
+    vehicle: Optional[str] = None
+    """The ship the pilot sits in, while live."""
+    detail: Optional[str] = None
+    """Why the stream is incompatible or unavailable, for a bug report."""
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     stt: SttSettings
@@ -1739,11 +1907,12 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
     llama_cpp: LlamaCppSettings
-    system_one: SystemOneSettings
+    decision_model: DecisionModelSettings
     hud_server: HudServerSettings
     hud_profiles: list[HudProfile]
     star_citizen: StarCitizenSettings
     sc_gamelog: ScGameLogSettings
+    sc_telemetry: ScTelemetrySettings
     debug_mode: bool
     streamer_mode: bool
     show_token_count: bool
@@ -1754,9 +1923,11 @@ class SettingsConfig(BaseModel):
     """Speak a short line, written by the support model in the user's language,
     while a slow tool runs and the Wingman has not said anything yet."""
     pronunciation: PronunciationSettings
-    cancel_tts_key: Optional[str] = None
-    cancel_tts_key_codes: Optional[list[int]] = None
-    cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
+    cancel_tts_bindings: list[InputBinding]
+    """Stop the Wingman mid-answer ("shut up"). One setting for every Wingman."""
+    global_ptt_bindings: list[InputBinding]
+    """Push-to-talk for every Wingman at once: hold it and say the Wingman's
+    name, like with voice activation."""
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
     spoken_language: SpokenLanguage

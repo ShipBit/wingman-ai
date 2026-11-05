@@ -17,7 +17,10 @@ permissions:
 jobs:
   pytest:
     name: pytest (Linux)
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-26.04 (ubuntu-latest since 2026-10-26) PortAudio fails
+    # at `import sounddevice` without a PulseAudio server, so every test that
+    # touches audio breaks during collection.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:

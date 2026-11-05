@@ -227,6 +227,18 @@ async def shutdown():
     keyboard.unhook_all()
 
 
+def exit_process(code: int):
+    """End the process now. os._exit skips the atexit handlers, so they run
+    here first: exit_handler and the ones that stop llama-server and unhook
+    keyboard and mouse. They get ten seconds; they must not keep the process
+    alive in turn."""
+    cleanup = threading.Thread(target=atexit._run_exitfuncs, daemon=True)
+    cleanup.start()
+    cleanup.join(timeout=10)
+    logging.shutdown()
+    os._exit(code)
+
+
 def exit_handler():
     printr.print(
         "atexit handler shutting down...", color=LogType.SYSTEM, server_only=True
@@ -882,12 +894,10 @@ if __name__ == "__main__":
         if not stopping:
             # The loop is gone, but the threads of turns, skills and audio
             # keep the process alive: Core would still run and answer nothing.
-            # End it so the client shows that Core stopped. os._exit skips the
-            # atexit handlers, so they run here first: exit_handler and the
-            # ones that stop llama-server and unhook keyboard and mouse. They
-            # get ten seconds; they must not keep the process alive in turn.
-            cleanup = threading.Thread(target=atexit._run_exitfuncs, daemon=True)
-            cleanup.start()
-            cleanup.join(timeout=10)
-            logging.shutdown()
-            os._exit(1)
+            # End it so the client shows that Core stopped.
+            exit_process(1)
+
+    # Stopped by Ctrl+C or SIGTERM, or the loop ended. AnyIO's worker threads
+    # are no daemons and only end with the task that started them, which
+    # loop.stop() cuts short: Python would wait for them forever on exit.
+    exit_process(0)

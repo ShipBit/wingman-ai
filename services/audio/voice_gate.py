@@ -89,6 +89,8 @@ class VoiceGate:
         self._set_pre_roll_length()
         self._reset_capture()
         self._reset_diagnostics()
+        self.clip_peak = 0.0
+        self.clip_best_score = 0.0
 
     # --- configuration ---
 
@@ -126,6 +128,10 @@ class VoiceGate:
         """Push-to-talk key up. Returns the utterance if there was speech."""
         if self.mode != "held":
             return None
+        # Arming for voice activation right after this resets the live
+        # numbers; the microphone test and the dropped-clip warning read these.
+        self.clip_peak = self.last_peak
+        self.clip_best_score = self.last_best_score
         utterance = self._finish(truncated=False)
         self.mode = "closed"
         self._reset_capture()
@@ -139,8 +145,9 @@ class VoiceGate:
             self._on_reset()
 
     def _reset_diagnostics(self) -> None:
-        """How loud the clip was and how sure the detector was at best. Kept
-        past close() so the log line for a dropped clip can read them."""
+        """How loud the audio was and how sure the detector was at best, since
+        the gate last opened. release() copies them to clip_peak and
+        clip_best_score, because opening again resets them."""
         self.last_peak = 0.0
         self.last_best_score = 0.0
 

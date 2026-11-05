@@ -12,6 +12,14 @@ from api.interface import (
 from providers.parakeet import Parakeet
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
+from services.binding_owners import (
+    SETTINGS_SLOTS,
+    announce,
+    get_slot,
+    settings_owner,
+    take_from_settings,
+)
+from services.input_bindings import added_bindings
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
 from services import other_language
@@ -181,6 +189,7 @@ class SettingsService:
     # POST /settings
     async def save_settings(self, settings: SettingsConfig):
         old = deepcopy(self.config_manager.settings_config)
+        await self._give_recorded_bindings_one_owner(settings, old)
 
         # Speech-to-text. One block for every wingman and both ways of talking.
         old_stt = old.stt
@@ -300,9 +309,10 @@ class SettingsService:
             await self.local_ai_service.update_settings_async(settings.llama_cpp)
             self.config_manager.settings_config.llama_cpp = settings.llama_cpp
 
-        # System One. Nothing to react to: the gates read the flag on every
-        # call, so the next utterance follows it without a restart.
-        self.config_manager.settings_config.system_one = settings.system_one
+        # Decision model. Nothing to react to: the gates read the switches and
+        # the provider on every call, so the next utterance follows them
+        # without a restart.
+        self.config_manager.settings_config.decision_model = settings.decision_model
 
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation
@@ -340,14 +350,18 @@ class SettingsService:
         self.config_manager.settings_config.filler_responses = settings.filler_responses
         self.config_manager.settings_config.pronunciation = settings.pronunciation
 
-        # cancel TTS ("shut up") bindings
-        self.config_manager.settings_config.cancel_tts_key = settings.cancel_tts_key
-        self.config_manager.settings_config.cancel_tts_key_codes = (
-            settings.cancel_tts_key_codes
-        )
-        self.config_manager.settings_config.cancel_tts_joystick_button = (
-            settings.cancel_tts_joystick_button
-        )
+        # Bindings that belong to no wingman: shut up and global push-to-talk.
+        # Mute came in with voice_activation above.
+        self.config_manager.settings_config.cancel_tts_bindings = settings.cancel_tts_bindings
+        self.config_manager.settings_config.global_ptt_bindings = settings.global_ptt_bindings
+        if (
+            settings.cancel_tts_bindings != old.cancel_tts_bindings
+            or settings.global_ptt_bindings != old.global_ptt_bindings
+            or settings.voice_activation.mute_toggle_bindings
+            != old.voice_activation.mute_toggle_bindings
+        ):
+            # A new mouse or joystick button needs its hook now, not after a restart.
+            await self.settings_events.publish("input_bindings_changed", None)
 
         # HUD server. hud_profiles are not taken from the page: they have their
         # own endpoints (/hud/profiles) and a drag in the preview changes them
@@ -361,6 +375,7 @@ class SettingsService:
         # Star Citizen: the game folder, and the log reader that reads it
         self.config_manager.settings_config.star_citizen = settings.star_citizen
         self.config_manager.settings_config.sc_gamelog = settings.sc_gamelog
+        self.config_manager.settings_config.sc_telemetry = settings.sc_telemetry
         # star_citizen as a whole: the answer "I play" starts or stops it too.
         if (
             settings.sc_gamelog != old.sc_gamelog
@@ -368,6 +383,13 @@ class SettingsService:
         ):
             await self.settings_events.publish(
                 "sc_gamelog_settings_changed", settings
+            )
+        if (
+            settings.sc_telemetry != old.sc_telemetry
+            or settings.star_citizen != old.star_citizen
+        ):
+            await self.settings_events.publish(
+                "sc_telemetry_settings_changed", settings
             )
 
         # save the config file
@@ -379,6 +401,24 @@ class SettingsService:
                 await wingman.update_settings(
                     settings=self.config_manager.settings_config
                 )
+
+    async def _give_recorded_bindings_one_owner(
+        self, settings: SettingsConfig, old: SettingsConfig
+    ) -> None:
+        """A key just recorded for push-to-talk for all Wingmen, shut up or
+        mute is that one's now: the other lists and every Wingman's
+        push-to-talk lose it. These keys work in every config, so the Wingmen
+        of every config lose it."""
+        for slot in SETTINGS_SLOTS:
+            recorded = added_bindings(get_slot(settings, slot), get_slot(old, slot))
+            if not recorded:
+                continue
+            lost = take_from_settings(settings, recorded, keep=slot)
+            lost += await self.config_service.take_bindings_from_wingmen(
+                recorded, self.config_manager.get_config_dirs()
+            )
+            if lost:
+                announce(settings_owner(slot), lost)
 
     def save_settings_to_disk(self):
         """Persist current settings to disk without triggering provider updates."""

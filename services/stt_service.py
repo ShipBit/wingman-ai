@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from api.enums import LogType, SttProvider
 from services.audio.vocabulary import Vocabulary, apply_override, load_preset
-from services.jev_gate import JevGate
+from services.decision_gate import DecisionGate
 from services.printr import Printr
 from services.audio.common_words import common_words
 from services.spoken_language import transcription_tag
@@ -46,8 +46,8 @@ class SttService:
         self.printr = Printr()
         self._preset_cache: dict[str, list[str]] = {}
         # Reads settings_service on every call, so a toggle in the client
-        # applies to the next utterance. See services/jev_gate.py.
-        self.jev = JevGate(wingman_name="STT", settings=settings_service.settings)
+        # applies to the next utterance. See services/decision_gate.py.
+        self.decision_gate = DecisionGate(wingman_name="STT", settings=settings_service.settings)
 
     @property
     def provider(self) -> SttProvider:
@@ -94,20 +94,20 @@ class SttService:
         the name or the everyday word is in the sentence around it, which is
         what the gate asks about.
 
-        Every way this can fail — gate off, no key, gateway down, Jev unsure
+        Every way this can fail — gate off, no key, provider down, model unsure
         — ends in the matcher's own answer, which is today's behaviour.
         """
         # Settings are re-read here rather than kept: SttService outlives every
         # save, and the gate must follow the switch the user just flipped.
-        self.jev.update_settings(self.settings_service.settings)
+        self.decision_gate.update_settings(self.settings_service.settings)
         vocabulary = self.vocabulary()
-        if not self.jev.active:
+        if not self.decision_gate.active:
             return vocabulary.correct(text)
 
         proposals = vocabulary.proposals(text)
         if not proposals:
             return text
-        confirmed = self.jev.confirm_vocabulary(text, proposals)
+        confirmed = self.decision_gate.confirm_vocabulary(text, proposals)
         if confirmed is None:
             return vocabulary.correct(text)
 
@@ -134,12 +134,21 @@ class SttService:
             common_words=common_words(self.app_root_path, self.settings_service.settings.spoken_language),
         )
 
+    def _parakeet_api_key(self) -> str:
+        """The secret `parakeet`, for a remote server that wants a key.
+        Optional like `local_llm`: never prompts, empty means keyless.
+        "not-set" is the placeholder older migrations wrote."""
+        key = str(self.secret_keeper.secrets.get("parakeet") or "").strip()
+        return "" if key == "not-set" else key
+
     def _transcribe(self, provider: SttProvider, filename: str) -> str | None:
         stt = self.settings_service.settings.stt
 
         if provider == SttProvider.PARAKEET:
             result = self.parakeet.transcribe(
-                config=stt.parakeet_config, filename=filename
+                config=stt.parakeet_config,
+                filename=filename,
+                api_key=self._parakeet_api_key(),
             )
             return result.text if result else None
 

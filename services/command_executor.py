@@ -12,7 +12,7 @@ import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 
 from api.enums import LogType
-from api.interface import CommandConfig, WingmanConfig
+from api.interface import CommandConfig, CommandKeyboardConfig, WingmanConfig
 from services.audio_library import AudioLibrary
 from services.name_match import without_name, words_of
 from services.printr import Printr
@@ -40,6 +40,41 @@ def _command_has_effective_actions(command: CommandConfig) -> bool:
         ):
             return True
     return False
+
+
+def _plays_by_strokes(config: CommandKeyboardConfig) -> bool:
+    """A combination recorded since 3.2.12 carries an extended flag per key
+    and is played key by key with it, so Right Ctrl stays Right Ctrl. A single
+    key and everything recorded before keep the old way exactly. Numpad keys
+    and keys known only by name (negative codes) also keep it."""
+    keys = config.keys
+    if not keys or len(keys) < 2:
+        return False
+    return all(
+        key.scan_code is not None and key.scan_code > 0 and not key.name.startswith("num ")
+        for key in keys
+    )
+
+
+def _play_strokes(config: CommandKeyboardConfig) -> None:
+    keys = config.keys
+
+    def down():
+        for key in keys:
+            keyboard.direct_event(key.scan_code, 0 + int(key.extended))
+
+    def up():
+        for key in reversed(keys):
+            keyboard.direct_event(key.scan_code, 2 + int(key.extended))
+
+    if config.press == config.release:
+        down()
+        time.sleep(config.hold or 0.1)
+        up()
+    elif config.press:
+        down()
+    else:
+        up()
 
 
 class CommandExecutor:
@@ -293,7 +328,9 @@ class CommandExecutor:
 
         try:
             for action in command.actions:
-                if action.keyboard:
+                if action.keyboard and _plays_by_strokes(action.keyboard):
+                    _play_strokes(action.keyboard)
+                elif action.keyboard:
                     if action.keyboard.hotkey_codes and not contains_numpad_key(
                         action.keyboard.hotkey
                     ):

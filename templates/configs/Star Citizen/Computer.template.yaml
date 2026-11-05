@@ -33,7 +33,13 @@ prompts:
     - Efficient and action-oriented
     - Technically precise
     - Loyal to your pilot
-record_key: end
+record_bindings:
+  # Known by name: each OS has its own scan code for it.
+  - device: keyboard
+    keys:
+      - name: end
+        scan_code: null
+        extended: false
 inworld:
   voice_id: Deborah
 wingman_pro:

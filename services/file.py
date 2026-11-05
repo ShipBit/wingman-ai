@@ -40,7 +40,7 @@ def get_writable_dir(subdir: str = None) -> str:
 
     full_path = path.join(dirs.user_data_dir, subdir)
     if not path.exists(full_path):
-        makedirs(full_path)
+        makedirs(full_path, exist_ok=True)
     return full_path
 
 
@@ -68,7 +68,7 @@ def get_custom_skills_dir() -> str:
     )
     custom_skills_path = path.join(dirs.user_data_dir, "custom_skills")
     if not path.exists(custom_skills_path):
-        makedirs(custom_skills_path)
+        makedirs(custom_skills_path, exist_ok=True)
     return custom_skills_path
 
 
@@ -86,7 +86,7 @@ def get_audio_library_dir() -> str:
     )
     audio_library_path = path.join(dirs.user_data_dir, "audio_library")
     if not path.exists(audio_library_path):
-        makedirs(audio_library_path)
+        makedirs(audio_library_path, exist_ok=True)
     return audio_library_path
 
 
@@ -104,7 +104,7 @@ def get_models_dir() -> str:
     )
     models_path = path.join(dirs.user_data_dir, "models")
     if not path.exists(models_path):
-        makedirs(models_path)
+        makedirs(models_path, exist_ok=True)
     return models_path
 
 
@@ -117,7 +117,7 @@ def get_pocket_tts_models_dir() -> str:
     models_root = get_models_dir()
     pocket_tts_path = path.join(models_root, "pocket-tts")
     if not path.exists(pocket_tts_path):
-        makedirs(pocket_tts_path)
+        makedirs(pocket_tts_path, exist_ok=True)
     return pocket_tts_path
 
 
@@ -141,7 +141,7 @@ def get_generated_files_dir(skill_name: str) -> str:
     )
     generated_files_path = path.join(dirs.user_data_dir, "generated_files", skill_name)
     if not path.exists(generated_files_path):
-        makedirs(generated_files_path)
+        makedirs(generated_files_path, exist_ok=True)
     return generated_files_path
 
 
@@ -159,7 +159,7 @@ def get_custom_voices_dir() -> str:
     )
     custom_voices_path = path.join(dirs.user_data_dir, "custom_voices")
     if not path.exists(custom_voices_path):
-        makedirs(custom_voices_path)
+        makedirs(custom_voices_path, exist_ok=True)
     _create_custom_voices_readme(custom_voices_path)
     return custom_voices_path
 
@@ -178,7 +178,7 @@ def get_persistent_memory_dir() -> str:
     )
     persistent_memory_path = path.join(dirs.user_data_dir, "persistent_memory")
     if not path.exists(persistent_memory_path):
-        makedirs(persistent_memory_path)
+        makedirs(persistent_memory_path, exist_ok=True)
     return persistent_memory_path
 
 
