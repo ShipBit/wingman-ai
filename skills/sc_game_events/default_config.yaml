@@ -10,8 +10,14 @@ tags:
   - Star Citizen
   - Game Integration
 description:
-  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, trades and quantum travel, and knows where you are and your missions. Needs the Star Citizen log in the settings.
-  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Handel und Quantenreisen, und weiß, wo du bist und welche Missionen du hast. Braucht das Star Citizen Log in den Einstellungen.
+  en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, trades, shields, hits and quantum jumps, and knows where you are, your missions and the state of your ship. Needs the Star Citizen log in the settings, and Star Citizen telemetry for the ship and the pilot.
+  de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Handel, Schilde, Treffer und Quantensprünge, und weiß, wo du bist, welche Missionen du hast und wie es deinem Schiff geht. Braucht das Star Citizen Log in den Einstellungen und für Schiff und Pilot die Star Citizen Telemetrie.
+# A production build does not offer telemetry yet (services/features.py).
+unreleased:
+  sc_telemetry:
+    description:
+      en: Your Wingman reacts in character to what happens in Star Citizen, like missions, zones, trades and quantum travel, and knows where you are and your missions. Needs the Star Citizen log in the settings.
+      de: Dein Wingman reagiert in seiner Rolle auf das, was in Star Citizen passiert, etwa Missionen, Zonen, Handel und Quantenreisen, und weiß, wo du bist und welche Missionen du hast. Braucht das Star Citizen Log in den Einstellungen.
 discovery_keywords:
   - star citizen
   - game events
