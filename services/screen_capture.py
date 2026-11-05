@@ -25,6 +25,8 @@ from urllib.parse import unquote, urlparse
 
 from PIL import Image
 
+from services.thread_priority import below_normal_priority
+
 PORTAL_TIMEOUT = 60
 """Seconds to wait for the portal: the first time the desktop may ask the user."""
 
@@ -37,10 +39,23 @@ def is_wayland() -> bool:
     return bool(os.environ.get("WAYLAND_DISPLAY")) or os.environ.get("XDG_SESSION_TYPE") == "wayland"
 
 
-def capture(display: int = 1, region: Optional[dict] = None) -> Image.Image:
+def capture(display: int = 1, region: Optional[dict] = None, dxcam: bool = False) -> Image.Image:
     """An RGB image of monitor `display` (1 = the first, 0 = all of them, as
     in mss), or of `region` ({"left", "top", "width", "height"}) when given.
+    `dxcam` takes a whole monitor through Desktop Duplication on Windows, see
+    `services/screen_capture_dxcam.py`; when that fails, mss takes it.
     Blocking: call it from a thread."""
+    with below_normal_priority():
+        if dxcam and sys.platform == "win32" and not region:
+            from services import screen_capture_dxcam
+
+            image = screen_capture_dxcam.capture(display)
+            if image is not None:
+                return image
+        return _capture(display, region)
+
+
+def _capture(display: int, region: Optional[dict]) -> Image.Image:
     if is_wayland():
         image = _wayland()
         if region:

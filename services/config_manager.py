@@ -27,6 +27,7 @@ from api.interface import (
 )
 from services.config_sanitizer import sanitize
 from services.file import get_writable_dir, get_custom_skills_dir
+from services.platform_utils import drop_other_platform_properties
 from services.printr import Printr
 from services.system_manager import LOCAL_VERSION
 
@@ -2075,7 +2076,9 @@ class ConfigManager:
                 )
 
                 if skill_default_config_path:
-                    skill_config = self.read_config(skill_default_config_path)
+                    skill_config = drop_other_platform_properties(
+                        self.read_config(skill_default_config_path)
+                    )
                     skill_config_wingman = self._drop_orphaned_skill_properties(
                         skill_dir, skill_config, skill_config_wingman
                     )

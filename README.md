@@ -420,7 +420,7 @@ We use them without changes, except for [keyboard](https://github.com/boppreh/ke
 
 Wingman ships or downloads these models. We use them without changes.
 
-- [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) - © NVIDIA, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), in the ONNX conversion by Ilya Stupakov ([istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)). Local speech recognition.
+- [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra) - © moondream, a post-trained [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) © NVIDIA, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), in the int8 ONNX export by Olicorne ([Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx](https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx)). Local speech recognition.
 - pocket-tts model weights - © Kyutai Labs, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), redistributed unmodified from [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Subject to Kyutai's acceptable-use terms: no voice cloning without explicit, lawful consent; no unlawful, harmful, deceptive or privacy-invasive use.
 - [Silero VAD](https://github.com/snakers4/silero-vad) - MIT, © 2020-present Silero Team. Detects speech for voice activation.
 - [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) - by Qwen, Apache-2.0, as GGUF from [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF). Local support model.

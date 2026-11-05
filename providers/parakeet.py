@@ -1,5 +1,8 @@
 import gc
+import os
 import platform
+import shutil
+import subprocess
 import threading
 import time
 from typing import Optional
@@ -15,6 +18,7 @@ from api.interface import (
     ParakeetTranscript,
     WingmanInitializationError,
 )
+from providers.parakeet_r2 import QUANTIZATION
 from services.printr import Printr
 
 
@@ -28,8 +32,19 @@ EXECUTION_PROVIDER_MAP = {
     "cuda": ["CUDAExecutionProvider", "CPUExecutionProvider"],
 }
 
-# v3 only. v2 transcribes English alone and was only marginally better at it;
-# with one spoken language per user it was a setting that could only break.
+CPU_THREADS = min(4, max(1, (os.cpu_count() or 2) // 2))
+"""Threads for a sentence on the CPU. ONNX Runtime takes every core by default
+and a game running unlimited wants them all too. Measured 2026-11-04 on an M5
+Max, 4 threads took 73-108 ms per sentence against 74-115 ms with all cores."""
+
+CUDA_OPTIONS = {"arena_extend_strategy": "kSameAsRequested"}
+"""The default arena grows in powers of two, so it can hold far more VRAM than
+the model needs. VRAM a game is short of makes it stutter."""
+
+# The architecture onnx-asr loads. The weights are Parakeet Ultra, a post-trained
+# v3 (providers/parakeet_r2.py). v2 transcribes English alone and was only
+# marginally better at it; with one spoken language per user it was a setting
+# that could only break.
 PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
 
@@ -93,12 +108,22 @@ class Parakeet:
                         color=LogType.WARNING,
                     )
 
+            vram_before = None
             if "CUDAExecutionProvider" in effective_providers:
                 self._preload_cuda_libraries()
+                vram_before = _vram_used_mb()
 
-            load_kwargs = {"providers": effective_providers}
+            load_kwargs = {
+                "providers": effective_providers,
+                "provider_options": [
+                    CUDA_OPTIONS if p == "CUDAExecutionProvider" else {}
+                    for p in effective_providers
+                ],
+                "sess_options": self._session_options(),
+            }
             if model_path:
                 load_kwargs["path"] = model_path
+                load_kwargs["quantization"] = QUANTIZATION
 
             self.model = onnx_asr.load_model(model_name, **load_kwargs)
 
@@ -122,6 +147,7 @@ class Parakeet:
                     color=LogType.WARNING,
                 )
             self._warm_up()
+            self._log_vram(vram_before, running_on)
         except ImportError:
             self.printr.toast_error(
                 "Parakeet requires 'onnx-asr' and 'onnxruntime'. Install with: pip install onnx-asr onnxruntime"
@@ -129,6 +155,32 @@ class Parakeet:
         except Exception as e:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
+            )
+
+    @staticmethod
+    def _session_options():
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = CPU_THREADS
+        # After a sentence ONNX Runtime's threads keep spinning on the cores
+        # for the next one. Here the next one comes seconds later, and the
+        # spinning only takes the CPU from the game.
+        options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+        return options
+
+    def _log_vram(self, before: Optional[int], running_on: list[str]):
+        """How much GPU memory loading took, so a user who sees frame drops
+        knows what CUDA costs. The difference over all GPUs before and after
+        loading and the warm-up: Windows shows no memory per process."""
+        if before is None or "CUDAExecutionProvider" not in running_on:
+            return
+        after = _vram_used_mb()
+        if after is not None:
+            self.printr.print(
+                f"Parakeet takes about {after - before} MB of VRAM on CUDA.",
+                server_only=True,
             )
 
     def _preload_cuda_libraries(self):
@@ -306,3 +358,20 @@ class Parakeet:
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
+
+
+def _vram_used_mb() -> Optional[int]:
+    """GPU memory in use on all NVIDIA GPUs, in MB, or None without nvidia-smi."""
+    if shutil.which("nvidia-smi") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=(subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0),
+        )
+        return sum(int(line) for line in result.stdout.split() if line.strip().isdigit())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None

@@ -792,7 +792,11 @@ custom_properties: # User-configurable settings
     required: true # Is this property required?
     property_type: string # See "Custom Properties — Available Types" below
     group: your_group_id # Optional, see "Grouping Custom Properties" below
+    platforms: [windows] # Optional: only offered on these systems (windows, darwin, linux)
 ```
+
+A property with `platforms` is not there on other systems, so the skill reads it
+with a default instead of `retrieve_custom_property_value`, which reports it missing.
 
 ### Custom Properties — Available Types
 

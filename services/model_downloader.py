@@ -1,6 +1,7 @@
 import asyncio
+import hashlib
 import os
-import threading
+import time
 from os import path
 from typing import Callable, Optional
 
@@ -16,6 +17,14 @@ printr = Printr()
 # surfacing an error.
 MAX_DOWNLOAD_ATTEMPTS = 3
 RETRY_BASE_DELAY_SECONDS = 2
+# A resumed download may need many attempts on a connection that keeps breaking;
+# only attempts without new bytes count against MAX_DOWNLOAD_ATTEMPTS.
+MAX_RESUMED_ATTEMPTS = 20
+
+
+class ChecksumError(IOError):
+    """A download came in whole but is not the file we expected. A retry
+    would fetch the same bytes again."""
 
 
 class ModelDownloader:
@@ -148,14 +157,25 @@ class ModelDownloader:
         category: str,
         filename: str,
         on_progress: Optional[Callable[[str, float, float, float], None]] = None,
+        size: Optional[int] = None,
+        sha256: Optional[str] = None,
     ) -> str:
         """Download a single file via HTTP with progress tracking.
+
+        A file already there is kept when it has `size` bytes (any file when
+        `size` is None). A broken connection keeps what came so far and asks
+        for the rest (HTTP Range); attempts that bring new bytes do not count
+        against the limit. A new file must match `sha256`, if given, before it
+        gets its name.
 
         Args:
             url: Direct download URL
             category: Subdirectory name under models/
             filename: Target filename
-            on_progress: Callback (filename, percent, downloaded_mb, total_mb)
+            on_progress: Callback (filename, percent, downloaded_mb, total_mb),
+                called from a worker thread
+            size: Expected size in bytes
+            sha256: Expected SHA256 (hex)
 
         Returns:
             Local file path.
@@ -164,89 +184,93 @@ class ModelDownloader:
         target_path = path.join(category_dir, filename)
 
         if path.exists(target_path):
+            if size is None or path.getsize(target_path) == size:
+                return target_path
             printr.print(
-                f"Model already exists: {filename}",
-                color=LogType.INFO,
+                f"{filename} has {path.getsize(target_path)} bytes instead of {size}, downloading it again.",
+                color=LogType.WARNING,
                 server_only=True,
             )
-            return target_path
+            os.remove(target_path)
 
-        loop = asyncio.get_event_loop()
+        printr.print(f"Downloading {filename}...", color=LogType.INFO, server_only=True)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self._download_resumable, url, target_path, size, sha256, on_progress
+        )
+        printr.print(f"Download complete: {filename}", color=LogType.POSITIVE, server_only=True)
+        return target_path
 
-        def _download():
-            # Unique temp name: if two triggers race the same file, they never
-            # interleave writes into the same .part; the atomic replace below
-            # makes the last writer win with a complete file either way.
-            temp_path = f"{target_path}.{os.getpid()}-{threading.get_ident()}.part"
+    def _download_resumable(
+        self,
+        url: str,
+        target_path: str,
+        size: Optional[int],
+        sha256: Optional[str],
+        on_progress: Optional[Callable[[str, float, float, float], None]],
+    ):
+        filename = path.basename(target_path)
+        temp_path = f"{target_path}.part"
+        delay = RETRY_BASE_DELAY_SECONDS
+        failures_without_progress = 0
+        for attempt in range(1, MAX_RESUMED_ATTEMPTS + 1):
+            have = path.getsize(temp_path) if path.exists(temp_path) else 0
             try:
-                response = requests.get(url, stream=True, timeout=30)
+                headers = {"Range": f"bytes={have}-"} if have else {}
+                response = requests.get(url, stream=True, timeout=30, headers=headers)
+                if have and response.status_code == 416:
+                    # The part file is whole already, or wrong: start over
+                    os.remove(temp_path)
+                    have = 0
+                    response = requests.get(url, stream=True, timeout=30)
                 response.raise_for_status()
-
-                total_size = int(response.headers.get("content-length", 0))
-                downloaded = 0
-                last_callback_pct = -2
-                total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
-
-                with open(temp_path, "wb") as f:
+                if response.status_code != 206:
+                    have = 0  # The server sent the whole file
+                total = int(response.headers.get("content-length", 0)) + have
+                downloaded = have
+                last_pct = -2
+                with open(temp_path, "ab" if have else "wb") as f:
                     for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total_size > 0:
-                            pct = int(downloaded / total_size * 100)
-                            downloaded_mb = downloaded // (1024 * 1024)
-                            if on_progress and pct - last_callback_pct >= 2:
-                                on_progress(filename, pct, downloaded_mb, total_mb)
-                                last_callback_pct = pct
+                        pct = int(downloaded / total * 100) if total else 0
+                        if on_progress and pct - last_pct >= 2:
+                            on_progress(filename, pct, downloaded // (1024 * 1024), total // (1024 * 1024))
+                            last_pct = pct
 
-                # Never promote a truncated body to the final filename.
-                if downloaded == 0 or (total_size > 0 and downloaded != total_size):
-                    raise IOError(
-                        f"Incomplete download: got {downloaded} of {total_size} bytes"
-                    )
-
+                # Never promote a truncated or foreign body to the final name
+                if downloaded == 0 or (total and downloaded != total) or (size and downloaded != size):
+                    raise IOError(f"Incomplete download: got {downloaded} of {size or total} bytes")
+                if sha256 and _sha256(temp_path) != sha256:
+                    os.remove(temp_path)
+                    raise ChecksumError(f"{filename} does not match its checksum")
                 os.replace(temp_path, target_path)
-                return target_path
-
-            except Exception:
-                if path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except OSError:
-                        pass
+                return
+            except ChecksumError:
                 raise
-
-        printr.print(
-            f"Downloading {filename}...",
-            color=LogType.INFO,
-            server_only=True,
-        )
-
-        delay = RETRY_BASE_DELAY_SECONDS
-        last_error: Optional[Exception] = None
-        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
-            try:
-                result = await loop.run_in_executor(None, _download)
-                printr.print(
-                    f"Download complete: {filename}",
-                    color=LogType.POSITIVE,
-                    server_only=True,
-                )
-                return result
             except Exception as e:
-                last_error = e
-                if not self._is_retryable(e) or attempt >= MAX_DOWNLOAD_ATTEMPTS:
-                    break
+                now_have = path.getsize(temp_path) if path.exists(temp_path) else 0
+                if not self._is_retryable(e):
+                    raise
+                if now_have > have:
+                    failures_without_progress = 0
+                    delay = RETRY_BASE_DELAY_SECONDS
+                else:
+                    failures_without_progress += 1
+                if failures_without_progress >= MAX_DOWNLOAD_ATTEMPTS or attempt == MAX_RESUMED_ATTEMPTS:
+                    raise
                 printr.print(
-                    f"Download of {filename} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    f"Download of {filename} interrupted at {now_have // (1024 * 1024)} MB "
+                    f"(attempt {attempt}): {e} - continuing in {delay}s...",
                     color=LogType.WARNING,
                     server_only=True,
                 )
-                await asyncio.sleep(delay)
+                time.sleep(delay)
                 delay *= 2
 
-        printr.print(
-            f"Failed to download {filename}: {last_error}",
-            color=LogType.ERROR,
-            server_only=True,
-        )
-        raise last_error
+
+def _sha256(file_path: str) -> str:
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()

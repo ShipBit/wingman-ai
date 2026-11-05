@@ -35,3 +35,11 @@ custom_properties:
     property_type: boolean
     required: true
     value: true
+  - id: use_dxcam
+    name: Use DXCam capture
+    hint: Takes the screenshot through DirectX instead of the standard capture. Can avoid stutter in games. If it fails, the standard capture takes over.
+    property_type: boolean
+    required: true
+    value: false
+    platforms:
+      - windows

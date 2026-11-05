@@ -947,6 +947,8 @@ class CustomProperty(BaseModel):
     """If property_type is set to 'single_select', you can provide options here. May also hold meta information for other property types like "multiple" for voice_selection."""
     group: Optional[str] = None
     """The id of a group from the skill's `property_groups`. None shows the property above all groups."""
+    platforms: Optional[list[str]] = None
+    """The systems the property is offered on: 'windows', 'darwin' (macOS), 'linux'. Core drops it elsewhere. None offers it everywhere."""
 
     @field_validator("group", mode="before")
     @classmethod
