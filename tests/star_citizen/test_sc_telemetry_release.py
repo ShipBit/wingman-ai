@@ -21,6 +21,12 @@ def unreleased(monkeypatch):
     monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", False)
 
 
+@pytest.fixture
+def released(monkeypatch):
+    # A stable release branch turns the flag off; these tests hold on both.
+    monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", True)
+
+
 def _sc_events() -> dict:
     return yaml.safe_load(SC_EVENTS.read_text(encoding="utf-8"))
 
@@ -53,7 +59,7 @@ def test_star_citizen_events_offers_no_telemetry_setting_while_unreleased(unrele
     assert any(prop["id"] == "react_mission" for prop in offered["custom_properties"])
 
 
-def test_released_telemetry_keeps_every_setting():
+def test_released_telemetry_keeps_every_setting(released):
     manifest = _sc_events()
     count = len(manifest["custom_properties"])
 
