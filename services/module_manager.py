@@ -14,7 +14,7 @@ from api.interface import (
     SkillToolInfo,
 )
 from services.file import get_custom_skills_dir
-from services.features import drop_unreleased_properties
+from services.features import drop_unreleased_features
 from services.platform_utils import drop_other_platform_properties
 from services.printr import Printr
 from skills.skill_base import Skill
@@ -309,7 +309,7 @@ class ModuleManager:
         available_skill_configs = ModuleManager.read_available_skill_configs()
         # Load each skill from its config
         for skill_folder_name, skill_config_path, is_custom, is_local in available_skill_configs:
-            skill_config = drop_unreleased_properties(
+            skill_config = drop_unreleased_features(
                 drop_other_platform_properties(ModuleManager.read_config(skill_config_path))
             )
 
