@@ -11,6 +11,7 @@ import pytest
 
 from api.enums import StarCitizenFeatureKind
 from api.interface import ConfigDirInfo, WingmanConfigFileInfo
+from services import features
 from services.star_citizen import setup as sc_setup
 from services.star_citizen.setup import StarCitizenSetupService
 from tests.support import template
@@ -237,7 +238,9 @@ def test_a_shipped_server_missing_from_mcp_yaml_is_added_from_the_template(servi
     "enabled, plays, runs",
     [(True, True, True), (True, None, False), (False, True, False)],
 )
-def test_the_log_reader_and_telemetry_run_only_for_players(enabled, plays, runs):
+def test_the_log_reader_and_telemetry_run_only_for_players(enabled, plays, runs, monkeypatch):
+    # Telemetry is switched off on stable release branches (services/features.py).
+    monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", True)
     settings = SimpleNamespace(
         sc_gamelog=SimpleNamespace(enabled=enabled),
         sc_telemetry=SimpleNamespace(enabled=enabled),
