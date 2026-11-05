@@ -136,7 +136,7 @@ from services.audio.transcription_worker import RECORDING_PATH
 from services.audio.vocabulary import apply_override, diff_override, list_presets, load_preset, spoken_names
 from services.config_manager import ConfigManager
 from services import input_bindings
-from services.jev_gate import JevGate
+from services.decision_gate import DecisionGate
 from services import speech_text
 from services.printr import Printr
 from services.user_activity import user_activity
@@ -570,6 +570,7 @@ class WingmanCore(WebSocketUser):
             ("/settings/test/local-ai-embed", self.test_local_ai_embed),
             ("/settings/test/hud-server", self.test_hud_server),
             ("/settings/test/openai-compatible-tts", self.test_openai_compatible_tts),
+            ("/settings/test/decision-model", self.test_decision_model),
         ):
             self.router.add_api_route(
                 methods=["POST"],
@@ -649,6 +650,20 @@ class WingmanCore(WebSocketUser):
             path="/models/openrouter",
             response_model=list,
             endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter/decisions",
+            response_model=list,
+            endpoint=self.get_openrouter_decision_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/decision-model-server",
+            response_model=list[str],
+            endpoint=self.get_decision_model_server_models,
             tags=tags,
         )
         self.router.add_api_route(
@@ -932,7 +947,7 @@ class WingmanCore(WebSocketUser):
         self._global_ptt_timer: Optional[threading.Timer] = None
         # Keyboard keys held when a joystick button went down while recording.
         self._joystick_recording_held: list = []
-        self.routing_jev = JevGate(
+        self.routing_decision_gate = DecisionGate(
             wingman_name="Routing", settings=self.settings_service.settings
         )
         self.settings_service.settings_events.subscribe(
@@ -2135,16 +2150,16 @@ class WingmanCore(WebSocketUser):
 
     def _wingman_for_global_ptt(self, text: str, tower) -> Wingman | None:
         """Who answers the global push-to-talk key: the wingman named in the
-        first words, else the one with the star, else the one Jev thinks most
-        likely when System One is on. If that call fails, the wingman who
+        first words, else the one with the star, else the one the decision
+        model thinks most likely when it is on. If that call fails, the wingman who
         answered last. Otherwise nobody: there is no one to guess from."""
         target = tower.get_addressed_wingman(text) or tower.get_default_wingman()
         if target:
             return target
         if len(tower.wingmen) == 1:
             return tower.wingmen[0]
-        self.routing_jev.update_settings(self.settings_service.settings)
-        name = self.routing_jev.pick_wingman(
+        self.routing_decision_gate.update_settings(self.settings_service.settings)
+        name = self.routing_decision_gate.pick_wingman(
             text,
             [w.config for w in tower.wingmen],
             recent={w.name: w.conversation.last_exchange() for w in tower.wingmen},
@@ -2152,13 +2167,13 @@ class WingmanCore(WebSocketUser):
         )
         target = next((w for w in tower.wingmen if w.name == name), None)
         if target:
-            self.printr.print(f"Jev picked {target.name} for '{text}'.", server_only=True)
-        elif self.routing_jev.wingman_choice_active:
-            # Jev is on but the call failed: whoever spoke last is the best guess.
+            self.printr.print(f"The decision model picked {target.name} for '{text}'.", server_only=True)
+        elif self.routing_decision_gate.wingman_choice_active:
+            # The decision model is on but the call failed: whoever spoke last is the best guess.
             target = next((w for w in tower.wingmen if w.name == self._last_answer_from), None)
             if target:
                 self.printr.print(
-                    f"Jev gave no answer, {target.name} answered last and gets '{text}'.",
+                    f"The decision model gave no answer, {target.name} answered last and gets '{text}'.",
                     server_only=True,
                 )
         if not target:
@@ -3338,6 +3353,52 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"OpenRouter: \n{str(e)}")
             return []
 
+    # GET /models/openrouter/decisions
+    async def get_openrouter_decision_models(self):
+        """The decision models OpenRouter lists. They answer only its System
+        One route, not chat completions, so the main model's list must not
+        offer them and this one offers nothing else."""
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                url="https://openrouter.ai/api/v1/models",
+                params={"output_modalities": "decisions"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            return response.json().get("data", [])
+        except Exception as e:
+            self.printr.toast_error(f"OpenRouter: \n{str(e)}")
+            return []
+
+    # GET /models/decision-model-server
+    async def get_decision_model_server_models(self) -> list[str]:
+        """The model ids the user's decision model server offers, for the
+        model field. oMLX and local-jev list theirs at /v1/models; a server
+        that does not gets an empty list and the field stays free text."""
+        from providers.decision_model import SERVER_SECRET, server_base_url
+
+        base = server_base_url(self.settings_service.settings.decision_model.server.endpoint)
+        if not base:
+            return []
+        key = self.secret_keeper.secrets.get(SERVER_SECRET, "")
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                url=f"{base}/v1/models",
+                headers={"Authorization": f"Bearer {key}"} if key else {},
+                timeout=5,
+            )
+            response.raise_for_status()
+            return [str(m["id"]) for m in response.json().get("data", []) if m.get("id")]
+        except Exception as e:
+            self.printr.print(
+                f"Decision model server: no model list from {base} ({e})",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return []
+
     # GET /models/openrouter/endpoints
     async def get_openrouter_model_endpoints(self, model_id: str):
         if not model_id:
@@ -4197,6 +4258,28 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False, provider="parakeet", error=str(e)
             )
+
+    # POST /settings/test/decision-model
+    async def test_decision_model(self) -> TestConnectionResult:
+        """Ask the chosen decision model one yes/no question, the way a turn
+        would, with the provider, model and key saved right now."""
+        from providers.decision_model import DecisionModelClient, noul
+
+        settings = self.settings_service.settings
+        provider = settings.decision_model.provider.value
+        client = DecisionModelClient(settings=settings)
+        result = await asyncio.to_thread(
+            client.decide,
+            {"transcript": "Shields up!"},
+            {"order": noul("The speaker is giving an order.")},
+        )
+        if result.ok and result.answers.get("order"):
+            return TestConnectionResult(success=True, provider=provider)
+        return TestConnectionResult(
+            success=False,
+            provider=provider,
+            error=result.error or "The model answered, but not the question.",
+        )
 
     # POST /settings/test/xvasynth
     async def test_xvasynth(self) -> TestConnectionResult:

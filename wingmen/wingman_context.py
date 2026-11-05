@@ -211,7 +211,7 @@ class WingmanContext:
             from wingmen.facade import SkillSystemOne
             # The wingman's own gate, so a skill obeys the same switch, the same
             # subscription and the same off-means-old-path rule as Core does.
-            self.__system_one = SkillSystemOne(self.__wingman.jev)
+            self.__system_one = SkillSystemOne(self.__wingman.decision_gate)
         return self.__system_one
 
     @property

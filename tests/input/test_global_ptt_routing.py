@@ -4,7 +4,7 @@ words, else the one with the star, else the one Jev picks."""
 from types import SimpleNamespace
 
 from api.interface import CommandConfig, WingmanConfig
-from services.jev_decisions import (
+from services.decision_questions import (
     read_wingman,
     wingman_description,
     wingman_questions,
@@ -56,7 +56,7 @@ class FakeJev:
 
 def core(jev):
     c = WingmanCore.__new__(WingmanCore)
-    c.routing_jev = jev
+    c.routing_decision_gate = jev
     c._last_answer_from = "ATC"
     c.settings_service = SimpleNamespace(settings=None)
     c.printr = SimpleNamespace(print=lambda *a, **k: None)

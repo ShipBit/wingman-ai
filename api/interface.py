@@ -9,6 +9,7 @@ from pydantic import (
     model_validator,
 )
 from api.enums import (
+    DecisionModelProvider,
     VoiceCloneState,
     ConversationProvider,
     CoreState,
@@ -1684,24 +1685,47 @@ class LlamaCppSettings(BaseModel):
         return self.mode != LocalAiMode.SERVER
 
 
-class SystemOneSettings(BaseModel):
-    """The System One model: a decision layer in front of the main model.
+class DecisionModelOpenRouterSettings(BaseModel):
+    model: str
+    """OpenRouter id of the decision model, e.g. `~typesafe/jev-latest` or
+    `cloudflare/clef-flash`. Its key is the secret `openrouter`, the same one
+    the main model uses."""
 
-    A System One model answers typed questions instead of writing text — which
+
+class DecisionModelServerSettings(BaseModel):
+    endpoint: str
+    """Where a server of the user's answers `/v1/systemone`, e.g.
+    `http://127.0.0.1:8000/v1` for oMLX. With or without the `/v1`. Empty
+    until the user fills it in; nothing is contacted before that."""
+    model: str
+    """The model name sent to that server. Its API key, if it needs one, is
+    the secret `decision_model_server`."""
+
+
+class DecisionModelSettings(BaseModel):
+    """The decision model: a layer in front of the main model.
+
+    A decision model answers typed questions instead of writing text — which
     command was asked for, which skills a turn needs, whether the microphone
     heard a request at all, whether a heard word is a game name. It answers in
     about 300 ms where a chat model takes over a second, and it cannot return
     a value outside the options it was given.
 
-    Which model that is comes from the subscription, not from here: it is a
-    fixed role like transcription and speech, so it can be changed in /admin
-    without a Wingman release. The user's choice is whether to use one at all.
+    Who answers is `provider`: the Wingman Subscription, where the plan picks
+    the model and /admin can change it without a Wingman release, or
+    OpenRouter or a server of the user's, where the user names it.
     """
 
-    enabled: bool
-    """Whether any of Core's decisions may go to the System One model.
+    provider: DecisionModelProvider
+    """Who answers. The Wingman Subscription unless the user picked another."""
 
-    The master switch over the four below, one per place Jev decides. Off
+    openrouter: DecisionModelOpenRouterSettings
+    server: DecisionModelServerSettings
+
+    enabled: bool
+    """Whether any of Core's decisions may go to the decision model.
+
+    The master switch over the four below, one per place it decides. Off
     means every one of those places decides the way it did before, which is
     always a working path and never an error."""
 
@@ -1733,7 +1757,7 @@ class SystemOneSettings(BaseModel):
     skills: bool
     """Whether skills may ask the model (`self.wingman.system_one`): UEX Corp
     matching a ship or place, Spotify a playlist, the HUD a panel. Off, each
-    skill decides the way it does without Jev."""
+    skill decides the way it does without it."""
 
 
 class OtherLanguageSetting(BaseModel):
@@ -1880,7 +1904,7 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
     llama_cpp: LlamaCppSettings
-    system_one: SystemOneSettings
+    decision_model: DecisionModelSettings
     hud_server: HudServerSettings
     hud_profiles: list[HudProfile]
     star_citizen: StarCitizenSettings

@@ -20,7 +20,7 @@ def hud(monkeypatch):
 
 
 def _run(name, **args):
-    return asyncio.run(run_hud_tool(SimpleNamespace(name="Computer", jev=None), name, args))
+    return asyncio.run(run_hud_tool(SimpleNamespace(name="Computer", decision_gate=None), name, args))
 
 
 def test_reading_shows_every_panel_with_its_state(hud, monkeypatch):

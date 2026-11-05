@@ -131,6 +131,7 @@ Speech-to-text, the AI model and text-to-speech are three separate steps. Take t
   - any OpenAI-compatible server, e.g. a remote Pocket TTS or XVASynth
 - **Image generation**: OpenAI and the Wingman Subscription
 - **Support model** for background work like memory, summaries and shortening long tool responses. It runs in our cloud by default, locally with llama.cpp (Qwen 3.5 4B or Gemma 4 E2B), or on your own llama.cpp server.
+- **Decision model** (optional, under Settings > General) for the quick decisions in front of the main model: which command you meant, which Wingman a sentence is for, whether a heard word is a game name. It picks from options instead of writing text, in a few hundred milliseconds. It runs through the Wingman Subscription (recommended: Jev uses hardly any of your quota), any decision model on OpenRouter with your own key (TypeSafe's Jev, Cloudflare's Clef, Perplexity's Decider and others), or your own server with TypeSafe's Jev API, like oMLX. Expect a local model on your own server to decide clearly worse than Jev.
 
 ### For developers
 

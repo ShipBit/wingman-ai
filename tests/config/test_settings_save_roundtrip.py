@@ -7,7 +7,7 @@ The cost of that shape is that a block added later is silently dropped: the
 value never reaches `settings_config`, the old one is written back to disk,
 and a toggle in the client does nothing at all with no error anywhere.
 
-That is not hypothetical. `system_one` shipped without its line and the
+That is not hypothetical. `system_one` (now `decision_model`) shipped without its line and the
 toggle was inert until this test was written.
 
 So rather than one assertion per block, this walks every field on
@@ -68,17 +68,17 @@ async def _noop(*args, **kwargs):
     return None
 
 
-def test_the_system_one_toggle_actually_reaches_the_config():
+def test_the_decision_model_toggle_actually_reaches_the_config():
     """The bug this file exists for: the flag was dropped on save, so the
     client toggle wrote the old value back and changed nothing."""
     current = _settings()
-    current.system_one.enabled = True
+    current.decision_model.enabled = True
 
     incoming = _settings()
-    incoming.system_one.enabled = False
+    incoming.decision_model.enabled = False
 
     asyncio.run(_service(current).save_settings(incoming))
-    assert current.system_one.enabled is False
+    assert current.decision_model.enabled is False
 
 
 def test_a_language_change_before_sign_in_reloads_the_config(monkeypatch):
