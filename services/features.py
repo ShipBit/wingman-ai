@@ -12,7 +12,7 @@ off, so the UI never offers them.
 
 SC_TELEMETRY = "sc_telemetry"
 
-SC_TELEMETRY_RELEASED = True
+SC_TELEMETRY_RELEASED = False
 """Star Citizen's telemetry stream (services/sc_telemetry). Off on stable
 until it has been tested more on unstable."""
 
