@@ -45,30 +45,37 @@ property_groups:
     name: Session and social
     toggle: react_session
   - id: combat
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings.
     name: Combat
     toggle: react_telemetry_combat
   - id: ship_alerts
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings.
     name: Ship alerts
     toggle: react_telemetry_ship_alerts
   - id: flight
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings. These come on every flight.
     name: Flight and travel
     toggle: react_telemetry_flight
   - id: survival
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings.
     name: Survival
     toggle: react_telemetry_survival
   - id: body
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings.
     name: Body needs
     toggle: react_telemetry_body
   - id: wallet
+    feature: sc_telemetry
     hint: Needs Star Citizen telemetry in the settings. Only speaks when purchases, sales and rewards come from the telemetry (see Game log or telemetry).
     name: Wallet
     toggle: react_telemetry_wallet
   - id: sources
+    feature: sc_telemetry
     name: Game log or telemetry
     hint: Both see these events. Pick which one speaks. If the one you pick is off, the other one speaks.
 custom_properties:

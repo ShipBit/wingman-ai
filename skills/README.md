@@ -1163,6 +1163,7 @@ How it is shown:
 - Within a group, the properties keep the order of the manifest.
 - A group with a `toggle` shows that boolean setting as an "Enabled" switch at the right of its heading, like the other panels, and not again inside the group. While it is off, the group's settings are hidden.
 - A skill without `property_groups` shows one flat list.
+- A group with `feature: sc_telemetry` belongs to a feature that is not released on every update channel yet (`services/features.py`). Where it is not, Core drops the group and its settings, and the UI never shows them.
 
 When and how to group:
 

@@ -1886,6 +1886,9 @@ class ScTelemetryStatus(BaseModel):
     """What Star Citizen's telemetry is doing, for the settings page."""
 
     state: ScTelemetryState
+    released: bool
+    """False on a channel the feature has not reached yet (services/features.py):
+    the client shows nothing of it then."""
     variable_managed: bool
     """Core can switch telemetry in the game itself (Windows)."""
     variable_set: Optional[bool] = None

@@ -443,6 +443,8 @@ class ScGameEvents(Skill):
 
     def _telemetry_answer(self, topic: str) -> str:
         source = self.wingman.sc_telemetry
+        if not source.released:
+            return "Live values of the ship and the pilot are not available. Use the overview instead."
         if not source.available:
             return "Star Citizen telemetry is switched off in the settings."
         state = source.state()
