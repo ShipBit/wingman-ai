@@ -1,8 +1,9 @@
-"""The System One decision logic, without a network.
+"""The decision model logic, without a network.
 
 Everything here is about what Core does with an answer, not about how good
-the answers are. The cases that matter are the ones where Jev is unsure, silent or broken, because those are
-the ones that must come out as "decide the way you did before".
+the answers are. The cases that matter are the ones where the model is unsure,
+silent or broken, because those are the ones that must come out as "decide
+the way you did before".
 """
 
 import asyncio
@@ -12,9 +13,10 @@ from types import SimpleNamespace
 import pytest
 import requests
 
+from api.enums import DecisionModelProvider
 from api.interface import CommandActionConfig, CommandConfig, CommandKeyboardConfig
-from providers.typesafe_jev import JevClient, JevResult
-from services.jev_decisions import (
+from providers.decision_model import DecisionModelClient, DecisionResult
+from services.decision_questions import (
     MULTIPLE_KEY,
     NONE_OPTION,
     command_questions,
@@ -22,8 +24,9 @@ from services.jev_decisions import (
     read_vocabulary,
     vocabulary_questions,
 )
-from services import jev_gate
-from services.jev_gate import MAX_COMMAND_OPTIONS, JevGate
+from services import decision_gate
+from services.decision_gate import MAX_COMMAND_OPTIONS, DecisionGate
+from tests.support import FakeDecisionSession, decision_model_settings, with_secrets
 from wingmen.facade import SkillSystemOne, SystemOneAnswers
 
 
@@ -35,8 +38,8 @@ def _command(name, instant=None) -> CommandConfig:
     )
 
 
-def _choice(value, confidence, probabilities=None) -> JevResult:
-    return JevResult(
+def _choice(value, confidence, probabilities=None) -> DecisionResult:
+    return DecisionResult(
         answers={
             "command": {
                 "type": "choice",
@@ -81,18 +84,88 @@ def test_the_escape_hatch_never_becomes_a_command():
 
 
 def test_a_failed_call_changes_nothing():
-    assert read_command(JevResult(error="HTTP 503"), 0.0) is None
+    assert read_command(DecisionResult(error="HTTP 503"), 0.0) is None
 
 
-# ── the client, switched off ────────────────────────────────────────
+# ── the client: where a call goes ───────────────────────────────────
 
 
-def test_no_subscription_and_no_key_means_no_request():
-    client = JevClient(api_key="")
+QUESTION = {"q": {"type": "noul", "instructions": "?"}}
+
+
+def _client(provider, secrets=None, **settings):
+    client = DecisionModelClient(settings=decision_model_settings(provider=provider, **settings))
+    with_secrets(client, **(secrets or {}))
+    client._session = FakeDecisionSession(
+        {"model": "m", "answers": {"q": {"type": "noul", "noul": 0.9}},
+         "usage": {"input_tokens": 12, "cost": 0.0000147}}
+    )
+    return client
+
+
+def test_wingman_pro_lets_the_plan_pick_the_model():
+    client = _client(DecisionModelProvider.WINGMAN_PRO, {"wingman_pro": "pro-token"})
+    assert client.decide("hi", QUESTION).ok
+    url, request = client._session.requests[0]
+    assert url == "https://pro.invalid/api/v1/systemone"
+    assert request["headers"]["Authorization"] == "Bearer pro-token"
+    assert "model" not in request["json"]
+
+
+def test_openrouter_takes_the_openrouter_key_and_the_chosen_model():
+    client = _client(
+        DecisionModelProvider.OPENROUTER,
+        {"openrouter": "or-key", "wingman_pro": "pro-token"},
+        openrouter_model="cloudflare/clef-flash",
+    )
+    result = client.decide("hi", QUESTION)
+    url, request = client._session.requests[0]
+    assert url == "https://openrouter.ai/api/v1/systemone"
+    assert request["headers"]["Authorization"] == "Bearer or-key"
+    assert request["json"]["model"] == "cloudflare/clef-flash"
+    assert result.cost == pytest.approx(0.0000147)
+
+
+@pytest.mark.parametrize("endpoint", [
+    "http://127.0.0.1:8000", "http://127.0.0.1:8000/", "http://127.0.0.1:8000/v1",
+    "http://127.0.0.1:8000/v1/",
+])
+def test_a_server_is_reached_however_its_address_was_written(endpoint):
+    client = _client(
+        DecisionModelProvider.SERVER, {"decision_model_server": "server-key"},
+        endpoint=endpoint, model="Qwen3.5-4B-4bit",
+    )
+    assert client.decide("hi", QUESTION).ok
+    url, request = client._session.requests[0]
+    assert url == "http://127.0.0.1:8000/v1/systemone"
+    assert request["headers"]["Authorization"] == "Bearer server-key"
+    assert request["json"]["model"] == "Qwen3.5-4B-4bit"
+
+
+def test_a_server_without_a_key_gets_no_authorization_header():
+    client = _client(DecisionModelProvider.SERVER, endpoint="http://127.0.0.1:8765")
+    client.decide("hi", QUESTION)
+    assert "Authorization" not in client._session.requests[0][1]["headers"]
+
+
+@pytest.mark.parametrize("provider,settings,reason", [
+    (DecisionModelProvider.WINGMAN_PRO, {}, "Wingman Subscription"),
+    (DecisionModelProvider.OPENROUTER, {}, "OpenRouter"),
+    (DecisionModelProvider.SERVER, {"endpoint": " "}, "server address"),
+])
+def test_a_provider_without_what_it_needs_sends_nothing(provider, settings, reason):
+    client = _client(provider, {}, **settings)
     assert not client.is_ready()
-    result = client.system_one({"transcript": "hi"}, {"x": {"type": "noul"}})
-    assert not result.ok
-    assert "Wingman Pro" in result.error
+    result = client.decide("hi", QUESTION)
+    assert reason in result.error
+    assert client._session.requests == []
+
+
+def test_a_key_added_while_core_runs_counts_at_once():
+    client = _client(DecisionModelProvider.OPENROUTER, {})
+    assert not client.is_ready()
+    client._secret_keeper.secrets["openrouter"] = "or-key"
+    assert client.is_ready()
 
 
 def test_a_failed_request_starts_the_next_on_a_fresh_connection():
@@ -105,10 +178,10 @@ def test_a_failed_request_starts_the_next_on_a_fresh_connection():
         def close(self):
             self.closed = True
 
-    client = JevClient(api_key="k")
+    client = _client(DecisionModelProvider.WINGMAN_PRO, {"wingman_pro": "k"})
     dead = DeadSession()
     client._session = dead
-    result = client.system_one({"transcript": "hi"}, {"q": {"type": "noul"}})
+    result = client.decide({"transcript": "hi"}, QUESTION)
     assert result.error
     assert dead.closed
     assert client._session is not dead
@@ -117,8 +190,8 @@ def test_a_failed_request_starts_the_next_on_a_fresh_connection():
 # ── vocabulary gating ───────────────────────────────────────────────
 
 
-def _vocab_result(values: list[float | None]) -> JevResult:
-    return JevResult(
+def _vocab_result(values: list[float | None]) -> DecisionResult:
+    return DecisionResult(
         answers={
             f"vocab_{i}": {"type": "noul", "noul": v}
             for i, v in enumerate(values)
@@ -152,7 +225,7 @@ def test_an_unanswered_candidate_is_not_replaced():
 
 
 def test_a_failed_call_leaves_the_matcher_in_charge():
-    assert read_vocabulary(JevResult(error="timeout"), CANDIDATES, 0.5) is None
+    assert read_vocabulary(DecisionResult(error="timeout"), CANDIDATES, 0.5) is None
 
 
 def test_no_candidates_is_no_replacements():
@@ -163,15 +236,18 @@ def test_no_candidates_is_no_replacements():
 
 
 def _settings(enabled: bool, commands: bool = True, **switches):
-    places = {"wingman_choice": True, "vocabulary": True, "skills": True, **switches}
-    return SimpleNamespace(
-        system_one=SimpleNamespace(enabled=enabled, commands=commands, **places),
-        wingman_pro=SimpleNamespace(base_url="https://example.invalid"),
-    )
+    return decision_model_settings(enabled=enabled, commands=commands, **switches)
+
+
+def _gate(settings) -> DecisionGate:
+    """A gate whose provider could be reached: a Wingman Pro token is there."""
+    gate = DecisionGate("T", settings=settings)
+    with_secrets(gate.client, wingman_pro="k")
+    return gate
 
 
 def test_a_switched_off_gate_reaches_no_model():
-    gate = JevGate("T", settings=_settings(False))
+    gate = DecisionGate("T", settings=_settings(False))
     assert asyncio.run(gate.ask({"x": 1}, {"q": {"type": "noul"}})) is None
     assert gate.ask_sync({"x": 1}, {"q": {"type": "noul"}}) is None
     assert gate.confirm_vocabulary("hi", [("a", "B", False)]) is None
@@ -182,16 +258,15 @@ def test_a_switched_off_gate_reaches_no_model():
 
 def _vocabulary_gate(monkeypatch, answer):
     """An active gate whose model call runs ``answer`` and counts the calls."""
-    monkeypatch.setattr(jev_gate, "VOCABULARY_DEADLINE", 0.05)
-    gate = JevGate("STT", settings=_settings(True))
-    gate.client.api_key = "k"
+    monkeypatch.setattr(decision_gate, "VOCABULARY_DEADLINE", 0.05)
+    gate = _gate(_settings(True))
     calls = []
 
     def system_one(state, questions):
         calls.append(state)
         return answer()
 
-    gate.client.system_one = system_one
+    gate.client.decide = system_one
     return gate, calls
 
 
@@ -210,14 +285,14 @@ def test_a_slow_answer_is_not_waited_for(monkeypatch):
 
 
 def test_after_a_failure_the_check_pauses(monkeypatch):
-    gate, calls = _vocabulary_gate(monkeypatch, lambda: JevResult(error="HTTP 502"))
+    gate, calls = _vocabulary_gate(monkeypatch, lambda: DecisionResult(error="HTTP 502"))
     assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
     assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
     assert len(calls) == 1
 
 
 def test_after_the_pause_the_check_asks_again(monkeypatch):
-    answers = [JevResult(error="HTTP 502"), _vocab_result([0.9])]
+    answers = [DecisionResult(error="HTTP 502"), _vocab_result([0.9])]
     gate, calls = _vocabulary_gate(monkeypatch, lambda: answers.pop(0))
     assert gate.confirm_vocabulary("radar on", PROPOSALS) is None
     gate._vocabulary_paused_until = 0.0
@@ -261,7 +336,7 @@ def test_not_for_and_examples_become_the_structured_form():
 def test_a_score_reads_back_as_a_label_a_number_and_named_shares():
     """TypeSafe answers a score with a position and a legend, not a label."""
     answers = SystemOneAnswers(
-        JevResult(
+        DecisionResult(
             answers={
                 "urgency": {
                     "type": "score",
@@ -282,7 +357,7 @@ def test_a_score_reads_back_as_a_label_a_number_and_named_shares():
 
 def test_a_noul_is_a_probability_and_yes_no_applies_a_threshold():
     answers = SystemOneAnswers(
-        JevResult(answers={"hostile": {"type": "noul", "noul": 0.94}})
+        DecisionResult(answers={"hostile": {"type": "noul", "noul": 0.94}})
     )
     assert answers.noul("hostile") == pytest.approx(0.94)
     assert answers.yes_no("hostile") is True
@@ -291,8 +366,7 @@ def test_a_noul_is_a_probability_and_yes_no_applies_a_threshold():
 
 def test_a_skill_cannot_ask_past_the_switch():
     """The one thing the open `decide()` door must not allow."""
-    gate = JevGate("T", settings=_settings(False))
-    gate.client.api_key = "k"
+    gate = _gate(_settings(False))
     api = SkillSystemOne(gate)
     assert api.available is False
     for answers in (
@@ -306,9 +380,9 @@ def test_a_skill_cannot_ask_past_the_switch():
 
 
 def test_decisions_are_timed_and_drained_per_turn():
-    gate = JevGate("T", settings=_settings(True))
-    gate._record("Command choice", JevResult(seconds=0.31))
-    gate._record("Skill preselection", JevResult(seconds=0.28))
+    gate = DecisionGate("T", settings=_settings(True))
+    gate._record("Command choice", DecisionResult(seconds=0.31))
+    gate._record("Skill preselection", DecisionResult(seconds=0.28))
 
     taken = gate.take_decisions()
     assert [label for label, _ms in taken] == ["Command choice", "Skill preselection"]
@@ -334,15 +408,14 @@ def test_the_turn_asks_about_commands_and_nothing_else():
     """Skill preselection was taken out: it saved 0.26 s expected against
     0.46 s spent on every turn. What is left is the command and the count of
     how many were asked for, which belongs to the same decision."""
-    gate = JevGate("T", settings=_settings(True))
-    gate.client.api_key = "k"
+    gate = _gate(_settings(True))
     sent = []
 
     def capture(state, questions):
         sent.append(questions)
-        return JevResult(answers={})
+        return DecisionResult(answers={})
 
-    gate.client.system_one = capture
+    gate.client.decide = capture
     asyncio.run(gate.pick_command("gear down", _commands(3)))
 
 
@@ -353,9 +426,8 @@ def test_the_turn_asks_about_commands_and_nothing_else():
 
 def test_the_command_switch_stops_the_question_on_its_own():
     """A roleplayer with no commands turns this off and keeps everything else."""
-    gate = JevGate("T", settings=_settings(True, commands=False))
-    gate.client.api_key = "k"
-    gate.client.system_one = lambda *a: pytest.fail("should not have asked")
+    gate = _gate(_settings(True, commands=False))
+    gate.client.decide = lambda *a: pytest.fail("should not have asked")
     assert asyncio.run(gate.pick_command("gear down", _commands(3))) is None
     # ...and the master switch still governs the rest.
     assert gate.active is True
@@ -365,18 +437,17 @@ def test_a_config_too_big_to_ask_about_is_not_asked_about():
     """Over TypeSafe's 255-option limit the model answers 400, so asking
     would cost a rejected request on every turn of the users with the
     biggest configs."""
-    gate = JevGate("T", settings=_settings(True))
+    gate = DecisionGate("T", settings=_settings(True))
     assert len(gate._askable_commands(_commands(MAX_COMMAND_OPTIONS))) == MAX_COMMAND_OPTIONS
     assert gate._askable_commands(_commands(MAX_COMMAND_OPTIONS + 1)) == []
-    gate.client.api_key = "k"
-    gate.client.system_one = lambda *a: pytest.fail("should not have asked")
+    with_secrets(gate.client, wingman_pro="k")
+    gate.client.decide = lambda *a: pytest.fail("should not have asked")
     assert asyncio.run(gate.pick_command("x", _commands(MAX_COMMAND_OPTIONS + 50))) is None
 
 
 def test_nothing_to_ask_means_no_call_at_all():
-    gate = JevGate("T", settings=_settings(True))
-    gate.client.api_key = "k"
-    gate.client.system_one = lambda *a: pytest.fail("should not have called out")
+    gate = _gate(_settings(True))
+    gate.client.decide = lambda *a: pytest.fail("should not have called out")
     assert asyncio.run(gate.pick_command("x", [])) is None
 
 
@@ -384,7 +455,7 @@ def test_nothing_to_ask_means_no_call_at_all():
 
 
 def _answer(multiple: float, command: str = "ToggleShields", confidence: float = 0.99):
-    return JevResult(
+    return DecisionResult(
         answers={
             MULTIPLE_KEY: {"type": "noul", "noul": multiple},
             "command": {
@@ -411,7 +482,7 @@ def test_a_trailing_clause_does_not_count_as_a_second_request():
 
 def test_an_unanswered_count_does_not_block_a_confident_command():
     """A question the model skipped must not silently disable the feature."""
-    result = JevResult(
+    result = DecisionResult(
         answers={"command": {"type": "choice", "choice": "ToggleShields",
                              "confidence": 0.99, "probabilities": {}}}
     )
@@ -421,10 +492,9 @@ def test_an_unanswered_count_does_not_block_a_confident_command():
 # ── a switch per place, under the master switch ─────────────────────
 
 
-def _gate_that_must_not_ask(**switches) -> JevGate:
-    gate = JevGate("T", settings=_settings(True, **switches))
-    gate.client.api_key = "k"
-    gate.client.system_one = lambda *a: pytest.fail("should not have asked")
+def _gate_that_must_not_ask(**switches) -> DecisionGate:
+    gate = _gate(_settings(True, **switches))
+    gate.client.decide = lambda *a: pytest.fail("should not have asked")
     return gate
 
 
@@ -450,7 +520,6 @@ def test_the_vocabulary_switch_leaves_the_matcher_alone():
 
 
 def test_the_master_switch_wins_over_every_place():
-    gate = JevGate("T", settings=_settings(False))
-    gate.client.api_key = "k"
+    gate = _gate(_settings(False))
     assert gate.skills_active is False
     assert gate.wingman_choice_active is False

@@ -1,6 +1,6 @@
-"""The System One model, reached through Wingman Pro.
+"""The decision model, reached through the provider the user picked.
 
-A System One model does not write text. It takes a state and a set of typed
+A decision model does not write text. It takes a state and a set of typed
 questions and answers all of them in one parallel pass — a `noul` is a yes/no
 as a probability, a `choice` picks one of up to 255 named options, a `score`
 rates on ordered levels. Every answer carries a calibrated confidence, which
@@ -12,14 +12,15 @@ same wall clock as asking one. So the callers here ask everything they might
 want in a single call and throw away what the turn did not need, rather than
 making one round trip per decision.
 
-Which model answers is the subscription's decision, not ours: it is a fixed
-role like transcription and speech, so it can be swapped in the backend
-without a Wingman release. Core never names a model here.
+The request is TypeSafe's System One format, and every provider speaks it
+unchanged, so a provider is no more than a URL, a key and a model name:
 
-There is a second, direct route to the Vercel AI Gateway, used by the
-benchmarks in ``evals/jev_bench`` and by anyone with their own gateway key.
-It is the same request and the same response — the backend forwards both
-untouched — so a measurement taken through one holds for the other.
+- Wingman Pro: the plan pays and the backend picks the model. Core sends no
+  model, so it can be swapped in /admin without a Wingman release.
+- OpenRouter: the user's own key, and any decision model OpenRouter lists —
+  Jev, Clef, Perplexity's Decider and the rest answer the same request.
+- A server of the user's: oMLX, local-jev, opendecider and others serve
+  ``/v1/systemone`` too, most of them from a small local chat model.
 
 Failures never raise. Every decision this model makes has an existing path
 behind it — the main LLM, a word match, a token threshold — and a backend
@@ -27,24 +28,23 @@ that is down or slow must cost a few milliseconds, not the turn.
 """
 
 import json
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import requests
 
-from api.enums import LogType
+from api.enums import DecisionModelProvider, LogType
 from services.printr import Printr
 
 printr = Printr()
 
-GATEWAY_URL = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
-"""The direct route, for a user with their own AI Gateway key."""
+OPENROUTER_URL = "https://openrouter.ai/api/v1/systemone"
+"""OpenRouter's System One route. Its other one, ``/api/alpha/decisions``,
+takes the same body and answered identically on 2026-11-05."""
 
-MODEL = "typesafe-ai/jev"
-"""Only sent on the direct route. Through Wingman Pro the backend picks the
-model from the plan's role and ignores anything we would put here."""
+SERVER_SECRET = "decision_model_server"
+"""The API key of a server of the user's, if it wants one (oMLX does)."""
 
 STATE_CHARS = 120
 """The state can be a whole tool response. This is enough to see what was
@@ -136,7 +136,7 @@ def score(
 
     The answer is not one of the levels. It is a position on the scale they
     span — ``1.99`` on three levels means "almost entirely the third one" —
-    plus a legend mapping index to label. ``JevResult.level()`` turns that
+    plus a legend mapping index to label. ``DecisionResult.level()`` turns that
     back into the label a caller asked about.
     """
     return {
@@ -147,22 +147,25 @@ def score(
 
 
 @dataclass
-class JevResult:
+class DecisionResult:
     """What came back, plus what it cost us in time and money."""
 
     answers: dict[str, Any] = field(default_factory=dict)
     seconds: float = 0.0
     cost: float = 0.0
-    """What the gateway billed. Measured 2026-09-20 it comes back as 0 on
-    every System One call — either it is below the precision the field is
-    reported in, or the gateway does not meter this endpoint yet. Use
-    ``estimated_cost`` for anything that has to add up."""
+    """What the provider billed. OpenRouter reports it in ``usage.cost``;
+    through Wingman Pro the gateway's figure came back as 0 on every call
+    measured 2026-09-20, so use ``estimated_cost`` for anything that has to
+    add up there. A server of the user's costs nothing."""
     input_tokens: int = 0
+    model: str = ""
+    """The model that answered, as the provider names it, e.g.
+    ``typesafe/jev-1.14-20261014``. Empty when nothing came back."""
     error: Optional[str] = None
 
     @property
     def estimated_cost(self) -> float:
-        """Input tokens at TypeSafe's list price. Output is free."""
+        """Input tokens at Jev's list price. Output is free."""
         return self.input_tokens * PRICE_PER_INPUT_TOKEN
 
     @property
@@ -308,7 +311,7 @@ def _answer_line(answer: dict) -> str:
     return line
 
 
-def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") -> "JevResult":
+def _log_failure(state: Any, questions: dict[str, dict], result: "DecisionResult") -> "DecisionResult":
     """A call that produced nothing, and what it was about.
 
     Logged as a warning rather than swallowed: the caller carries on with its
@@ -316,7 +319,7 @@ def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") ->
     gateway that is down looks exactly like a gateway nobody configured.
     """
     printr.print(
-        f"Jev failed after {result.seconds * 1000:.0f} ms: {result.error}\n"
+        f"Decision model failed after {result.seconds * 1000:.0f} ms: {result.error}\n"
         f"  asked: {', '.join(questions)}\n"
         f"  state: {_state_line(state)}",
         color=LogType.WARNING,
@@ -325,7 +328,7 @@ def _log_failure(state: Any, questions: dict[str, dict], result: "JevResult") ->
     return result
 
 
-def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -> None:
+def _log_exchange(state: Any, questions: dict[str, dict], result: "DecisionResult") -> None:
     """Every exchange, in the log file and nowhere else.
 
     Always, not behind debug_mode: these decisions happen before the main
@@ -336,7 +339,8 @@ def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -
     see.
     """
     lines = [
-        f"Jev {result.seconds * 1000:.0f} ms · {result.input_tokens:,} tok · "
+        f"Decision model {result.model or '?'} {result.seconds * 1000:.0f} ms · "
+        f"{result.input_tokens:,} tok · "
         f"{_state_line(state)}"
     ]
     width = max((len(key) for key in questions), default=0)
@@ -348,74 +352,99 @@ def _log_exchange(state: Any, questions: dict[str, dict], result: "JevResult") -
     printr.print("\n".join(lines), color=LogType.SYSTEM, server_only=True)
 
 
-class JevClient:
-    """One HTTP call per decision batch. Holds no state beyond the credential.
+def server_base_url(endpoint: str) -> str:
+    """The server's root, whatever the user pasted.
 
-    The credential is an AI Gateway key, not a TypeSafe key: the gateway bills
-    the call and passes the request through unchanged, so the request and
-    response shapes are TypeSafe's own and a later move to TypeSafe direct is
-    a base URL change.
+    Servers are usually configured by their OpenAI base URL, which ends in
+    ``/v1``, and the request path is added here. Both spellings work, with or
+    without a trailing slash."""
+    base = (endpoint or "").strip().rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    return base
+
+
+@dataclass
+class Route:
+    """Where the next call goes. ``model`` is None when the provider picks it."""
+
+    url: str
+    token: str
+    model: Optional[str]
+
+
+class DecisionModelClient:
+    """One HTTP call per decision batch.
+
+    The provider is read from the settings on every call, not captured at
+    construction: a user who switches it, signs in or adds a key while Core
+    runs expects the next utterance to follow, not the next restart.
     """
 
-    def __init__(
-        self,
-        api_key: str = "",
-        timeout: float = DEFAULT_TIMEOUT,
-        subscription: Optional[Any] = None,
-    ):
-        self.subscription = subscription
-        """``WingmanProSettings`` when Core is signed in. Its presence is what
-        chooses the route: the plan pays for the call and the backend picks the
-        model, so there is nothing for a user to configure."""
-        self.api_key = api_key or os.environ.get("AI_GATEWAY_API_KEY", "")
+    def __init__(self, settings: Optional[Any] = None, timeout: float = DEFAULT_TIMEOUT):
+        self.settings = settings
+        """``SettingsConfig``: ``decision_model`` says which provider, and
+        ``wingman_pro`` where the subscription lives."""
         self.timeout = timeout
         self._session = requests.Session()
         self._secret_keeper = None
 
-    def _pro_token(self) -> str:
-        """The subscription token, read fresh: a user can sign in while Core
-        runs, and a client built at startup must not stay signed out."""
-        if self.subscription is None:
-            return ""
+    def _secret(self, name: str) -> str:
+        """A secret, read fresh: one added while Core runs counts at once."""
         if self._secret_keeper is None:
             from services.secret_keeper import SecretKeeper
 
             self._secret_keeper = SecretKeeper()
-        return self._secret_keeper.secrets.get("wingman_pro", "") or ""
+        return self._secret_keeper.secrets.get(name, "") or ""
+
+    def route(self) -> tuple[Optional[Route], str]:
+        """The route for the next call, or None and why there is none."""
+        if self.settings is None:
+            return None, "there are no settings yet"
+        decision = self.settings.decision_model
+        if decision.provider == DecisionModelProvider.OPENROUTER:
+            token = self._secret("openrouter")
+            if not token:
+                return None, "there is no OpenRouter API key"
+            return Route(OPENROUTER_URL, token, decision.openrouter.model or None), ""
+        if decision.provider == DecisionModelProvider.SERVER:
+            base = server_base_url(decision.server.endpoint)
+            if not base:
+                return None, "no server address is set"
+            return Route(
+                f"{base}/v1/systemone", self._secret(SERVER_SECRET), decision.server.model or None
+            ), ""
+        token = self._secret("wingman_pro")
+        if not token:
+            return None, "you are not signed in to the Wingman Subscription"
+        return Route(f"{self.settings.wingman_pro.base_url}/api/v1/systemone", token, None), ""
 
     def is_ready(self) -> bool:
-        return bool(self._pro_token() or self.api_key)
+        return self.route()[0] is not None
 
-    def system_one(self, state: Any, questions: dict[str, dict]) -> JevResult:
+    def decide(self, state: Any, questions: dict[str, dict]) -> DecisionResult:
         """Answer every question in ``questions`` against ``state``.
 
         ``state`` is whatever the decision is about: a transcript, or a dict of
         several things the questions may refer to. It is sent as-is.
         """
         if not questions:
-            return JevResult(error="no questions")
+            return DecisionResult(error="no questions")
 
-        token = self._pro_token()
-        if token:
-            url = f"{self.subscription.base_url}/api/v1/systemone"
-            payload = {"state": state, "questions": questions}
-        elif self.api_key:
-            token = self.api_key
-            url = GATEWAY_URL
-            payload = {"model": MODEL, "state": state, "questions": questions}
-        else:
-            return JevResult(error="not signed in to Wingman Pro and no AI_GATEWAY_API_KEY")
+        route, reason = self.route()
+        if route is None:
+            return DecisionResult(error=reason)
+        payload = {"state": state, "questions": questions}
+        if route.model:
+            payload["model"] = route.model
+        headers = {"Content-Type": "application/json"}
+        if route.token:
+            headers["Authorization"] = f"Bearer {route.token}"
 
         started = time.perf_counter()
         try:
             response = self._session.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=self.timeout,
+                route.url, headers=headers, json=payload, timeout=self.timeout
             )
         except requests.RequestException as e:
             # The pooled connection may be one the network dropped without
@@ -424,26 +453,27 @@ class JevClient:
             # finding the same dead one.
             self._session.close()
             self._session = requests.Session()
-            return _log_failure(state, questions, JevResult(
+            return _log_failure(state, questions, DecisionResult(
                 seconds=time.perf_counter() - started, error=str(e)))
 
         seconds = time.perf_counter() - started
         if not response.ok:
-            return _log_failure(state, questions, JevResult(
+            return _log_failure(state, questions, DecisionResult(
                 seconds=seconds, error=f"HTTP {response.status_code}: {response.text[:300]}"))
         try:
             body = response.json()
         except json.JSONDecodeError as e:
-            return _log_failure(state, questions, JevResult(
+            return _log_failure(state, questions, DecisionResult(
                 seconds=seconds, error=f"bad JSON: {e}"))
 
         usage = body.get("usage") or {}
         gateway = ((body.get("provider_metadata") or {}).get("gateway")) or {}
-        result = JevResult(
+        result = DecisionResult(
             answers=body.get("answers") or {},
             seconds=seconds,
-            cost=float(gateway.get("cost") or 0.0),
+            cost=float(usage.get("cost") or gateway.get("cost") or 0.0),
             input_tokens=int(usage.get("input_tokens") or 0),
+            model=str(body.get("model") or route.model or ""),
         )
         _log_exchange(state, questions, result)
         return result

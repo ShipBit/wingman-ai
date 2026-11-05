@@ -1,20 +1,20 @@
-"""The two decisions the prototype hands to Jev, and how to read the answers.
+"""The decisions Core hands to the decision model, and how to read the answers.
 
 Kept apart from the places that use them so each one can be measured on its
 own against the path it would replace. Every function here is pure: it builds
-questions or reads a ``JevResult``. Nothing calls the gateway, nothing touches
+questions or reads a ``DecisionResult``. Nothing calls a provider, nothing touches
 a wingman.
 
 Each decision has a fallback and a threshold, and the two belong together:
 below the threshold the caller does what it does today. That is what makes
-this safe to switch on — a Jev that is unsure costs a few hundred milliseconds
+this safe to switch on — a model that is unsure costs a few hundred milliseconds
 and changes nothing.
 """
 
 from typing import Optional
 
 from api.interface import CommandConfig, WingmanConfig
-from providers.typesafe_jev import JevResult, choice, noul
+from providers.decision_model import DecisionResult, choice, noul
 
 NONE_OPTION = "none_of_these"
 """The option that means the user did not ask for any command. Jev's docs
@@ -127,7 +127,7 @@ wrongly called multiple only costs the main-model round it would have taken
 anyway."""
 
 
-def read_command(result: JevResult, min_confidence: float) -> Optional[str]:
+def read_command(result: DecisionResult, min_confidence: float) -> Optional[str]:
     """The command to execute, or None to let the main model decide.
 
     None covers every way this ends without a keypress: the call failed, the
@@ -180,7 +180,7 @@ def vocabulary_questions(candidates: list[tuple[str, str]]) -> dict[str, dict]:
 
 
 def read_vocabulary(
-    result: JevResult, candidates: list[tuple[str, str]], threshold: float
+    result: DecisionResult, candidates: list[tuple[str, str]], threshold: float
 ) -> Optional[set[int]]:
     """Indices of the candidates to actually replace, or None to change nothing.
 
@@ -264,9 +264,9 @@ def wingman_questions(configs: list[WingmanConfig]) -> dict[str, dict]:
     }
 
 
-def read_wingman(result: JevResult, min_confidence: float) -> Optional[str]:
-    """The name of the wingman to answer, or None: the call failed or Jev
-    was not sure enough."""
+def read_wingman(result: DecisionResult, min_confidence: float) -> Optional[str]:
+    """The name of the wingman to answer, or None: the call failed or the
+    model was not sure enough."""
     if not result.ok:
         return None
     return result.choice("wingman", min_confidence=min_confidence)

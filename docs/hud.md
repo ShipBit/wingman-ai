@@ -33,7 +33,7 @@ removed.
 There is no tool that clears the whole info panel: it belongs to every Wingman,
 and one Wingman must not wipe what another put there. Ask to remove a panel by
 its title instead. A title said differently ("the mining one") is matched by
-System One when you have it.
+the decision model when you have it on.
 
 Each profile's info panels come back after a restart when its *Restore info
 panels* is on.

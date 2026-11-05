@@ -79,7 +79,7 @@ from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.turn_metrics import TurnMetrics
 from services.filler_response import FillerLine, FillerResponder
-from services.jev_gate import JevGate
+from services.decision_gate import DecisionGate
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -276,8 +276,8 @@ class Wingman:
         # --- Conversation state ---
         self.last_gpt_call = None
 
-        # --- System One decisions (settings.system_one.enabled) ---
-        self.jev = JevGate(wingman_name=name, settings=settings)
+        # --- System One decisions (settings.decision_model.enabled) ---
+        self.decision_gate = DecisionGate(wingman_name=name, settings=settings)
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -648,7 +648,7 @@ class Wingman:
                 # that end early on a command. Skills add their own decisions
                 # to the same list on the way, so this is the whole layer.
                 self.metrics.add_system_one_snapshot(
-                    benchmark_llm, self.jev.take_decisions()
+                    benchmark_llm, self.decision_gate.take_decisions()
                 )
 
                 actual_response = instant_response or process_result
@@ -713,12 +713,12 @@ class Wingman:
         # No snapshot around this: the gate times every decision it takes,
         # including the ones skills make later in the turn, and they are added
         # together at the end.
-        if self.jev.active and not instant_command_executed:
-            jev_executed, jev_response = await self._ask_jev_about_the_turn(transcript)
-            if jev_response:
-                await self.conversation.add_assistant_message(jev_response)
-                return jev_response, jev_response, None, True
-            instant_command_executed = instant_command_executed or jev_executed
+        if self.decision_gate.active and not instant_command_executed:
+            decided_executed, decided_response = await self._ask_decision_model_about_the_turn(transcript)
+            if decided_response:
+                await self.conversation.add_assistant_message(decided_response)
+                return decided_response, decided_response, None, True
+            instant_command_executed = instant_command_executed or decided_executed
 
         llm_processing_time_ms = 0.0
         tool_execution_time_ms = 0.0
@@ -1141,16 +1141,16 @@ class Wingman:
             wingman_name=self.name,
         )
 
-    async def _ask_jev_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
+    async def _ask_decision_model_about_the_turn(self, transcript: str) -> tuple[bool, str | None]:
         """Ask which command the request means, and run it if the answer holds."""
-        name = await self.jev.pick_command(
+        name = await self.decision_gate.pick_command(
             transcript, self.command_executor.eligible_commands()
         )
         if not name:
             return False, None
-        return await self._run_jev_command(name)
+        return await self._run_decided_command(name)
 
-    async def _run_jev_command(self, name: str) -> tuple[bool, str | None]:
+    async def _run_decided_command(self, name: str) -> tuple[bool, str | None]:
         """Run the command the System One model picked.
 
         Returns ``(executed, spoken_response)``. ``executed`` without a
@@ -1636,7 +1636,7 @@ class Wingman:
             self.tool_executor._settings = settings
             self.mcp_manager.settings = settings
             self.skill_manager.settings = settings
-            self.jev.update_settings(settings)
+            self.decision_gate.update_settings(settings)
 
             for skill in self.skills:
                 skill.settings = settings

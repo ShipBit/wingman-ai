@@ -281,6 +281,21 @@ class LocalAiMode(Enum):
     SERVER = "server"
 
 
+class DecisionModelProvider(Enum):
+    """Who answers the decision model's questions.
+
+    All three take TypeSafe's System One request unchanged, so switching is a
+    different URL, key and model name, nothing else.
+    """
+
+    WINGMAN_PRO = "wingman_pro"
+    """The default: the plan pays and the backend picks the model."""
+    OPENROUTER = "openrouter"
+    """The user's own OpenRouter key and any decision model OpenRouter lists."""
+    SERVER = "server"
+    """A System One server the user runs: oMLX, local-jev, opendecider."""
+
+
 class ConversationProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
@@ -495,6 +510,10 @@ class LocalAiModeEnumModel(BaseEnumModel):
     local_ai_mode: LocalAiMode
 
 
+class DecisionModelProviderEnumModel(BaseEnumModel):
+    decision_model_provider: DecisionModelProvider
+
+
 class SpokenLanguageEnumModel(BaseEnumModel):
     spoken_language: SpokenLanguage
 
@@ -526,6 +545,7 @@ ENUM_TYPES = {
     "RecordingDevice": RecordingDeviceModel,
     "CoreState": CoreStateEnumModel,
     "LocalAiMode": LocalAiModeEnumModel,
+    "DecisionModelProvider": DecisionModelProviderEnumModel,
     "ScGameLogRulesProblem": ScGameLogRulesProblemEnumModel,
     "ScTelemetryState": ScTelemetryStateEnumModel,
     "SkillRequirement": SkillRequirementEnumModel,

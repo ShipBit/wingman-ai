@@ -1659,16 +1659,17 @@ Which provider transcribes is a global setting. A skill may add words the transc
 
 A fast, cheap model that picks from options you give it instead of writing text: which of these
 does the user mean, how urgent is this, yes or no. About 300 ms, a fraction of the cost of
-`ai.generate`. `.available` is `False` when the user switched it off or the plan lacks it; check
-it and fall back to `local_ai` or a rule. The entry point is `await .decide(state, questions)`
+`ai.generate`. `.available` is `False` when the user switched it off or its provider can't be
+reached; check it and fall back to `local_ai` or a rule. The entry point is `await .decide(state, questions)`
 (`.decide_sync(...)` for threads).
 
 Use it whenever the skill needs to **pick, rate or judge** rather than write.
 It cannot answer outside the options you give it, so there is nothing to parse
 and nothing to validate.
 
-This is a thin wrapper around [TypeSafe's Jev](https://docs.typesafe.ai) and
-keeps their names, so their docs and examples read straight across:
+It speaks [TypeSafe's System One API](https://docs.typesafe.ai), whichever decision model the
+user picked in Settings (through the Wingman Subscription, OpenRouter or a server of their own), and keeps
+TypeSafe's names, so their docs and examples read straight across:
 
 | TypeSafe SDK | here |
 |---|---|
@@ -1733,8 +1734,8 @@ The other readers on the answers:
 | `.levels(k)` | The level labels of a score, lowest first. |
 | `.raw(k=None)` | The answers exactly as the model sent them, for anything the readers above don't cover. |
 
-Always handle `available` being False — the user can switch System One off in
-Settings, and a plan may not include it. Every reader returns `None`/`{}` in
+Always handle `available` being False — the user can switch the decision model off in
+Settings, and the provider they chose may have no access, no key or no server. Every reader returns `None`/`{}` in
 that case, so the skill silently takes the None branch unless you check.
 
 ### `self.wingman.commands` — user commands
