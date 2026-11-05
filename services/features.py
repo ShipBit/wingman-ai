@@ -1,32 +1,46 @@
 """Features that are built but not yet released on every update channel.
 
-develop keeps every flag on, so unstable builds get the feature. A stable
-release branch turns a flag off in one commit: the code ships, but nothing of
-it runs and the client shows nothing of it. Once the feature is released, its
-flag and this check go away.
+The channel comes from the build (services/build_channel.py), so the same
+commit can ship a feature on unstable and leave it out of production. Where a
+feature is not released, its code ships but nothing of it runs, and the client
+shows nothing of it. Releasing it everywhere means removing it from
+RELEASED_ON; once that is done, its checks can go.
 
 A skill marks the settings of such a feature with `feature: <name>` on their
-property group. Core drops the group and its settings while the feature is
-off, so the UI never offers them.
+property group: Core drops the group and its settings where the feature is not
+released, so the UI never offers them. Under `unreleased: {<name>: {...}}` a
+skill names manifest fields, like its description, that replace its own there.
 """
+
+from services import build_channel
 
 SC_TELEMETRY = "sc_telemetry"
 
-SC_TELEMETRY_RELEASED = False
-"""Star Citizen's telemetry stream (services/sc_telemetry). Off on stable
-until it has been tested more on unstable."""
+RELEASED_ON: dict[str, tuple[str, ...]] = {
+    # Star Citizen's telemetry stream (services/sc_telemetry). Production
+    # follows once testers on unstable have used it for a while.
+    SC_TELEMETRY: ("unstable",),
+}
+"""The channels each feature is released on. A feature not listed is released everywhere."""
 
 
 def released(feature: str) -> bool:
-    if feature == SC_TELEMETRY:
-        return SC_TELEMETRY_RELEASED
-    return True
+    channels = RELEASED_ON.get(feature)
+    return channels is None or build_channel.CHANNEL in channels
 
 
-def drop_unreleased_properties(skill_manifest: dict | None) -> dict | None:
-    """A skill's default_config.yaml without the property groups of features
-    that are not released, and without the settings in them."""
-    if not skill_manifest or not skill_manifest.get("property_groups"):
+def drop_unreleased_features(skill_manifest: dict | None) -> dict | None:
+    """A skill's default_config.yaml as this build offers it: without the
+    property groups of features that are not released, without the settings
+    in them, and with the fields the skill replaces for such a feature."""
+    if not skill_manifest:
+        return skill_manifest
+    overrides = skill_manifest.pop("unreleased", None)
+    if isinstance(overrides, dict):
+        for feature, fields in overrides.items():
+            if not released(feature) and isinstance(fields, dict):
+                skill_manifest.update(fields)
+    if not skill_manifest.get("property_groups"):
         return skill_manifest
     dropped = {
         group.get("id")

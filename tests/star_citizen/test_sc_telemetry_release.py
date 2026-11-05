@@ -1,5 +1,5 @@
-"""Star Citizen telemetry on a channel it has not reached yet: the code ships,
-but the stream never starts and the UI shows none of its settings."""
+"""Star Citizen telemetry in a production build, which it has not reached yet:
+the code ships, but the stream never starts and the UI shows none of it."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from services import features
-from services.features import drop_unreleased_properties
+from services import build_channel, features
+from services.features import drop_unreleased_features
 from services.sc_telemetry.service import ScTelemetryService
 from services.star_citizen import setup as sc_setup
 from tests.support import REPO_ROOT
@@ -18,13 +18,12 @@ SC_EVENTS = Path(REPO_ROOT) / "skills" / "sc_game_events" / "default_config.yaml
 
 @pytest.fixture
 def unreleased(monkeypatch):
-    monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", False)
+    monkeypatch.setattr(build_channel, "CHANNEL", "production")
 
 
 @pytest.fixture
 def released(monkeypatch):
-    # A stable release branch turns the flag off; these tests hold on both.
-    monkeypatch.setattr(features, "SC_TELEMETRY_RELEASED", True)
+    monkeypatch.setattr(build_channel, "CHANNEL", "unstable")
 
 
 def _sc_events() -> dict:
@@ -52,7 +51,7 @@ def test_star_citizen_events_offers_no_telemetry_setting_while_unreleased(unrele
     telemetry_groups = _telemetry_groups(manifest)
     assert telemetry_groups
 
-    offered = drop_unreleased_properties(manifest)
+    offered = drop_unreleased_features(manifest)
 
     assert not {group["id"] for group in offered["property_groups"]} & telemetry_groups
     assert not [prop["id"] for prop in offered["custom_properties"] if prop.get("group") in telemetry_groups]
@@ -63,7 +62,22 @@ def test_released_telemetry_keeps_every_setting(released):
     manifest = _sc_events()
     count = len(manifest["custom_properties"])
 
-    offered = drop_unreleased_properties(manifest)
+    offered = drop_unreleased_features(manifest)
 
     assert len(offered["custom_properties"]) == count
     assert _telemetry_groups(offered)
+
+
+def test_star_citizen_events_describes_itself_without_telemetry_where_it_is_unreleased(unreleased):
+    offered = drop_unreleased_features(_sc_events())
+
+    assert "unreleased" not in offered
+    for text in offered["description"].values():
+        assert "telemetr" not in text.lower()
+
+
+def test_star_citizen_events_names_telemetry_where_it_is_released(released):
+    offered = drop_unreleased_features(_sc_events())
+
+    assert "unreleased" not in offered
+    assert "telemetry" in offered["description"]["en"].lower()
