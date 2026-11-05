@@ -1,5 +1,5 @@
 name: Dev Build
-run-name: "Core Build – ${{ inputs.platform }}"
+run-name: "Core Build – ${{ inputs.platform }} (${{ inputs.channel }})"
 
 on:
   workflow_dispatch:
@@ -22,6 +22,14 @@ on:
           - github
           - blacksmith
         default: github
+      channel:
+        description: "Update channel: unstable or production. The same commit can be built for both."
+        required: true
+        type: choice
+        options:
+          - unstable
+          - production
+        default: unstable
       version_label:
         description: "Optional suffix (e.g. rc1, beta.2). Leave empty for default."
         required: false
@@ -33,6 +41,7 @@ jobs:
     uses: ./.github/workflows/release-windows.yml
     with:
       runner: ${{ inputs.runner }}
+      channel: ${{ inputs.channel }}
     secrets: inherit
 
   build-macos:
@@ -40,6 +49,7 @@ jobs:
     uses: ./.github/workflows/release-macos.yml
     with:
       runner: ${{ inputs.runner }}
+      channel: ${{ inputs.channel }}
     secrets: inherit
 
   build-linux:
@@ -47,4 +57,5 @@ jobs:
     uses: ./.github/workflows/release-linux.yml
     with:
       runner: ${{ inputs.runner }}
+      channel: ${{ inputs.channel }}
     secrets: inherit

@@ -6,6 +6,10 @@ on:
       runner:
         type: string
         default: 'github'
+      channel:
+        description: "Update channel the build ships on: unstable or production. Decides which features Core offers (services/features.py) and where it is staged."
+        type: string
+        default: 'unstable'
     outputs:
       version:
         description: "Extracted version from system_manager.py"
@@ -54,6 +58,9 @@ jobs:
           # which would put Parakeet on the CPU without a word in the log.
           python scripts/check_onnxruntime_gpu.py
 
+      - name: Set build channel
+        run: python scripts/set_build_channel.py ${{ inputs.channel }}
+
       - name: Build with PyInstaller
         run: |
           source venv/bin/activate
@@ -67,37 +74,12 @@ jobs:
           retention-days: 5
 
       - name: Upload to R2 staging
+        shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         run: |
           pip install awscli
-          aws s3 cp dist/WingmanAiCore/ \
-            "s3://wingman-staging/core/${{ github.sha }}/linux-x86_64/" \
-            --recursive \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
-          echo "${{ github.sha }}" > latest-linux.txt
-          aws s3 cp latest-linux.txt \
-            "s3://wingman-staging/core/latest-linux.txt" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
-
-      - name: Clean up old staging builds
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-        run: |
-          R2_ENDPOINT="https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
-          CURRENT_SHA="${{ github.sha }}"
-
-          SHAS=$(aws s3 ls "s3://wingman-staging/core/" --endpoint-url "$R2_ENDPOINT" \
-            | grep 'PRE ' | awk '{print $2}' | sed 's|/||' | grep -v '^latest')
-
-          for SHA in $SHAS; do
-            if [ "$SHA" != "$CURRENT_SHA" ]; then
-              echo "Deleting old staging: core/$SHA/"
-              aws s3 rm "s3://wingman-staging/core/${SHA}/" \
-                --recursive --endpoint-url "$R2_ENDPOINT"
-            fi
-          done
+          bash .github/scripts/stage-core.sh "${{ inputs.channel }}" linux-x86_64 dist/WingmanAiCore
