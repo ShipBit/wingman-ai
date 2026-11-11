@@ -404,8 +404,34 @@ exe = EXE(
     icon='assets/wingman-ai.ico',
 )
 
+# Windows: the program that presses keys in a game running as administrator
+# (services/elevated_input.py). uac_uiaccess is the right it exists for; Windows
+# honours it only for a signed exe under Program Files. It gets an analysis of
+# its own so that none of Core's modules end up in it, and no console, so that
+# no window opens over the game. Its few binaries are already among Core's.
+helper = []
+if sys.platform == 'win32':
+    # printr is what Core's side of the module logs with; the helper never does.
+    helper_a = Analysis(['input_helper.py'], pathex=[SITE_PACKAGES], excludes=['services.printr'])
+    helper = [
+        EXE(
+            PYZ(helper_a.pure),
+            helper_a.scripts,
+            [],
+            exclude_binaries=True,
+            name='WingmanAiInput',
+            upx=True,
+            console=False,
+            uac_uiaccess=True,
+            icon='assets/wingman-ai.ico',
+        ),
+        helper_a.binaries,
+        helper_a.datas,
+    ]
+
 coll = COLLECT(
     exe,
+    *helper,
     a.binaries,
     a.datas,
     strip=False,
