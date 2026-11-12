@@ -122,6 +122,7 @@ from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager, ConfigValidationError
 from services.connection_manager import ConnectionManager
 from services.esp32_handler import Esp32Handler
+from services import elevated_input
 from services import error_reporting
 from services.avatar_studio import variant_file
 from services.file import get_generated_images_dir
@@ -200,6 +201,8 @@ def _error_report_tags() -> dict:
 error_reporting.set_tag_provider(_error_report_tags)
 
 keyboard.hook(core.on_key)
+# Commands also reach a game that runs as administrator (Windows).
+elevated_input.install()
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"

@@ -45,6 +45,7 @@ Core builds go to the `wingman-staging` R2 bucket (`staging.wingman-ai.com`), ke
 ```
 core/{channel}/{sha}/{windows-x86_64|darwin-aarch64|linux-x86_64}/
   WingmanAiCore(.exe)     ← main binary
+  WingmanAiInput.exe      ← Windows only: presses keys in games that run as administrator
   _internal/              ← PyInstaller dependencies
 core/{channel}/latest-windows.txt   ← SHA pointers per channel
 core/{channel}/latest-macos.txt
@@ -59,5 +60,5 @@ Core version lives in `services/system_manager.py` → `LOCAL_VERSION`. Change i
 
 ## Signing
 
-- **Windows**: DigiCert SSM, signed during Core build
+- **Windows**: DigiCert SSM, signed during Core build. `WingmanAiInput.exe` is signed too: Windows gives it the UIAccess right only with a valid signature and only when it is installed under Program Files, next to `WingmanAiCore.exe`.
 - **macOS/Linux**: Code signing happens in the Client pipeline, not here
