@@ -357,7 +357,14 @@ class ElevenLabs:
                         (audio_chunk.reshape(-1) * 32767.0).astype(np.int16).tobytes()
                     )
 
-                    my_stream.write(chunk)
+                    try:
+                        my_stream.write(chunk)
+                    except sd.PortAudioError:
+                        # stop_playback() stopped the stream under this write
+                        # (the cancel key): macOS fails the write. Not an error.
+                        if audio_player.raw_stream is not my_stream:
+                            break
+                        raise
             finally:
                 if my_stream is not None:
                     try:
