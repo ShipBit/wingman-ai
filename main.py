@@ -201,8 +201,9 @@ def _error_report_tags() -> dict:
 error_reporting.set_tag_provider(_error_report_tags)
 
 keyboard.hook(core.on_key)
-# Commands also reach a game that runs as administrator (Windows).
-elevated_input.install()
+# Commands also reach a game that runs as administrator (Windows), unless the
+# user turned it off. Off by default on production for now.
+elevated_input.apply(config_manager.settings_config.elevated_input)
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"

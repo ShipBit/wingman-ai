@@ -3,6 +3,9 @@ audio: {}
 streamer_mode: false
 show_token_count: false
 filler_responses: true
+# Windows: input for games that run as administrator. null follows the update
+# channel (on for unstable, off for production).
+elevated_input: null
 # How the text is rewritten before a voice reads it: abbreviations, units and
 # numbers are spelled out in the spoken language. Your own rules win; presets
 # are bundled lists per game (templates/pronunciation).

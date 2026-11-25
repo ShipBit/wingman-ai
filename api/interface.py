@@ -1922,6 +1922,12 @@ class SettingsConfig(BaseModel):
     filler_responses: bool
     """Speak a short line, written by the support model in the user's language,
     while a slow tool runs and the Wingman has not said anything yet."""
+    elevated_input: Optional[bool] = None
+    """Windows: send commands and hear push-to-talk keys in a game that runs as
+    administrator, through the input helper next to Core. None follows the
+    update channel: on for unstable, off for production. The default is needed
+    because configs are written without None values, so a None never reaches
+    the file."""
     pronunciation: PronunciationSettings
     cancel_tts_bindings: list[InputBinding]
     """Stop the Wingman mid-answer ("shut up"). One setting for every Wingman."""

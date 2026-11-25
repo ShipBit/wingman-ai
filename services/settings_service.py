@@ -23,6 +23,7 @@ from services.input_bindings import added_bindings
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
 from services import other_language
+from services import elevated_input
 from services.config_service import ConfigService
 from services.spoken_language import LANGUAGE_NAMES
 from services.wingman_default_voices import (
@@ -348,6 +349,9 @@ class SettingsService:
         self.config_manager.settings_config.streamer_mode = settings.streamer_mode
         self.config_manager.settings_config.show_token_count = settings.show_token_count
         self.config_manager.settings_config.filler_responses = settings.filler_responses
+        if settings.elevated_input != self.config_manager.settings_config.elevated_input:
+            self.config_manager.settings_config.elevated_input = settings.elevated_input
+            elevated_input.apply(settings.elevated_input)
         self.config_manager.settings_config.pronunciation = settings.pronunciation
 
         # Bindings that belong to no wingman: shut up and global push-to-talk.

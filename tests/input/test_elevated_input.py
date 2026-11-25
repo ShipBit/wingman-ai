@@ -151,3 +151,72 @@ def test_helper_drops_everything_else(message):
 
     assert perform(message, functions) is False
     assert done == []
+
+
+def test_a_failing_window_check_never_costs_the_input(monkeypatch, helper):
+    def broken():
+        raise OSError("access denied")
+
+    monkeypatch.setattr(elevated_input, "_out_of_reach", broken)
+    monkeypatch.setattr(elevated_input, "_log", lambda *_a, **_k: None)
+    pressed = []
+
+    routed("key", lambda *arguments: pressed.append(arguments))(30, 0)
+
+    assert pressed == [(30, 0)]
+
+
+@pytest.mark.parametrize(
+    ("channel", "setting", "enabled"),
+    [
+        ("unstable", None, True),
+        ("production", None, False),
+        ("production", True, True),
+        ("unstable", False, False),
+    ],
+)
+def test_the_setting_wins_and_none_follows_the_channel(monkeypatch, channel, setting, enabled):
+    monkeypatch.setattr(elevated_input.build_channel, "CHANNEL", channel)
+
+    assert elevated_input.is_enabled(setting) is enabled
+
+
+def test_turning_it_off_puts_the_direct_input_back_and_ends_the_helper(monkeypatch, helper):
+    keyboard_module = type("Keyboard", (), {})()
+    mouse_module = type("Mouse", (), {})()
+    for action, (module, function, _signature) in elevated_input.ACTIONS.items():
+        target = keyboard_module if module == "keyboard" else mouse_module
+        setattr(target, function, lambda *_a, name=action: name)
+    originals = {
+        action: getattr(keyboard_module if module == "keyboard" else mouse_module, function)
+        for action, (module, function, _signature) in elevated_input.ACTIONS.items()
+    }
+    monkeypatch.setattr(elevated_input.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        elevated_input, "_windows", lambda: type("W", (), {"shell32": type("S", (), {"IsUserAnAdmin": lambda: 0})})()
+    )
+    monkeypatch.setattr(elevated_input, "_os_modules", lambda: {"keyboard": keyboard_module, "mouse": mouse_module})
+    monkeypatch.setattr(helper, "start", lambda: None)
+    monkeypatch.setattr(elevated_input, "_originals", {})
+    connection = helper._connection
+
+    elevated_input.apply(True)
+    assert keyboard_module._send_event is not originals["key"]
+
+    elevated_input.apply(False)
+    for action, (module, function, _signature) in elevated_input.ACTIONS.items():
+        target = keyboard_module if module == "keyboard" else mouse_module
+        assert getattr(target, function) is originals[action]
+    assert connection.closed
+    assert helper._connection is None
+
+
+def test_a_stopped_helper_is_not_brought_back_when_its_pipe_closes(helper):
+    started = []
+    helper.start = lambda: started.append(True)
+    connection = helper._connection
+
+    helper.stop()
+    helper._lost(connection)
+
+    assert started == []
