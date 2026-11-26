@@ -38,6 +38,13 @@ on:
 jobs:
   build-windows:
     if: inputs.platform == 'windows' || inputs.platform == 'all'
+    # A called workflow gets no more rights than its caller grants: the sign job
+    # logs in to Azure with OIDC (id-token) and deletes the unsigned artifact
+    # (actions).
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
     uses: ./.github/workflows/release-windows.yml
     with:
       runner: ${{ inputs.runner }}
