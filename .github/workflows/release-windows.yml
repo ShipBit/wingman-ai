@@ -75,7 +75,16 @@ jobs:
 
   sign-windows-executable:
     needs: build-windows
-    runs-on: windows-2022  # signing requires GitHub-hosted runner (certificate path)
+    # The Artifact Signing action supports the GitHub-hosted windows-2022 and
+    # windows-2025 images.
+    runs-on: windows-2022
+    # The Azure login is tied to this environment (federated credential of the
+    # app registration). It holds the signing secrets and variables.
+    environment: signing
+    permissions:
+      id-token: write  # Azure login without a stored secret (OIDC)
+      contents: read
+      actions: write  # delete the unsigned artifact
     outputs:
       version: ${{ needs.build-windows.outputs.version }}
       artifact_name: ${{ steps.artifact.outputs.artifact_name }}
@@ -86,28 +95,20 @@ jobs:
           name: core-windows-unsigned
           path: WingmanAiCore
 
+      # WingmanAiInput.exe too: Windows grants it UIAccess only with a valid
+      # signature.
       - name: Sign
-        env:
-          CERTIFICATE_HOST: ${{ secrets.SM_HOST }}
-          CERTIFICATE_HOST_API_KEY: ${{ secrets.SM_API_KEY }}
-          CERTIFICATE_SHA1_HASH: ${{ secrets.SM_CODE_SIGNING_CERT_SHA1_HASH }}
-          CLIENT_CERTIFICATE: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
-          CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
         uses: ./.github/actions/code-sign
         with:
-          path-to-binary: 'WingmanAiCore/WingmanAiCore.exe'
-
-      # Windows grants this one UIAccess only with a valid signature.
-      - name: Sign input helper
-        env:
-          CERTIFICATE_HOST: ${{ secrets.SM_HOST }}
-          CERTIFICATE_HOST_API_KEY: ${{ secrets.SM_API_KEY }}
-          CERTIFICATE_SHA1_HASH: ${{ secrets.SM_CODE_SIGNING_CERT_SHA1_HASH }}
-          CLIENT_CERTIFICATE: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
-          CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
-        uses: ./.github/actions/code-sign
-        with:
-          path-to-binary: 'WingmanAiCore/WingmanAiInput.exe'
+          files: |
+            WingmanAiCore/WingmanAiCore.exe
+            WingmanAiCore/WingmanAiInput.exe
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE_NAME }}
 
       - name: Set artifact name
         id: artifact

@@ -8,7 +8,7 @@ Wingman AI uses a two-stage build pipeline: **Core** is built first (Python via 
 |----------|---------|---------|
 | `dev-build.yml` | Manual | Build selected platform(s) |
 | `tests.yml` | Pull request, push to main/develop, manual | pytest on Linux (`python -m pytest`) |
-| `release-windows.yml` | Called by dev-build.yml and by the Client's release run (never by a tag) | Windows build + DigiCert signing |
+| `release-windows.yml` | Called by dev-build.yml and by the Client's release run (never by a tag) | Windows build + signing (Azure Artifact Signing) |
 | `release-macos.yml` | Called by dev-build | macOS build |
 | `release-linux.yml` | Called by dev-build | Linux build |
 
@@ -16,7 +16,7 @@ Wingman AI uses a two-stage build pipeline: **Core** is built first (Python via 
 
 1. Checkout + install system deps + setup Python 3.11.7
 2. PyInstaller builds `WingmanAiCore.spec` → `dist/WingmanAiCore/`
-3. Windows: code-signed via DigiCert SSM
+3. Windows: code-signed via Azure Artifact Signing
 4. Upload to R2 staging: `core/{channel}/{git-sha}/{platform}/` (platform is `windows-x86_64`, `darwin-aarch64` or `linux-x86_64`)
 5. Update the `core/{channel}/latest-{os}.txt` pointer and prune old builds of the same channel
 
@@ -60,5 +60,23 @@ Core version lives in `services/system_manager.py` → `LOCAL_VERSION`. Change i
 
 ## Signing
 
-- **Windows**: DigiCert SSM, signed during Core build. `WingmanAiInput.exe` is signed too: Windows gives it the UIAccess right only with a valid signature and only when it is installed under Program Files, next to `WingmanAiCore.exe`.
+- **Windows**: Azure Artifact Signing, signed during Core build (`.github/actions/code-sign`). `WingmanAiInput.exe` is signed too: Windows gives it the UIAccess right only with a valid signature and only when it is installed under Program Files, next to `WingmanAiCore.exe`.
 - **macOS/Linux**: Code signing happens in the Client pipeline, not here
+
+### Azure Artifact Signing
+
+The certificate is issued to ShipBit GmbH. Azure renews it by itself: each one lives three days, and the timestamp keeps a signature valid after that. What does expire is the identity validation behind it, on 2029-02-26. Renew it in the Azure portal before that day, or signing stops.
+
+The sign job logs in to Azure with OIDC, so no signing secret is stored. The Entra app registration has a federated credential for the GitHub environment `signing` of this repo, and the role `Artifact Signing Certificate Profile Signer` on the signing account. The credential's subject carries the organization and repository IDs (GitHub's immutable subject format), so it survives a rename. The repo is older than that format and was opted in to it once:
+
+```
+gh api -X PUT repos/ShipBit/wingman-ai/actions/oidc/customization/sub \
+  -F use_default=true -F use_immutable_subject=true
+```
+
+The environment holds:
+
+- Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+- Variables: `ARTIFACT_SIGNING_ENDPOINT` (of the account's region, e.g. `https://weu.codesigning.azure.net`), `ARTIFACT_SIGNING_ACCOUNT_NAME`, `ARTIFACT_SIGNING_PROFILE_NAME`
+
+A workflow that calls `release-windows.yml` has to grant `id-token: write` and `actions: write` to that job, as `dev-build.yml` does.
