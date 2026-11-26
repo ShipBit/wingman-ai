@@ -90,3 +90,15 @@ def test_the_budget_follows_the_model_that_answers():
     assert local.n_ctx == 4096
     assert cloud.n_ctx == CLOUD_CONTEXT_TOKENS
     assert cloud.max_input_tokens > local.max_input_tokens
+
+
+def test_a_support_call_whose_server_was_stopped_meanwhile_returns_nothing(monkeypatch):
+    """Switching to cloud mode stops the support server on another thread. A
+    call that started just before used to fail on the missing client."""
+    from providers.llama_cpp_provider import LlamaCppProvider
+
+    provider = LlamaCppProvider.__new__(LlamaCppProvider)
+    provider._support_client = None
+    monkeypatch.setattr(provider, "load_support_model", lambda: True, raising=False)
+
+    assert provider.support("hello", system_prompt="Be brief.").text is None

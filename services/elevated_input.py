@@ -35,6 +35,7 @@ from ctypes import wintypes
 from multiprocessing.connection import Client, Listener
 from os import path
 
+from services import build_channel
 from keyboard.keyboard._keyboard_event import KEY_DOWN, KEY_UP, KeyboardEvent
 from mouse.mouse._mouse_event import ButtonEvent
 
@@ -269,11 +270,31 @@ class ElevatedInput:
         self._starting: threading.Thread | None = None
         self._starts = 0
         self._warned = False
+        self._failed = False
+        self._stopped = False
         self._lock = threading.Lock()
+
+    def stop(self) -> None:
+        """Ends the helper: it quits when its pipe closes. No new one comes up
+        until start() is called again."""
+        with self._lock:
+            self._stopped = True
+            connection, self._connection = self._connection, None
+            self._starts = 0
+        if connection is not None:
+            with suppress(OSError):
+                connection.close()
+
+    def fail_once(self, error: Exception) -> None:
+        if self._failed:
+            return
+        self._failed = True
+        _log(f"Input helper: checking the window in front failed ({error}); input goes the direct way.")
 
     def start(self) -> None:
         """Brings the helper up in the background."""
         with self._lock:
+            self._stopped = False
             if self._connection is not None or self._starts >= MAX_STARTS:
                 return
             if self._starting is not None and self._starting.is_alive():
@@ -306,7 +327,8 @@ class ElevatedInput:
             self._connection = None
         with suppress(OSError):
             connection.close()
-        self.start()
+        if not self._stopped:
+            self.start()
 
     def _read(self, connection) -> None:
         """What the helper hears while an elevated window is in front goes to
@@ -384,6 +406,9 @@ class ElevatedInput:
                 connection.close()
             _log("Input helper: started, but did not report ready.")
             return
+        if self._stopped:
+            connection.close()
+            return
         self._connection = connection
         threading.Thread(target=self._read, args=(connection,), daemon=True).start()
         threading.Thread(target=self._watch, args=(connection,), daemon=True).start()
@@ -397,8 +422,14 @@ def routed(action: str, direct):
     """`direct`, unless the window in front needs the helper and it took over."""
 
     def send(*arguments):
-        if _out_of_reach() and _elevated_input.send(action, arguments):
-            return None
+        # This sits in front of every key press of every command, also in games
+        # that need no helper. A failure in the check must never cost the input:
+        # it then goes the direct way, as it did before the helper existed.
+        try:
+            if _out_of_reach() and _elevated_input.send(action, arguments):
+                return None
+        except Exception as error:  # noqa: BLE001
+            _elevated_input.fail_once(error)
         return direct(*arguments)
 
     return send
@@ -411,26 +442,64 @@ def _os_modules() -> dict:
     return {"keyboard": _winkeyboard, "mouse": _winmouse}
 
 
-def install() -> None:
-    """Called once when Core starts. An elevated Core reaches every window."""
+def enabled_by_default() -> bool:
+    """What `settings.elevated_input = None` means: on where testers run Core,
+    off on production until they have used it for a while."""
+    return build_channel.CHANNEL == "unstable"
+
+
+def is_enabled(setting: bool | None) -> bool:
+    return enabled_by_default() if setting is None else setting
+
+
+_originals: dict[str, object] = {}
+
+
+def apply(setting: bool | None) -> None:
+    """Turns the helper on or off, at startup and whenever the setting changes.
+
+    Off is exactly 3.2.15: no helper process, no check in front of the input.
+    """
     if platform.system() != "Windows":
         return
+    if is_enabled(setting):
+        _install()
+    else:
+        _uninstall()
+
+
+def _install() -> None:
+    if _originals:
+        return
     try:
+        # An elevated Core reaches every window by itself.
         if _windows().shell32.IsUserAnAdmin():
             return
         modules = _os_modules()
-        wrapped = {
-            action: routed(action, getattr(modules[module], function))
+        originals = {
+            action: getattr(modules[module], function)
             for action, (module, function, _signature) in ACTIONS.items()
         }
+        wrapped = {action: routed(action, original) for action, original in originals.items()}
     except Exception as error:
         # Core must start without it: input then goes the direct way only.
         _log(f"Input for elevated windows is off: {error}")
         return
     for action, (module, function, _signature) in ACTIONS.items():
         setattr(modules[module], function, wrapped[action])
+    _originals.update(originals)
     # Now, not at the first command: the game must not wait for the helper.
     _elevated_input.start()
+
+
+def _uninstall() -> None:
+    if not _originals:
+        return
+    modules = _os_modules()
+    for action, (module, function, _signature) in ACTIONS.items():
+        setattr(modules[module], function, _originals[action])
+    _originals.clear()
+    _elevated_input.stop()
 
 
 # ─────────────────────────────── helper side ─────────────────────────────────

@@ -1258,6 +1258,10 @@ class PocketTTS:
             self._cache_voice_state(resolved_key, state)
             return state
         except Exception as e:
+            if not self.model:
+                # Unloaded on another thread since the check at the top. The
+                # voice file is fine; deleting or re-cloning it would be wrong.
+                raise RuntimeError("PocketTTS Model is not loaded.") from e
             if resolved_key.endswith(".safetensors"):
                 stem, _tag = self._parse_safetensors_name(
                     resolved_key, self._known_model_tags()

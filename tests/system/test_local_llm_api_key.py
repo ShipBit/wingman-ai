@@ -50,3 +50,12 @@ def test_keyless_setups_still_start(stored):
     llm = asyncio.run(_factory(stored).create_llm(errors))
     assert llm._openai.api_key == "not-needed"
     assert errors == []
+
+
+def test_an_openai_compatible_voice_server_runs_without_a_key():
+    """A local TTS server needs no key; the OpenAI client refused to start
+    with an empty one and the wingman failed to load."""
+    from providers.open_ai import OpenAiCompatibleTts
+
+    tts = OpenAiCompatibleTts(api_key="", base_url="http://localhost:8880/v1")
+    assert tts.client.api_key

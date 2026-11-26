@@ -290,6 +290,19 @@ def test_real_tool_calls_are_left_alone():
     assert with_args.function.name == "lights on"
 
 
+def test_arguments_cut_off_mid_string_are_left_for_the_call_to_report():
+    """A model that stops mid-answer leaves unterminated JSON. That used to end
+    the whole turn with a JSONDecodeError before any call ran."""
+    broken = tool_call("save_note", '{"text": "Buy fu')
+    after = tool_call("lights on", "{}")
+
+    fix([broken, after])
+
+    assert broken.function.name == "save_note"
+    assert broken.function.arguments == '{"text": "Buy fu'
+    assert after.function.name == "execute_command"
+
+
 # ── handle_tool_calls ──
 
 

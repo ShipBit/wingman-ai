@@ -23,6 +23,7 @@ from services.input_bindings import added_bindings
 from services.config_manager import ConfigManager
 from services.local_ai_service import LocalAiService
 from services import other_language
+from services import elevated_input
 from services.config_service import ConfigService
 from services.spoken_language import LANGUAGE_NAMES
 from services.wingman_default_voices import (
@@ -31,6 +32,24 @@ from services.wingman_default_voices import (
 )
 from services.printr import Printr
 from services.pub_sub import PubSub
+
+
+def device_index(device, kind: str) -> int | None:
+    """A sounddevice index for `device`: an index, None (system default) or the
+    AudioDeviceSettings (name + host API) the settings store. A device that is
+    gone resolves to None."""
+    if device is None or isinstance(device, int):
+        return device
+
+    channels = "max_input_channels" if kind == "input" else "max_output_channels"
+    for candidate in sd.query_devices():
+        if (
+            candidate[channels] > 0
+            and candidate["name"] == getattr(device, "name", None)
+            and candidate["hostapi"] == getattr(device, "hostapi", None)
+        ):
+            return candidate["index"]
+    return None
 
 
 class SettingsService:
@@ -348,6 +367,9 @@ class SettingsService:
         self.config_manager.settings_config.streamer_mode = settings.streamer_mode
         self.config_manager.settings_config.show_token_count = settings.show_token_count
         self.config_manager.settings_config.filler_responses = settings.filler_responses
+        if settings.elevated_input != self.config_manager.settings_config.elevated_input:
+            self.config_manager.settings_config.elevated_input = settings.elevated_input
+            elevated_input.apply(settings.elevated_input)
         self.config_manager.settings_config.pronunciation = settings.pronunciation
 
         # Bindings that belong to no wingman: shut up and global push-to-talk.
@@ -425,8 +447,14 @@ class SettingsService:
         self.config_manager.save_settings_config()
 
     async def set_audio_devices(
-        self, input_device: Optional[int] = None, output_device: Optional[int] = None
+        self,
+        input_device: Optional[int | AudioDeviceSettings] = None,
+        output_device: Optional[int | AudioDeviceSettings] = None,
     ):
+        # The settings form sends back what it read, so a side that was not
+        # touched arrives as the stored name + host API rather than an index.
+        input_device = device_index(input_device, "input")
+        output_device = device_index(output_device, "output")
         input_settings = None
         output_settings = None
 

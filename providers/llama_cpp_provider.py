@@ -610,9 +610,14 @@ class LlamaCppProvider:
             system_prompt = get_prompt("support-default")
         if not self.load_support_model():
             return SupportResult(text=None)
+        # A settings change on another thread (cloud mode, another model) can
+        # stop the server between the start above and the request.
+        client = self._support_client
+        if client is None:
+            return SupportResult(text=None)
 
         try:
-            result = self._support_client.chat.completions.create(
+            result = client.chat.completions.create(
                 model="local-model",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -668,8 +673,12 @@ class LlamaCppProvider:
         if not any(sanitized):
             return None
 
+        client = self._embed_client
+        if client is None:
+            return None
+
         try:
-            response = self._embed_client.embeddings.create(
+            response = client.embeddings.create(
                 model="local-model",
                 input=sanitized,
             )
