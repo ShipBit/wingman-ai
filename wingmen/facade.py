@@ -915,38 +915,21 @@ class SkillAudio:
         return await self._set_device("input", device)
 
     async def _set_device(self, kind: str, device) -> bool:
+        from services.settings_service import device_index
+
         settings_service = getattr(self._wingman, "settings_service", None)
         if settings_service is None:
             return False
         # set_audio_devices replaces both sides, so pass the other one on as it is.
         current = settings_service._get_audio_settings_indexed(write=False)
         devices = {"input": current.input, "output": current.output}
-        devices[kind] = _device_index(device, kind)
+        devices[kind] = device_index(device, kind)
         # Publishes 'audio_devices_changed', which re-routes playback — the same
         # path as the HTTP API.
         await settings_service.set_audio_devices(
             input_device=devices["input"], output_device=devices["output"]
         )
         return True
-
-
-def _device_index(device, kind: str) -> int | None:
-    """A sounddevice index for `device`: an index, None (system default) or the
-    AudioDeviceSettings (name + host API) the settings store. A device that is
-    gone resolves to None."""
-    if device is None or isinstance(device, int):
-        return device
-    import sounddevice as sd
-
-    channels = "max_input_channels" if kind == "input" else "max_output_channels"
-    for candidate in sd.query_devices():
-        if (
-            candidate[channels] > 0
-            and candidate["name"] == getattr(device, "name", None)
-            and candidate["hostapi"] == getattr(device, "hostapi", None)
-        ):
-            return candidate["index"]
-    return None
 
 
 class SkillTts:

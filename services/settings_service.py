@@ -34,6 +34,24 @@ from services.printr import Printr
 from services.pub_sub import PubSub
 
 
+def device_index(device, kind: str) -> int | None:
+    """A sounddevice index for `device`: an index, None (system default) or the
+    AudioDeviceSettings (name + host API) the settings store. A device that is
+    gone resolves to None."""
+    if device is None or isinstance(device, int):
+        return device
+
+    channels = "max_input_channels" if kind == "input" else "max_output_channels"
+    for candidate in sd.query_devices():
+        if (
+            candidate[channels] > 0
+            and candidate["name"] == getattr(device, "name", None)
+            and candidate["hostapi"] == getattr(device, "hostapi", None)
+        ):
+            return candidate["index"]
+    return None
+
+
 class SettingsService:
     def __init__(self, config_manager: ConfigManager, config_service: ConfigService):
         self.printr = Printr()
@@ -429,8 +447,14 @@ class SettingsService:
         self.config_manager.save_settings_config()
 
     async def set_audio_devices(
-        self, input_device: Optional[int] = None, output_device: Optional[int] = None
+        self,
+        input_device: Optional[int | AudioDeviceSettings] = None,
+        output_device: Optional[int | AudioDeviceSettings] = None,
     ):
+        # The settings form sends back what it read, so a side that was not
+        # touched arrives as the stored name + host API rather than an index.
+        input_device = device_index(input_device, "input")
+        output_device = device_index(output_device, "output")
         input_settings = None
         output_settings = None
 

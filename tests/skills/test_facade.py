@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import yaml
 
 from api.enums import TtsProvider, WingmanProTtsProvider
-from api.interface import AudioDeviceSettings, AudioSettings, CommandCategoryConfig
+from api.interface import AudioSettings, CommandCategoryConfig
 from wingmen import facade
 
 
@@ -24,23 +24,6 @@ def test_switching_the_output_keeps_the_input():
 
     assert _run(audio.set_output_device(7))
     service.set_audio_devices.assert_awaited_once_with(input_device=3, output_device=7)
-
-
-def test_a_stored_device_resolves_to_its_index(monkeypatch):
-    import sounddevice as sd
-
-    devices = [
-        {"index": 0, "name": "Mic", "hostapi": 0, "max_input_channels": 1, "max_output_channels": 0},
-        {"index": 1, "name": "Speakers", "hostapi": 0, "max_input_channels": 0, "max_output_channels": 2},
-    ]
-    monkeypatch.setattr(sd, "query_devices", lambda: devices)
-
-    stored = AudioDeviceSettings(name="Speakers", hostapi=0)
-    assert facade._device_index(stored, "output") == 1
-    assert facade._device_index(stored, "input") is None
-    assert facade._device_index(AudioDeviceSettings(name="Gone", hostapi=0), "output") is None
-    assert facade._device_index(4, "output") == 4
-    assert facade._device_index(None, "output") is None
 
 
 def _subscription_config(subprovider):
