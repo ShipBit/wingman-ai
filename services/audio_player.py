@@ -198,9 +198,15 @@ class AudioPlayer:
                 except sd.PortAudioError:
                     pass  # ran out and closed in the meantime
 
-        if self.raw_stream is not None:
-            self.raw_stream.stop()
-            self.raw_stream = None
+        # Detach before stopping: a streaming TTS may be inside write() on its
+        # own thread, and that write fails once the stream stops. Detached
+        # first, the writer sees it was stopped on purpose (elevenlabs.py).
+        raw_stream, self.raw_stream = self.raw_stream, None
+        if raw_stream is not None:
+            try:
+                raw_stream.stop()
+            except sd.PortAudioError:
+                pass  # its writer closed it in the meantime
 
         self.is_playing = False
         if was_playing:

@@ -308,8 +308,10 @@ class OpenAiCompatibleTts:
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
+        # A local server needs no key, but the OpenAI client refuses to start
+        # without one ("Missing credentials"), so it gets a stand-in.
         self.client = OpenAI(
-            api_key=api_key,
+            api_key=api_key or "not-needed",
             base_url=base_url,
         )
 

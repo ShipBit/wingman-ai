@@ -73,13 +73,18 @@ class ToolExecutor:
         if tool_calls and len(tool_calls) > 0:
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
-                function_args = (
-                    tool_call.function.arguments
-                    # Mistral returns a dict
-                    if isinstance(tool_call.function.arguments, dict)
-                    # OpenAI returns a string
-                    else json.loads(tool_call.function.arguments)
-                )
+                try:
+                    function_args = (
+                        tool_call.function.arguments
+                        # Mistral returns a dict
+                        if isinstance(tool_call.function.arguments, dict)
+                        # OpenAI returns a string
+                        else json.loads(tool_call.function.arguments)
+                    )
+                except (TypeError, ValueError):
+                    # Arguments cut off mid-string. Nothing to fix here; running
+                    # the call reports the broken arguments back to the model.
+                    continue
 
                 # try to resolve function name to a command name
                 if (len(function_args) == 0 and get_command_fn(function_name)) or (

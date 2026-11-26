@@ -97,6 +97,18 @@ jobs:
         with:
           path-to-binary: 'WingmanAiCore/WingmanAiCore.exe'
 
+      # Windows grants this one UIAccess only with a valid signature.
+      - name: Sign input helper
+        env:
+          CERTIFICATE_HOST: ${{ secrets.SM_HOST }}
+          CERTIFICATE_HOST_API_KEY: ${{ secrets.SM_API_KEY }}
+          CERTIFICATE_SHA1_HASH: ${{ secrets.SM_CODE_SIGNING_CERT_SHA1_HASH }}
+          CLIENT_CERTIFICATE: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
+          CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
+        uses: ./.github/actions/code-sign
+        with:
+          path-to-binary: 'WingmanAiCore/WingmanAiInput.exe'
+
       - name: Set artifact name
         id: artifact
         shell: bash

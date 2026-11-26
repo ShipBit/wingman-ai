@@ -99,3 +99,28 @@ def test_a_line_after_the_model_was_unloaded_is_told_not_reported(tmp_path, monk
 
         assert ("Computer: PocketTTS model is not loaded.", "toast_error") in lines
         assert not [line for line in lines if line[1] == LogType.ERROR]
+
+
+def test_a_voice_whose_model_is_unloaded_mid_load_is_kept(tmp_path, monkeypatch):
+    """The unload can land between the "is the model loaded" check and the
+    voice load. That used to end as "could not be loaded" and, for a built-in
+    voice, delete the file to download it again."""
+    provider, _ = make_provider(tmp_path, monkeypatch)
+    voice = tmp_path / "Captain.wav"
+    voice.write_bytes(b"RIFF")
+
+    class Unloading:
+        def get_state_for_audio_prompt(self, prompt):
+            provider.model = None
+            raise AttributeError("'NoneType' object has no attribute 'get_state_for_audio_prompt'")
+
+    provider.model = Unloading()
+    monkeypatch.setattr(provider, "_clone_from_audio_and_cache", lambda path: provider.model.get_state_for_audio_prompt(path))
+
+    try:
+        provider.get_voice_state(str(voice))
+    except RuntimeError as e:
+        assert "not loaded" in str(e)
+    else:
+        raise AssertionError("expected the not-loaded error")
+    assert voice.exists()
